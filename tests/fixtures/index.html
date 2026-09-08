@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>vision-e2e fixture</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: sans-serif;
+      }
+      /* Absolutely positioned so click coordinates are deterministic. */
+      #click-target {
+        position: absolute;
+        left: 100px;
+        top: 100px;
+        width: 200px;
+        height: 60px;
+        font-size: 18px;
+      }
+      #name-input {
+        position: absolute;
+        left: 100px;
+        top: 200px;
+        width: 200px;
+        height: 30px;
+      }
+      #dblclick-target {
+        position: absolute;
+        left: 400px;
+        top: 100px;
+        width: 200px;
+        height: 60px;
+      }
+      #marker {
+        position: absolute;
+        left: 100px;
+        top: 300px;
+      }
+      #spacer {
+        height: 3000px;
+      }
+    </style>
+  </head>
+  <body>
+    <button id="click-target" type="button">Click me</button>
+    <button id="dblclick-target" type="button">Double click me</button>
+    <input id="name-input" type="text" aria-label="Name" placeholder="Name" />
+    <div id="marker" data-marker="idle">marker:idle</div>
+    <div id="spacer"></div>
+    <script>
+      document.getElementById('click-target').addEventListener('click', () => {
+        const m = document.getElementById('marker')
+        m.setAttribute('data-marker', 'clicked')
+        m.textContent = 'marker:clicked'
+      })
+      document.getElementById('dblclick-target').addEventListener('dblclick', () => {
+        const m = document.getElementById('marker')
+        m.setAttribute('data-marker', 'dblclicked')
+        m.textContent = 'marker:dblclicked'
+      })
+      document.getElementById('name-input').addEventListener('input', (e) => {
+        const m = document.getElementById('marker')
+        m.setAttribute('data-marker', 'typed:' + e.target.value)
+        m.textContent = 'marker:typed:' + e.target.value
+      })
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          const m = document.getElementById('marker')
+          m.setAttribute('data-marker', 'enter')
+          m.textContent = 'marker:enter'
+        }
+      })
+    </script>
+  </body>
+</html>
