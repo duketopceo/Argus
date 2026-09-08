@@ -78,6 +78,15 @@ export interface AssertResult extends AssertionResult {
   cached: boolean
 }
 
+export interface LocateResult {
+  ok: boolean
+  reason: string | undefined
+  healed: boolean
+  point: Point | undefined
+  fingerprint: FingerprintRecord | undefined
+  model: string | undefined
+}
+
 export class Engine {
   private _visionCalls = 0
   private _steps: StepResult[] = []
@@ -103,7 +112,10 @@ export class Engine {
     let observation = await this._opts.driver.observe()
 
     for (let i = 0; i < cap; i++) {
-      const response = await this._callModel('ground', buildActionMessages(instruction, observation))
+      const response = await this._callModel(
+        'ground',
+        buildActionMessages(instruction, observation),
+      )
       if (!response) {
         return this._result(false, 'budget exceeded or model call blocked')
       }
@@ -111,18 +123,35 @@ export class Engine {
       const action = this._parseAction(response.content)
 
       if (action.action === 'done') {
-        this._steps.push({ instruction, action: 'done', ok: true, reason: action.reasoning, model: response.model })
+        this._steps.push({
+          instruction,
+          action: 'done',
+          ok: true,
+          reason: action.reasoning,
+          model: response.model,
+        })
         break
       }
 
       if (action.action === 'fail') {
-        this._steps.push({ instruction, action: 'fail', ok: false, reason: action.reasoning, model: response.model })
+        this._steps.push({
+          instruction,
+          action: 'fail',
+          ok: false,
+          reason: action.reasoning,
+          model: response.model,
+        })
         return this._result(false, action.reasoning)
       }
 
       const resolved = await this._resolveAction(action)
       const nextObservation = await this._executeAction(tdApi, action)
-      const fingerprint = await this._buildFingerprint(instruction, action, resolved, response.model)
+      const fingerprint = await this._buildFingerprint(
+        instruction,
+        action,
+        resolved,
+        response.model,
+      )
 
       this._fingerprints.push(fingerprint)
       this._steps.push({ instruction, action: action.action, ok: true, model: response.model })
@@ -209,7 +238,12 @@ export class Engine {
 
       const resolved = await this._resolveAction(action)
       const nextObservation = await this._executeAction(this._opts.actions, action)
-      const newFingerprint = await this._buildFingerprint(step.instruction, action, resolved, response.model)
+      const newFingerprint = await this._buildFingerprint(
+        step.instruction,
+        action,
+        resolved,
+        response.model,
+      )
       flow.steps[i] = newFingerprint
 
       this._steps.push({
@@ -227,6 +261,90 @@ export class Engine {
     }
 
     return this._result(true)
+  }
+
+  /**
+   * Resolve a single element for the `td.find()` DSL (R13). When `cached` is
+   * provided and still resolves locally, this costs zero vision calls (R2);
+   * otherwise it grounds (or heals) via the model and returns a fresh
+   * fingerprint (R4). The returned point is the viewport-pixel click target.
+   */
+  async locate(instruction: string, cached?: FingerprintRecord): Promise<LocateResult> {
+    const observation = await this._opts.driver.observe()
+
+    if (cached) {
+      const regionBuffer = await this._regionScreenshot(cached.bbox)
+      const resolve = new Fingerprint(cached).resolve(regionBuffer, observation.a11yYaml)
+      if (resolve.matched) {
+        return {
+          ok: true,
+          reason: undefined,
+          healed: false,
+          point: cached.clickPoint,
+          fingerprint: cached,
+          model: undefined,
+        }
+      }
+      if (this._opts.ledger.replayOnly || !this._opts.ledger.canSpend(0.001)) {
+        return {
+          ok: false,
+          reason: 'fingerprint mismatch and budget/replay-only prevents heal',
+          healed: false,
+          point: undefined,
+          fingerprint: undefined,
+          model: undefined,
+        }
+      }
+    }
+
+    const response = await this._callModel(
+      cached ? 'heal' : 'ground',
+      buildActionMessages(instruction, observation),
+      cached ? [this._opts.config.escalation_model] : undefined,
+    )
+    if (!response) {
+      return {
+        ok: false,
+        reason: 'model call blocked by budget',
+        healed: false,
+        point: undefined,
+        fingerprint: undefined,
+        model: undefined,
+      }
+    }
+
+    const action = this._parseAction(response.content)
+    if (action.action === 'fail') {
+      return {
+        ok: false,
+        reason: action.reasoning,
+        healed: false,
+        point: undefined,
+        fingerprint: undefined,
+        model: response.model,
+      }
+    }
+    if (action.x === undefined || action.y === undefined) {
+      return {
+        ok: false,
+        reason: `model returned "${action.action}" without coordinates`,
+        healed: false,
+        point: undefined,
+        fingerprint: undefined,
+        model: response.model,
+      }
+    }
+
+    const resolved = await this._resolveNode(action.x, action.y)
+    const fingerprint = await this._buildFingerprint(instruction, action, resolved, response.model)
+    return {
+      ok: true,
+      reason: undefined,
+      healed: cached !== undefined,
+      point: { x: action.x, y: action.y },
+      fingerprint,
+      model: response.model,
+    }
   }
 
   async assert(question: string): Promise<AssertResult> {
@@ -335,30 +453,35 @@ export class Engine {
     const info = await this._opts.driver.rawPage.evaluate<
       { x: number; y: number; width: number; height: number; snippet: string } | null,
       [number, number]
-    >(([cx, cy]) => {
-      const doc = (
-        globalThis as unknown as {
-          document: { elementFromPoint: (x: number, y: number) => unknown }
+    >(
+      ([cx, cy]) => {
+        const doc = (
+          globalThis as unknown as {
+            document: { elementFromPoint: (x: number, y: number) => unknown }
+          }
+        ).document
+        const el = doc.elementFromPoint(cx, cy) as {
+          getBoundingClientRect: () => { x: number; y: number; width: number; height: number }
+          getAttribute: (attr: string) => string | null
+          textContent: string | null
+        } | null
+        if (!el) {
+          return null
         }
-      ).document
-      const el = doc.elementFromPoint(cx, cy) as {
-        getBoundingClientRect: () => { x: number; y: number; width: number; height: number }
-        getAttribute: (attr: string) => string | null
-        textContent: string | null
-      } | null
-      if (!el) {
-        return null
-      }
-      const rect = el.getBoundingClientRect()
-      const snippet = ((el.getAttribute('aria-label') as string | null) || el.textContent || '').trim().slice(0, 200)
-      return {
-        x: Math.round(rect.x),
-        y: Math.round(rect.y),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-        snippet,
-      }
-    }, [x, y])
+        const rect = el.getBoundingClientRect()
+        const snippet = ((el.getAttribute('aria-label') as string | null) || el.textContent || '')
+          .trim()
+          .slice(0, 200)
+        return {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+          snippet,
+        }
+      },
+      [x, y],
+    )
 
     if (!info) {
       return {
@@ -370,7 +493,10 @@ export class Engine {
     return { bbox: info, clickPoint: { x, y }, a11ySnippet: info.snippet }
   }
 
-  private async _executeAction(tdApi: TestDriverApi, action: ProposedAction | ActionPayload): Promise<Observation> {
+  private async _executeAction(
+    tdApi: TestDriverApi,
+    action: ProposedAction | ActionPayload,
+  ): Promise<Observation> {
     switch (action.action) {
       case 'click':
         return tdApi.click(action.x ?? 0, action.y ?? 0)

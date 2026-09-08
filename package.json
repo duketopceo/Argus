@@ -7,6 +7,11 @@
   "bin": {
     "vision-e2e": "dist/cli.js"
   },
+  "exports": {
+    ".": "./dist/api.js",
+    "./api": "./dist/api.js",
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist",
     "action"
