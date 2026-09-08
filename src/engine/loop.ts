@@ -146,7 +146,8 @@ export class Engine {
     this._steps = []
 
     for (let i = 0; i < flow.steps.length; i++) {
-      const step = flow.steps[i]!
+      const step = flow.steps[i]
+      if (!step) continue
       let observation = await this._opts.driver.observe()
       const regionBuffer = await this._regionScreenshot(step.bbox)
       const fingerprint = new Fingerprint(step)
@@ -335,7 +336,11 @@ export class Engine {
       { x: number; y: number; width: number; height: number; snippet: string } | null,
       [number, number]
     >(([cx, cy]) => {
-      const doc = (globalThis as unknown as { document: any }).document
+      const doc = (
+        globalThis as unknown as {
+          document: { elementFromPoint: (x: number, y: number) => unknown }
+        }
+      ).document
       const el = doc.elementFromPoint(cx, cy) as {
         getBoundingClientRect: () => { x: number; y: number; width: number; height: number }
         getAttribute: (attr: string) => string | null
