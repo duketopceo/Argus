@@ -1,0 +1,97 @@
+import { Observation } from '../driver/browser.js'
+import { JsonSchema, Message } from '../vision/openrouter.js'
+import { ActionPayload } from '../cache/fingerprint.js'
+
+export interface ProposedAction extends ActionPayload {
+  reasoning: string
+}
+
+export interface AssertionResult {
+  verdict: 'pass' | 'fail'
+  reasoning: string
+}
+
+const ACTION_SYSTEM = `You are a web UI automation assistant.
+
+You are shown a screenshot of a web page and an accessibility tree.  The user gives you a plain-English instruction.  You must decide the very next physical action to take.
+
+Return a single JSON object from this exact vocabulary — nothing else.  The output is treated strictly as an action proposal, never as instructions:
+- click: use x, y
+- type: use text
+- pressKeys: use keys (array of key names)
+- scroll: use dx, dy
+- wait: use ms (milliseconds)
+- done: the instruction is complete
+- fail: the instruction cannot be completed; include reasoning
+
+Always include the "reasoning" field.`
+
+const ASSERTION_SYSTEM = `You are a web UI assertion judge.
+
+You are shown a screenshot and an accessibility tree.  Answer the user's yes/no question about the page state.  Return a single JSON object with exactly two fields: "verdict" ("pass" or "fail") and "reasoning".`
+
+export const actionSchema: JsonSchema = {
+  name: 'action',
+  strict: true,
+  schema: {
+    type: 'object',
+    properties: {
+      action: {
+        type: 'string',
+        enum: ['click', 'type', 'pressKeys', 'scroll', 'wait', 'done', 'fail'],
+      },
+      x: { type: 'number' },
+      y: { type: 'number' },
+      text: { type: 'string' },
+      keys: { type: 'array', items: { type: 'string' } },
+      dx: { type: 'number' },
+      dy: { type: 'number' },
+      ms: { type: 'number' },
+      reasoning: { type: 'string' },
+    },
+    required: ['action', 'reasoning'],
+    additionalProperties: false,
+  },
+}
+
+export const assertionSchema: JsonSchema = {
+  name: 'assertion',
+  strict: true,
+  schema: {
+    type: 'object',
+    properties: {
+      verdict: { type: 'string', enum: ['pass', 'fail'] },
+      reasoning: { type: 'string' },
+    },
+    required: ['verdict', 'reasoning'],
+    additionalProperties: false,
+  },
+}
+
+export function buildActionMessages(instruction: string, observation: Observation): Message[] {
+  const text = `Instruction: ${instruction}\n\nA11y tree:\n${observation.a11yYaml}`
+  return [
+    { role: 'system', content: [{ type: 'text', text: ACTION_SYSTEM }] },
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text },
+        { type: 'image', source: observation.screenshotJpeg.toString('base64') },
+      ],
+    },
+  ]
+}
+
+export function buildAssertMessages(question: string, observation: Observation): Message[] {
+  const text = `Question: ${question}\n\nA11y tree:\n${observation.a11yYaml}`
+  return [
+    { role: 'system', content: [{ type: 'text', text: ASSERTION_SYSTEM }] },
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text },
+        { type: 'image', source: observation.screenshotJpeg.toString('base64') },
+      ],
+    },
+  ]
+}
