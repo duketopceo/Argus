@@ -352,6 +352,7 @@ export class Engine {
         cached ? 'heal' : 'ground',
         buildActionMessages(feedback, observation),
         cached ? [this._opts.config.escalation_model] : undefined,
+        this._opts.config.grounding_model,
       )
       if (!retry) break
       action = this._parseAction(retry.content)
@@ -434,13 +435,14 @@ export class Engine {
     kind: CallKind,
     messages: Message[],
     escalationModels?: string[],
+    modelOverride?: string,
   ): Promise<{ id: string; content: string; cost: CallCost; model: string } | undefined> {
     if (!this._opts.ledger.canSpend(0.001)) {
       return undefined
     }
     const schema = kind === 'assert' ? assertionSchema : actionSchema
     const response = await this._opts.client.complete({
-      model: this._opts.config.model,
+      model: modelOverride ?? this._opts.config.model,
       messages,
       schema,
       ...(escalationModels ? { escalationModels } : {}),
@@ -477,6 +479,25 @@ export class Engine {
         reasoning: typeof parsed.reasoning === 'string' ? parsed.reasoning : '',
       } as unknown as ProposedAction
     } catch (e) {
+      // Tolerant fallback for specialist grounding models (e.g. ui-tars) that
+      // answer with a bare "(x,y)" or `click(start_box='(x,y)')` instead of
+      // JSON. Coordinates are absolute pixels of the screenshot; values <= 1
+      // are treated as normalized [0,1] and scaled to the viewport.
+      const coord = content.match(/\(?\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*\)?/)
+      if (coord) {
+        let x = Number(coord[1])
+        let y = Number(coord[2])
+        if (x <= 1 && y <= 1) {
+          x = Math.round(x * 1280)
+          y = Math.round(y * 720)
+        }
+        return {
+          action: 'click',
+          x: Math.round(x),
+          y: Math.round(y),
+          reasoning: `coordinate-only response: ${content.slice(0, 120)}`,
+        } as ProposedAction
+      }
       return { action: 'fail', reasoning: `JSON parse failed: ${(e as Error).message}` }
     }
   }

@@ -17,6 +17,12 @@ export interface Target {
 export interface Config {
   model: string
   escalation_model: string
+  /**
+   * Optional specialist model for grounding-correction retries (e.g. a
+   * ui-tars-class model that returns bare coordinates). Used only when the
+   * primary model's proposed point resolves to the wrong element.
+   */
+  grounding_model: string | undefined
   provider: ProviderRules
   budgetUsd: number | undefined
   target: Target | undefined
@@ -44,6 +50,7 @@ export type ConfigInput = Partial<Omit<Config, 'provider'>> & { provider?: Parti
 const defaults: Config = {
   model: 'google/gemini-2.5-flash-lite',
   escalation_model: 'moonshotai/kimi-k2.5',
+  grounding_model: undefined,
   provider: {
     ignore: ['siliconflow', 'novitaai', 'atlascloud', 'streamlake', 'chutes'],
   },
