@@ -428,6 +428,8 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
             videoPath: undefined,
           })
           await fileSession.save()
+          ctx.out(`${ok ? 'PASS' : 'FAIL'} ${fileSlug} (${fileName})`)
+          if (!ok && failureMessage !== undefined) ctx.err(`  reason: ${failureMessage}`)
         } else {
           for (const registeredTest of registered) {
             const session = await TdSession.create({
@@ -470,6 +472,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
             })
             await session.save()
             ctx.out(`${ok ? 'PASS' : 'FAIL'} ${registeredTest.name} (${fileName})`)
+            if (!ok && failureMessage !== undefined) ctx.err(`  reason: ${failureMessage}`)
           }
         }
 
@@ -498,6 +501,8 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
           budgetExceeded: false,
           videoPath: undefined,
         })
+        ctx.out(`FAIL ${fileSlug} (${fileName})`)
+        ctx.err(`  reason: ${(e as Error).message}`)
       } finally {
         await driver?.close()
         bindSession(undefined)
