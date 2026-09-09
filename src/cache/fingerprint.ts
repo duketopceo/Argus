@@ -39,6 +39,12 @@ export interface FingerprintRecord {
   model: string
   a11ySnippet: string
   regionHash: string
+  /**
+   * Set by diff-aware invalidation before replay: the reason this entry is
+   * considered stale. Presence means "re-ground on next use" — the entry is
+   * kept for reference/heal context.
+   */
+  stale?: string
 }
 
 export interface ResolveResult {

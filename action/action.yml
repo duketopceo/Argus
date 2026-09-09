@@ -1,5 +1,5 @@
-name: vision-e2e
-description: Run the vision-e2e harness and post a sticky PR comment with cost and evidence.
+name: argus
+description: Run the Argus vision-e2e harness and post a sticky PR comment with cost and evidence.
 author: duketopceo
 inputs:
   openrouter-api-key:
@@ -14,6 +14,14 @@ inputs:
     required: false
   budget-usd:
     description: Optional per-run budget cap override in USD
+    required: false
+  index:
+    description: Run `argus index` before the test run to enable diff-aware cache invalidation
+    default: 'true'
+    required: false
+  diff-base:
+    description: Base ref for diff invalidation (e.g. origin/main); empty = working tree
+    default: ''
     required: false
 outputs:
   conclusion:
@@ -45,14 +53,21 @@ runs:
           cp "${{ inputs.config }}" vision-e2e.config.ts
         fi
 
-    - name: Run vision-e2e
+    - name: Build repo index
+      if: inputs.index == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: npx argus index
+
+    - name: Run argus
       id: run
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       continue-on-error: true
       env:
         OPENROUTER_API_KEY: ${{ inputs.openrouter-api-key }}
-      run: npx vision-e2e run
+        ARGUS_DIFF_BASE: ${{ inputs.diff-base }}
+      run: npx argus run
 
     - name: Post or update sticky PR comment
       id: post

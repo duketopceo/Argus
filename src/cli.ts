@@ -19,6 +19,12 @@ import { BrowserDriver } from './driver/browser.js'
 import { TargetProcess } from './driver/target.js'
 import { Engine, VisionClient } from './engine/loop.js'
 import { Actions } from './engine/actions.js'
+import { diffChangedFiles } from './index/diff.js'
+import { invalidateForDiff } from './index/invalidate.js'
+import { readIndex } from './index/scan.js'
+import { ErrorRecord, JOURNAL_SCHEMA_VERSION, JournalEntry } from './journal/schema.js'
+import { newRunId, writeJournal } from './journal/store.js'
+import { createLogger, resolveLogLevel } from './log.js'
 import { JunitCase, writeJunitXml } from './report/junit.js'
 import { buildRunReport, TestReport, writeRunReport } from './report/run.js'
 import { flowPath, loadFlow } from './cache/store.js'
@@ -50,11 +56,13 @@ Usage:
   argus run [pattern] [--url <target>] [--dir <testsDir>] [--report-dir <dir>]
   argus cache list [--dir <cacheDir>]
   argus cache prune [name|--all] [--dir <cacheDir>]
+  argus index [--dir <repo>]
   argus --help
 
 Config: vision-e2e.config.ts or vision-e2e.config.json in the working directory
 (model, escalation_model, provider rules, budgetUsd, target, cacheDir,
-testsDir, reportDir, secrets).`
+testsDir, reportDir, secrets, logLevel, sourceGlobs, indexPath, diffBase,
+persistCache).`
 
 const RECORD_USAGE = `Usage: argus record "<flow description>" --url <target> [options]
 
@@ -109,6 +117,8 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
       return cmdRun(rest, ctx, deps)
     case 'cache':
       return cmdCache(rest, ctx)
+    case 'index':
+      return cmdIndex(rest, ctx)
     default:
       ctx.err(`unknown command: ${cmd}`)
       ctx.out(USAGE)
@@ -358,6 +368,29 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
   warnUnknownProviders(config, ctx)
   if (values['cache-dir'] !== undefined) config.cacheDir = values['cache-dir']
 
+  const logger = createLogger(resolveLogLevel(ctx.env, config.logLevel), ctx)
+  const runErrors: ErrorRecord[] = []
+  const runId = newRunId()
+  const startedAt = new Date()
+
+  // Diff-aware invalidation (fast path): when the index and a diff are
+  // available, mark flow fingerprints stale so they re-ground proactively.
+  // Index missing or unreadable → content-hash verification remains the
+  // backstop and the run proceeds unchanged.
+  let staleReason: string | undefined
+  {
+    const indexPath = resolve(ctx.cwd, config.indexPath ?? 'argus.index.json')
+    const index = await readIndex(indexPath)
+    const changed = await diffChangedFiles(ctx.cwd, config.diffBase ?? ctx.env.ARGUS_DIFF_BASE)
+    const result = invalidateForDiff(changed, index, config.sourceGlobs, [])
+    if (result.stale && result.reason !== undefined) {
+      staleReason = result.reason
+      logger.info(`diff invalidation: ${result.reason}`)
+    } else if (index === undefined) {
+      logger.debug(`no usable index at ${indexPath} — hash verification only`)
+    }
+  }
+
   const url = values.url ?? config.target?.url
   if (url === undefined) {
     ctx.err('no target URL: pass --url or set config.target.url')
@@ -377,7 +410,6 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
     ctx.out(`no test files found under ${testsDir}`)
   }
 
-  const startedAt = new Date()
   const runStart = Date.now()
   const reports: TestReport[] = []
   const junitCases: JunitCase[] = []
@@ -405,6 +437,8 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
           config,
           flowName: fileSlug,
           env: ctx.env,
+          ...(staleReason !== undefined ? { staleReason } : {}),
+          logger,
         })
         bindSession(fileSession)
         await driver.goto(target?.url ?? url)
@@ -438,6 +472,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
             videoPath: undefined,
           })
           await fileSession.save()
+          runErrors.push(...fileSession.errorRecords.map((r) => ({ ...r, context: `${r.context ?? ''} [${fileSlug}]` })))
           ctx.out(`${ok ? 'PASS' : 'FAIL'} ${fileSlug} (${fileName})`)
           if (!ok && failureMessage !== undefined) ctx.err(`  reason: ${failureMessage}`)
         } else {
@@ -448,6 +483,8 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
               config,
               flowName: `${fileSlug}__${slugify(registeredTest.name)}`,
               env: ctx.env,
+              ...(staleReason !== undefined ? { staleReason } : {}),
+              logger,
             })
             bindSession(session)
             session.ledger.startSandbox()
@@ -481,6 +518,9 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
               videoPath: undefined,
             })
             await session.save()
+            runErrors.push(
+              ...session.errorRecords.map((r) => ({ ...r, context: `${r.context ?? ''} [${registeredTest.name}]` })),
+            )
             ctx.out(`${ok ? 'PASS' : 'FAIL'} ${registeredTest.name} (${fileName})`)
             if (!ok && failureMessage !== undefined) ctx.err(`  reason: ${failureMessage}`)
           }
@@ -539,6 +579,60 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
   await mkdir(reportDir, { recursive: true })
   await writeJunitXml(join(reportDir, 'junit.xml'), 'vision-e2e', junitCases)
   await writeRunReport(join(reportDir, 'run.json'), report)
+
+  // Evidence store: one immutable journal record per run. Failure to write is
+  // a warning, never a run failure.
+  {
+    const git = await gitInfo(ctx.cwd)
+    const entry: JournalEntry = {
+      schemaVersion: JOURNAL_SCHEMA_VERSION,
+      runId,
+      repo: git.repo,
+      commitSha: git.commitSha,
+      branch: git.branch,
+      startedAt: startedAt.toISOString(),
+      durationMs: Date.now() - runStart,
+      ok: report.ok,
+      totals: {
+        tests: report.totals.tests,
+        passed: report.totals.passed,
+        failed: report.totals.failed,
+        visionCalls: report.totals.visionCalls,
+        visionCostUsd: report.totals.visionCostUsd,
+        budgetExceeded: report.totals.budgetExceeded,
+      },
+      tests: reports.map((r) => ({
+        name: r.name,
+        file: r.file,
+        ok: r.ok,
+        durationMs: r.durationMs,
+        ...(r.failureMessage !== undefined ? { failureMessage: r.failureMessage } : {}),
+        steps: r.steps.map((s) => ({
+          instruction: s.instruction,
+          action: s.action,
+          ok: s.ok,
+          ...(s.reason !== undefined ? { reason: s.reason } : {}),
+          ...(s.healed ? { healed: true } : {}),
+          ...(s.model !== undefined ? { model: s.model } : {}),
+        })),
+        asserts: r.asserts.map((a) => ({
+          question: a.question,
+          verdict: a.verdict,
+          reasoning: a.reasoning,
+          ...(a.cached ? { cached: true } : {}),
+        })),
+        visionCalls: r.visionCalls,
+      })),
+      errors: runErrors,
+    }
+    const cacheDir = resolve(ctx.cwd, config.cacheDir ?? '.vision-e2e-cache')
+    try {
+      const path = await writeJournal(cacheDir, entry)
+      logger.debug(`journal written: ${path}`)
+    } catch (e) {
+      logger.warn(`journal write failed: ${(e as Error).message}`)
+    }
+  }
   ctx.out(
     `run complete: ${report.totals.passed}/${report.totals.tests} passed, ` +
       `${report.totals.visionCalls} vision calls, ` +
@@ -633,4 +727,48 @@ if (invokedAsScript) {
       console.error(`argus: ${(e as Error).message}`)
       process.exitCode = 1
     })
+}
+
+/** `argus index` — scan a repo into argus.index.json. */
+async function cmdIndex(args: string[], ctx: Ctx): Promise<number> {
+  const { values } = parseArgs({
+    args,
+    options: {
+      dir: { type: 'string' },
+      out: { type: 'string' },
+      help: { type: 'boolean', short: 'h', default: false },
+    },
+  })
+  if (values.help) {
+    ctx.out('Usage: argus index [--dir <repo>] [--out <path>]\n\n  Scans the repo into argus.index.json: file → purpose → imports → importedBy → package version → content hash. Consumed by `argus run` for diff-aware cache invalidation.')
+    return 0
+  }
+  const root = resolve(ctx.cwd, values.dir ?? '.')
+  const config = await loadConfig(ctx.cwd)
+  const outPath = resolve(ctx.cwd, values.out ?? config.indexPath ?? 'argus.index.json')
+  const { scanRepo, writeIndex } = await import('./index/scan.js')
+  const index = await scanRepo(root)
+  await writeIndex(index, outPath)
+  ctx.out(`indexed ${index.entries.length} files → ${outPath}`)
+  return 0
+}
+
+/** Repo identity for journal records; all probes degrade to 'unknown'. */
+async function gitInfo(cwd: string): Promise<{ repo: string; commitSha?: string; branch?: string }> {
+  const { execFile } = await import('node:child_process')
+  const run = (args: string[]): Promise<string> =>
+    new Promise((res) => {
+      execFile('git', args, { cwd }, (err, stdout) => res(err ? '' : stdout.trim()))
+    })
+  const [remote, sha, branch] = await Promise.all([
+    run(['remote', 'get-url', 'origin']),
+    run(['rev-parse', 'HEAD']),
+    run(['rev-parse', '--abbrev-ref', 'HEAD']),
+  ])
+  const repoMatch = remote.match(/[:/]([^/]+\/[^/]+?)(\.git)?$/)
+  return {
+    repo: repoMatch?.[1] ?? basename(cwd),
+    ...(sha !== '' ? { commitSha: sha } : {}),
+    ...(branch !== '' ? { branch } : {}),
+  }
 }

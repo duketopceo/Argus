@@ -43,6 +43,23 @@ export interface Config {
    * pre-navigation setup.
    */
   pageSetup: string | undefined
+  /**
+   * Log verbosity — 'debug'|'info'|'warn'|'error'. ARGUS_DEBUG=1 forces
+   * 'debug'. Default 'warn'.
+   */
+  logLevel: 'debug' | 'info' | 'warn' | 'error' | undefined
+  /**
+   * Repo globs naming the app surface the tests exercise (e.g. 'ui/src/**').
+   * Diff-aware invalidation marks flow caches stale when the diff touches
+   * files in this surface's dependency cone.
+   */
+  sourceGlobs: string[] | undefined
+  /** Path (repo-relative) for the generated repo index. Default 'argus.index.json'. */
+  indexPath: string | undefined
+  /** Base ref for diff invalidation (e.g. 'origin/main'); unset = working tree. */
+  diffBase: string | undefined
+  /** Where run state persists: 'artifact' (default) or 'commit'. */
+  persistCache: 'artifact' | 'commit' | undefined
 }
 
 export type ConfigInput = Partial<Omit<Config, 'provider'>> & { provider?: Partial<ProviderRules> }
@@ -61,6 +78,11 @@ const defaults: Config = {
   reportDir: undefined,
   secrets: undefined,
   pageSetup: undefined,
+  logLevel: undefined,
+  sourceGlobs: undefined,
+  indexPath: undefined,
+  diffBase: undefined,
+  persistCache: undefined,
 }
 
 export function resolveConfig(input: ConfigInput = {}): Config {
