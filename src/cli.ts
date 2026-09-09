@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { realpathSync } from 'node:fs'
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { basename, extname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
@@ -189,6 +190,8 @@ async function cmdRecord(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
   try {
     target = await startTarget(config)
     driver = await launchDriver(deps)
+    const setupTmp = await mkdtemp(join(tmpdir(), 'vision-e2e-setup-'))
+    await applyPageSetup(config, driver, ctx, setupTmp)
     const client = createClient(deps, config, ctx)
     const ledger = new Ledger(config.budgetUsd)
     const actions = new Actions(driver)
@@ -245,7 +248,7 @@ async function discoverTestFiles(dir: string): Promise<string[]> {
   return found.sort()
 }
 
-async function importTestFile(file: string, tmpDir: string): Promise<void> {
+async function importModule(file: string, tmpDir: string): Promise<Record<string, unknown>> {
   let target = file
   if (extname(file) === '.ts' || extname(file) === '.mts') {
     let transpile: (source: string) => string
@@ -257,8 +260,8 @@ async function importTestFile(file: string, tmpDir: string): Promise<void> {
         }).outputText
     } catch {
       throw new Error(
-        `cannot execute TypeScript test file ${file}: the "typescript" package is not ` +
-          'available. Install it or ship precompiled .mjs test files.',
+        `cannot execute TypeScript module ${file}: the "typescript" package is not ` +
+          'available. Install it or ship precompiled .mjs modules.',
       )
     }
     const source = await readFile(file, 'utf8')
@@ -266,7 +269,34 @@ async function importTestFile(file: string, tmpDir: string): Promise<void> {
     target = join(tmpDir, `${basename(file)}.${process.pid}.mjs`)
     await writeFile(target, transpile(source), 'utf8')
   }
-  await import(`${pathToFileURL(target).href}?t=${Date.now()}`)
+  return (await import(`${pathToFileURL(target).href}?t=${Date.now()}`)) as Record<string, unknown>
+}
+
+async function importTestFile(file: string, tmpDir: string): Promise<void> {
+  await importModule(file, tmpDir)
+}
+
+type PageSetupFn = (page: unknown) => void | Promise<void>
+
+/**
+ * Optional `config.pageSetup` module: default-exported function invoked with
+ * the Playwright Page after launch, before navigation — the seam for
+ * page.route mocks and pre-navigation seeding.
+ */
+async function applyPageSetup(
+  config: Config,
+  driver: BrowserDriver,
+  ctx: Ctx,
+  tmpDir: string,
+): Promise<void> {
+  if (config.pageSetup === undefined || config.pageSetup === '') return
+  const file = resolve(ctx.cwd, config.pageSetup)
+  const mod = await importModule(file, tmpDir)
+  const setup = mod.default
+  if (typeof setup !== 'function') {
+    throw new Error(`pageSetup module ${file} must default-export a function`)
+  }
+  await (setup as PageSetupFn)(driver.rawPage)
 }
 
 interface GlobalPatch {
@@ -355,6 +385,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
       let driver: BrowserDriver | undefined
       try {
         driver = await launchDriver(deps)
+        await applyPageSetup(config, driver, ctx, tmpDir)
 
         // A file-level session so test files that call `td` at module top
         // level (no test() wrapper) still execute as a single named test.

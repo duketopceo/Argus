@@ -30,6 +30,13 @@ export interface Config {
    * locally and never sent to the model — the model only resolves the field.
    */
   secrets: Record<string, string> | undefined
+  /**
+   * Optional module path (resolved from cwd) whose default export is invoked
+   * with the Playwright `Page` after the driver launches and before any
+   * navigation — the seam for `page.route` mocks, tenant seeding, and other
+   * pre-navigation setup.
+   */
+  pageSetup: string | undefined
 }
 
 export type ConfigInput = Partial<Omit<Config, 'provider'>> & { provider?: Partial<ProviderRules> }
@@ -46,6 +53,7 @@ const defaults: Config = {
   testsDir: undefined,
   reportDir: undefined,
   secrets: undefined,
+  pageSetup: undefined,
 }
 
 export function resolveConfig(input: ConfigInput = {}): Config {
