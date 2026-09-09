@@ -118,13 +118,23 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
 
 function createClient(deps: CliDeps, config: Config, ctx: Ctx): VisionClient {
   if (deps.createClient) return deps.createClient(config)
-  const apiKey = ctx.env.OPENROUTER_API_KEY
-  if (apiKey === undefined || apiKey === '') {
-    throw new Error(
-      'OPENROUTER_API_KEY is not set — every vision call is billed through this key (BYOK)',
-    )
+  // Lazy: a cache-hit replay makes zero vision calls and needs no key. The
+  // error fires clearly on the first actual model call.
+  let inner: OpenRouterClient | undefined
+  return {
+    complete: async (opts) => {
+      if (inner === undefined) {
+        const apiKey = ctx.env.OPENROUTER_API_KEY
+        if (apiKey === undefined || apiKey === '') {
+          throw new Error(
+            'OPENROUTER_API_KEY is not set — every vision call is billed through this key (BYOK)',
+          )
+        }
+        inner = new OpenRouterClient({ apiKey })
+      }
+      return inner.complete(opts)
+    },
   }
-  return new OpenRouterClient({ apiKey })
 }
 
 async function launchDriver(deps: CliDeps): Promise<BrowserDriver> {
