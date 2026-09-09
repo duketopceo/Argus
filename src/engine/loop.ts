@@ -451,7 +451,7 @@ export class Engine {
     const response = await this._opts.client.complete({
       model: modelOverride ?? this._opts.config.model,
       messages,
-      schema,
+      ...(schema !== undefined ? { schema } : {}),
       ...(escalationModels ? { escalationModels } : {}),
       provider: this._opts.config.provider,
       kind,
