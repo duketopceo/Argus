@@ -42,7 +42,7 @@ export interface Config {
 export type ConfigInput = Partial<Omit<Config, 'provider'>> & { provider?: Partial<ProviderRules> }
 
 const defaults: Config = {
-  model: 'qwen/qwen3.7-flash',
+  model: 'google/gemini-2.5-flash-lite',
   escalation_model: 'moonshotai/kimi-k2.5',
   provider: {
     ignore: ['siliconflow', 'novitaai', 'atlascloud', 'streamlake', 'chutes'],
