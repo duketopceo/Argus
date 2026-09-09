@@ -1,11 +1,11 @@
 {
-  "name": "vision-e2e",
+  "name": "argus-e2e",
   "version": "0.0.1",
-  "description": "Open-source, BYOK vision-model E2E testing harness: record once, fingerprint-cache, replay near-free, heal on drift, report on the GitHub PR.",
+  "description": "Argus \u2014 open-source vision-model E2E testing harness. Record, replay, heal, and assert with any OpenRouter model under a hard budget cap.",
   "type": "module",
   "license": "MIT",
   "bin": {
-    "vision-e2e": "dist/cli.js"
+    "argus": "dist/cli.js"
   },
   "exports": {
     ".": "./dist/api.js",
@@ -40,5 +40,9 @@
   "dependencies": {
     "playwright": "1.63.0",
     "typescript": "^5.5.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/duketopceo/Argus.git"
   }
 }

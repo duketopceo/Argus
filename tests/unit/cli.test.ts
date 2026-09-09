@@ -58,8 +58,8 @@ describe('vision-e2e CLI', () => {
     expect(await main(['record', '--help'], { out: out.fn })).toBe(0)
     expect(await main(['run', '--help'], { out: out.fn })).toBe(0)
     expect(await main(['--help'], { out: out.fn })).toBe(0)
-    expect(out.lines.join('\n')).toContain('vision-e2e run')
-    expect(out.lines.join('\n')).toContain('vision-e2e record')
+    expect(out.lines.join('\n')).toContain('argus run')
+    expect(out.lines.join('\n')).toContain('argus record')
   })
 
   it('runs a td-API test file end-to-end, warns on unknown provider slugs, writes JUnit + report', async () => {

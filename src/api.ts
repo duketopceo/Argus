@@ -302,7 +302,7 @@ export function bindSession(session: TdSession | undefined): void {
 
 function session(): TdSession {
   if (currentSession === undefined) {
-    throw new Error('td used outside a vision-e2e run — no active session')
+    throw new Error('td used outside an argus run — no active session')
   }
   return currentSession
 }
@@ -340,8 +340,8 @@ export function renderTestFile(flowName: string, steps: FingerprintRecord[]): st
     }
   })
   return [
-    `// Recorded by vision-e2e: ${flowName}`,
-    `import { test } from 'vision-e2e'`,
+    `// Recorded by argus: ${flowName}`,
+    `import { test } from 'argus-e2e'`,
     '',
     `test(${JSON.stringify(flowName)}, async (td) => {`,
     ...lines,

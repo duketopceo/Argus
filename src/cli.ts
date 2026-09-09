@@ -43,20 +43,20 @@ interface Ctx {
   err: (line: string) => void
 }
 
-const USAGE = `vision-e2e — vision-model E2E testing harness (BYOK via OPENROUTER_API_KEY)
+const USAGE = `argus — vision-model E2E testing harness (BYOK via OPENROUTER_API_KEY)
 
 Usage:
-  vision-e2e record "<flow description>" --url <target> [--name <flow>] [--tests-dir <dir>]
-  vision-e2e run [pattern] [--url <target>] [--dir <testsDir>] [--report-dir <dir>]
-  vision-e2e cache list [--dir <cacheDir>]
-  vision-e2e cache prune [name|--all] [--dir <cacheDir>]
-  vision-e2e --help
+  argus record "<flow description>" --url <target> [--name <flow>] [--tests-dir <dir>]
+  argus run [pattern] [--url <target>] [--dir <testsDir>] [--report-dir <dir>]
+  argus cache list [--dir <cacheDir>]
+  argus cache prune [name|--all] [--dir <cacheDir>]
+  argus --help
 
 Config: vision-e2e.config.ts or vision-e2e.config.json in the working directory
 (model, escalation_model, provider rules, budgetUsd, target, cacheDir,
 testsDir, reportDir, secrets).`
 
-const RECORD_USAGE = `Usage: vision-e2e record "<flow description>" --url <target> [options]
+const RECORD_USAGE = `Usage: argus record "<flow description>" --url <target> [options]
 
 Options:
   --url <url>        Target URL (falls back to config.target.url)
@@ -64,7 +64,7 @@ Options:
   --tests-dir <dir>  Where to write the generated test file (default: config testsDir or ./tests)
   -h, --help         Show this help`
 
-const RUN_USAGE = `Usage: vision-e2e run [pattern] [options]
+const RUN_USAGE = `Usage: argus run [pattern] [options]
 
 Discovers *.test.{ts,mts,mjs,js} under the tests dir, executes each against the
 target, and writes JUnit XML + a JSON run report.
@@ -77,7 +77,7 @@ Options:
   --cache-dir <dir>  Fingerprint cache dir (default: config cacheDir)
   -h, --help         Show this help`
 
-const CACHE_USAGE = `Usage: vision-e2e cache <list|prune> [options]
+const CACHE_USAGE = `Usage: argus cache <list|prune> [options]
 
   cache list                 List cached flows (name + step count)
   cache prune [name|--all]   Delete one flow cache, or all with --all
@@ -181,7 +181,7 @@ async function cmdRecord(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
 
   const description = positionals.join(' ').trim()
   if (description === '') {
-    ctx.err('record requires a flow description: vision-e2e record "<flow>" --url <target>')
+    ctx.err('record requires a flow description: argus record "<flow>" --url <target>')
     return 2
   }
 
@@ -630,7 +630,7 @@ if (invokedAsScript) {
       process.exitCode = code
     })
     .catch((e: unknown) => {
-      console.error(`vision-e2e: ${(e as Error).message}`)
+      console.error(`argus: ${(e as Error).message}`)
       process.exitCode = 1
     })
 }
