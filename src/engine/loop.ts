@@ -313,7 +313,51 @@ export class Engine {
       }
     }
 
-    const action = this._parseAction(response.content)
+    let action = this._parseAction(response.content)
+    let model = response.model
+
+    // Verify-then-correct: resolve the DOM node under the proposed point and
+    // check its label against the instruction's target words. A mismatch means
+    // the model's pixel grounding drifted (small models are systematically
+    // imprecise); re-ask once with the resolved element as feedback.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (action.action === 'fail') {
+        return {
+          ok: false,
+          reason: action.reasoning,
+          healed: false,
+          point: undefined,
+          fingerprint: undefined,
+          model,
+        }
+      }
+      if (action.action !== 'click') break
+      if (action.x === undefined || action.y === undefined) {
+        return {
+          ok: false,
+          reason: `model returned "${action.action}" without coordinates`,
+          healed: false,
+          point: undefined,
+          fingerprint: undefined,
+          model,
+        }
+      }
+
+      const probe = await this._resolveNode(action.x, action.y)
+      if (probe === null || instructionMatchesNode(instruction, probe.a11ySnippet)) break
+
+      if (attempt === 1 || !this._opts.ledger.canSpend(0.001)) break
+      const feedback = `Your previous coordinates (${action.x},${action.y}) resolved to "${probe.a11ySnippet}", which does not match the target. Re-examine the grid labels and return corrected coordinates for: ${instruction}`
+      const retry = await this._callModel(
+        cached ? 'heal' : 'ground',
+        buildActionMessages(feedback, observation),
+        cached ? [this._opts.config.escalation_model] : undefined,
+      )
+      if (!retry) break
+      action = this._parseAction(retry.content)
+      model = retry.model
+    }
+
     if (action.action === 'fail') {
       return {
         ok: false,
@@ -321,7 +365,7 @@ export class Engine {
         healed: false,
         point: undefined,
         fingerprint: undefined,
-        model: response.model,
+        model,
       }
     }
     if (action.x === undefined || action.y === undefined) {
@@ -331,12 +375,12 @@ export class Engine {
         healed: false,
         point: undefined,
         fingerprint: undefined,
-        model: response.model,
+        model,
       }
     }
 
     const resolved = await this._resolveNode(action.x, action.y)
-    const fingerprint = await this._buildFingerprint(instruction, action, resolved, response.model)
+    const fingerprint = await this._buildFingerprint(instruction, action, resolved, model)
     return {
       ok: true,
       reason: undefined,
@@ -557,4 +601,27 @@ export class Engine {
   private _result(ok: boolean, reason?: string): RunResult {
     return { ok, steps: this._steps, visionCalls: this._visionCalls, ...(reason ? { reason } : {}) }
   }
+}
+
+/**
+ * Cheap semantic check for the verify-then-correct loop: does the resolved
+ * node's label share any content word with the instruction? Stopwords and
+ * short words are ignored; quoted phrases are split into words.
+ */
+const LOCATE_STOPWORDS = new Set([
+  'the', 'a', 'an', 'in', 'on', 'of', 'to', 'for', 'with', 'below', 'above',
+  'left', 'right', 'top', 'bottom', 'side', 'sidebar', 'navigation', 'nav',
+  'item', 'button', 'link', 'field', 'input', 'section', 'area', 'panel',
+  'that', 'this', 'into', 'onto', 'page', 'view', 'menu', 'click', 'find',
+])
+
+export function instructionMatchesNode(instruction: string, nodeSnippet: string): boolean {
+  const words = instruction
+    .toLowerCase()
+    .replace(/["'']/g, ' ')
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 4 && !LOCATE_STOPWORDS.has(w))
+  if (words.length === 0) return true
+  const haystack = nodeSnippet.toLowerCase()
+  return words.some((w) => haystack.includes(w))
 }
