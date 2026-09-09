@@ -527,9 +527,14 @@ export class Engine {
       // JSON. Coordinates are absolute pixels of the screenshot; values <= 1
       // are treated as normalized [0,1] and scaled to the viewport.
       const coord = content.match(/\(?\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*\)?/)
-      if (coord) {
-        let x = Number(coord[1])
-        let y = Number(coord[2])
+      // Malformed-JSON fallback: pull "x":N and "y":N fields independently.
+      const xm = content.match(/"x"\s*:\s*(\d+(?:\.\d+)?)/)
+      const ym = content.match(/"y"\s*:\s*(\d+(?:\.\d+)?)/)
+      const px = coord?.[1] ?? xm?.[1]
+      const py = coord?.[2] ?? ym?.[1]
+      if (px !== undefined && py !== undefined) {
+        let x = Number(px)
+        let y = Number(py)
         if (x <= 1 && y <= 1) {
           x = Math.round(x * 1280)
           y = Math.round(y * 720)
