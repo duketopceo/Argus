@@ -166,6 +166,47 @@ describe('vision-e2e CLI', () => {
     expect(junit).toContain('failing assert')
   }, 60_000)
 
+  it('invokes config pageSetup with the page before navigation', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'vision-e2e-setup-'))
+    const testsDir = join(cwd, 'tests')
+    await mkdir(testsDir, { recursive: true })
+
+    // pageSetup receives the Playwright page; assert it fires pre-navigation
+    // (url is still about:blank) and records a marker we can observe.
+    await writeFile(
+      join(cwd, 'setup.mjs'),
+      `export default async function setup(page) {
+  if (page.url() !== 'about:blank') throw new Error('pageSetup ran after navigation')
+  globalThis.__pageSetupCalls = (globalThis.__pageSetupCalls || 0) + 1
+  await page.addInitScript('globalThis.__seeded = true')
+}
+`,
+    )
+    await writeFile(
+      join(cwd, 'vision-e2e.config.json'),
+      JSON.stringify({
+        testsDir,
+        reportDir: join(cwd, 'report'),
+        pageSetup: './setup.mjs',
+        budgetUsd: 1,
+      }),
+    )
+    await writeFile(
+      join(testsDir, 'noop.test.mjs'),
+      `test('noop', async () => {})
+`,
+    )
+    const client = new StubClient([])
+    const code = await main(['run', '--url', FIXTURE_URL], {
+      cwd,
+      out: capture().fn,
+      err: capture().fn,
+      createClient: () => client,
+    })
+    expect(code).toBe(0)
+    expect((globalThis as Record<string, unknown>).__pageSetupCalls).toBe(1)
+  }, 60_000)
+
   it('cache list and prune operate on the cache dir', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'vision-e2e-cache-'))
     const cacheDir = join(cwd, 'cache')
