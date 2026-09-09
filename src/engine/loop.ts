@@ -344,7 +344,7 @@ export class Engine {
         }
       }
       if (action.action !== 'click') break
-      if (action.x === undefined || action.y === undefined) {
+      if (typeof action.x !== 'number' || !Number.isFinite(action.x) || typeof action.y !== 'number' || !Number.isFinite(action.y)) {
         return {
           ok: false,
           reason: `model returned "${action.action}" without coordinates (reasoning: ${(action.reasoning ?? '').slice(0, 160)})`,
@@ -385,7 +385,7 @@ export class Engine {
         model,
       }
     }
-    if (action.x === undefined || action.y === undefined) {
+    if (typeof action.x !== 'number' || !Number.isFinite(action.x) || typeof action.y !== 'number' || !Number.isFinite(action.y)) {
       return {
         ok: false,
         reason: `model returned "${action.action}" without coordinates`,
@@ -507,6 +507,8 @@ export class Engine {
           } else {
             out.text = v
           }
+          if (typeof out.x === 'string') out.x = Number(out.x)
+          if (typeof out.y === 'string') out.y = Number(out.y)
         }
         if (typeof parsed.reasoning === 'string') out.reasoning = parsed.reasoning
         return out as unknown as ProposedAction
@@ -589,7 +591,7 @@ export class Engine {
   private async _resolveAction(
     action: ProposedAction,
   ): Promise<{ bbox: Bbox; clickPoint: Point; a11ySnippet: string } | undefined> {
-    if (action.x === undefined || action.y === undefined) {
+    if (typeof action.x !== 'number' || !Number.isFinite(action.x) || typeof action.y !== 'number' || !Number.isFinite(action.y)) {
       return undefined
     }
     return this._resolveNode(action.x, action.y)
@@ -648,7 +650,7 @@ export class Engine {
   ): Promise<Observation> {
     switch (action.action) {
       case 'click':
-        return tdApi.click(action.x ?? 0, action.y ?? 0)
+        return tdApi.click(Number.isFinite(action.x) ? (action.x as number) : 0, Number.isFinite(action.y) ? (action.y as number) : 0)
       case 'type':
         return tdApi.type(action.text ?? '')
       case 'pressKeys':
