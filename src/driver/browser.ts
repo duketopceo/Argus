@@ -23,6 +23,9 @@ export interface BrowserDriverOptions {
 export interface Observation {
   screenshotJpeg: Buffer
   a11yYaml: string
+  /** Viewport (CSS pixels) the screenshot was taken at — model coords map 1:1. */
+  width: number
+  height: number
 }
 
 const DEFAULT_VIEWPORT: Viewport = { width: 1280, height: 720 }
@@ -39,6 +42,7 @@ export class BrowserDriver {
     private readonly page: Page,
     private readonly quality: number,
     private readonly videoDir: string,
+    private readonly viewport: Viewport,
     private video: string | undefined,
     private closed = false,
   ) {}
@@ -62,6 +66,7 @@ export class BrowserDriver {
         page,
         options.screenshotQuality ?? DEFAULT_QUALITY,
         videoDir,
+        viewport,
         undefined,
       )
     } catch (e) {
@@ -85,15 +90,96 @@ export class BrowserDriver {
   /**
    * Capture the current observation: a bounded JPEG screenshot plus the page's
    * a11y tree as YAML via ariaSnapshot (not the deprecated accessibility API).
+   *
+   * `grid: true` paints a temporary coordinate overlay (lines + axis labels
+   * every 100px) before the screenshot and removes it immediately after — the
+   * set-of-marks trick that measurably improves vision-model pixel grounding.
    */
-  async observe(): Promise<Observation> {
-    const screenshotJpeg = await this.page.screenshot({
-      type: 'jpeg',
-      quality: this.quality,
-      scale: 'css',
+  async observe(options: { grid?: boolean } = {}): Promise<Observation> {
+    const grid = options.grid === true
+    if (grid) await this._paintGrid()
+    try {
+      const screenshotJpeg = await this.page.screenshot({
+        type: 'jpeg',
+        quality: this.quality,
+        scale: 'css',
+      })
+      const a11yYaml = await this.page.locator('body').ariaSnapshot()
+      return { screenshotJpeg, a11yYaml, width: this.viewport.width, height: this.viewport.height }
+    } finally {
+      if (grid) await this._removeGrid()
+    }
+  }
+
+  private async _paintGrid(): Promise<void> {
+    await this.page.evaluate(() => {
+      const doc = (
+        globalThis as unknown as {
+          document: {
+            createElement: (tag: string) => unknown
+            body: { appendChild: (el: unknown) => void }
+          }
+        }
+      ).document
+      const overlay = doc.createElement('div') as {
+        id: string
+        setAttribute: (k: string, v: string) => void
+        style: { cssText: string }
+      }
+      overlay.id = '__vision_e2e_grid'
+      overlay.setAttribute('aria-hidden', 'true')
+      overlay.style.cssText =
+        'position:fixed;inset:0;z-index:2147483647;pointer-events:none;' +
+        'background-image:' +
+        'linear-gradient(to right, rgba(255,0,0,.35) 1px, transparent 1px),' +
+        'linear-gradient(to bottom, rgba(255,0,0,.35) 1px, transparent 1px);' +
+        'background-size:100px 100px;'
+      doc.body.appendChild(overlay)
+
+      const labels = doc.createElement('div') as {
+        id: string
+        setAttribute: (k: string, v: string) => void
+        style: { cssText: string }
+        textContent: string
+      }
+      labels.id = '__vision_e2e_grid_labels'
+      labels.setAttribute('aria-hidden', 'true')
+      labels.style.cssText =
+        'position:fixed;inset:0;z-index:2147483647;pointer-events:none;' +
+        'font:9px monospace;color:rgba(200,0,0,.9);'
+      const win = globalThis as unknown as {
+        innerWidth: number
+        innerHeight: number
+        document: typeof doc
+      }
+      for (let x = 100; x < win.innerWidth; x += 100) {
+        for (let y = 100; y < win.innerHeight; y += 100) {
+          const tag = win.document.createElement('span') as {
+            style: { cssText: string }
+            textContent: string
+          }
+          tag.style.cssText = `position:absolute;left:${x + 1}px;top:${y + 1}px;`
+          tag.textContent = `${x},${y}`
+          ;(labels as unknown as { appendChild: (el: unknown) => void }).appendChild(tag)
+        }
+      }
+      doc.body.appendChild(labels)
     })
-    const a11yYaml = await this.page.locator('body').ariaSnapshot()
-    return { screenshotJpeg, a11yYaml }
+  }
+
+  private async _removeGrid(): Promise<void> {
+    await this.page
+      .evaluate(() => {
+        const doc = (
+          globalThis as unknown as {
+            document: { getElementById: (id: string) => { remove: () => void } | null }
+          }
+        ).document
+        for (const id of ['__vision_e2e_grid', '__vision_e2e_grid_labels']) {
+          doc.getElementById(id)?.remove()
+        }
+      })
+      .catch(() => undefined)
   }
 
   /** Path of the recorded webm, available after close(). */

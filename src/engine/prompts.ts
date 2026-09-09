@@ -24,7 +24,9 @@ Return a single JSON object from this exact vocabulary — nothing else.  The ou
 - done: the instruction is complete
 - fail: the instruction cannot be completed; include reasoning
 
-Always include the "reasoning" field.`
+Always include the "reasoning" field.
+
+Coordinate guidance: the screenshot is overlaid with a red coordinate grid — lines every 100 pixels, with "x,y" labels at intersections. Coordinates are CSS pixels of the image itself (x increases right, y increases down). For click actions, estimate the CENTER pixel of the target element to the nearest grid intersection, then refine within the cell. Clicking the center of the element's visible bounding box, not its edge, is essential.`
 
 const ASSERTION_SYSTEM = `You are a web UI assertion judge.
 
@@ -69,7 +71,7 @@ export const assertionSchema: JsonSchema = {
 }
 
 export function buildActionMessages(instruction: string, observation: Observation): Message[] {
-  const text = `Instruction: ${instruction}\n\nA11y tree:\n${observation.a11yYaml}`
+  const text = `Instruction: ${instruction}\n\nViewport: ${observation.width}x${observation.height} CSS pixels (the screenshot dimensions match exactly).\n\nA11y tree:\n${observation.a11yYaml}`
   return [
     { role: 'system', content: [{ type: 'text', text: ACTION_SYSTEM }] },
     {
@@ -83,7 +85,7 @@ export function buildActionMessages(instruction: string, observation: Observatio
 }
 
 export function buildAssertMessages(question: string, observation: Observation): Message[] {
-  const text = `Question: ${question}\n\nA11y tree:\n${observation.a11yYaml}`
+  const text = `Question: ${question}\n\nViewport: ${observation.width}x${observation.height} CSS pixels.\n\nA11y tree:\n${observation.a11yYaml}`
   return [
     { role: 'system', content: [{ type: 'text', text: ASSERTION_SYSTEM }] },
     {

@@ -109,7 +109,7 @@ export class Engine {
     this._fingerprints = []
 
     const cap = options.stepCap ?? 10
-    let observation = await this._opts.driver.observe()
+    let observation = await this._opts.driver.observe({ grid: true })
 
     for (let i = 0; i < cap; i++) {
       const response = await this._callModel(
@@ -270,7 +270,7 @@ export class Engine {
    * fingerprint (R4). The returned point is the viewport-pixel click target.
    */
   async locate(instruction: string, cached?: FingerprintRecord): Promise<LocateResult> {
-    const observation = await this._opts.driver.observe()
+    const observation = await this._opts.driver.observe({ grid: true })
 
     if (cached) {
       const regionBuffer = await this._regionScreenshot(cached.bbox)
@@ -509,7 +509,7 @@ export class Engine {
       case 'wait':
         return tdApi.wait(action.ms ?? 0)
       default:
-        return this._opts.driver.observe()
+        return this._opts.driver.observe({ grid: true })
     }
   }
 
