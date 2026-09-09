@@ -309,10 +309,17 @@ export class Engine {
       }
     }
 
+    const specialist = this._opts.config.grounding_model !== undefined
+    const prompt = specialist
+      ? // ui-tars-class models ignore JSON schemas and answer with bare
+        // "(x,y)" coordinates — ask in their native format.
+        `Click on the UI element matching this description: ${instruction.replace(/^locate:\s*/i, '')}.`
+      : instruction
     const response = await this._callModel(
       cached ? 'heal' : 'ground',
-      buildActionMessages(instruction, observation),
+      buildActionMessages(prompt, observation),
       cached ? [this._opts.config.escalation_model] : undefined,
+      this._opts.config.grounding_model,
     )
     if (!response) {
       return {
@@ -357,7 +364,6 @@ export class Engine {
       }
 
       if (attempt === 1 || !this._opts.ledger.canSpend(0.001)) break
-      const specialist = this._opts.config.grounding_model !== undefined
       const feedback = specialist
         ? // ui-tars-class models want their native prompt format.
           `Click on the UI element matching this description: ${instruction.replace(/^locate:\s*/i, '')}.`
