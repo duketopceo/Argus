@@ -1,0 +1,72 @@
+name: vision-e2e
+description: Run the vision-e2e harness and post a sticky PR comment with cost and evidence.
+author: duketopceo
+inputs:
+  openrouter-api-key:
+    description: OpenRouter API key (BYOK). All vision calls are billed through this key.
+    required: true
+  config:
+    description: Path to the vision-e2e config file
+    default: vision-e2e.config.ts
+    required: false
+  working-directory:
+    description: Working directory for the consumer's project
+    required: false
+  budget-usd:
+    description: Optional per-run budget cap override in USD
+    required: false
+outputs:
+  conclusion:
+    description: 'Run conclusion: success, failure, or neutral'
+    value: ${{ steps.post.outputs.conclusion }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: npm
+
+    - name: Install consumer dependencies
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: npm ci
+
+    - name: Install Playwright Chromium
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: npx playwright install --with-deps chromium
+
+    - name: Stage config
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        if [ "${{ inputs.config }}" != "vision-e2e.config.ts" ]; then
+          cp "${{ inputs.config }}" vision-e2e.config.ts
+        fi
+
+    - name: Run vision-e2e
+      id: run
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      continue-on-error: true
+      env:
+        OPENROUTER_API_KEY: ${{ inputs.openrouter-api-key }}
+      run: npx vision-e2e run
+
+    - name: Post or update sticky PR comment
+      id: post
+      uses: actions/github-script@v7
+      env:
+        OPENROUTER_API_KEY: ${{ inputs.openrouter-api-key }}
+        VISION_E2E_WORKING_DIR: ${{ inputs.working-directory }}
+      with:
+        github-token: ${{ github.token }}
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+          const actionPath = process.env.GITHUB_ACTION_PATH;
+          const file = path.join(actionPath, 'action', 'sticky-comment.mjs');
+          const code = fs.readFileSync(file, 'utf8');
+          const runFn = new Function('github', 'context', 'core', 'require', `return (async () => {\n${code}\n})()`);
+          return await runFn(github, context, core, require);
