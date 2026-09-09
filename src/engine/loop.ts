@@ -470,6 +470,28 @@ export class Engine {
   private _parseAction(content: string): ProposedAction {
     try {
       const parsed = JSON.parse(content) as Record<string, unknown>
+      // Variant shape some models emit: {"click": "(x,y)"} or
+      // {"click": {"x": .., "y": ..}} — action name as key, payload as value.
+      const variantKey = ['click', 'type', 'pressKeys', 'scroll', 'wait', 'done', 'fail'].find(
+        (k) => k in parsed,
+      )
+      if (parsed.action === undefined && variantKey !== undefined) {
+        const v = parsed[variantKey]
+        const out: Record<string, unknown> = { action: variantKey }
+        if (typeof v === 'object' && v !== null) Object.assign(out, v)
+        else if (typeof v === 'string') {
+          const coord = v.match(/\(?\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*\)?/)
+          if (coord) {
+            out.x = Number(coord[1])
+            out.y = Number(coord[2])
+          } else {
+            out.text = v
+          }
+        }
+        if (typeof parsed.reasoning === 'string') out.reasoning = parsed.reasoning
+        return out as unknown as ProposedAction
+      }
+
       const action = String(parsed.action ?? '')
       if (!['click', 'type', 'pressKeys', 'scroll', 'wait', 'done', 'fail'].includes(action)) {
         return {
