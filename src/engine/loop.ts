@@ -380,6 +380,22 @@ export class Engine {
     }
 
     const resolved = await this._resolveNode(action.x, action.y)
+    // Never commit a fingerprint for a node we can see is wrong — a false
+    // cache entry would silently replay the mis-click forever.
+    if (
+      resolved !== null &&
+      action.action === 'click' &&
+      !instructionMatchesNode(instruction, resolved.a11ySnippet)
+    ) {
+      return {
+        ok: false,
+        reason: `model grounded to "${resolved.a11ySnippet}", which does not match the instruction`,
+        healed: false,
+        point: undefined,
+        fingerprint: undefined,
+        model,
+      }
+    }
     const fingerprint = await this._buildFingerprint(instruction, action, resolved, model)
     return {
       ok: true,
