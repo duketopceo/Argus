@@ -335,7 +335,7 @@ export class Engine {
       if (action.x === undefined || action.y === undefined) {
         return {
           ok: false,
-          reason: `model returned "${action.action}" without coordinates`,
+          reason: `model returned "${action.action}" without coordinates (reasoning: ${action.reasoning.slice(0, 160)})`,
           healed: false,
           point: undefined,
           fingerprint: undefined,
