@@ -1,5 +1,7 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+
+import { writeAtomicJson } from '../fsutil.js'
 
 import { FingerprintRecord } from './fingerprint.js'
 
@@ -62,10 +64,5 @@ export async function saveFlow(
   steps: FingerprintRecord[],
   asserts?: CachedAssert[],
 ): Promise<void> {
-  await mkdir(cacheDir, { recursive: true })
-  const path = flowPath(cacheDir, flowName)
-  const tmp = `${path}.tmp`
-  const json = `${JSON.stringify({ steps, asserts: asserts ?? [] }, sortKeys, 2)}\n`
-  await writeFile(tmp, json, 'utf8')
-  await rename(tmp, path)
+  await writeAtomicJson(flowPath(cacheDir, flowName), { steps, asserts: asserts ?? [] }, sortKeys)
 }

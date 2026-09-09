@@ -1,6 +1,9 @@
-node_modules/
-dist/
+argus.index.json
 coverage/
+dist/
 .env
-*.webm
+node_modules/
 test-results/
+.vision-e2e-cache/
+vision-e2e-report/
+*.webm

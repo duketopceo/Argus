@@ -12,6 +12,7 @@ import {
   fnv1a,
   FingerprintRecord,
   Point,
+  ResolveResult,
 } from '../cache/fingerprint.js'
 import { CachedAssert, FlowCache, saveFlow } from '../cache/store.js'
 import { ErrorRecord } from '../journal/schema.js'
@@ -206,9 +207,16 @@ export class Engine {
       const step = flow.steps[i]
       if (!step) continue
       let observation = await this._opts.driver.observe()
-      const regionBuffer = await this._regionScreenshot(step.bbox)
-      const fingerprint = new Fingerprint(step)
-      const resolve = fingerprint.resolve(regionBuffer, observation.a11yYaml)
+      // Diff-invalidated entries skip hash verification entirely and go
+      // straight to the heal path — the diff already told us they're stale.
+      let resolve: ResolveResult
+      if (step.stale !== undefined) {
+        this._note('heal', 'cache entry invalidated by diff', step.stale)
+        resolve = { matched: false, currentHash: '', regionMatched: false, a11yMatched: false }
+      } else {
+        const regionBuffer = await this._regionScreenshot(step.bbox)
+        resolve = new Fingerprint(step).resolve(regionBuffer, observation.a11yYaml)
+      }
 
       if (resolve.matched) {
         await this._executeAction(this._opts.actions, step.action)
@@ -273,6 +281,7 @@ export class Engine {
         response.model,
       )
       flow.steps[i] = newFingerprint
+      this._note('heal', 'fingerprint mismatch healed by model', step.instruction)
 
       this._steps.push({
         instruction: step.instruction,
@@ -334,12 +343,19 @@ export class Engine {
         // "(x,y)" coordinates — ask in their native format.
         `Click on the UI element matching this description: ${instruction.replace(/^locate:\s*/i, '')}.`
       : instruction
-    const response = await this._callModel(
-      cached ? 'heal' : 'ground',
-      buildActionMessages(prompt, observation),
-      cached ? [this._opts.config.escalation_model] : undefined,
-      this._opts.config.grounding_model,
-    )
+    let response
+    try {
+      response = await this._callModel(
+        cached ? 'heal' : 'ground',
+        buildActionMessages(prompt, observation),
+        cached ? [this._opts.config.escalation_model] : undefined,
+        this._opts.config.grounding_model,
+      )
+    } catch (e) {
+      // Provider failures are hard errors — still journal them as evidence.
+      this._note('locate', 'model call threw', (e as Error).message)
+      throw e
+    }
     if (!response) {
       return {
         ok: false,

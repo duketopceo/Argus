@@ -1,10 +1,8 @@
 /**
- * Stress / fault-injection suite — dev-only, not part of `vitest run` default.
- * Every malformed model output or drifted element must degrade gracefully:
- * the engine returns a structured failure or recovers, and the anomaly lands
- * in `errorRecords` for the run journal.
- *
- * Run explicitly: npx vitest run tests/stress/
+ * Stress / fault-injection suite — runs in the default test run (one shared
+ * browser, ~2s). Every malformed model output or drifted element must
+ * degrade gracefully: the engine returns a structured failure or recovers,
+ * and the anomaly lands in `errorRecords` for the run journal.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { tmpdir } from 'node:os'
@@ -87,10 +85,11 @@ describe('fault injection — model output garbage degrades gracefully', () => {
     expect(engine.errorRecords.some((e) => e.message.includes('missing/invalid coords'))).toBe(true)
   })
 
-  it('provider 5xx propagates as a failed locate with journaled evidence', async () => {
+  it('provider 5xx throws (hard failure) but still lands in errorRecords', async () => {
     const cacheDir = await mkdtemp(join(tmpdir(), 'argus-stress-'))
     const engine = makeEngine(driver, new FaultyClient([new Error('OpenRouter 502')]), cacheDir)
     await expect(engine.locate('locate: the click button')).rejects.toThrow('OpenRouter 502')
+    expect(engine.errorRecords.some((e) => e.message === 'model call threw')).toBe(true)
   })
 
   it('empty response queue → structured failure, no uncaught paths', async () => {
@@ -118,9 +117,13 @@ describe('fault injection — model output garbage degrades gracefully', () => {
       stale: 'diff touched app surface: src/App.tsx',
     }
     const r = await engine.locate('locate: the click button', fake)
-    // It re-grounded via the model (stale → bypass hash-verify).
-    expect(client.calls).toBeGreaterThan(0)
+    // Stale → bypass hash-verify, re-ground via exactly one model call,
+    // producing a fresh fingerprint rather than replaying the stale one.
+    expect(r.ok).toBe(true)
+    expect(client.calls).toBe(1)
+    expect(r.fingerprint).toBeDefined()
+    expect(r.fingerprint).not.toBe(fake)
+    expect(r.fingerprint?.regionHash).not.toBe('deadbeef')
     expect(engine.errorRecords.some((e) => e.message === 'cache entry invalidated by diff')).toBe(true)
-    void r
   })
 })

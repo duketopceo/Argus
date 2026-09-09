@@ -58,8 +58,6 @@ export interface Config {
   indexPath: string | undefined
   /** Base ref for diff invalidation (e.g. 'origin/main'); unset = working tree. */
   diffBase: string | undefined
-  /** Where run state persists: 'artifact' (default) or 'commit'. */
-  persistCache: 'artifact' | 'commit' | undefined
 }
 
 export type ConfigInput = Partial<Omit<Config, 'provider'>> & { provider?: Partial<ProviderRules> }
@@ -82,7 +80,6 @@ const defaults: Config = {
   sourceGlobs: undefined,
   indexPath: undefined,
   diffBase: undefined,
-  persistCache: undefined,
 }
 
 export function resolveConfig(input: ConfigInput = {}): Config {

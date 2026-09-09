@@ -1,5 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { writeAtomicJson } from '../fsutil.js'
 
 import type { HealEvent, TdAssertRecord, TdStepRecord } from '../api.js'
 
@@ -72,6 +71,5 @@ export function buildRunReport(
 }
 
 export async function writeRunReport(path: string, report: RunReport): Promise<void> {
-  await mkdir(dirname(path), { recursive: true })
-  await writeFile(path, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
+  await writeAtomicJson(path, report)
 }

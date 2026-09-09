@@ -56,16 +56,17 @@ export function invalidateForDiff(
   if (changed.length === 0) return { stale: false, reason: undefined, changedInSurface: [] }
 
   const cone = index !== undefined ? dependentCone(index, changed) : new Set(changed)
-  const inSurface = (p: string): boolean =>
-    sourceGlobs !== undefined && sourceGlobs.some((g) => globToRegex(g).test(p))
+  const patterns = (sourceGlobs ?? []).map(globToRegex)
+  const inSurface = (p: string): boolean => patterns.some((re) => re.test(p))
 
   let hit: string[]
-  if (sourceGlobs !== undefined && sourceGlobs.length > 0) {
+  if (patterns.length > 0) {
     // A change lands on the app surface if the changed file itself matches,
     // or something in its dependent cone (files that import it) matches.
-    hit = [...cone].filter((p) => inSurface(p) || changed.includes(p) && inSurface(p))
+    hit = [...cone].filter(inSurface)
   } else {
-    hit = [...cone].filter((p) => testPaths.includes(p))
+    const testSet = new Set(testPaths)
+    hit = [...cone].filter((p) => testSet.has(p))
   }
 
   if (hit.length === 0) {

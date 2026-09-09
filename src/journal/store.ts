@@ -1,5 +1,6 @@
-import { mkdir, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+
+import { writeAtomicJson } from '../fsutil.js'
 
 import { JournalEntry } from './schema.js'
 
@@ -8,18 +9,21 @@ export function journalDir(cacheDir: string): string {
 }
 
 /**
- * Append one immutable run record. Atomic via tmp+rename (same pattern as
- * src/cache/store.ts). Never throws — journal write failure is itself an
- * evidence gap, not a reason to abort a run.
+ * Append one immutable run record. Atomic via tmp+rename (src/fsutil.ts).
+ * Returns the written path, or undefined on failure — a journal write must
+ * never abort a run.
  */
-export async function writeJournal(cacheDir: string, entry: JournalEntry): Promise<string> {
-  const dir = journalDir(cacheDir)
-  await mkdir(dir, { recursive: true })
-  const path = join(dir, `${entry.runId}.json`)
-  const tmp = `${path}.tmp`
-  await writeFile(tmp, `${JSON.stringify(entry, null, 2)}\n`, 'utf8')
-  await rename(tmp, path)
-  return path
+export async function writeJournal(
+  cacheDir: string,
+  entry: JournalEntry,
+): Promise<string | undefined> {
+  const path = join(journalDir(cacheDir), `${entry.runId}.json`)
+  try {
+    await writeAtomicJson(path, entry)
+    return path
+  } catch {
+    return undefined
+  }
 }
 
 /** runId: timestamp + short random suffix — sortable and collision-safe. */

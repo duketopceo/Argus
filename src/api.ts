@@ -143,7 +143,8 @@ export class TdSession {
   ) {
     this.flow = flow
     if (opts.staleReason !== undefined && flow !== undefined) {
-      for (const step of flow.steps) step.stale = opts.staleReason
+      const reason = opts.staleReason
+      flow.steps = flow.steps.map((step) => ({ ...step, stale: reason }))
     }
     this.ledger = new Ledger(opts.config.budgetUsd)
     this.actions = new Actions(opts.driver)

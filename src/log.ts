@@ -33,8 +33,6 @@ export function createLogger(
 
 export function resolveLogLevel(env: Record<string, string | undefined>, configured?: string): LogLevel {
   if (env.ARGUS_DEBUG === '1' || env.ARGUS_DEBUG === 'true') return 'debug'
-  if (configured === 'debug' || configured === 'info' || configured === 'warn' || configured === 'error') {
-    return configured
-  }
+  if (configured !== undefined && configured in ORDER) return configured as LogLevel
   return 'warn'
 }
