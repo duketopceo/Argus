@@ -347,7 +347,11 @@ export class Engine {
       if (probe === null || instructionMatchesNode(instruction, probe.a11ySnippet)) break
 
       if (attempt === 1 || !this._opts.ledger.canSpend(0.001)) break
-      const feedback = `Your previous coordinates (${action.x},${action.y}) resolved to "${probe.a11ySnippet}", which does not match the target. Re-examine the grid labels and return corrected coordinates for: ${instruction}`
+      const specialist = this._opts.config.grounding_model !== undefined
+      const feedback = specialist
+        ? // ui-tars-class models want their native prompt format.
+          `Click on the UI element matching this description: ${instruction.replace(/^locate:\s*/i, '')}.`
+        : `Your previous coordinates (${action.x},${action.y}) resolved to "${probe.a11ySnippet}", which does not match the target. Re-examine the grid labels and return corrected coordinates for: ${instruction}`
       const retry = await this._callModel(
         cached ? 'heal' : 'ground',
         buildActionMessages(feedback, observation),
@@ -440,7 +444,10 @@ export class Engine {
     if (!this._opts.ledger.canSpend(0.001)) {
       return undefined
     }
-    const schema = kind === 'assert' ? assertionSchema : actionSchema
+    // Specialist grounding models don't emit JSON — sending response_format
+    // plus require_parameters would filter out their providers entirely.
+    const schema =
+      modelOverride === undefined ? (kind === 'assert' ? assertionSchema : actionSchema) : undefined
     const response = await this._opts.client.complete({
       model: modelOverride ?? this._opts.config.model,
       messages,
@@ -467,10 +474,21 @@ export class Engine {
       if (!['click', 'type', 'pressKeys', 'scroll', 'wait', 'done', 'fail'].includes(action)) {
         return { action: 'fail', reasoning: `unknown action: ${action}` }
       }
+      // Some specialist models return JSON action names but put coordinates in
+      // a trailing "(x,y)" or start_box token instead of the schema fields.
+      let x = typeof parsed.x === 'number' ? parsed.x : undefined
+      let y = typeof parsed.y === 'number' ? parsed.y : undefined
+      if (x === undefined || y === undefined) {
+        const coord = content.match(/\(?\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*\)?/)
+        if (coord) {
+          x = Number(coord[1])
+          y = Number(coord[2])
+        }
+      }
       return {
         action: action as ProposedAction['action'],
-        x: typeof parsed.x === 'number' ? parsed.x : undefined,
-        y: typeof parsed.y === 'number' ? parsed.y : undefined,
+        x,
+        y,
         text: typeof parsed.text === 'string' ? parsed.text : undefined,
         keys: Array.isArray(parsed.keys) ? parsed.keys.map((k) => String(k)) : undefined,
         dx: typeof parsed.dx === 'number' ? parsed.dx : undefined,
