@@ -80,9 +80,27 @@ export async function loadConfig(cwd: string): Promise<Config> {
         return resolveConfig(JSON.parse(raw) as ConfigInput)
       }
 
-      const mod = (await import(pathToFileURL(file).href)) as {
-        default?: ConfigInput
-      } & ConfigInput
+      let mod: { default?: ConfigInput } & ConfigInput
+      try {
+        mod = (await import(pathToFileURL(file).href)) as typeof mod
+      } catch (e) {
+        // Node cannot import .ts directly — transpile to a temp .mjs, matching
+        // how the CLI loads TypeScript test files.
+        const code = (e as { code?: string }).code
+        if (code !== 'ERR_UNKNOWN_FILE_EXTENSION') throw e
+        const ts = await import('typescript')
+        const { readFile, mkdtemp, writeFile } = await import('node:fs/promises')
+        const { tmpdir } = await import('node:os')
+        const { join } = await import('node:path')
+        const source = await readFile(file, 'utf8')
+        const js = ts.transpileModule(source, {
+          compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+        }).outputText
+        const dir = await mkdtemp(join(tmpdir(), 'vision-e2e-config-'))
+        const out = join(dir, 'vision-e2e.config.mjs')
+        await writeFile(out, js, 'utf8')
+        mod = (await import(pathToFileURL(out).href)) as typeof mod
+      }
       const exported = mod.default ?? mod
       return resolveConfig(exported as ConfigInput)
     } catch (e: unknown) {

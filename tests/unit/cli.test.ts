@@ -221,3 +221,18 @@ describe('vision-e2e CLI', () => {
     expect(out.lines.join('\n')).toContain('cache empty')
   })
 })
+
+describe('loadConfig', () => {
+  it('loads a TypeScript config via transpile fallback', async () => {
+    const { loadConfig } = await import('../../src/config.js')
+    const cwd = await mkdtemp(join(tmpdir(), 'vision-e2e-cfg-'))
+    await writeFile(
+      join(cwd, 'vision-e2e.config.ts'),
+      `export default { model: 'test/model', budgetUsd: 0.5 } satisfies import('../../src/config.js').ConfigInput
+`,
+    )
+    const config = await loadConfig(cwd)
+    expect(config.model).toBe('test/model')
+    expect(config.budgetUsd).toBe(0.5)
+  })
+})
