@@ -9,10 +9,11 @@ import {
   Bbox,
   computeRegionHash,
   Fingerprint,
+  fnv1a,
   FingerprintRecord,
   Point,
 } from '../cache/fingerprint.js'
-import { FlowCache, saveFlow } from '../cache/store.js'
+import { CachedAssert, FlowCache, saveFlow } from '../cache/store.js'
 import {
   actionSchema,
   AssertionResult,
@@ -47,6 +48,8 @@ export interface EngineOptions {
   client: VisionClient
   ledger: Ledger
   config: Config
+  /** Assertion verdicts persisted from a prior run of this flow. */
+  initialAsserts?: CachedAssert[]
 }
 
 export interface RecordOptions {
@@ -91,9 +94,18 @@ export class Engine {
   private _visionCalls = 0
   private _steps: StepResult[] = []
   private _fingerprints: FingerprintRecord[] = []
-  private _assertCache = new Map<string, AssertionResult>()
+  private _assertCache = new Map<string, CachedAssert>()
 
-  constructor(private _opts: EngineOptions) {}
+  constructor(private _opts: EngineOptions) {
+    for (const entry of _opts.initialAsserts ?? []) {
+      this._assertCache.set(`${entry.question}${entry.a11yHash}`, entry)
+    }
+  }
+
+  /** Assertion verdicts collected/known this run — persist into the flow cache. */
+  get assertEntries(): CachedAssert[] {
+    return [...this._assertCache.values()]
+  }
 
   get visionCalls(): number {
     return this._visionCalls
@@ -414,11 +426,13 @@ export class Engine {
 
   async assert(question: string): Promise<AssertResult> {
     const observation = await this._opts.driver.observe()
-    const regionHash = computeRegionHash(observation.screenshotJpeg)
-    const key = JSON.stringify({ question, regionHash })
+    // Page-state key is the a11y tree, not screenshot bytes — JPEG pixels
+    // shift every render, but identical DOM means the answer is unchanged.
+    const a11yHash = fnv1a(observation.a11yYaml)
+    const key = `${question}${a11yHash}`
     const cached = this._assertCache.get(key)
     if (cached) {
-      return { ...cached, cached: true }
+      return { verdict: cached.verdict, reasoning: cached.reasoning, cached: true }
     }
 
     if (this._opts.ledger.replayOnly || !this._opts.ledger.canSpend(0.001)) {
@@ -431,7 +445,13 @@ export class Engine {
     }
 
     const parsed = this._parseAssertion(response.content)
-    this._assertCache.set(key, parsed)
+    this._assertCache.set(key, {
+      question,
+      a11yHash,
+      verdict: parsed.verdict,
+      reasoning: parsed.reasoning,
+      model: response.model,
+    })
     return { ...parsed, cached: false }
   }
 

@@ -142,6 +142,7 @@ export class TdSession {
       client: opts.client,
       ledger: this.ledger,
       config: opts.config,
+      ...(flow?.asserts !== undefined ? { initialAsserts: flow.asserts } : {}),
     })
     this.td = this._makeTd()
   }
@@ -173,7 +174,12 @@ export class TdSession {
   /** Persist the (possibly healed) fingerprints back to the cache (R4, R5). */
   async save(): Promise<void> {
     if (this.opts.flowName !== undefined && this.opts.config.cacheDir !== undefined) {
-      await saveFlow(this.opts.config.cacheDir, this.opts.flowName, this.fingerprints)
+      await saveFlow(
+        this.opts.config.cacheDir,
+        this.opts.flowName,
+        this.fingerprints,
+        this.engine.assertEntries,
+      )
     }
   }
 
