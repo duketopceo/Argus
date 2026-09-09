@@ -472,7 +472,10 @@ export class Engine {
       const parsed = JSON.parse(content) as Record<string, unknown>
       const action = String(parsed.action ?? '')
       if (!['click', 'type', 'pressKeys', 'scroll', 'wait', 'done', 'fail'].includes(action)) {
-        return { action: 'fail', reasoning: `unknown action: ${action}` }
+        return {
+          action: 'fail',
+          reasoning: `unknown action: ${action} (raw: ${content.slice(0, 160)})`,
+        }
       }
       // Some specialist models return JSON action names but put coordinates in
       // a trailing "(x,y)" or start_box token instead of the schema fields.
