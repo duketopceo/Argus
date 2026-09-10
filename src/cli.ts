@@ -661,7 +661,7 @@ function buildCodeReviewMessages(repo: string, pr: string, patchText: string): M
       content: [
         {
           type: 'text',
-          text: 'You are a senior software engineer reviewing a PR diff. Focus on correctness, security, and maintainability. Ignore stylistic nits. Be concise. Output JSON.',
+          text: 'You are a senior engineer reviewing a PR diff. Output terse, actionable findings. One line per issue. No throat-clearing.',
         },
       ],
     },
@@ -670,7 +670,7 @@ function buildCodeReviewMessages(repo: string, pr: string, patchText: string): M
       content: [
         {
           type: 'text',
-          text: `Review the diff for ${repo}#${pr}.\n\n${patchText}\n\nReturn a JSON object with summary, verdict (pass/needs_changes/approve), and findings (array of file, line, severity, message).`,
+          text: `Review the diff for ${repo}#${pr}.\n\n${patchText}\n\nReturn JSON: summary, verdict (pass/needs_changes/approve), and findings[].\n\nEach finding must include:\n- file\n- line\n- severity: bug | risk | nit | q\n- message: one line in this format: \`L<line>: <emoji> <severity>: <problem>. <fix>.\`\n\nSeverity emojis:\n- bug = 🔴\n- risk = 🟡\n- nit = 🔵\n- q = ❓\n\nRules for the message:\n- Start with \`L<line>: \`\n- Then the emoji and keyword, e.g. \`🔴 bug:\`, \`🟡 risk:\`, \`🔵 nit:\`, \`❓ q:\`\n- State the concrete problem and a concrete fix\n- No \\\"I noticed\\\", \\\"perhaps\\\", \\\"consider\\\", \\\"maybe\\\", \\\"you might want\\\"\n- Do not restate what the line does\n- Include the why only if the fix is not obvious\n- Put exact symbol/variable/function names in backticks\n\nExamples:\nL42: 🔴 bug: \`user\` can be null after .find(). Add guard before .email.\nL88-140: 🔵 nit: 50-line fn does 4 things. Extract validate/normalize/persist.\nL23: 🟡 risk: no retry on 429. Wrap in withBackoff(3).`,
         },
       ],
     },

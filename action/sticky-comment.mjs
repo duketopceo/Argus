@@ -184,10 +184,10 @@ function renderBody(report, codeReview, runUrl, ok) {
     lines.push(codeReview.summary)
     lines.push('')
     if (codeReview.findings.length > 0) {
-      lines.push('| File | Line | Severity | Finding |')
-      lines.push('| --- | ---: | --- | --- |')
+      lines.push('| File | Severity | Finding |')
+      lines.push('| --- | --- | --- |')
       for (const f of codeReview.findings) {
-        lines.push(`| \`${f.file}\` | ${f.line ?? '—'} | ${f.severity} | ${f.message} |`)
+        lines.push(`| \`${f.file}\` | ${f.severity} | ${f.message} |`)
       }
       lines.push('')
     }
