@@ -57,6 +57,10 @@ function renderBody(report, runUrl) {
       ? formatUsd(report.totals.visionCostUsd / report.totals.visionCalls)
       : '$0.00'
   lines.push(`| Per-call cost (avg) | ${perCall} |`)
+  for (const model of Object.keys(report.totals.callsByModel ?? {}).sort()) {
+    lines.push(`| Calls (${model}) | ${report.totals.callsByModel[model]} |`)
+    lines.push(`| Spend (${model}) | ${formatUsd(report.totals.costByModel?.[model] ?? 0)} |`)
+  }
   lines.push(`| Total vision spend | ${formatUsd(report.totals.visionCostUsd)} |`)
   lines.push(`| Sandbox seconds | ${report.totals.sandboxSeconds.toFixed(1)}s |`)
   lines.push('')
