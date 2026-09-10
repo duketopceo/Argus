@@ -22,7 +22,7 @@ function renderMissingKeyBody() {
   return lines.join('\n')
 }
 
-function renderBody(report, codeReview, runUrl) {
+function renderBody(report, codeReview, runUrl, ok) {
   if (!report) return renderMissingKeyBody()
 
   const lines = []
@@ -37,7 +37,7 @@ function renderBody(report, codeReview, runUrl) {
 
   lines.push(SENTINEL)
   lines.push('')
-  lines.push(`## argus-reviewer ${report.ok ? '✅ PASS' : '❌ FAIL'}`)
+  lines.push(`## argus-reviewer ${ok ? '✅ PASS' : '❌ FAIL'}`)
   lines.push('')
   lines.push(
     `**Summary:** ${report.totals.passed}/${report.totals.tests} passed · ` +
@@ -55,7 +55,7 @@ function renderBody(report, codeReview, runUrl) {
     lines.push(`- \`${path.basename(t.file)}\` — ${t.name}`)
   }
   lines.push('')
-  lines.push(`**Risk:** ${report.ok ? 'Low — UI regression tests passed; no heals or failures.' : 'High — investigate failures before merge.'}`)
+  lines.push(`**Risk:** ${ok ? 'Low — UI regression tests and code review passed; no heals or failures.' : 'High — investigate failures before merge.'}`)
   lines.push('')
   if (Object.keys(trace).length > 0) {
     lines.push('**Trace**')
@@ -239,7 +239,7 @@ async function main() {
 
   const ok = (report?.ok === true) && (codeReview === undefined || codeReview.ok)
   const conclusion = !hasKey ? 'neutral' : ok ? 'success' : 'failure'
-  const body = !hasKey ? renderMissingKeyBody() : renderBody(report, codeReview, runUrl)
+  const body = !hasKey ? renderMissingKeyBody() : renderBody(report, codeReview, runUrl, ok)
 
   if (pr) {
     const { data: comments } = await github.rest.issues.listComments({
