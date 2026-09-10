@@ -39,7 +39,7 @@ runs:
     - name: Install Playwright Chromium
       shell: bash
       working-directory: ${{ inputs.working-directory }}
-      run: npx playwright install --with-deps chromium
+      run: npx playwright install chromium
 
     - name: Stage config
       shell: bash
