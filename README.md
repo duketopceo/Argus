@@ -15,6 +15,21 @@ npx argus-reviewer run             # replays + asserts, zero-cost on cache hit
 
 Configuration lives in `vision-e2e.config.ts` (filename kept for compatibility) — see `src/config.ts` for the full shape: `model`, `grounding_model`, `escalation_model`, `provider` routing rules, `budgetUsd`, `target`, `pageSetup`, `secrets`.
 
+### OpenRouter cost attribution
+
+Add an `openrouter` block to tag every request. `trace` is sent in the request body and is the right hook for cost allocation by repo/PR/run. `headers` are sent verbatim with every OpenRouter request (useful for `HTTP-Referer` or `X-Title`).
+
+```ts
+export default {
+  openrouter: {
+    trace: { repo: 'duketopceo/myapp', pr: '42', run: 'argus-reviewer' },
+    headers: { 'HTTP-Referer': 'https://github.com/duketopceo/myapp' },
+  },
+}
+```
+
+The GitHub Action automatically sets `ARGUS_REVIEWER_TRACE` with the repository, PR number, commit, and run id, so every PR review is attributed in OpenRouter without extra config. You can also set `ARGUS_REVIEWER_TRACE` yourself (JSON object) to add more fields.
+
 Status: early development. See `action/` for the composite GitHub Action and `runner/` for self-hosted runner registration.
 
 ## File structure

@@ -116,6 +116,20 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
   }
 }
 
+function parseOpenRouterTrace(env: Ctx['env']): Record<string, string> | undefined {
+  const raw = env.ARGUS_REVIEWER_TRACE
+  if (!raw) return undefined
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([_, v]) => typeof v === 'string'),
+    ) as Record<string, string>
+  } catch {
+    return undefined
+  }
+}
+
 function createClient(deps: CliDeps, config: Config, ctx: Ctx): VisionClient {
   if (deps.createClient) return deps.createClient(config)
   // Lazy: a cache-hit replay makes zero vision calls and needs no key. The
@@ -130,7 +144,21 @@ function createClient(deps: CliDeps, config: Config, ctx: Ctx): VisionClient {
             'OPENROUTER_API_KEY is not set — every vision call is billed through this key (BYOK)',
           )
         }
-        inner = new OpenRouterClient({ apiKey })
+        const envTrace = parseOpenRouterTrace(ctx.env)
+        const trace = { ...(envTrace ?? {}), ...(config.openrouter?.trace ?? {}) }
+        const headers = { ...(config.openrouter?.headers ?? {}) }
+        const traceOpt = Object.keys(trace).length > 0 ? trace : undefined
+        const headersOpt = Object.keys(headers).length > 0 ? headers : undefined
+        inner = new OpenRouterClient({
+          apiKey,
+          ...(traceOpt ? { trace: traceOpt } : {}),
+          ...(headersOpt ? { headers: headersOpt } : {}),
+          onCall: (call) => {
+            ctx.out(
+              `openrouter ${call.kind} ${call.model} ${call.tokens}tok $${call.costUsd.toFixed(6)}`,
+            )
+          },
+        })
       }
       return inner.complete(opts)
     },
@@ -435,6 +463,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
             visionCostUsd: state.visionCostUsd,
             sandboxSeconds: state.sandboxSeconds,
             budgetExceeded: state.budgetExceeded,
+            calls: state.calls,
             videoPath: undefined,
           })
           await fileSession.save()
@@ -478,6 +507,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
               visionCostUsd: state.visionCostUsd,
               sandboxSeconds: state.sandboxSeconds,
               budgetExceeded: state.budgetExceeded,
+              calls: state.calls,
               videoPath: undefined,
             })
             await session.save()
@@ -509,6 +539,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
           visionCostUsd: 0,
           sandboxSeconds: 0,
           budgetExceeded: false,
+          calls: [],
           videoPath: undefined,
         })
         ctx.out(`FAIL ${fileSlug} (${fileName})`)

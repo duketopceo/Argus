@@ -43,6 +43,12 @@ export interface Config {
    * pre-navigation setup.
    */
   pageSetup: string | undefined
+  /**
+   * OpenRouter request metadata. `trace` is sent in the request body and
+   * can be used to attribute spend by repo, PR, or run. `headers` are
+   * sent verbatim with every OpenRouter request (e.g. HTTP-Referer, X-Title).
+   */
+  openrouter: { trace?: Record<string, string>; headers?: Record<string, string> } | undefined
 }
 
 export type ConfigInput = Partial<Omit<Config, 'provider'>> & { provider?: Partial<ProviderRules> }
@@ -61,6 +67,7 @@ const defaults: Config = {
   reportDir: undefined,
   secrets: undefined,
   pageSetup: undefined,
+  openrouter: undefined,
 }
 
 export function resolveConfig(input: ConfigInput = {}): Config {

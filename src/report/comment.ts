@@ -40,6 +40,10 @@ function costRows(totals: RunReport['totals']): string[] {
   const perCall =
     totals.visionCalls > 0 ? formatUsd(totals.visionCostUsd / totals.visionCalls) : '$0.00'
   lines.push(`| Per-call cost (avg) | ${perCall} |`)
+  for (const model of Object.keys(totals.callsByModel).sort()) {
+    lines.push(`| Calls (${model}) | ${totals.callsByModel[model]} |`)
+    lines.push(`| Spend (${model}) | ${formatUsd(totals.costByModel[model] ?? 0)} |`)
+  }
   lines.push(`| Total vision spend | ${formatUsd(totals.visionCostUsd)} |`)
   lines.push(`| Sandbox seconds | ${totals.sandboxSeconds.toFixed(1)}s |`)
   return lines
