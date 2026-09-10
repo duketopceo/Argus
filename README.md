@@ -1,4 +1,4 @@
-# Argus
+# argus-reviewer
 
 Open-source, self-hosted vision-model E2E testing — the hundred-eyed watcher for your UI. Bring your own `OPENROUTER_API_KEY`: record a flow once, fingerprint-cache every step, replay near-free, heal on UI drift, and get results as a check + comment on the GitHub PR.
 
@@ -8,13 +8,48 @@ Open-source, self-hosted vision-model E2E testing — the hundred-eyed watcher f
 - **Grounding specialist**: a `grounding_model` (e.g. a ui-tars-class model) can drive element location with its native coordinate output, verified against the DOM before any click executes.
 
 ```bash
-npm i -D argus-e2e        # or github:duketopceo/Argus
-npx argus record "log in and open settings" --url https://localhost:3000
-npx argus run             # replays + asserts, zero-cost on cache hit
+npm i -D argus-reviewer-e2e        # or github:duketopceo/argus-reviewer
+npx argus-reviewer record "log in and open settings" --url https://localhost:3000
+npx argus-reviewer run             # replays + asserts, zero-cost on cache hit
 ```
 
 Configuration lives in `vision-e2e.config.ts` (filename kept for compatibility) — see `src/config.ts` for the full shape: `model`, `grounding_model`, `escalation_model`, `provider` routing rules, `budgetUsd`, `target`, `pageSetup`, `secrets`.
 
 Status: early development. See `action/` for the composite GitHub Action and `runner/` for self-hosted runner registration.
+
+## File structure
+
+```text
+argus-reviewer/
+├── action/                  # GitHub Actions composite action + sticky PR comment
+│   ├── action.yml
+│   └── sticky-comment.mjs
+├── runner/                  # Self-hosted runner registration docs + script
+│   ├── README.md
+│   └── register-runner.sh
+├── src/
+│   ├── api.ts               # Test-facing `test`/`td` API + generated test file renderer
+│   ├── cli.ts               # `record`, `run`, and `cache` commands
+│   ├── config.ts            # `vision-e2e.config.ts` loader + provider slug defaults
+│   ├── driver/
+│   │   ├── browser.ts       # Playwright Chromium launch + observation capture
+│   │   └── target.ts        # Optional local dev-server target process
+│   ├── engine/
+│   │   ├── actions.ts       # Low-level page actions (click, type, scroll, …)
+│   │   ├── loop.ts          # Vision model record/replay + healing loop
+│   │   └── prompts.ts       # OpenRouter action/assertion prompts + JSON schemas
+│   ├── cache/
+│   │   ├── fingerprint.ts   # Per-step screenshot/a11y fingerprint + resolve
+│   │   └── store.ts         # Flow cache read/write
+│   ├── report/
+│   │   ├── comment.ts       # Markdown PR comment + commit-status rendering
+│   │   ├── junit.ts         # JUnit XML output
+│   │   └── run.ts           # JSON run report consumed by the action
+│   └── vision/
+│       ├── cost.ts          # OpenRouter cost parsing per call
+│       ├── ledger.ts        # Per-run USD budget tracking
+│       └── openrouter.ts    # OpenRouter chat-completion client + schema parsing
+└── tests/                   # Unit tests + small Playwright fixture page
+```
 
 License: MIT.

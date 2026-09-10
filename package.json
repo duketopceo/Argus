@@ -1,11 +1,11 @@
 {
-  "name": "argus-e2e",
+  "name": "argus-reviewer-e2e",
   "version": "0.0.1",
-  "description": "Argus \u2014 open-source vision-model E2E testing harness. Record, replay, heal, and assert with any OpenRouter model under a hard budget cap.",
+  "description": "argus-reviewer \u2014 open-source vision-model E2E testing harness. Record, replay, heal, and assert with any OpenRouter model under a hard budget cap.",
   "type": "module",
   "license": "MIT",
   "bin": {
-    "argus": "dist/cli.js"
+    "argus-reviewer": "dist/cli.js"
   },
   "exports": {
     ".": "./dist/api.js",
@@ -43,6 +43,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/duketopceo/Argus.git"
+    "url": "git+https://github.com/duketopceo/argus-reviewer.git"
   }
 }
