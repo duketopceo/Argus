@@ -341,8 +341,7 @@ export function renderTestFile(flowName: string, steps: FingerprintRecord[]): st
   })
   return [
     `// Recorded by argus-reviewer: ${flowName}`,
-    `import { test } from 'argus-reviewer-e2e'`,
-    '',
+    `// Run with: npx argus-reviewer run`,
     `test(${JSON.stringify(flowName)}, async (td) => {`,
     ...lines,
     '})',
