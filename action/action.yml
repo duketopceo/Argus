@@ -5,6 +5,10 @@ inputs:
   openrouter-api-key:
     description: OpenRouter API key (BYOK). All vision calls are billed through this key.
     required: true
+  cli:
+    description: Command used to run argus-reviewer (defaults to `npx argus-reviewer`). For dogfooding this repo, use `node dist/cli.js` after `npm run build`.
+    default: npx argus-reviewer
+    required: false
   config:
     description: Path to the argus-reviewer config file
     default: vision-e2e.config.ts
@@ -59,7 +63,7 @@ runs:
           "run_id":"${{ github.run_id }}",
           "run_attempt":"${{ github.run_attempt }}",
           "workflow":"${{ github.workflow }}"}
-      run: npx argus-reviewer run
+      run: ${{ inputs.cli }} run
 
     - name: Post or update sticky PR comment
       id: post
@@ -73,7 +77,7 @@ runs:
           const fs = require('fs');
           const path = require('path');
           const actionPath = process.env.GITHUB_ACTION_PATH;
-          const file = path.join(actionPath, 'action', 'sticky-comment.mjs');
+          const file = path.join(actionPath, 'sticky-comment.mjs');
           const code = fs.readFileSync(file, 'utf8');
           const runFn = new Function('github', 'context', 'core', 'require', `return (async () => {\n${code}\n})()`);
           return await runFn(github, context, core, require);

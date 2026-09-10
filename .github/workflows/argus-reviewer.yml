@@ -1,0 +1,27 @@
+name: argus-reviewer PR review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+jobs:
+  review:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Build argus-reviewer
+        run: npm ci && npm run build
+
+      - name: Run argus-reviewer action
+        uses: ./action
+        with:
+          openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+          cli: node dist/cli.js
+          working-directory: .
