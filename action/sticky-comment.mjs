@@ -3,7 +3,7 @@
 const fs = require('fs')
 const path = require('path')
 
-const SENTINEL = '<!-- vision-e2e -->'
+const SENTINEL = '<!-- argus-reviewer -->'
 
 function formatUsd(n) {
   return `$${(n || 0).toFixed(6)}`
@@ -13,9 +13,9 @@ function renderMissingKeyBody() {
   const lines = []
   lines.push(SENTINEL)
   lines.push('')
-  lines.push('## vision-e2e ⚪ skipped — no OpenRouter key')
+  lines.push('## argus-reviewer ⚪ skipped')
   lines.push('')
-  lines.push('`OPENROUTER_API_KEY` is not configured. Add it as a repository or workflow secret to run vision-e2e.')
+  lines.push('`OPENROUTER_API_KEY` is not configured. Add it as a repository or workflow secret to run argus-reviewer.')
   lines.push('')
   lines.push('This status is intentionally neutral, not a failure.')
   lines.push('')
@@ -24,12 +24,20 @@ function renderMissingKeyBody() {
 
 function renderBody(report, runUrl) {
   if (!report) return renderMissingKeyBody()
+
   const lines = []
+  const budgetCap = report.config?.budgetUsd ?? 0
+  const healCount = report.tests.reduce((n, t) => n + (t.healEvents?.length ?? 0), 0)
+  const assertCount = report.tests.reduce((n, t) => n + (t.asserts?.length ?? 0), 0)
+  const assertFails = report.tests.reduce(
+    (n, t) => n + (t.asserts?.filter((a) => a.verdict === 'fail').length ?? 0),
+    0,
+  )
+  const trace = report.trace ?? {}
+
   lines.push(SENTINEL)
   lines.push('')
-  const budget = report.totals.budgetExceeded ? ' (budget cap exceeded)' : ''
-  const status = report.ok ? `✅ PASS${budget}` : `❌ FAIL${budget}`
-  lines.push(`## vision-e2e ${status}`)
+  lines.push(`## argus-reviewer ${report.ok ? '✅ PASS' : '❌ FAIL'}`)
   lines.push('')
   lines.push(
     `**Summary:** ${report.totals.passed}/${report.totals.tests} passed · ` +
@@ -38,19 +46,45 @@ function renderBody(report, runUrl) {
       `${report.totals.sandboxSeconds.toFixed(1)}s sandbox`,
   )
   lines.push('')
-  lines.push('### Tests')
+
+  lines.push('<details>')
+  lines.push('<summary>📝 Summary</summary>')
   lines.push('')
-  lines.push('| Test | Result | Calls | Cost |')
-  lines.push('| --- | --- | --- | --- |')
+  lines.push('**What ran**')
   for (const t of report.tests) {
-    const result = t.ok ? '✅ pass' : '❌ fail'
-    lines.push(`| ${t.name} | ${result} | ${t.visionCalls} | ${formatUsd(t.visionCostUsd)} |`)
+    lines.push(`- \`${path.basename(t.file)}\` — ${t.name}`)
   }
   lines.push('')
-  lines.push('### Cost ledger')
+  lines.push(`**Risk:** ${report.ok ? 'Low — UI regression tests passed; no heals or failures.' : 'High — investigate failures before merge.'}`)
+  lines.push('')
+  if (Object.keys(trace).length > 0) {
+    lines.push('**Trace**')
+    for (const [k, v] of Object.entries(trace)) {
+      lines.push(`- ${k}: \`${v}\``)
+    }
+    lines.push('')
+  }
+  lines.push('</details>')
+  lines.push('')
+
+  lines.push('<details>')
+  lines.push(`<summary>📒 Tests (${report.totals.tests})</summary>`)
+  lines.push('')
+  lines.push('| Test | Result | Calls | Cost | Heals | Asserts |')
+  lines.push('| --- | --- | ---: | ---: | ---: | ---: |')
+  for (const t of report.tests) {
+    const result = t.ok ? '✅ pass' : '❌ fail'
+    lines.push(`| ${t.name} | ${result} | ${t.visionCalls} | ${formatUsd(t.visionCostUsd)} | ${t.healEvents?.length ?? 0} | ${t.asserts?.length ?? 0} |`)
+  }
+  lines.push('')
+  lines.push('</details>')
+  lines.push('')
+
+  lines.push('<details>')
+  lines.push('<summary>💰 Cost ledger</summary>')
   lines.push('')
   lines.push('| Line item | Value |')
-  lines.push('| --- | --- |')
+  lines.push('| --- | ---: |')
   lines.push(`| Vision calls | ${report.totals.visionCalls} |`)
   const perCall =
     report.totals.visionCalls > 0
@@ -63,10 +97,18 @@ function renderBody(report, runUrl) {
   }
   lines.push(`| Total vision spend | ${formatUsd(report.totals.visionCostUsd)} |`)
   lines.push(`| Sandbox seconds | ${report.totals.sandboxSeconds.toFixed(1)}s |`)
+  if (budgetCap > 0) {
+    lines.push(`| Budget cap | ${formatUsd(budgetCap)} |`)
+    lines.push(`| Budget exceeded | ${report.totals.budgetExceeded ? '⚠️ yes' : '✅ no'} |`)
+  }
   lines.push('')
-  lines.push('### Heal events')
+  lines.push('</details>')
   lines.push('')
-  const heals = report.tests.reduce((acc, t) => acc.concat(t.healEvents || []), [])
+
+  lines.push('<details>')
+  lines.push('<summary>🔧 Heal events</summary>')
+  lines.push('')
+  const heals = report.tests.flatMap((t) => t.healEvents ?? [])
   if (heals.length === 0) {
     lines.push('No heals this run.')
   } else {
@@ -75,7 +117,11 @@ function renderBody(report, runUrl) {
     }
   }
   lines.push('')
-  lines.push('### Assertions')
+  lines.push('</details>')
+  lines.push('')
+
+  lines.push('<details>')
+  lines.push('<summary>✅ Assertions</summary>')
   lines.push('')
   let any = false
   for (const t of report.tests) {
@@ -92,15 +138,50 @@ function renderBody(report, runUrl) {
     lines.push('No assertions recorded.')
     lines.push('')
   }
-  lines.push('### Evidence')
+  lines.push('</details>')
+  lines.push('')
+
+  lines.push('<details>')
+  lines.push('<summary>📂 Evidence</summary>')
   lines.push('')
   if (report.artifacts && report.artifacts.videos.length > 0) {
-    for (const v of report.artifacts.videos) lines.push(`- video: ${v}`)
+    for (const v of report.artifacts.videos) lines.push(`- video: \`${v}\``)
   }
   if (runUrl) lines.push(`- [workflow run / artifacts](${runUrl})`)
   if ((!report.artifacts || report.artifacts.videos.length === 0) && !runUrl) {
     lines.push('No artifact links available.')
   }
+  lines.push('')
+  lines.push('</details>')
+  lines.push('')
+
+  lines.push('<details>')
+  lines.push('<summary>🚥 Pre-merge checks</summary>')
+  lines.push('')
+  lines.push('| Check | Status | Explanation |')
+  lines.push('| --- | --- | --- |')
+  lines.push(`| Tests | ${report.ok ? '✅ Passed' : '❌ Failed'} | ${report.totals.passed}/${report.totals.tests} tests passed |`)
+  lines.push(`| Budget | ${report.totals.budgetExceeded ? '⚠️ Warning' : '✅ Passed'} | ${formatUsd(report.totals.visionCostUsd)} spent${budgetCap > 0 ? ` of ${formatUsd(budgetCap)}` : ''} |`)
+  lines.push(`| Heal events | ${healCount === 0 ? '✅ Passed' : '⚠️ Warning'} | ${healCount} heal event${healCount === 1 ? '' : 's'} |`)
+  lines.push(`| Assertions | ${assertFails === 0 ? '✅ Passed' : '❌ Failed'} | ${assertFails === 0 ? assertCount : `${assertFails} failed`} assertion${assertCount === 1 ? '' : 's'} |`)
+  lines.push(`| OpenRouter key | ✅ Passed | \`OPENROUTER_API_KEY\` configured |`)
+  lines.push('')
+  lines.push('</details>')
+  lines.push('')
+
+  lines.push('<details>')
+  lines.push('<summary>✨ Actions</summary>')
+  lines.push('')
+  lines.push('- [ ] Re-run argus-reviewer')
+  lines.push('- [ ] Open a heal PR')
+  lines.push('- [ ] Record a new flow')
+  lines.push('')
+  lines.push('</details>')
+  lines.push('')
+  lines.push('---')
+  lines.push('')
+  lines.push('<sub>`argus-reviewer` — self-hosted, BYOK OpenRouter UI regression.</sub>')
+  lines.push('')
   return lines.join('\n')
 }
 
@@ -158,8 +239,8 @@ async function main() {
     repo,
     sha,
     state,
-    description: `vision-e2e ${conclusion}`,
-    context: 'vision-e2e',
+    description: `argus-reviewer ${conclusion}`,
+    context: 'argus-reviewer',
     target_url: runUrl,
   })
 
