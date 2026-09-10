@@ -22,7 +22,8 @@ import { Actions } from './engine/actions.js'
 import { JunitCase, writeJunitXml } from './report/junit.js'
 import { buildRunReport, TestReport, writeRunReport } from './report/run.js'
 import { flowPath, loadFlow } from './cache/store.js'
-import { OpenRouterClient } from './vision/openrouter.js'
+import { CallCost } from './vision/cost.js'
+import { JsonSchema, Message, OpenRouterClient } from './vision/openrouter.js'
 import { Ledger } from './vision/ledger.js'
 
 export interface CliDeps {
@@ -48,6 +49,7 @@ const USAGE = `argus-reviewer — vision-model E2E testing harness (BYOK via OPE
 Usage:
   argus-reviewer record "<flow description>" --url <target> [--name <flow>] [--tests-dir <dir>]
   argus-reviewer run [pattern] [--url <target>] [--dir <testsDir>] [--report-dir <dir>]
+  argus-reviewer code-review [--report-dir <dir>]
   argus-reviewer cache list [--dir <cacheDir>]
   argus-reviewer cache prune [name|--all] [--dir <cacheDir>]
   argus-reviewer --help
@@ -75,6 +77,15 @@ Options:
   --dir <dir>        Tests directory (default: config testsDir or ./tests)
   --report-dir <dir> Report output dir (default: config reportDir or ./vision-e2e-report)
   --cache-dir <dir>  Fingerprint cache dir (default: config cacheDir)
+  -h, --help         Show this help`
+
+const CODE_REVIEW_USAGE = `Usage: argus-reviewer code-review [options]
+
+Reviews the PR diff for the repo/PR referenced by ARGUS_REVIEWER_TRACE using the
+configured code model. Writes code-review.json next to run.json.
+
+Options:
+  --report-dir <dir> Report output dir (default: config reportDir or ./vision-e2e-report)
   -h, --help         Show this help`
 
 const CACHE_USAGE = `Usage: argus-reviewer cache <list|prune> [options]
@@ -107,6 +118,8 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
       return cmdRecord(rest, ctx, deps)
     case 'run':
       return cmdRun(rest, ctx, deps)
+    case 'code-review':
+      return cmdCodeReview(rest, ctx, deps)
     case 'cache':
       return cmdCache(rest, ctx)
     default:
@@ -576,6 +589,204 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
       `$${report.totals.visionCostUsd.toFixed(6)} vision spend — reports in ${reportDir}`,
   )
   return report.ok ? 0 : 1
+}
+
+const CODE_REVIEW_SCHEMA: JsonSchema = {
+  name: 'code-review',
+  schema: {
+    type: 'object',
+    properties: {
+      summary: { type: 'string' },
+      verdict: { type: 'string', enum: ['pass', 'needs_changes', 'approve'] },
+      findings: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            file: { type: 'string' },
+            line: { type: 'number' },
+            severity: { type: 'string', enum: ['info', 'warning', 'error'] },
+            message: { type: 'string' },
+          },
+          required: ['file', 'message', 'severity'],
+        },
+      },
+    },
+    required: ['summary', 'verdict', 'findings'],
+  },
+}
+
+interface PrFile {
+  filename: string
+  patch?: string
+}
+
+interface CodeReviewReport {
+  ok: boolean
+  skipped: boolean
+  summary: string
+  verdict: 'pass' | 'needs_changes' | 'approve'
+  findings: { file: string; line?: number; severity: string; message: string }[]
+  calls: CallCost[]
+  visionCostUsd: number
+  tokens: number
+  model: string
+}
+
+async function fetchPrDiff(repo: string, pr: string, token: string, ctx: Ctx): Promise<string | undefined> {
+  const url = `https://api.github.com/repos/${repo}/pulls/${pr}/files?per_page=100`
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+  })
+  if (!res.ok) {
+    ctx.err(`failed to fetch PR files: ${res.status} ${res.statusText}`)
+    return undefined
+  }
+  const files = (await res.json()) as PrFile[]
+  const patches = files
+    .filter((f) => typeof f.patch === 'string' && f.patch.length > 0)
+    .map((f) => `### ${f.filename}\n\`\`\`diff\n${f.patch}\n\`\`\``)
+  if (patches.length === 0) return undefined
+  return patches.join('\n\n')
+}
+
+function buildCodeReviewMessages(repo: string, pr: string, patchText: string): Message[] {
+  return [
+    {
+      role: 'system',
+      content: [
+        {
+          type: 'text',
+          text: 'You are a senior software engineer reviewing a PR diff. Focus on correctness, security, and maintainability. Ignore stylistic nits. Be concise. Output JSON.',
+        },
+      ],
+    },
+    {
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: `Review the diff for ${repo}#${pr}.\n\n${patchText}\n\nReturn a JSON object with summary, verdict (pass/needs_changes/approve), and findings (array of file, line, severity, message).`,
+        },
+      ],
+    },
+  ]
+}
+
+function parseCodeReview(content: string): {
+  summary: string
+  verdict: 'pass' | 'needs_changes' | 'approve'
+  findings: CodeReviewReport['findings']
+} {
+  const defaultFindings: CodeReviewReport['findings'] = []
+  try {
+    const parsed = JSON.parse(content) as {
+      summary?: string
+      verdict?: string
+      findings?: CodeReviewReport['findings']
+    }
+    const validVerdict = ['pass', 'needs_changes', 'approve'].includes(parsed.verdict ?? '')
+      ? (parsed.verdict as 'pass' | 'needs_changes' | 'approve')
+      : (Array.isArray(parsed.findings) && parsed.findings.length === 0 ? 'pass' : 'needs_changes')
+    return {
+      summary: parsed.summary ?? (validVerdict === 'pass' ? 'No issues found' : 'Code review completed'),
+      verdict: validVerdict,
+      findings: Array.isArray(parsed.findings) ? parsed.findings : defaultFindings,
+    }
+  } catch {
+    return {
+      summary: 'Code review completed but could not parse the model response',
+      verdict: 'needs_changes',
+      findings: defaultFindings,
+    }
+  }
+}
+
+async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> {
+  const { values } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      help: { type: 'boolean', short: 'h', default: false },
+      'report-dir': { type: 'string' },
+    },
+  })
+  if (values.help) {
+    ctx.out(CODE_REVIEW_USAGE)
+    return 0
+  }
+
+  const config = await loadConfig(ctx.cwd)
+  const reportDir = resolve(
+    ctx.cwd,
+    values['report-dir'] ?? config.reportDir ?? 'vision-e2e-report',
+  )
+  await mkdir(reportDir, { recursive: true })
+  const codeReviewPath = join(reportDir, 'code-review.json')
+
+  const trace = parseOpenRouterTrace(ctx.env)
+  const repo = (trace?.repo ?? ctx.env.GITHUB_REPOSITORY) as string | undefined
+  const pr = trace?.pr
+  const token = ctx.env.GITHUB_TOKEN ?? ctx.env.GH_TOKEN
+
+  const skip = async (reason: string): Promise<number> => {
+    ctx.out(`code-review: skipping — ${reason}`)
+    const skipped: CodeReviewReport = {
+      ok: true,
+      skipped: true,
+      summary: `Code review skipped — ${reason}`,
+      verdict: 'pass',
+      findings: [],
+      calls: [],
+      visionCostUsd: 0,
+      tokens: 0,
+      model: config.code_model ?? config.model,
+    }
+    await writeFile(codeReviewPath, `${JSON.stringify(skipped, null, 2)}\n`, 'utf8')
+    return 0
+  }
+
+  if (!repo || !pr) return await skip('missing repo/pr in trace')
+  if (!token) return await skip('missing GITHUB_TOKEN')
+
+  const patchText = await fetchPrDiff(repo, pr, token, ctx)
+  if (!patchText) return await skip('could not fetch PR diff')
+
+  try {
+    const client = createClient(deps, config, ctx)
+    const model = config.code_model ?? config.model
+    const response = await client.complete({
+      model,
+      messages: buildCodeReviewMessages(repo, pr, patchText),
+      schema: CODE_REVIEW_SCHEMA,
+      kind: 'code',
+    })
+    const { summary, verdict, findings } = parseCodeReview(response.content)
+    const report: CodeReviewReport = {
+      ok: verdict !== 'needs_changes',
+      skipped: false,
+      summary,
+      verdict,
+      findings,
+      calls: [response.cost],
+      visionCostUsd: response.cost.costUsd,
+      tokens: response.cost.tokens,
+      model: response.model,
+    }
+    await writeFile(codeReviewPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
+    ctx.out(
+      `code review complete: ${findings.length} findings, verdict ${verdict}, ` +
+        `${response.cost.tokens}tok $${response.cost.costUsd.toFixed(6)}`,
+    )
+    return 0
+  } catch (e) {
+    ctx.err(`code review failed: ${(e as Error).message}`)
+    return 1
+  }
 }
 
 async function cmdCache(args: string[], ctx: Ctx): Promise<number> {

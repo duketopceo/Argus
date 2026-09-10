@@ -23,6 +23,11 @@ export interface Config {
    * primary model's proposed point resolves to the wrong element.
    */
   grounding_model: string | undefined
+  /**
+   * Optional code review model. Used by `argus-reviewer code-review` to review
+   * PR diffs and post findings. Defaults to the primary `model` if not set.
+   */
+  code_model: string | undefined
   provider: ProviderRules
   budgetUsd: number | undefined
   target: Target | undefined
@@ -57,6 +62,7 @@ const defaults: Config = {
   model: 'google/gemini-2.5-flash-lite',
   escalation_model: 'moonshotai/kimi-k2.5',
   grounding_model: undefined,
+  code_model: 'anthropic/claude-sonnet-4',
   provider: {
     ignore: ['siliconflow', 'novitaai', 'atlascloud', 'streamlake', 'chutes'],
   },

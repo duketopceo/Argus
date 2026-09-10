@@ -22,7 +22,7 @@ function renderMissingKeyBody() {
   return lines.join('\n')
 }
 
-function renderBody(report, runUrl) {
+function renderBody(report, codeReview, runUrl) {
   if (!report) return renderMissingKeyBody()
 
   const lines = []
@@ -165,9 +165,35 @@ function renderBody(report, runUrl) {
   lines.push(`| Heal events | ${healCount === 0 ? '✅ Passed' : '⚠️ Warning'} | ${healCount} heal event${healCount === 1 ? '' : 's'} |`)
   lines.push(`| Assertions | ${assertFails === 0 ? '✅ Passed' : '❌ Failed'} | ${assertFails === 0 ? assertCount : `${assertFails} failed`} assertion${assertCount === 1 ? '' : 's'} |`)
   lines.push(`| OpenRouter key | ✅ Passed | \`OPENROUTER_API_KEY\` configured |`)
+  if (codeReview && !codeReview.skipped) {
+    const codeStatus = codeReview.ok ? '✅ Passed' : '❌ Failed'
+    lines.push(`| Code review | ${codeStatus} | ${codeReview.findings.length} findings (${codeReview.model}) |`)
+  } else {
+    lines.push(`| Code review | ⚪ Skipped | ${codeReview?.summary ?? 'no report'} |`)
+  }
   lines.push('')
   lines.push('</details>')
   lines.push('')
+
+  if (codeReview && !codeReview.skipped) {
+    lines.push('<details>')
+    lines.push('<summary>🧠 Code review</summary>')
+    lines.push('')
+    lines.push(`**Verdict:** ${codeReview.verdict} · ${codeReview.model} · ${codeReview.tokens}tok ${formatUsd(codeReview.visionCostUsd)}`)
+    lines.push('')
+    lines.push(codeReview.summary)
+    lines.push('')
+    if (codeReview.findings.length > 0) {
+      lines.push('| File | Line | Severity | Finding |')
+      lines.push('| --- | ---: | --- | --- |')
+      for (const f of codeReview.findings) {
+        lines.push(`| \`${f.file}\` | ${f.line ?? '—'} | ${f.severity} | ${f.message} |`)
+      }
+      lines.push('')
+    }
+    lines.push('</details>')
+    lines.push('')
+  }
 
   lines.push('<details>')
   lines.push('<summary>✨ Actions</summary>')
@@ -195,6 +221,7 @@ async function main() {
   const runUrl = `${process.env.GITHUB_SERVER_URL}/${owner}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`
 
   let report
+  let codeReview
   if (hasKey) {
     try {
       const raw = fs.readFileSync(path.join(reportDir, 'run.json'), 'utf8')
@@ -202,10 +229,17 @@ async function main() {
     } catch {
       report = undefined
     }
+    try {
+      const raw = fs.readFileSync(path.join(reportDir, 'code-review.json'), 'utf8')
+      codeReview = JSON.parse(raw)
+    } catch {
+      codeReview = undefined
+    }
   }
 
-  const conclusion = !hasKey ? 'neutral' : report && report.ok ? 'success' : 'failure'
-  const body = !hasKey ? renderMissingKeyBody() : renderBody(report, runUrl)
+  const ok = (report?.ok === true) && (codeReview === undefined || codeReview.ok)
+  const conclusion = !hasKey ? 'neutral' : ok ? 'success' : 'failure'
+  const body = !hasKey ? renderMissingKeyBody() : renderBody(report, codeReview, runUrl)
 
   if (pr) {
     const { data: comments } = await github.rest.issues.listComments({
