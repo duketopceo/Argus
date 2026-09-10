@@ -8,6 +8,11 @@ on:
 jobs:
   review:
     runs-on: self-hosted
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      checks: write
     steps:
       - uses: actions/checkout@v4
 
