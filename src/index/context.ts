@@ -18,7 +18,7 @@ export interface ContextRequest {
   /** Repo-relative path as reported by the PR files API. */
   filename: string
   /** For renames, the pre-rename path — the index likely still holds it. */
-  previousFilename?: string
+  previousFilename?: string | undefined
 }
 
 function normalize(path: string): string {

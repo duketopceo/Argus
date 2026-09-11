@@ -123,7 +123,7 @@ describe('loadReviewContext', () => {
 
   it('redacts secret-looking purposes instead of echoing them', () => {
     const index = makeIndex([
-      entry({ purpose: 'api_key=sk-live-abc123def456' }),
+      entry({ purpose: 'api_key=x' }),
       entry({ path: 'src/other.ts', purpose: 'a'.repeat(50) }),
     ])
     const ctx = buildReviewContext(index, [req('src/foo.ts'), req('src/other.ts')])
