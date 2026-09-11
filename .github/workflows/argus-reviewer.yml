@@ -14,6 +14,9 @@ jobs:
       pull-requests: write
       checks: write
       statuses: write
+      actions: write
+    env:
+      ARGUS_DEBUG: '1'
     steps:
       - uses: actions/checkout@v4
 
@@ -26,8 +29,17 @@ jobs:
         run: npm ci && npm run build
 
       - name: Run argus-reviewer action
+        id: review
         uses: ./action
         with:
           openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           cli: node dist/cli.js
           working-directory: .
+
+      - name: Upload argus-reviewer report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: argus-reviewer-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: argus-reviewer-report/
+          if-no-files-found: ignore

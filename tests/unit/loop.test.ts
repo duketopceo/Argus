@@ -61,7 +61,10 @@ describe('Engine record/replay', () => {
   let driver: BrowserDriver
 
   beforeAll(async () => {
-    driver = await BrowserDriver.launch({ viewport: { width: 1280, height: 720 } })
+    driver = await BrowserDriver.launch({
+      viewport: { width: 1280, height: 720 },
+      browserTimeoutMs: 8_000,
+    })
   })
 
   beforeEach(async () => {

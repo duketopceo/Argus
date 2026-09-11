@@ -2,6 +2,7 @@ import { mkdtemp, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { debug } from '../debug.js'
 import { chromium, firefox, webkit, type Browser, type BrowserContext, type Page } from 'playwright'
 
 export interface Viewport {
@@ -203,7 +204,11 @@ export class BrowserDriver {
     if (this.closed) return this.video
     this.closed = true
     const video = this.page.video()
-    await this._withTimeout(this.context.close())
+    try {
+      await this._withTimeout(this.context.close())
+    } catch (e) {
+      debug('browser', `context close failed: ${(e as Error).message}`)
+    }
     if (video) {
       try {
         this.video = await this._withTimeout(video.path())
@@ -211,7 +216,11 @@ export class BrowserDriver {
         this.video = undefined
       }
     }
-    await this._withTimeout(this.browser.close())
+    try {
+      await this._withTimeout(this.browser.close())
+    } catch (e) {
+      debug('browser', `browser close failed: ${(e as Error).message}`)
+    }
     return this.video
   }
 
