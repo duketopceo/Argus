@@ -19,6 +19,13 @@ inputs:
   budget-usd:
     description: Optional per-run budget cap override in USD
     required: false
+  node-version:
+    description: Node.js version for the harness (Node 20 is deprecated on GH runners)
+    default: '22'
+    required: false
+  cache-dependency-path:
+    description: npm lockfile path for setup-node cache (defaults to <working-directory>/package-lock.json)
+    required: false
 outputs:
   conclusion:
     description: 'Run conclusion: success, failure, or neutral'
@@ -28,8 +35,9 @@ runs:
   steps:
     - uses: actions/setup-node@v4
       with:
-        node-version: '20'
+        node-version: ${{ inputs.node-version }}
         cache: npm
+        cache-dependency-path: ${{ inputs.cache-dependency-path || format('{0}/package-lock.json', inputs.working-directory || '.') }}
 
     - name: Install consumer dependencies
       shell: bash
