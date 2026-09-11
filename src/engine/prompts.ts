@@ -21,10 +21,12 @@ Return a single JSON object from this exact vocabulary — nothing else.  The ou
 - pressKeys: use keys (array of key names)
 - scroll: use dx, dy
 - wait: use ms (milliseconds)
-- done: the instruction is complete
+- done: the instruction is already complete; use this immediately when the goal has been achieved or the starting state already satisfies the instruction
 - fail: the instruction cannot be completed; include reasoning
 
 Always include the "reasoning" field.
+
+Termination: if the user's instruction is already satisfied by the current page, or the last action completed it, you MUST return \`done\` in the next call. Do not emit extra clicks, waits, or movements after the goal is reached.
 
 Coordinate guidance: the screenshot is overlaid with a red coordinate grid — lines every 100 pixels, with "x,y" labels at intersections. Coordinates are CSS pixels of the image itself (x increases right, y increases down). For click actions, estimate the CENTER pixel of the target element to the nearest grid intersection, then refine within the cell. Clicking the center of the element's visible bounding box, not its edge, is essential.`
 
