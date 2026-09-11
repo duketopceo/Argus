@@ -394,33 +394,45 @@ export class Engine {
           model,
         }
       }
-      if (action.action !== 'click') break
       const coordsOk =
+        action.action === 'click' &&
         typeof action.x === 'number' &&
         Number.isFinite(action.x) &&
         typeof action.y === 'number' &&
         Number.isFinite(action.y)
       const probe = coordsOk ? await this._resolveNode(action.x as number, action.y as number) : null
-      // Missing/invalid coords are treated like a mismatch: retry once via the
-      // correction path before giving up.
-      if (coordsOk && (probe === null || instructionMatchesNode(instruction, probe.a11ySnippet))) {
+      // A point that resolves to no element at all is a mismatch too — it was
+      // previously accepted and cached, which let clicks into empty space get
+      // fingerprinted and replayed as "ok". Retry once with feedback; if the
+      // second attempt still resolves to nothing we accept it (canvas/shadow
+      // DOM and other unresolvable nodes are legitimate).
+      if (action.action === 'click' && coordsOk && probe !== null &&
+          instructionMatchesNode(instruction, probe.a11ySnippet)) {
         break
       }
 
       if (attempt === 1 || !this._opts.ledger.canSpend(0.001)) break
       this._note(
         'locate',
-        coordsOk && probe !== null
-          ? 'grounding corrected after probe mismatch'
-          : 'grounding corrected after missing/invalid coords',
+        action.action !== 'click'
+          ? `locate steered after "${action.action}" response`
+          : coordsOk
+            ? probe !== null
+              ? 'grounding corrected after probe mismatch'
+              : 'grounding corrected after no element at coordinates'
+            : 'grounding corrected after missing/invalid coords',
         `attempt=${attempt} instruction=${instruction.slice(0, 80)}`,
       )
       const feedback = specialist
         ? // ui-tars-class models want their native prompt format.
           `Click on the UI element matching this description: ${instruction.replace(/^locate:\s*/i, '')}.`
-        : coordsOk && probe !== null
-          ? `Your previous coordinates (${action.x},${action.y}) resolved to "${probe.a11ySnippet}", which does not match the target. Re-examine the grid labels and return corrected coordinates for: ${instruction}`
-          : `Your previous response was a "${action.action}" action with no usable coordinates. Return the click point (x, y in CSS pixels) for: ${instruction}`
+        : action.action !== 'click'
+          ? `A locate step must return the click point (x, y in CSS pixels) for: ${instruction}. You returned "${action.action}".`
+          : probe !== null
+            ? `Your previous coordinates (${action.x},${action.y}) resolved to "${probe.a11ySnippet}", which does not match the target. Re-examine the grid labels and return corrected coordinates for: ${instruction}`
+            : coordsOk
+              ? `Your previous coordinates (${action.x},${action.y}) did not resolve to any element. Re-examine the grid labels and return corrected coordinates for: ${instruction}`
+              : `Your previous response was a "${action.action}" action with no usable coordinates. Return the click point (x, y in CSS pixels) for: ${instruction}`
       let retry
       try {
         retry = await this._callModel(

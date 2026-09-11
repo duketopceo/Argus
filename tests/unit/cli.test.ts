@@ -220,6 +220,20 @@ describe('vision-e2e CLI', () => {
     expect(await main(['cache', 'list'], { cwd, out: out.fn })).toBe(0)
     expect(out.lines.join('\n')).toContain('cache empty')
   })
+
+  it('init scaffolds config, smoke test, and workflow; skips existing files', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'vision-e2e-init-'))
+    const out = capture()
+    expect(await main(['init'], { cwd, out: out.fn })).toBe(0)
+    const { existsSync } = await import('node:fs')
+    expect(existsSync(join(cwd, 'argus-reviewer.config.ts'))).toBe(true)
+    expect(existsSync(join(cwd, 'tests/argus/smoke.test.ts'))).toBe(true)
+    expect(existsSync(join(cwd, '.github/workflows/argus-reviewer.yml'))).toBe(true)
+    // Second run without --force skips rather than overwriting
+    const out2 = capture()
+    expect(await main(['init'], { cwd, out: out2.fn })).toBe(0)
+    expect(out2.lines.join('\n')).toContain('exists, skipping')
+  })
 })
 
 describe('loadConfig', () => {

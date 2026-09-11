@@ -6,6 +6,31 @@ const POLL_INTERVAL_MS = 250
 const STOP_GRACE_MS = 3_000
 
 /**
+ * Poll `url` until it answers with HTTP 2xx/3xx or the timeout elapses.
+ * Non-http(s) schemes (e.g. file://) cannot be fetched, so they are treated
+ * as immediately ready — Playwright navigates them directly.
+ */
+export async function waitForReady(url: string, timeoutMs: number): Promise<void> {
+  if (!/^https?:/i.test(url)) return
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    try {
+      const res = await fetch(url, { redirect: 'manual' })
+      if (res.status >= 200 && res.status < 400) return
+    } catch {
+      // connection refused / not up yet — keep polling
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Target did not become ready: ${url} did not respond ` +
+          `with HTTP 2xx/3xx within ${timeoutMs}ms`,
+      )
+    }
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+  }
+}
+
+/**
  * Boot adapter for the run target (R11): spawn a shell command, poll the URL
  * until it answers with HTTP 2xx/3xx or the ready timeout elapses, then let
  * the run proceed. stop() kills the whole spawned process tree.
@@ -47,24 +72,7 @@ export class TargetProcess {
       )
     })
 
-    const ready = (async (): Promise<void> => {
-      const deadline = Date.now() + spec.readyTimeoutMs
-      for (;;) {
-        try {
-          const res = await fetch(spec.url, { redirect: 'manual' })
-          if (res.status >= 200 && res.status < 400) return
-        } catch {
-          // connection refused / not up yet — keep polling
-        }
-        if (Date.now() >= deadline) {
-          throw new Error(
-            `Target did not become ready: ${spec.url} did not respond ` +
-              `with HTTP 2xx/3xx within ${spec.readyTimeoutMs}ms`,
-          )
-        }
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
-      }
-    })()
+    const ready = waitForReady(spec.url, spec.readyTimeoutMs)
 
     try {
       await Promise.race([ready, childExited])

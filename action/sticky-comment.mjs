@@ -217,7 +217,7 @@ async function main() {
   const repo = context.repo.repo
   const hasKey = !!process.env.OPENROUTER_API_KEY
   const workDir = process.env.VISION_E2E_WORKING_DIR || ''
-  const reportDir = path.resolve(process.env.GITHUB_WORKSPACE, workDir, 'vision-e2e-report')
+  const reportDir = path.resolve(process.env.GITHUB_WORKSPACE, workDir, 'argus-reviewer-report')
   const runUrl = `${process.env.GITHUB_SERVER_URL}/${owner}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`
 
   let report

@@ -56,7 +56,7 @@ function stubReport(overrides: Partial<RunReport> = {}): RunReport {
     },
   ]
   return {
-    tool: 'vision-e2e',
+    tool: 'argus-reviewer',
     startedAt: '2026-09-08T00:00:00.000Z',
     durationMs: 1200,
     ok: true,
@@ -82,7 +82,7 @@ describe('renderComment', () => {
     const body = renderComment(stubReport(), { runUrl: 'https://github.com/run/1' })
 
     expect(body).toContain(SENTINEL)
-    expect(body).toContain('## vision-e2e ✅ PASS')
+    expect(body).toContain('## argus-reviewer ✅ PASS')
     expect(body).toContain('### Tests')
     expect(body).toContain('| landing | ✅ pass | 2 | $0.002000 |  |')
     expect(body).toContain('| login | ❌ fail | 1 | $0.001000 | assert failed |')
@@ -109,7 +109,7 @@ describe('renderComment', () => {
     const body = renderComment(undefined, { missingKey: true })
 
     expect(body).toContain(SENTINEL)
-    expect(body).toContain('## vision-e2e ⚪ skipped — no OpenRouter key')
+    expect(body).toContain('## argus-reviewer ⚪ skipped — no OpenRouter key')
     expect(body).toContain('OPENROUTER_API_KEY')
     expect(body).toContain('neutral')
   })

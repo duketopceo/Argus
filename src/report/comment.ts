@@ -1,6 +1,6 @@
 import { RunReport, TestReport } from './run.js'
 
-export const SENTINEL = '<!-- vision-e2e -->'
+export const SENTINEL = '<!-- argus-reviewer -->'
 
 export interface CommentOptions {
   /** Link to the workflow run or artifact index. */
@@ -12,12 +12,12 @@ function formatUsd(n: number): string {
 }
 
 function statusLine(report: RunReport | undefined, missingKey: boolean): string {
-  if (missingKey) return '## vision-e2e ⚪ skipped — no OpenRouter key'
-  if (!report) return '## vision-e2e ⚪ no report'
+  if (missingKey) return '## argus-reviewer ⚪ skipped — no OpenRouter key'
+  if (!report) return '## argus-reviewer ⚪ no report'
   const emoji = report.ok ? '✅' : '❌'
   const status = report.ok ? 'PASS' : 'FAIL'
   const budget = report.totals.budgetExceeded ? ' (budget cap exceeded)' : ''
-  return `## vision-e2e ${emoji} ${status}${budget}`
+  return `## argus-reviewer ${emoji} ${status}${budget}`
 }
 
 function testRows(tests: TestReport[]): string[] {
@@ -98,7 +98,7 @@ function evidenceRows(videos: string[], runUrl: string | undefined): string[] {
 function missingKeyBody(): string[] {
   return [
     '',
-    '`OPENROUTER_API_KEY` is not configured. Add it as a repository or workflow secret to run vision-e2e.',
+    '`OPENROUTER_API_KEY` is not configured. Add it as a repository or workflow secret to run argus-reviewer.',
     '',
     'This status is intentionally neutral, not a failure.',
     '',
