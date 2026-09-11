@@ -76,6 +76,10 @@ const defaults: Config = {
   openrouter: undefined,
 }
 
+export function defineConfig(input: ConfigInput): ConfigInput {
+  return input
+}
+
 export function resolveConfig(input: ConfigInput = {}): Config {
   const provider: ProviderRules = { ...defaults.provider, ...(input.provider ?? {}) }
   return {
@@ -89,9 +93,11 @@ export async function loadConfig(cwd: string): Promise<Config> {
   const fs = await import('node:fs/promises')
   const path = await import('node:path')
 
-  for (const ext of ['.ts', '.json']) {
-    const file = path.join(cwd, `vision-e2e.config${ext}`)
-    try {
+  const names = ['argus-reviewer.config', 'vision-e2e.config']
+  for (const name of names) {
+    for (const ext of ['.ts', '.json']) {
+      const file = path.join(cwd, `${name}${ext}`)
+      try {
       const stat = await fs.stat(file)
       if (!stat.isFile()) continue
 
@@ -128,6 +134,7 @@ export async function loadConfig(cwd: string): Promise<Config> {
       if (code === 'ENOENT') continue
       throw e
     }
+  }
   }
 
   return resolveConfig()

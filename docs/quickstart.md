@@ -8,18 +8,17 @@
 npm i -D argus-reviewer-e2e
 ```
 
-Until the package is on npm, install from the GitHub tag:
+Until the package is on npm, install from the GitHub repo:
 
 ```bash
-npm i -D github:duketopceo/Argus
+npm i -D duketopceo/Argus
 ```
 
 ## 2. Configure
 
-Create `vision-e2e.config.ts` in the repo root:
+Create `argus-reviewer.config.ts` in the repo root:
 
 ```ts
-import { resolve } from 'node:path'
 import { defineConfig } from 'argus-reviewer-e2e'
 
 export default defineConfig({
@@ -28,7 +27,7 @@ export default defineConfig({
   code_model: 'anthropic/claude-sonnet-4',
   budgetUsd: 1.0,
   target: {
-    command: '',
+    // command: 'npm run dev' if the target needs a local server started
     url: 'https://your-app.example.com',
     readyTimeoutMs: 10_000,
   },
@@ -100,7 +99,7 @@ cd Argus/runner
 ./register-runner.sh duketopceo/YourRepo your-runner-name
 ```
 
-The runner needs `self-hosted`, `Linux`, `X64`, and `vision-e2e` labels.
+The runner is registered with the labels `self-hosted`, `Linux`, and `X64`.
 
 ## 7. Open a PR
 
