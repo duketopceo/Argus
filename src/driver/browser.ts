@@ -2,7 +2,7 @@ import { mkdtemp, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
+import { chromium, firefox, webkit, type Browser, type BrowserContext, type Page } from 'playwright'
 
 export interface Viewport {
   width: number
@@ -18,6 +18,10 @@ export interface BrowserDriverOptions {
   screenshotQuality?: number
   /** Optional scale factor for the observation screenshot (<=1 downscales). */
   screenshotScale?: number
+  /** Playwright browser engine: `chromium` (default), `firefox`, or `webkit`. */
+  browser?: 'chromium' | 'firefox' | 'webkit' | undefined
+  /** Hard limit in ms for Playwright cleanup. */
+  browserTimeoutMs?: number | undefined
 }
 
 export interface Observation {
@@ -43,6 +47,7 @@ export class BrowserDriver {
     private readonly quality: number,
     private readonly videoDir: string,
     private readonly viewport: Viewport,
+    private readonly browserTimeoutMs: number,
     private video: string | undefined,
     private closed = false,
   ) {}
@@ -52,7 +57,12 @@ export class BrowserDriver {
     const videoDir = options.videoDir ?? (await mkdtemp(join(tmpdir(), 'vision-e2e-video-')))
     await mkdir(videoDir, { recursive: true })
 
-    const browser = await chromium.launch({ headless: true })
+    const browserName = options.browser ?? 'chromium'
+    const browserType = { chromium, firefox, webkit }[browserName]
+    if (browserType === undefined) {
+      throw new Error(`unknown browser: ${browserName}`)
+    }
+    const browser = await browserType.launch({ headless: true })
     try {
       const context = await browser.newContext({
         viewport,
@@ -67,10 +77,11 @@ export class BrowserDriver {
         options.screenshotQuality ?? DEFAULT_QUALITY,
         videoDir,
         viewport,
+        options.browserTimeoutMs ?? 30_000,
         undefined,
       )
     } catch (e) {
-      await browser.close()
+      await browser.close().catch(() => undefined)
       throw e
     }
   }
@@ -192,15 +203,24 @@ export class BrowserDriver {
     if (this.closed) return this.video
     this.closed = true
     const video = this.page.video()
-    await this.context.close()
+    await this._withTimeout(this.context.close())
     if (video) {
       try {
-        this.video = await video.path()
+        this.video = await this._withTimeout(video.path())
       } catch {
         this.video = undefined
       }
     }
-    await this.browser.close()
+    await this._withTimeout(this.browser.close())
     return this.video
+  }
+
+  private _withTimeout<T>(promise: Promise<T>): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('browser cleanup timed out')), this.browserTimeoutMs),
+      ),
+    ])
   }
 }

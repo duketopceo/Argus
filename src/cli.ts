@@ -34,7 +34,7 @@ export interface CliDeps {
   /** Inject a vision client (tests stub this; default builds OpenRouterClient). */
   createClient?: (config: Config) => VisionClient
   /** Inject a driver factory (tests may stub browser launch). */
-  launchDriver?: () => Promise<BrowserDriver>
+  launchDriver?: (config: Config) => Promise<BrowserDriver>
 }
 
 interface Ctx {
@@ -178,9 +178,12 @@ function createClient(deps: CliDeps, config: Config, ctx: Ctx): VisionClient {
   }
 }
 
-async function launchDriver(deps: CliDeps): Promise<BrowserDriver> {
-  if (deps.launchDriver) return deps.launchDriver()
-  return BrowserDriver.launch()
+async function launchDriver(config: Config, deps: CliDeps): Promise<BrowserDriver> {
+  if (deps.launchDriver) return deps.launchDriver(config)
+  return BrowserDriver.launch({
+    browser: config.browser,
+    browserTimeoutMs: config.browserTimeoutMs,
+  })
 }
 
 function warnUnknownProviders(config: Config, ctx: Ctx): void {
@@ -240,7 +243,7 @@ async function cmdRecord(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
   let driver: BrowserDriver | undefined
   try {
     target = await startTarget(config)
-    driver = await launchDriver(deps)
+    driver = await launchDriver(config, deps)
     const setupTmp = await mkdtemp(join(tmpdir(), 'vision-e2e-setup-'))
     await applyPageSetup(config, driver, ctx, setupTmp)
     const client = createClient(deps, config, ctx)
@@ -435,7 +438,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
       const fileSlug = fileName.replace(TEST_FILE_RE, '')
       let driver: BrowserDriver | undefined
       try {
-        driver = await launchDriver(deps)
+        driver = await launchDriver(config, deps)
         await applyPageSetup(config, driver, ctx, tmpDir)
 
         // A file-level session so test files that call `td` at module top
