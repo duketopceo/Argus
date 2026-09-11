@@ -635,23 +635,36 @@ interface CodeReviewReport {
 
 async function fetchPrDiff(repo: string, pr: string, token: string, ctx: Ctx): Promise<string | undefined> {
   const url = `https://api.github.com/repos/${repo}/pulls/${pr}/files?per_page=100`
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-    },
-  })
-  if (!res.ok) {
-    ctx.err(`failed to fetch PR files: ${res.status} ${res.statusText}`)
-    return undefined
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 30_000)
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    })
+    if (!res.ok) {
+      ctx.err(`failed to fetch PR files: ${res.status} ${res.statusText}`)
+      return undefined
+    }
+    const files = (await res.json()) as PrFile[]
+    const patches = files
+      .filter((f) => typeof f.patch === 'string' && f.patch.length > 0)
+      .map((f) => `### ${f.filename}\n\`\`\`diff\n${f.patch}\n\`\`\``)
+    if (patches.length === 0) return undefined
+    return patches.join('\n\n')
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      ctx.err('failed to fetch PR files: request timed out after 30s')
+      return undefined
+    }
+    throw e
+  } finally {
+    clearTimeout(timeout)
   }
-  const files = (await res.json()) as PrFile[]
-  const patches = files
-    .filter((f) => typeof f.patch === 'string' && f.patch.length > 0)
-    .map((f) => `### ${f.filename}\n\`\`\`diff\n${f.patch}\n\`\`\``)
-  if (patches.length === 0) return undefined
-  return patches.join('\n\n')
 }
 
 function buildCodeReviewMessages(repo: string, pr: string, patchText: string): Message[] {

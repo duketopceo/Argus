@@ -237,7 +237,8 @@ async function main() {
     }
   }
 
-  const ok = (report?.ok === true) && (codeReview === undefined || codeReview.ok)
+  const codeReviewOk = codeReview == null || codeReview.ok === true
+  const ok = (report?.ok === true) && codeReviewOk
   const conclusion = !hasKey ? 'neutral' : ok ? 'success' : 'failure'
   const body = !hasKey ? renderMissingKeyBody() : renderBody(report, codeReview, runUrl, ok)
 

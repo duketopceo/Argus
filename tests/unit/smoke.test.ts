@@ -132,7 +132,7 @@ describe('argus-reviewer end-to-end smoke', () => {
     expect(code).toBe(0)
     expect(out.lines.join('\n')).toContain('PASS smoke-flow')
     expect(runClient.calls.length).toBeLessThanOrEqual(1)
-  }, 120_000)
+  }, 60_000)
 
   it('fails to run when no target URL is provided', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'argus-reviewer-smoke-notarget-'))
