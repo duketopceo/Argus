@@ -69,7 +69,9 @@ function sha256(buf: Buffer): string {
 function resolveImport(spec: string, fromFile: string, files: Set<string>): string | undefined {
   if (!spec.startsWith('.')) return undefined
   const base = resolve(dirname(fromFile), spec)
-  for (const cand of [base, `${base}.ts`, `${base}.tsx`, `${base}.js`, `${base}.mjs`, `${base}/index.ts`, `${base}/index.js`]) {
+  const exts = ['ts', 'tsx', 'js', 'jsx', 'mts', 'cts', 'mjs', 'cjs']
+  const candidates = [base, ...exts.map((e) => `${base}.${e}`), ...exts.map((e) => `${base}/index.${e}`)]
+  for (const cand of candidates) {
     if (files.has(cand)) return cand
   }
   return undefined

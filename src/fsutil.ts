@@ -11,7 +11,7 @@ export async function writeAtomicJson(
   replacer?: (key: string, v: unknown) => unknown,
 ): Promise<void> {
   await mkdir(dirname(path), { recursive: true })
-  const tmp = `${path}.tmp`
+  const tmp = `${path}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`
   await writeFile(tmp, `${JSON.stringify(value, replacer, 2)}\n`, 'utf8')
   await rename(tmp, path)
 }

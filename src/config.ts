@@ -23,6 +23,16 @@ export interface Config {
    * primary model's proposed point resolves to the wrong element.
    */
   grounding_model: string | undefined
+  /**
+   * Optional code review model. Used by `argus-reviewer code-review` to review
+   * PR diffs and post findings. Defaults to the primary `model` if not set.
+   */
+  code_model: string | undefined
+  /**
+   * Hard budget for the `argus-reviewer code-review` lane. When set, the
+   * review stops early if the cumulative OpenRouter cost exceeds this cap.
+   */
+  codeReviewBudgetUsd: number | undefined
   provider: ProviderRules
   budgetUsd: number | undefined
   target: Target | undefined
@@ -43,6 +53,28 @@ export interface Config {
    * pre-navigation setup.
    */
   pageSetup: string | undefined
+  /**
+   * OpenRouter request metadata. `trace` is sent in the request body and
+   * can be used to attribute spend by repo, PR, or run. `headers` are
+   * sent verbatim with every OpenRouter request (e.g. HTTP-Referer, X-Title).
+   */
+  openrouter: { trace?: Record<string, string>; headers?: Record<string, string> } | undefined
+  /**
+   * Browser engine for Playwright: `chromium`, `firefox`, or `webkit`.
+   * Defaults to `chromium`.
+   */
+  browser: 'chromium' | 'firefox' | 'webkit' | undefined
+  /**
+   * Hard limit in milliseconds for Playwright cleanup (context + browser close).
+   * Prevents a hung browser from keeping the runner or test suite alive.
+   * Defaults to 30 seconds.
+   */
+  browserTimeoutMs: number | undefined
+  /**
+   * Severity levels that block a pre-merge status. Defaults to `['bug']` so
+   * `risk`/`nit`/`q` findings are surfaced but do not fail the status.
+   */
+  severity: string[] | undefined
   /**
    * Log verbosity — 'debug'|'info'|'warn'|'error'. ARGUS_DEBUG=1 forces
    * 'debug'. Default 'warn'.
@@ -66,6 +98,8 @@ const defaults: Config = {
   model: 'google/gemini-2.5-flash-lite',
   escalation_model: 'moonshotai/kimi-k2.5',
   grounding_model: undefined,
+  code_model: 'deepseek/deepseek-v4.1-flash',
+  codeReviewBudgetUsd: undefined,
   provider: {
     ignore: ['siliconflow', 'novitaai', 'atlascloud', 'streamlake', 'chutes'],
   },
@@ -76,10 +110,18 @@ const defaults: Config = {
   reportDir: undefined,
   secrets: undefined,
   pageSetup: undefined,
+  openrouter: undefined,
+  browser: 'chromium',
+  browserTimeoutMs: 30_000,
+  severity: ['bug'],
   logLevel: undefined,
   sourceGlobs: undefined,
   indexPath: undefined,
   diffBase: undefined,
+}
+
+export function defineConfig(input: ConfigInput): ConfigInput {
+  return input
 }
 
 export function resolveConfig(input: ConfigInput = {}): Config {
@@ -95,9 +137,11 @@ export async function loadConfig(cwd: string): Promise<Config> {
   const fs = await import('node:fs/promises')
   const path = await import('node:path')
 
-  for (const ext of ['.ts', '.json']) {
-    const file = path.join(cwd, `vision-e2e.config${ext}`)
-    try {
+  const names = ['argus-reviewer.config', 'vision-e2e.config']
+  for (const name of names) {
+    for (const ext of ['.ts', '.json']) {
+      const file = path.join(cwd, `${name}${ext}`)
+      try {
       const stat = await fs.stat(file)
       if (!stat.isFile()) continue
 
@@ -134,6 +178,7 @@ export async function loadConfig(cwd: string): Promise<Config> {
       if (code === 'ENOENT') continue
       throw e
     }
+  }
   }
 
   return resolveConfig()

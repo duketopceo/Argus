@@ -15,6 +15,7 @@ import {
   TdSession,
 } from './api.js'
 import { Config, loadConfig, unknownProviderSlugs } from './config.js'
+import { debug } from './debug.js'
 import { BrowserDriver } from './driver/browser.js'
 import { TargetProcess } from './driver/target.js'
 import { Engine, VisionClient } from './engine/loop.js'
@@ -29,7 +30,8 @@ import { createLogger, resolveLogLevel } from './log.js'
 import { JunitCase, writeJunitXml } from './report/junit.js'
 import { buildRunReport, TestReport, writeRunReport } from './report/run.js'
 import { flowPath, loadFlow } from './cache/store.js'
-import { OpenRouterClient } from './vision/openrouter.js'
+import { CallCost } from './vision/cost.js'
+import { JsonSchema, Message, OpenRouterClient } from './vision/openrouter.js'
 import { Ledger } from './vision/ledger.js'
 
 export interface CliDeps {
@@ -40,7 +42,7 @@ export interface CliDeps {
   /** Inject a vision client (tests stub this; default builds OpenRouterClient). */
   createClient?: (config: Config) => VisionClient
   /** Inject a driver factory (tests may stub browser launch). */
-  launchDriver?: () => Promise<BrowserDriver>
+  launchDriver?: (config: Config) => Promise<BrowserDriver>
 }
 
 interface Ctx {
@@ -50,21 +52,22 @@ interface Ctx {
   err: (line: string) => void
 }
 
-const USAGE = `argus — vision-model E2E testing harness (BYOK via OPENROUTER_API_KEY)
+const USAGE = `argus-reviewer — vision-model E2E testing harness (BYOK via OPENROUTER_API_KEY)
 
 Usage:
-  argus record "<flow description>" --url <target> [--name <flow>] [--tests-dir <dir>]
-  argus run [pattern] [--url <target>] [--dir <testsDir>] [--report-dir <dir>]
-  argus cache list [--dir <cacheDir>]
-  argus cache prune [name|--all] [--dir <cacheDir>]
-  argus index [--dir <repo>]
-  argus --help
+  argus-reviewer record "<flow description>" --url <target> [--name <flow>] [--tests-dir <dir>]
+  argus-reviewer run [pattern] [--url <target>] [--dir <testsDir>] [--report-dir <dir>]
+  argus-reviewer code-review [--report-dir <dir>]
+  argus-reviewer cache list [--dir <cacheDir>]
+  argus-reviewer cache prune [name|--all] [--dir <cacheDir>]
+  argus-reviewer index [--dir <repo>]
+  argus-reviewer --help
 
 Config: vision-e2e.config.ts or vision-e2e.config.json in the working directory
 (model, escalation_model, provider rules, budgetUsd, target, cacheDir,
 testsDir, reportDir, secrets, logLevel, sourceGlobs, indexPath, diffBase).`
 
-const RECORD_USAGE = `Usage: argus record "<flow description>" --url <target> [options]
+const RECORD_USAGE = `Usage: argus-reviewer record "<flow description>" --url <target> [options]
 
 Options:
   --url <url>        Target URL (falls back to config.target.url)
@@ -72,7 +75,7 @@ Options:
   --tests-dir <dir>  Where to write the generated test file (default: config testsDir or ./tests)
   -h, --help         Show this help`
 
-const RUN_USAGE = `Usage: argus run [pattern] [options]
+const RUN_USAGE = `Usage: argus-reviewer run [pattern] [options]
 
 Discovers *.test.{ts,mts,mjs,js} under the tests dir, executes each against the
 target, and writes JUnit XML + a JSON run report.
@@ -85,7 +88,16 @@ Options:
   --cache-dir <dir>  Fingerprint cache dir (default: config cacheDir)
   -h, --help         Show this help`
 
-const CACHE_USAGE = `Usage: argus cache <list|prune> [options]
+const CODE_REVIEW_USAGE = `Usage: argus-reviewer code-review [options]
+
+Reviews the PR diff for the repo/PR referenced by ARGUS_REVIEWER_TRACE using the
+configured code model. Writes code-review.json next to run.json.
+
+Options:
+  --report-dir <dir> Report output dir (default: config reportDir or ./vision-e2e-report)
+  -h, --help         Show this help`
+
+const CACHE_USAGE = `Usage: argus-reviewer cache <list|prune> [options]
 
   cache list                 List cached flows (name + step count)
   cache prune [name|--all]   Delete one flow cache, or all with --all
@@ -115,6 +127,8 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
       return cmdRecord(rest, ctx, deps)
     case 'run':
       return cmdRun(rest, ctx, deps)
+    case 'code-review':
+      return cmdCodeReview(rest, ctx, deps)
     case 'cache':
       return cmdCache(rest, ctx)
     case 'index':
@@ -123,6 +137,20 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
       ctx.err(`unknown command: ${cmd}`)
       ctx.out(USAGE)
       return 2
+  }
+}
+
+function parseOpenRouterTrace(env: Ctx['env']): Record<string, string> | undefined {
+  const raw = env.ARGUS_REVIEWER_TRACE
+  if (!raw) return undefined
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([_, v]) => typeof v === 'string'),
+    ) as Record<string, string>
+  } catch {
+    return undefined
   }
 }
 
@@ -140,16 +168,33 @@ function createClient(deps: CliDeps, config: Config, ctx: Ctx): VisionClient {
             'OPENROUTER_API_KEY is not set — every vision call is billed through this key (BYOK)',
           )
         }
-        inner = new OpenRouterClient({ apiKey })
+        const envTrace = parseOpenRouterTrace(ctx.env)
+        const trace = { ...(envTrace ?? {}), ...(config.openrouter?.trace ?? {}) }
+        const headers = { ...(config.openrouter?.headers ?? {}) }
+        const traceOpt = Object.keys(trace).length > 0 ? trace : undefined
+        const headersOpt = Object.keys(headers).length > 0 ? headers : undefined
+        inner = new OpenRouterClient({
+          apiKey,
+          ...(traceOpt ? { trace: traceOpt } : {}),
+          ...(headersOpt ? { headers: headersOpt } : {}),
+          onCall: (call) => {
+            ctx.out(
+              `openrouter ${call.kind} ${call.model} ${call.tokens}tok $${call.costUsd.toFixed(6)}`,
+            )
+          },
+        })
       }
       return inner.complete(opts)
     },
   }
 }
 
-async function launchDriver(deps: CliDeps): Promise<BrowserDriver> {
-  if (deps.launchDriver) return deps.launchDriver()
-  return BrowserDriver.launch()
+async function launchDriver(config: Config, deps: CliDeps): Promise<BrowserDriver> {
+  if (deps.launchDriver) return deps.launchDriver(config)
+  return BrowserDriver.launch({
+    browser: config.browser,
+    browserTimeoutMs: config.browserTimeoutMs,
+  })
 }
 
 function warnUnknownProviders(config: Config, ctx: Ctx): void {
@@ -191,7 +236,7 @@ async function cmdRecord(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
 
   const description = positionals.join(' ').trim()
   if (description === '') {
-    ctx.err('record requires a flow description: argus record "<flow>" --url <target>')
+    ctx.err('record requires a flow description: argus-reviewer record "<flow>" --url <target>')
     return 2
   }
 
@@ -209,7 +254,7 @@ async function cmdRecord(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
   let driver: BrowserDriver | undefined
   try {
     target = await startTarget(config)
-    driver = await launchDriver(deps)
+    driver = await launchDriver(config, deps)
     const setupTmp = await mkdtemp(join(tmpdir(), 'vision-e2e-setup-'))
     await applyPageSetup(config, driver, ctx, setupTmp)
     const client = createClient(deps, config, ctx)
@@ -367,6 +412,12 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
   const config = await loadConfig(ctx.cwd)
   warnUnknownProviders(config, ctx)
   if (values['cache-dir'] !== undefined) config.cacheDir = values['cache-dir']
+  const envBudget = ctx.env.ARGUS_BUDGET_USD
+  if (envBudget !== undefined && envBudget !== '') {
+    const parsed = Number(envBudget)
+    if (Number.isFinite(parsed) && parsed > 0) config.budgetUsd = parsed
+    else ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`)
+  }
 
   const logger = createLogger(resolveLogLevel(ctx.env, config.logLevel), ctx)
   const runErrors: ErrorRecord[] = []
@@ -443,6 +494,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
       durationMs: Date.now() - runStart,
       reports,
       runErrors,
+      ok: !runFailed,
     })
     const cacheDir = resolve(ctx.cwd, config.cacheDir ?? '.vision-e2e-cache')
     const path = await writeJournal(cacheDir, entry)
@@ -465,7 +517,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
       const fileSlug = fileName.replace(TEST_FILE_RE, '')
       let driver: BrowserDriver | undefined
       try {
-        driver = await launchDriver(deps)
+        driver = await launchDriver(config, deps)
         await applyPageSetup(config, driver, ctx, tmpDir)
 
         // A file-level session so test files that call `td` at module top
@@ -500,6 +552,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
             visionCostUsd: state.visionCostUsd,
             sandboxSeconds: state.sandboxSeconds,
             budgetExceeded: state.budgetExceeded,
+            calls: state.calls,
             videoPath: undefined,
           })
           await fileSession.save()
@@ -538,6 +591,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
               visionCostUsd: state.visionCostUsd,
               sandboxSeconds: state.sandboxSeconds,
               budgetExceeded: state.budgetExceeded,
+              calls: state.calls,
               videoPath: undefined,
             })
             await session.save()
@@ -570,6 +624,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
           visionCostUsd: 0,
           sandboxSeconds: 0,
           budgetExceeded: false,
+          calls: [],
           videoPath: undefined,
         })
         ctx.out(`FAIL ${fileSlug} (${fileName})`)
@@ -597,9 +652,18 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
     })
   }
   const report = buildRunReport(reports, startedAt, Date.now() - runStart)
-  await mkdir(reportDir, { recursive: true })
-  await writeJunitXml(join(reportDir, 'junit.xml'), 'vision-e2e', junitCases)
-  await writeRunReport(join(reportDir, 'run.json'), report)
+  try {
+    await mkdir(reportDir, { recursive: true })
+    await writeJunitXml(join(reportDir, 'junit.xml'), 'vision-e2e', junitCases)
+    await writeRunReport(join(reportDir, 'run.json'), report)
+  } catch (e) {
+    // Report-write failure must not eat the journal — the journal is the
+    // evidence store for exactly this kind of failure.
+    const msg = `report write failed: ${(e as Error).message}`
+    runErrors.push({ stage: 'report', message: msg })
+    ctx.err(msg)
+    runFailed = true
+  }
   await journalize()
 
   ctx.out(
@@ -608,6 +672,376 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
       `$${report.totals.visionCostUsd.toFixed(6)} vision spend — reports in ${reportDir}`,
   )
   return report.ok && !runFailed ? 0 : 1
+}
+
+const CODE_REVIEW_SCHEMA: JsonSchema = {
+  name: 'code-review',
+  schema: {
+    type: 'object',
+    properties: {
+      summary: { type: 'string' },
+      verdict: { type: 'string', enum: ['pass', 'needs_changes', 'approve'] },
+      findings: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            file: { type: 'string' },
+            line: { type: 'number' },
+            severity: { type: 'string', enum: ['bug', 'risk', 'nit', 'q'] },
+            message: { type: 'string' },
+          },
+          required: ['file', 'message', 'severity'],
+        },
+      },
+    },
+    required: ['summary', 'verdict', 'findings'],
+  },
+}
+
+interface PrFile {
+  filename: string
+  patch?: string
+}
+
+interface CodeReviewReport {
+  ok: boolean
+  skipped: boolean
+  summary: string
+  verdict: 'pass' | 'needs_changes' | 'approve'
+  findings: { file: string; line?: number; severity: string; message: string }[]
+  calls: CallCost[]
+  visionCostUsd: number
+  tokens: number
+  model: string
+  budgetExceeded: boolean
+}
+
+const CHUNK_TOKEN_TARGET = 6000
+const CHUNK_FILE_OVERHEAD = 100
+const MAX_PR_FILE_PAGES = 10
+
+async function fetchPrFiles(repo: string, pr: string, token: string, ctx: Ctx): Promise<PrFile[] | undefined> {
+  const files: PrFile[] = []
+  let page = 1
+  while (page <= MAX_PR_FILE_PAGES) {
+    const url = `https://api.github.com/repos/${repo}/pulls/${pr}/files?per_page=100&page=${page}`
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 30_000)
+    try {
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      })
+      if (!res.ok) {
+        ctx.err(`failed to fetch PR files: ${res.status} ${res.statusText}`)
+        return undefined
+      }
+      const batch = (await res.json()) as PrFile[]
+      const withPatches = batch.filter((f) => typeof f.patch === 'string' && f.patch.length > 0)
+      files.push(...withPatches)
+      if (batch.length < 100) break
+      page++
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') {
+        ctx.err(`failed to fetch PR files: request timed out after 30s (page ${page})`)
+        return undefined
+      }
+      throw e
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+  return files
+}
+
+function buildPatchChunks(files: PrFile[]): string[] {
+  const chunks: string[] = []
+  let current: PrFile[] = []
+  let currentTokens = 0
+  for (const f of files) {
+    const fileTokens = Math.ceil((f.patch?.length ?? 0) / 4) + CHUNK_FILE_OVERHEAD
+    if (current.length > 0 && currentTokens + fileTokens > CHUNK_TOKEN_TARGET) {
+      chunks.push(current.map((c) => `### ${c.filename}\n\`\`\`diff\n${c.patch}\n\`\`\``).join('\n\n'))
+      current = [f]
+      currentTokens = fileTokens
+    } else {
+      current.push(f)
+      currentTokens += fileTokens
+    }
+  }
+  if (current.length > 0) {
+    chunks.push(current.map((c) => `### ${c.filename}\n\`\`\`diff\n${c.patch}\n\`\`\``).join('\n\n'))
+  }
+  return chunks
+}
+
+function buildCodeReviewMessages(
+  repo: string,
+  pr: string,
+  patchText: string,
+  chunkIndex = 0,
+  totalChunks = 1,
+): Message[] {
+  return [
+    {
+      role: 'system',
+      content: [
+        {
+          type: 'text',
+          text: 'You are a senior engineer reviewing a PR diff. Output terse, actionable findings. One line per issue. No throat-clearing.',
+        },
+      ],
+    },
+    {
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: `Review chunk ${chunkIndex + 1} of ${totalChunks} for ${repo}#${pr}.\n\n${patchText}\n\nReturn JSON: summary, verdict (pass/needs_changes/approve), and findings[].\n\nEach finding must include:\n- file\n- line\n- severity: bug | risk | nit | q\n- message: one line in this format: \`L<line>: <emoji> <severity>: <problem>. <fix>.\`\n\nSeverity emojis:\n- bug = 🔴\n- risk = 🟡\n- nit = 🔵\n- q = ❓\n\nRules for the message:\n- Start with \`L<line>: \`\n- Then the emoji and keyword, e.g. \`🔴 bug:\`, \`🟡 risk:\`, \`🔵 nit:\`, \`❓ q:\`\n- State the concrete problem and a concrete fix\n- No "I noticed", "perhaps", "consider", "maybe", "you might want"\n- Do not restate what the line does\n- Include the why only if the fix is not obvious\n- Put exact symbol/variable/function names in backticks\n\nVerdict rule:\n- If there are no bug or risk findings, use "approve".\n- Use "needs_changes" only when at least one bug or risk is present.\n- "pass" only when there are zero findings.\n\nDo not report issues that are already handled by try/catch, null guards, AbortController, type narrowing, or other existing error checks visible in the diff. Only report real, high-confidence problems.\n\nExamples:\nL42: 🔴 bug: \`user\` can be null after .find(). Add guard before .email.\nL88-140: 🔵 nit: 50-line fn does 4 things. Extract validate/normalize/persist.\nL23: 🟡 risk: no retry on 429. Wrap in withBackoff(3).`,
+        },
+      ],
+    },
+  ]
+}
+
+function buildSynthesisMessages(repo: string, pr: string, files: string[], findings: CodeReviewReport['findings']): Message[] {
+  const findingsText = JSON.stringify(findings, null, 2)
+  return [
+    {
+      role: 'system',
+      content: [
+        {
+          type: 'text',
+          text: 'You are a senior engineering lead. Synthesize a final PR review from a set of per-file findings. Be terse.',
+        },
+      ],
+    },
+    {
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: `Synthesize the final review for ${repo}#${pr}.\n\nChanged files: ${files.join(', ')}\n\nPer-file findings (JSON):\n${findingsText}\n\nReturn JSON: summary, verdict (pass/needs_changes/approve), and findings[]. The findings array may be the same input or a deduplicated, ranked subset. Include only real, high-confidence issues. Verdict: "pass" only for zero findings; "needs_changes" if any bug or risk remains; otherwise "approve".`,
+        },
+      ],
+    },
+  ]
+}
+
+function deriveSeverity(message: string): string {
+  if (message.includes('🔴') || /(?:^|\W)bug:/.test(message)) return 'bug'
+  if (message.includes('🟡') || /(?:^|\W)risk:/.test(message)) return 'risk'
+  if (message.includes('🔵') || /(?:^|\W)nit:/.test(message)) return 'nit'
+  if (message.includes('❓') || /(?:^|\W)q:/.test(message)) return 'q'
+  return 'nit'
+}
+
+function parseCodeReview(content: string): {
+  summary: string
+  verdict: 'pass' | 'needs_changes' | 'approve'
+  findings: CodeReviewReport['findings']
+} {
+  const defaultFindings: CodeReviewReport['findings'] = []
+  try {
+    const parsed = JSON.parse(content) as {
+      summary?: string
+      verdict?: string
+      findings?: CodeReviewReport['findings']
+    }
+    const validVerdict = ['pass', 'needs_changes', 'approve'].includes(parsed.verdict ?? '')
+      ? (parsed.verdict as 'pass' | 'needs_changes' | 'approve')
+      : (Array.isArray(parsed.findings) && parsed.findings.length === 0 ? 'pass' : 'needs_changes')
+    const findings = Array.isArray(parsed.findings)
+      ? parsed.findings.map((f) => ({
+          ...f,
+          severity: (f as { severity?: string }).severity ?? deriveSeverity((f as { message?: string }).message ?? ''),
+        }))
+      : defaultFindings
+    return {
+      summary: parsed.summary ?? (validVerdict === 'pass' ? 'No issues found' : 'Code review completed'),
+      verdict: validVerdict,
+      findings,
+    }
+  } catch {
+    return {
+      summary: 'Code review completed but could not parse the model response',
+      verdict: 'needs_changes',
+      findings: defaultFindings,
+    }
+  }
+}
+
+async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> {
+  const { values } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      help: { type: 'boolean', short: 'h', default: false },
+      'report-dir': { type: 'string' },
+    },
+  })
+  if (values.help) {
+    ctx.out(CODE_REVIEW_USAGE)
+    return 0
+  }
+
+  const config = await loadConfig(ctx.cwd)
+  const reportDir = resolve(
+    ctx.cwd,
+    values['report-dir'] ?? config.reportDir ?? 'vision-e2e-report',
+  )
+  await mkdir(reportDir, { recursive: true })
+  const codeReviewPath = join(reportDir, 'code-review.json')
+
+  const trace = parseOpenRouterTrace(ctx.env)
+  const repo = (trace?.repo ?? ctx.env.GITHUB_REPOSITORY) as string | undefined
+  const pr = trace?.pr
+  const token = ctx.env.GITHUB_TOKEN ?? ctx.env.GH_TOKEN
+  const model = config.code_model ?? config.model
+  const budget = config.codeReviewBudgetUsd
+  debug('code-review', `repo=${repo ?? 'none'} pr=${pr ?? 'none'} model=${model} budget=${budget ?? 'unlimited'}`)
+
+  const skip = async (reason: string): Promise<number> => {
+    ctx.out(`code-review: skipping — ${reason}`)
+    const skipped: CodeReviewReport = {
+      ok: true,
+      skipped: true,
+      summary: `Code review skipped — ${reason}`,
+      verdict: 'pass',
+      findings: [],
+      calls: [],
+      visionCostUsd: 0,
+      tokens: 0,
+      model,
+      budgetExceeded: false,
+    }
+    await writeFile(codeReviewPath, `${JSON.stringify(skipped, null, 2)}\n`, 'utf8')
+    return 0
+  }
+
+  if (!repo || !pr) return await skip('missing repo/pr in trace')
+  if (!token) return await skip('missing GITHUB_TOKEN')
+
+  const files = await fetchPrFiles(repo, pr, token, ctx)
+  if (!files || files.length === 0) return await skip('could not fetch PR diff')
+
+  const chunks = buildPatchChunks(files)
+  debug('code-review', `chunks=${chunks.length} files=${files.length}`)
+
+  try {
+    const client = createClient(deps, config, ctx)
+    const ledger = new Ledger(budget)
+    const allFindings: CodeReviewReport['findings'] = []
+    const allCalls: CallCost[] = []
+    let totalTokens = 0
+    let totalCost = 0
+    let lastModel = model
+
+    for (let i = 0; i < chunks.length; i++) {
+      if (ledger.budgetExceeded) break
+      debug('code-review', `chunk=${i + 1}/${chunks.length}`)
+      const chunk = chunks[i]
+      if (chunk === undefined) continue
+      const response = await client.complete({
+        model,
+        messages: buildCodeReviewMessages(repo, pr, chunk, i, chunks.length),
+        schema: CODE_REVIEW_SCHEMA,
+        kind: 'code',
+      })
+      ledger.recordCall(response.cost)
+      allCalls.push(response.cost)
+      totalTokens += response.cost.tokens
+      totalCost += response.cost.costUsd
+      lastModel = response.model
+      const parsed = parseCodeReview(response.content)
+      allFindings.push(...parsed.findings)
+      if (budget !== undefined && ledger.visionCostUsd > budget) {
+        ledger.flagBudgetExceeded()
+        ctx.err(`code-review: budget exceeded after chunk ${i + 1}; stopping early`)
+        break
+      }
+    }
+
+    let summary: string | undefined
+    let verdict: 'pass' | 'needs_changes' | 'approve' | undefined
+    let finalFindings = allFindings
+
+    if (chunks.length > 1 && !ledger.budgetExceeded) {
+      try {
+        debug('code-review', 'synthesis')
+        const synthResponse = await client.complete({
+          model,
+          messages: buildSynthesisMessages(repo, pr, files.map((f) => f.filename), allFindings),
+          schema: CODE_REVIEW_SCHEMA,
+          kind: 'code',
+        })
+        ledger.recordCall(synthResponse.cost)
+        allCalls.push(synthResponse.cost)
+        totalTokens += synthResponse.cost.tokens
+        totalCost += synthResponse.cost.costUsd
+        lastModel = synthResponse.model
+        const parsed = parseCodeReview(synthResponse.content)
+        summary = parsed.summary
+        verdict = parsed.verdict
+        finalFindings = parsed.findings.length > 0 ? parsed.findings : allFindings
+        if (budget !== undefined && ledger.visionCostUsd > budget) {
+          ledger.flagBudgetExceeded()
+          ctx.err('code-review: budget exceeded after synthesis; stopping early')
+        }
+      } catch (e) {
+        debug('code-review', `synthesis failed: ${(e as Error).message}`)
+        ctx.err(`code-review synthesis failed: ${(e as Error).message}`)
+      }
+    }
+
+    if (summary === undefined || verdict === undefined) {
+      if (allFindings.length === 0) {
+        summary = 'No issues found'
+        verdict = 'pass'
+      } else if (allFindings.some((f) => ['bug', 'risk'].includes(f.severity))) {
+        summary = `${allFindings.length} finding(s) include bug or risk`
+        verdict = 'needs_changes'
+      } else {
+        summary = `${allFindings.length} low-severity finding(s)`
+        verdict = 'approve'
+      }
+    }
+
+    if (ledger.budgetExceeded) {
+      summary = `Budget exceeded — review stopped early. ${summary}`
+      if (verdict !== 'needs_changes') verdict = 'needs_changes'
+    }
+
+    const blockSeverities = config.severity ?? ['bug']
+    const hasBlocker = finalFindings.some((f) => blockSeverities.includes((f as { severity?: string }).severity ?? ''))
+    const report: CodeReviewReport = {
+      ok: !hasBlocker && !ledger.budgetExceeded,
+      skipped: false,
+      summary,
+      verdict,
+      findings: finalFindings,
+      calls: allCalls,
+      visionCostUsd: totalCost,
+      tokens: totalTokens,
+      model: lastModel,
+      budgetExceeded: ledger.budgetExceeded,
+    }
+    await writeFile(codeReviewPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
+    ctx.out(
+      `code review complete: ${finalFindings.length} findings, verdict ${verdict}, ` +
+        `${totalTokens}tok $${totalCost.toFixed(6)}${ledger.budgetExceeded ? ' (budget exceeded)' : ''}`,
+    )
+    return 0
+  } catch (e) {
+    debug('code-review', `failed: ${(e as Error).message}`)
+    ctx.err(`code review failed: ${(e as Error).message}`)
+    return 1
+  }
 }
 
 async function cmdCache(args: string[], ctx: Ctx): Promise<number> {
@@ -693,7 +1127,7 @@ if (invokedAsScript) {
       process.exitCode = code
     })
     .catch((e: unknown) => {
-      console.error(`argus: ${(e as Error).message}`)
+      console.error(`argus-reviewer: ${(e as Error).message}`)
       process.exitCode = 1
     })
 }

@@ -16,14 +16,21 @@ function safeBaseRef(base: string): string | undefined {
 }
 
 export async function diffChangedFiles(cwd: string, base?: string): Promise<string[]> {
-  const safe = base !== undefined ? safeBaseRef(base) : undefined
-  const useBase = safe !== undefined
+  // A provided-but-invalid base disables diff detection rather than silently
+  // switching to working-tree semantics (which would over-invalidate in CI).
+  if (base !== undefined && safeBaseRef(base) === undefined) return []
+  const useBase = base !== undefined
   const args = useBase
-    ? ['diff', '--name-only', `${safe}...HEAD`]
+    ? ['diff', '--name-only', `${base}...HEAD`]
     : ['status', '--porcelain', '--untracked-files=all']
   const { stdout } = await execFileAsync('git', args, { cwd, ...GIT_OPTS }).catch(() => ({ stdout: '' }))
   return stdout
     .split('\n')
-    .map((l) => (useBase ? l.trim() : l.replace(/^..\s+/, '').trim()))
-    .filter((l) => l !== '' && !l.startsWith('R ') && !l.includes(' -> '))
+    .map((l) => {
+      const stripped = useBase ? l.trim() : l.replace(/^..\s+/, '').trim()
+      // Porcelain rename lines are `R  old -> new`; keep the new path.
+      const arrow = stripped.indexOf(' -> ')
+      return arrow === -1 ? stripped : stripped.slice(arrow + 4)
+    })
+    .filter((l) => l !== '' && !l.startsWith('R '))
 }

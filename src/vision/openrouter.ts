@@ -1,4 +1,5 @@
 import { ProviderRules } from '../config.js'
+import { debug } from '../debug.js'
 import { CallCost, CallKind, makeCallCost, OpenRouterResponse } from './cost.js'
 
 export interface TextContentPart {
@@ -27,11 +28,33 @@ export interface JsonSchema {
 export interface OpenRouterClientOptions {
   apiKey: string
   fetch?: typeof fetch
+  /**
+   * Extra metadata sent on every request. `trace` is merged into the request
+   * body `trace` field for cost attribution. `headers` are merged into the
+   * request headers (e.g. HTTP-Referer, X-Title).
+   */
+  trace?: Record<string, string>
+  headers?: Record<string, string>
+  /**
+   * Called once for every successful OpenRouter request with the resolved
+   * model, cost, and token usage. Useful for per-call logging.
+   */
+  onCall?: (call: {
+    id: string
+    model: string
+    kind: CallKind
+    costUsd: number
+    tokens: number
+    trace?: Record<string, string>
+  }) => void
 }
 
 export class OpenRouterClient {
   private _apiKey: string
   private _fetch: typeof fetch
+  private _trace: Record<string, string> | undefined
+  private _headers: Record<string, string> | undefined
+  private _onCall: OpenRouterClientOptions['onCall']
 
   constructor(opts: OpenRouterClientOptions) {
     if (!opts.apiKey) {
@@ -39,6 +62,9 @@ export class OpenRouterClient {
     }
     this._apiKey = opts.apiKey
     this._fetch = opts.fetch ?? globalThis.fetch
+    this._trace = opts.trace
+    this._headers = opts.headers
+    this._onCall = opts.onCall
   }
 
   async complete(opts: {
@@ -51,7 +77,9 @@ export class OpenRouterClient {
   }): Promise<{ id: string; content: string; cost: CallCost; model: string }> {
     const candidates = [opts.model, ...(opts.escalationModels ?? [])]
     const errors: Error[] = []
+    const kind = opts.kind ?? 'ground'
 
+    debug('openrouter', `kind=${kind} candidates=[${candidates.join(', ')}] messages=${opts.messages.length}`)
     for (let i = 0; i < candidates.length; i++) {
       const model = candidates[i]
       if (model === undefined) continue
@@ -63,11 +91,26 @@ export class OpenRouterClient {
           ...(opts.schema !== undefined ? { schema: opts.schema } : {}),
           ...(opts.provider !== undefined ? { provider: opts.provider } : {}),
           models: remaining,
+          kind,
         })
-        const cost = makeCallCost(response, opts.kind ?? 'ground')
+        const cost = makeCallCost(response, kind)
+        debug(
+          'openrouter',
+          `model=${response.model} tokens=${cost.tokens} costUsd=${cost.costUsd.toFixed(6)} content_len=${this._extractContent(response).length}`,
+        )
+        this._onCall?.({
+          id: response.id,
+          model: response.model,
+          kind,
+          costUsd: cost.costUsd,
+          tokens: cost.tokens,
+          ...(this._trace ? { trace: this._trace } : {}),
+        })
         return { id: response.id, content: this._extractContent(response), cost, model: response.model }
       } catch (e) {
-        errors.push(e as Error)
+        const err = e as Error
+        debug('openrouter', `candidate ${model} failed: ${err.message}`)
+        errors.push(err)
       }
     }
 
@@ -98,6 +141,7 @@ export class OpenRouterClient {
     schema?: JsonSchema
     provider?: ProviderRules
     models?: string[]
+    kind: CallKind
   }): Promise<OpenRouterResponse> {
     const body: Record<string, unknown> = {
       model: req.model,
@@ -119,13 +163,21 @@ export class OpenRouterClient {
         },
       }
     }
+    if (this._trace) {
+      body.trace = this._trace
+    }
+
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this._apiKey}`,
+      'Content-Type': 'application/json',
+      'X-Title': 'argus-reviewer',
+      'X-OpenRouter-Metadata': 'enabled',
+      ...(this._headers ?? {}),
+    }
 
     const res = await this._fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this._apiKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(body),
     })
     if (!res.ok) {

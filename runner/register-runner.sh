@@ -32,8 +32,20 @@ run() {
   fi
 }
 
-# 1. Registration token via gh (repo scope required).
-TOKEN="$(gh api -X POST "repos/$REPO/actions/runners/registration-token" -q .token)"
+# 1. Registration token via env, gh, or GH_TOKEN env.
+if [[ -n "$RUNNER_REGISTRATION_TOKEN" ]]; then
+  TOKEN="$RUNNER_REGISTRATION_TOKEN"
+elif command -v gh >/dev/null 2>&1; then
+  TOKEN="$(gh api -X POST "repos/$REPO/actions/runners/registration-token" -q .token)"
+elif [[ -n "$GH_TOKEN" ]]; then
+  TOKEN="$(curl -sSf -X POST \
+    -H "Authorization: token $GH_TOKEN" \
+    -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/repos/$REPO/actions/runners/registration-token" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')"
+else
+  echo "set RUNNER_REGISTRATION_TOKEN, install gh, or set GH_TOKEN" >&2
+  exit 1
+fi
 
 # 2. Download + extract the runner.
 run mkdir -p "$RUNNER_DIR"

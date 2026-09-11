@@ -108,8 +108,8 @@ describe('fault injection — model output garbage degrades gracefully', () => {
     const engine = makeEngine(driver, client, cacheDir)
     const fake = {
       instruction: 'the click button',
-      action: { type: 'click' as const, x: 200, y: 130 },
-      bbox: { x: 150, y: 100, w: 100, h: 60 },
+      action: { action: 'click' as const, x: 200, y: 130 },
+      bbox: { x: 150, y: 100, width: 100, height: 60 },
       clickPoint: { x: 200, y: 130 },
       model: 'fake',
       a11ySnippet: 'button "Click me"',

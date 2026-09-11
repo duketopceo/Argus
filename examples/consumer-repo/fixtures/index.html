@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>argus-reviewer consumer fixture</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 2rem; }
+    button { padding: 0.5rem 1rem; font-size: 1rem; }
+    #marker { margin-top: 1rem; color: #666; }
+  </style>
+</head>
+<body>
+  <h1>Consumer example</h1>
+  <button id="target">Click me</button>
+  <div id="marker">marker: untouched</div>
+  <script>
+    document.getElementById('target').addEventListener('click', () => {
+      document.getElementById('marker').textContent = 'marker: clicked'
+    })
+  </script>
+</body>
+</html>

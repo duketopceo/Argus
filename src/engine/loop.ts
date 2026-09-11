@@ -343,12 +343,21 @@ export class Engine {
         // "(x,y)" coordinates — ask in their native format.
         `Click on the UI element matching this description: ${instruction.replace(/^locate:\s*/i, '')}.`
       : instruction
+    // A diff-invalidated (stale) entry is a fresh ground, not a heal — heal
+    // implies the fingerprint *checked out as wrong*, stale means we never
+    // verified it. Keeping the kind split honest also keeps the heal-rate
+    // signal in the journal meaningful and avoids spending escalation calls
+    // on entries we already know are stale.
+    const isStale = cached !== undefined && cached.stale !== undefined
+    const useHeal = cached !== undefined && !isStale
+    const escalation =
+      specialist || useHeal ? [this._opts.config.escalation_model] : undefined
     let response
     try {
       response = await this._callModel(
-        cached ? 'heal' : 'ground',
+        useHeal ? 'heal' : 'ground',
         buildActionMessages(prompt, observation),
-        cached ? [this._opts.config.escalation_model] : undefined,
+        escalation,
         this._opts.config.grounding_model,
       )
     } catch (e) {
@@ -412,12 +421,18 @@ export class Engine {
         : coordsOk && probe !== null
           ? `Your previous coordinates (${action.x},${action.y}) resolved to "${probe.a11ySnippet}", which does not match the target. Re-examine the grid labels and return corrected coordinates for: ${instruction}`
           : `Your previous response was a "${action.action}" action with no usable coordinates. Return the click point (x, y in CSS pixels) for: ${instruction}`
-      const retry = await this._callModel(
-        cached ? 'heal' : 'ground',
-        buildActionMessages(feedback, observation),
-        cached ? [this._opts.config.escalation_model] : undefined,
-        this._opts.config.grounding_model,
-      )
+      let retry
+      try {
+        retry = await this._callModel(
+          useHeal ? 'heal' : 'ground',
+          buildActionMessages(feedback, observation),
+          escalation,
+          this._opts.config.grounding_model,
+        )
+      } catch (e) {
+        this._note('locate', 'correction retry threw', (e as Error).message)
+        break
+      }
       if (!retry) break
       action = this._parseAction(retry.content)
       model = retry.model
@@ -452,7 +467,7 @@ export class Engine {
       action.action === 'click' &&
       !instructionMatchesNode(instruction, resolved.a11ySnippet)
     ) {
-      this._note('locate', 'grounding mismatch rejected', `resolved="${resolved.a11ySnippet}"`)
+      this._note('locate', 'grounding mismatch rejected', `resolved_hash=${fnv1a(resolved.a11ySnippet)}`)
       return {
         ok: false,
         reason: `model grounded to "${resolved.a11ySnippet}", which does not match the instruction`,

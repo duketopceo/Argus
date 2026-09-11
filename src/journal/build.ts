@@ -1,4 +1,4 @@
-import { RunReport, TestReport } from '../report/run.js'
+import { TestReport } from '../report/run.js'
 
 import { ErrorRecord, JOURNAL_SCHEMA_VERSION, JournalEntry } from './schema.js'
 
@@ -12,8 +12,8 @@ export function buildJournalEntry(opts: {
   durationMs: number
   reports: TestReport[]
   runErrors: ErrorRecord[]
-  /** When the run aborted before buildRunReport, pass undefined and totals are derived. */
-  report?: RunReport
+  /** Overall run outcome — aborts before the first test must record ok:false. */
+  ok?: boolean
 }): JournalEntry {
   const { reports } = opts
   const failed = reports.filter((r) => !r.ok).length
@@ -25,7 +25,7 @@ export function buildJournalEntry(opts: {
     branch: opts.branch,
     startedAt: opts.startedAt.toISOString(),
     durationMs: opts.durationMs,
-    ok: failed === 0,
+    ok: (opts.ok ?? true) && failed === 0,
     totals: {
       tests: reports.length,
       passed: reports.length - failed,

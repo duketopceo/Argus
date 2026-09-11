@@ -25,6 +25,10 @@ function stubReport(overrides: Partial<RunReport> = {}): RunReport {
       visionCostUsd: 0.002,
       sandboxSeconds: 2.0,
       budgetExceeded: false,
+      calls: [
+        { model: 'qwen/qwen3.7-flash', provider: 'stub', tokens: 10, costUsd: 0.001, kind: 'ground' },
+        { model: 'qwen/qwen3.7-flash', provider: 'stub', tokens: 10, costUsd: 0.001, kind: 'assert' },
+      ],
       videoPath: 'videos/landing.webm',
     },
     {
@@ -47,6 +51,7 @@ function stubReport(overrides: Partial<RunReport> = {}): RunReport {
       visionCostUsd: 0.001,
       sandboxSeconds: 2.5,
       budgetExceeded: false,
+      calls: [{ model: 'qwen/qwen3.7-flash', provider: 'stub', tokens: 10, costUsd: 0.001, kind: 'heal' }],
       videoPath: undefined,
     },
   ]
@@ -63,6 +68,8 @@ function stubReport(overrides: Partial<RunReport> = {}): RunReport {
       visionCostUsd: 0.003,
       sandboxSeconds: 4.5,
       budgetExceeded: false,
+      callsByModel: { 'qwen/qwen3.7-flash': 3 },
+      costByModel: { 'qwen/qwen3.7-flash': 0.003 },
     },
     tests,
     artifacts: { videos: ['videos/landing.webm'] },
