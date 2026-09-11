@@ -1,4 +1,4 @@
-export type CallKind = 'ground' | 'heal' | 'assert'
+export type CallKind = 'ground' | 'heal' | 'assert' | 'code'
 
 export interface CallCost {
   model: string

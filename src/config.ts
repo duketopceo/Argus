@@ -23,6 +23,11 @@ export interface Config {
    * primary model's proposed point resolves to the wrong element.
    */
   grounding_model: string | undefined
+  /**
+   * Optional code review model. Used by `argus-reviewer code-review` to review
+   * PR diffs and post findings. Defaults to the primary `model` if not set.
+   */
+  code_model: string | undefined
   provider: ProviderRules
   budgetUsd: number | undefined
   target: Target | undefined
@@ -43,6 +48,12 @@ export interface Config {
    * pre-navigation setup.
    */
   pageSetup: string | undefined
+  /**
+   * OpenRouter request metadata. `trace` is sent in the request body and
+   * can be used to attribute spend by repo, PR, or run. `headers` are
+   * sent verbatim with every OpenRouter request (e.g. HTTP-Referer, X-Title).
+   */
+  openrouter: { trace?: Record<string, string>; headers?: Record<string, string> } | undefined
 }
 
 export type ConfigInput = Partial<Omit<Config, 'provider'>> & { provider?: Partial<ProviderRules> }
@@ -51,6 +62,7 @@ const defaults: Config = {
   model: 'google/gemini-2.5-flash-lite',
   escalation_model: 'moonshotai/kimi-k2.5',
   grounding_model: undefined,
+  code_model: 'anthropic/claude-sonnet-4',
   provider: {
     ignore: ['siliconflow', 'novitaai', 'atlascloud', 'streamlake', 'chutes'],
   },
@@ -61,6 +73,7 @@ const defaults: Config = {
   reportDir: undefined,
   secrets: undefined,
   pageSetup: undefined,
+  openrouter: undefined,
 }
 
 export function resolveConfig(input: ConfigInput = {}): Config {

@@ -1,12 +1,16 @@
-name: vision-e2e
-description: Run the vision-e2e harness and post a sticky PR comment with cost and evidence.
+name: argus-reviewer
+description: Run the argus-reviewer harness and post a sticky PR comment with cost and evidence.
 author: duketopceo
 inputs:
   openrouter-api-key:
     description: OpenRouter API key (BYOK). All vision calls are billed through this key.
     required: true
+  cli:
+    description: Command used to run argus-reviewer (defaults to `npx argus-reviewer`). For dogfooding this repo, use `node dist/cli.js` after `npm run build`.
+    default: npx argus-reviewer
+    required: false
   config:
-    description: Path to the vision-e2e config file
+    description: Path to the argus-reviewer config file
     default: vision-e2e.config.ts
     required: false
   working-directory:
@@ -35,7 +39,7 @@ runs:
     - name: Install Playwright Chromium
       shell: bash
       working-directory: ${{ inputs.working-directory }}
-      run: npx playwright install --with-deps chromium
+      run: npx playwright install chromium
 
     - name: Stage config
       shell: bash
@@ -45,14 +49,38 @@ runs:
           cp "${{ inputs.config }}" vision-e2e.config.ts
         fi
 
-    - name: Run vision-e2e
+    - name: Run argus-reviewer code review
+      id: code-review
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      continue-on-error: true
+      env:
+        OPENROUTER_API_KEY: ${{ inputs.openrouter-api-key }}
+        GITHUB_TOKEN: ${{ github.token }}
+        ARGUS_REVIEWER_TRACE: >-
+          {"repo":"${{ github.repository }}",
+          "pr":"${{ github.event.pull_request.number }}",
+          "commit":"${{ github.sha }}",
+          "run_id":"${{ github.run_id }}",
+          "run_attempt":"${{ github.run_attempt }}",
+          "workflow":"${{ github.workflow }}"}
+      run: ${{ inputs.cli }} code-review
+
+    - name: Run argus-reviewer
       id: run
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       continue-on-error: true
       env:
         OPENROUTER_API_KEY: ${{ inputs.openrouter-api-key }}
-      run: npx vision-e2e run
+        ARGUS_REVIEWER_TRACE: >-
+          {"repo":"${{ github.repository }}",
+          "pr":"${{ github.event.pull_request.number }}",
+          "commit":"${{ github.sha }}",
+          "run_id":"${{ github.run_id }}",
+          "run_attempt":"${{ github.run_attempt }}",
+          "workflow":"${{ github.workflow }}"}
+      run: ${{ inputs.cli }} run
 
     - name: Post or update sticky PR comment
       id: post
@@ -66,7 +94,7 @@ runs:
           const fs = require('fs');
           const path = require('path');
           const actionPath = process.env.GITHUB_ACTION_PATH;
-          const file = path.join(actionPath, 'action', 'sticky-comment.mjs');
+          const file = path.join(actionPath, 'sticky-comment.mjs');
           const code = fs.readFileSync(file, 'utf8');
           const runFn = new Function('github', 'context', 'core', 'require', `return (async () => {\n${code}\n})()`);
           return await runFn(github, context, core, require);
