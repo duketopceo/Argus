@@ -109,3 +109,10 @@ The runner is registered with the labels `self-hosted`, `Linux`, and `X64`.
 - code review findings
 - OpenRouter spend per model
 - links to evidence and workflow logs
+
+Code review is **index-informed**: when `argus.index.json` exists (the action's
+`index` input defaults to `'true'` and writes it), each changed file's diff is
+sent with a bounded `> context:` block — the file's purpose plus its top
+importers/imports — so the reviewer model can weigh caller blast radius, not
+just the patch. Index metadata is sanitized before reaching the prompt and
+framed as unverified; no extra config or model calls are needed.
