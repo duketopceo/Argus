@@ -609,7 +609,7 @@ const CODE_REVIEW_SCHEMA: JsonSchema = {
           properties: {
             file: { type: 'string' },
             line: { type: 'number' },
-            severity: { type: 'string', enum: ['info', 'warning', 'error'] },
+            severity: { type: 'string', enum: ['bug', 'risk', 'nit', 'q'] },
             message: { type: 'string' },
           },
           required: ['file', 'message', 'severity'],
@@ -635,43 +635,79 @@ interface CodeReviewReport {
   visionCostUsd: number
   tokens: number
   model: string
+  budgetExceeded: boolean
 }
 
-async function fetchPrDiff(repo: string, pr: string, token: string, ctx: Ctx): Promise<string | undefined> {
-  const url = `https://api.github.com/repos/${repo}/pulls/${pr}/files?per_page=100`
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 30_000)
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    })
-    if (!res.ok) {
-      ctx.err(`failed to fetch PR files: ${res.status} ${res.statusText}`)
-      return undefined
+const CHUNK_TOKEN_TARGET = 6000
+const CHUNK_FILE_OVERHEAD = 100
+const MAX_PR_FILE_PAGES = 10
+
+async function fetchPrFiles(repo: string, pr: string, token: string, ctx: Ctx): Promise<PrFile[] | undefined> {
+  const files: PrFile[] = []
+  let page = 1
+  while (page <= MAX_PR_FILE_PAGES) {
+    const url = `https://api.github.com/repos/${repo}/pulls/${pr}/files?per_page=100&page=${page}`
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 30_000)
+    try {
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      })
+      if (!res.ok) {
+        ctx.err(`failed to fetch PR files: ${res.status} ${res.statusText}`)
+        return undefined
+      }
+      const batch = (await res.json()) as PrFile[]
+      const withPatches = batch.filter((f) => typeof f.patch === 'string' && f.patch.length > 0)
+      files.push(...withPatches)
+      if (batch.length < 100) break
+      page++
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') {
+        ctx.err(`failed to fetch PR files: request timed out after 30s (page ${page})`)
+        return undefined
+      }
+      throw e
+    } finally {
+      clearTimeout(timeout)
     }
-    const files = (await res.json()) as PrFile[]
-    const patches = files
-      .filter((f) => typeof f.patch === 'string' && f.patch.length > 0)
-      .map((f) => `### ${f.filename}\n\`\`\`diff\n${f.patch}\n\`\`\``)
-    if (patches.length === 0) return undefined
-    return patches.join('\n\n')
-  } catch (e) {
-    if (e instanceof Error && e.name === 'AbortError') {
-      ctx.err('failed to fetch PR files: request timed out after 30s')
-      return undefined
-    }
-    throw e
-  } finally {
-    clearTimeout(timeout)
   }
+  return files
 }
 
-function buildCodeReviewMessages(repo: string, pr: string, patchText: string): Message[] {
+function buildPatchChunks(files: PrFile[]): string[] {
+  const chunks: string[] = []
+  let current: PrFile[] = []
+  let currentTokens = 0
+  for (const f of files) {
+    const fileTokens = Math.ceil((f.patch?.length ?? 0) / 4) + CHUNK_FILE_OVERHEAD
+    if (current.length > 0 && currentTokens + fileTokens > CHUNK_TOKEN_TARGET) {
+      chunks.push(current.map((c) => `### ${c.filename}\n\`\`\`diff\n${c.patch}\n\`\`\``).join('\n\n'))
+      current = [f]
+      currentTokens = fileTokens
+    } else {
+      current.push(f)
+      currentTokens += fileTokens
+    }
+  }
+  if (current.length > 0) {
+    chunks.push(current.map((c) => `### ${c.filename}\n\`\`\`diff\n${c.patch}\n\`\`\``).join('\n\n'))
+  }
+  return chunks
+}
+
+function buildCodeReviewMessages(
+  repo: string,
+  pr: string,
+  patchText: string,
+  chunkIndex = 0,
+  totalChunks = 1,
+): Message[] {
   return [
     {
       role: 'system',
@@ -687,7 +723,31 @@ function buildCodeReviewMessages(repo: string, pr: string, patchText: string): M
       content: [
         {
           type: 'text',
-          text: `Review the diff for ${repo}#${pr}.\n\n${patchText}\n\nReturn JSON: summary, verdict (pass/needs_changes/approve), and findings[].\n\nEach finding must include:\n- file\n- line\n- severity: bug | risk | nit | q\n- message: one line in this format: \`L<line>: <emoji> <severity>: <problem>. <fix>.\`\n\nSeverity emojis:\n- bug = 🔴\n- risk = 🟡\n- nit = 🔵\n- q = ❓\n\nRules for the message:\n- Start with \`L<line>: \`\n- Then the emoji and keyword, e.g. \`🔴 bug:\`, \`🟡 risk:\`, \`🔵 nit:\`, \`❓ q:\`\n- State the concrete problem and a concrete fix\n- No \\\"I noticed\\\", \\\"perhaps\\\", \\\"consider\\\", \\\"maybe\\\", \\\"you might want\\\"\n- Do not restate what the line does\n- Include the why only if the fix is not obvious\n- Put exact symbol/variable/function names in backticks\n\nVerdict rule:\n- If there are no bug or risk findings, use \"approve\".\n- Use \"needs_changes\" only when at least one bug or risk is present.\n- \"pass\" only when there are zero findings.\n\nDo not report issues that are already handled by try/catch, null guards, AbortController, type narrowing, or other existing error checks visible in the diff. Only report real, high-confidence problems.\n\nExamples:\nL42: 🔴 bug: \`user\` can be null after .find(). Add guard before .email.\nL88-140: 🔵 nit: 50-line fn does 4 things. Extract validate/normalize/persist.\nL23: 🟡 risk: no retry on 429. Wrap in withBackoff(3).`,
+          text: `Review chunk ${chunkIndex + 1} of ${totalChunks} for ${repo}#${pr}.\n\n${patchText}\n\nReturn JSON: summary, verdict (pass/needs_changes/approve), and findings[].\n\nEach finding must include:\n- file\n- line\n- severity: bug | risk | nit | q\n- message: one line in this format: \`L<line>: <emoji> <severity>: <problem>. <fix>.\`\n\nSeverity emojis:\n- bug = 🔴\n- risk = 🟡\n- nit = 🔵\n- q = ❓\n\nRules for the message:\n- Start with \`L<line>: \`\n- Then the emoji and keyword, e.g. \`🔴 bug:\`, \`🟡 risk:\`, \`🔵 nit:\`, \`❓ q:\`\n- State the concrete problem and a concrete fix\n- No \\\"I noticed\\\", \\\"perhaps\\\", \\\"consider\\\", \\\"maybe\\\", \\\"you might want\\\"\n- Do not restate what the line does\n- Include the why only if the fix is not obvious\n- Put exact symbol/variable/function names in backticks\n\nVerdict rule:\n- If there are no bug or risk findings, use \"approve\".\n- Use \"needs_changes\" only when at least one bug or risk is present.\n- \"pass\" only when there are zero findings.\n\nDo not report issues that are already handled by try/catch, null guards, AbortController, type narrowing, or other existing error checks visible in the diff. Only report real, high-confidence problems.\n\nExamples:\nL42: 🔴 bug: \`user\` can be null after .find(). Add guard before .email.\nL88-140: 🔵 nit: 50-line fn does 4 things. Extract validate/normalize/persist.\nL23: 🟡 risk: no retry on 429. Wrap in withBackoff(3).`,
+        },
+      ],
+    },
+  ]
+}
+
+function buildSynthesisMessages(repo: string, pr: string, files: string[], findings: CodeReviewReport['findings']): Message[] {
+  const findingsText = JSON.stringify(findings, null, 2)
+  return [
+    {
+      role: 'system',
+      content: [
+        {
+          type: 'text',
+          text: 'You are a senior engineering lead. Synthesize a final PR review from a set of per-file findings. Be terse.',
+        },
+      ],
+    },
+    {
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: `Synthesize the final review for ${repo}#${pr}.\n\nChanged files: ${files.join(', ')}\n\nPer-file findings (JSON):\n${findingsText}\n\nReturn JSON: summary, verdict (pass/needs_changes/approve), and findings[]. The findings array may be the same input or a deduplicated, ranked subset. Include only real, high-confidence issues. Verdict: "pass" only for zero findings; "needs_changes" if any bug or risk remains; otherwise "approve".`,
         },
       ],
     },
@@ -763,7 +823,9 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
   const repo = (trace?.repo ?? ctx.env.GITHUB_REPOSITORY) as string | undefined
   const pr = trace?.pr
   const token = ctx.env.GITHUB_TOKEN ?? ctx.env.GH_TOKEN
-  debug('code-review', `repo=${repo ?? 'none'} pr=${pr ?? 'none'} model=${config.code_model ?? config.model}`)
+  const model = config.code_model ?? config.model
+  const budget = config.codeReviewBudgetUsd
+  debug('code-review', `repo=${repo ?? 'none'} pr=${pr ?? 'none'} model=${model} budget=${budget ?? 'unlimited'}`)
 
   const skip = async (reason: string): Promise<number> => {
     ctx.out(`code-review: skipping — ${reason}`)
@@ -776,7 +838,8 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       calls: [],
       visionCostUsd: 0,
       tokens: 0,
-      model: config.code_model ?? config.model,
+      model,
+      budgetExceeded: false,
     }
     await writeFile(codeReviewPath, `${JSON.stringify(skipped, null, 2)}\n`, 'utf8')
     return 0
@@ -785,36 +848,114 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
   if (!repo || !pr) return await skip('missing repo/pr in trace')
   if (!token) return await skip('missing GITHUB_TOKEN')
 
-  const patchText = await fetchPrDiff(repo, pr, token, ctx)
-  if (!patchText) return await skip('could not fetch PR diff')
+  const files = await fetchPrFiles(repo, pr, token, ctx)
+  if (!files || files.length === 0) return await skip('could not fetch PR diff')
+
+  const chunks = buildPatchChunks(files)
+  debug('code-review', `chunks=${chunks.length} files=${files.length}`)
 
   try {
     const client = createClient(deps, config, ctx)
-    const model = config.code_model ?? config.model
-    const response = await client.complete({
-      model,
-      messages: buildCodeReviewMessages(repo, pr, patchText),
-      schema: CODE_REVIEW_SCHEMA,
-      kind: 'code',
-    })
-    const { summary, verdict, findings } = parseCodeReview(response.content)
+    const ledger = new Ledger(budget)
+    const allFindings: CodeReviewReport['findings'] = []
+    const allCalls: CallCost[] = []
+    let totalTokens = 0
+    let totalCost = 0
+    let lastModel = model
+
+    for (let i = 0; i < chunks.length; i++) {
+      if (ledger.budgetExceeded) break
+      debug('code-review', `chunk=${i + 1}/${chunks.length}`)
+      const chunk = chunks[i]
+      if (chunk === undefined) continue
+      const response = await client.complete({
+        model,
+        messages: buildCodeReviewMessages(repo, pr, chunk, i, chunks.length),
+        schema: CODE_REVIEW_SCHEMA,
+        kind: 'code',
+      })
+      ledger.recordCall(response.cost)
+      allCalls.push(response.cost)
+      totalTokens += response.cost.tokens
+      totalCost += response.cost.costUsd
+      lastModel = response.model
+      const parsed = parseCodeReview(response.content)
+      allFindings.push(...parsed.findings)
+      if (budget !== undefined && ledger.visionCostUsd > budget) {
+        ledger.flagBudgetExceeded()
+        ctx.err(`code-review: budget exceeded after chunk ${i + 1}; stopping early`)
+        break
+      }
+    }
+
+    let summary: string | undefined
+    let verdict: 'pass' | 'needs_changes' | 'approve' | undefined
+    let finalFindings = allFindings
+
+    if (chunks.length > 1 && !ledger.budgetExceeded) {
+      try {
+        debug('code-review', 'synthesis')
+        const synthResponse = await client.complete({
+          model,
+          messages: buildSynthesisMessages(repo, pr, files.map((f) => f.filename), allFindings),
+          schema: CODE_REVIEW_SCHEMA,
+          kind: 'code',
+        })
+        ledger.recordCall(synthResponse.cost)
+        allCalls.push(synthResponse.cost)
+        totalTokens += synthResponse.cost.tokens
+        totalCost += synthResponse.cost.costUsd
+        lastModel = synthResponse.model
+        const parsed = parseCodeReview(synthResponse.content)
+        summary = parsed.summary
+        verdict = parsed.verdict
+        finalFindings = parsed.findings.length > 0 ? parsed.findings : allFindings
+        if (budget !== undefined && ledger.visionCostUsd > budget) {
+          ledger.flagBudgetExceeded()
+          ctx.err('code-review: budget exceeded after synthesis; stopping early')
+        }
+      } catch (e) {
+        debug('code-review', `synthesis failed: ${(e as Error).message}`)
+        ctx.err(`code-review synthesis failed: ${(e as Error).message}`)
+      }
+    }
+
+    if (summary === undefined || verdict === undefined) {
+      if (allFindings.length === 0) {
+        summary = 'No issues found'
+        verdict = 'pass'
+      } else if (allFindings.some((f) => ['bug', 'risk'].includes(f.severity))) {
+        summary = `${allFindings.length} finding(s) include bug or risk`
+        verdict = 'needs_changes'
+      } else {
+        summary = `${allFindings.length} low-severity finding(s)`
+        verdict = 'approve'
+      }
+    }
+
+    if (ledger.budgetExceeded) {
+      summary = `Budget exceeded — review stopped early. ${summary}`
+      if (verdict !== 'needs_changes') verdict = 'needs_changes'
+    }
+
     const blockSeverities = config.severity ?? ['bug']
-    const hasBlocker = findings.some((f) => blockSeverities.includes((f as { severity?: string }).severity ?? ''))
+    const hasBlocker = finalFindings.some((f) => blockSeverities.includes((f as { severity?: string }).severity ?? ''))
     const report: CodeReviewReport = {
-      ok: !hasBlocker,
+      ok: !hasBlocker && !ledger.budgetExceeded,
       skipped: false,
       summary,
       verdict,
-      findings,
-      calls: [response.cost],
-      visionCostUsd: response.cost.costUsd,
-      tokens: response.cost.tokens,
-      model: response.model,
+      findings: finalFindings,
+      calls: allCalls,
+      visionCostUsd: totalCost,
+      tokens: totalTokens,
+      model: lastModel,
+      budgetExceeded: ledger.budgetExceeded,
     }
     await writeFile(codeReviewPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
     ctx.out(
-      `code review complete: ${findings.length} findings, verdict ${verdict}, ` +
-        `${response.cost.tokens}tok $${response.cost.costUsd.toFixed(6)}`,
+      `code review complete: ${finalFindings.length} findings, verdict ${verdict}, ` +
+        `${totalTokens}tok $${totalCost.toFixed(6)}${ledger.budgetExceeded ? ' (budget exceeded)' : ''}`,
     )
     return 0
   } catch (e) {
