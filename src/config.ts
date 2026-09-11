@@ -28,6 +28,11 @@ export interface Config {
    * PR diffs and post findings. Defaults to the primary `model` if not set.
    */
   code_model: string | undefined
+  /**
+   * Hard budget for the `argus-reviewer code-review` lane. When set, the
+   * review stops early if the cumulative OpenRouter cost exceeds this cap.
+   */
+  codeReviewBudgetUsd: number | undefined
   provider: ProviderRules
   budgetUsd: number | undefined
   target: Target | undefined
@@ -79,6 +84,7 @@ const defaults: Config = {
   escalation_model: 'moonshotai/kimi-k2.5',
   grounding_model: undefined,
   code_model: 'deepseek/deepseek-v4.1-flash',
+  codeReviewBudgetUsd: undefined,
   provider: {
     ignore: ['siliconflow', 'novitaai', 'atlascloud', 'streamlake', 'chutes'],
   },
