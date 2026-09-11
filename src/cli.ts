@@ -683,11 +683,19 @@ function buildCodeReviewMessages(repo: string, pr: string, patchText: string): M
       content: [
         {
           type: 'text',
-          text: `Review the diff for ${repo}#${pr}.\n\n${patchText}\n\nReturn JSON: summary, verdict (pass/needs_changes/approve), and findings[].\n\nEach finding must include:\n- file\n- line\n- severity: bug | risk | nit | q\n- message: one line in this format: \`L<line>: <emoji> <severity>: <problem>. <fix>.\`\n\nSeverity emojis:\n- bug = 🔴\n- risk = 🟡\n- nit = 🔵\n- q = ❓\n\nRules for the message:\n- Start with \`L<line>: \`\n- Then the emoji and keyword, e.g. \`🔴 bug:\`, \`🟡 risk:\`, \`🔵 nit:\`, \`❓ q:\`\n- State the concrete problem and a concrete fix\n- No \\\"I noticed\\\", \\\"perhaps\\\", \\\"consider\\\", \\\"maybe\\\", \\\"you might want\\\"\n- Do not restate what the line does\n- Include the why only if the fix is not obvious\n- Put exact symbol/variable/function names in backticks\n\nExamples:\nL42: 🔴 bug: \`user\` can be null after .find(). Add guard before .email.\nL88-140: 🔵 nit: 50-line fn does 4 things. Extract validate/normalize/persist.\nL23: 🟡 risk: no retry on 429. Wrap in withBackoff(3).`,
+          text: `Review the diff for ${repo}#${pr}.\n\n${patchText}\n\nReturn JSON: summary, verdict (pass/needs_changes/approve), and findings[].\n\nEach finding must include:\n- file\n- line\n- severity: bug | risk | nit | q\n- message: one line in this format: \`L<line>: <emoji> <severity>: <problem>. <fix>.\`\n\nSeverity emojis:\n- bug = 🔴\n- risk = 🟡\n- nit = 🔵\n- q = ❓\n\nRules for the message:\n- Start with \`L<line>: \`\n- Then the emoji and keyword, e.g. \`🔴 bug:\`, \`🟡 risk:\`, \`🔵 nit:\`, \`❓ q:\`\n- State the concrete problem and a concrete fix\n- No \\\"I noticed\\\", \\\"perhaps\\\", \\\"consider\\\", \\\"maybe\\\", \\\"you might want\\\"\n- Do not restate what the line does\n- Include the why only if the fix is not obvious\n- Put exact symbol/variable/function names in backticks\n\nVerdict rule:\n- If there are no bug or risk findings, use \"approve\".\n- Use \"needs_changes\" only when at least one bug or risk is present.\n- \"pass\" only when there are zero findings.\n\nDo not report issues that are already handled by try/catch, null guards, AbortController, type narrowing, or other existing error checks visible in the diff. Only report real, high-confidence problems.\n\nExamples:\nL42: 🔴 bug: \`user\` can be null after .find(). Add guard before .email.\nL88-140: 🔵 nit: 50-line fn does 4 things. Extract validate/normalize/persist.\nL23: 🟡 risk: no retry on 429. Wrap in withBackoff(3).`,
         },
       ],
     },
   ]
+}
+
+function deriveSeverity(message: string): string {
+  if (message.includes('🔴') || /(?:^|\W)bug:/.test(message)) return 'bug'
+  if (message.includes('🟡') || /(?:^|\W)risk:/.test(message)) return 'risk'
+  if (message.includes('🔵') || /(?:^|\W)nit:/.test(message)) return 'nit'
+  if (message.includes('❓') || /(?:^|\W)q:/.test(message)) return 'q'
+  return 'nit'
 }
 
 function parseCodeReview(content: string): {
@@ -705,10 +713,16 @@ function parseCodeReview(content: string): {
     const validVerdict = ['pass', 'needs_changes', 'approve'].includes(parsed.verdict ?? '')
       ? (parsed.verdict as 'pass' | 'needs_changes' | 'approve')
       : (Array.isArray(parsed.findings) && parsed.findings.length === 0 ? 'pass' : 'needs_changes')
+    const findings = Array.isArray(parsed.findings)
+      ? parsed.findings.map((f) => ({
+          ...f,
+          severity: (f as { severity?: string }).severity ?? deriveSeverity((f as { message?: string }).message ?? ''),
+        }))
+      : defaultFindings
     return {
       summary: parsed.summary ?? (validVerdict === 'pass' ? 'No issues found' : 'Code review completed'),
       verdict: validVerdict,
-      findings: Array.isArray(parsed.findings) ? parsed.findings : defaultFindings,
+      findings,
     }
   } catch {
     return {
