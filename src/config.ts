@@ -62,7 +62,7 @@ const defaults: Config = {
   model: 'google/gemini-2.5-flash-lite',
   escalation_model: 'moonshotai/kimi-k2.5',
   grounding_model: undefined,
-  code_model: 'anthropic/claude-sonnet-4',
+  code_model: 'deepseek/deepseek-v4.1-flash',
   provider: {
     ignore: ['siliconflow', 'novitaai', 'atlascloud', 'streamlake', 'chutes'],
   },

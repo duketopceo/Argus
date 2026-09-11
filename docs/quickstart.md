@@ -24,7 +24,7 @@ import { defineConfig } from 'argus-reviewer-e2e'
 export default defineConfig({
   model: 'google/gemini-2.5-flash-lite',
   escalation_model: 'anthropic/claude-sonnet-4',
-  code_model: 'anthropic/claude-sonnet-4',
+  code_model: 'deepseek/deepseek-v4.1-flash',
   budgetUsd: 1.0,
   target: {
     // command: 'npm run dev' if the target needs a local server started
