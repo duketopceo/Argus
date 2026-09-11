@@ -54,6 +54,17 @@ export interface Config {
    * sent verbatim with every OpenRouter request (e.g. HTTP-Referer, X-Title).
    */
   openrouter: { trace?: Record<string, string>; headers?: Record<string, string> } | undefined
+  /**
+   * Browser engine for Playwright: `chromium`, `firefox`, or `webkit`.
+   * Defaults to `chromium`.
+   */
+  browser: 'chromium' | 'firefox' | 'webkit' | undefined
+  /**
+   * Hard limit in milliseconds for Playwright cleanup (context + browser close).
+   * Prevents a hung browser from keeping the runner or test suite alive.
+   * Defaults to 30 seconds.
+   */
+  browserTimeoutMs: number | undefined
 }
 
 export type ConfigInput = Partial<Omit<Config, 'provider'>> & { provider?: Partial<ProviderRules> }
@@ -74,6 +85,8 @@ const defaults: Config = {
   secrets: undefined,
   pageSetup: undefined,
   openrouter: undefined,
+  browser: 'chromium',
+  browserTimeoutMs: 30_000,
 }
 
 export function defineConfig(input: ConfigInput): ConfigInput {
