@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { realpathSync } from 'node:fs'
+import { existsSync, realpathSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, extname, join, relative, resolve } from 'node:path'
@@ -17,7 +17,7 @@ import {
 import { Config, loadConfig, unknownProviderSlugs } from './config.js'
 import { debug } from './debug.js'
 import { BrowserDriver } from './driver/browser.js'
-import { TargetProcess } from './driver/target.js'
+import { TargetProcess, waitForReady } from './driver/target.js'
 import { Engine, VisionClient } from './engine/loop.js'
 import { Actions } from './engine/actions.js'
 import { diffChangedFiles } from './index/diff.js'
@@ -61,6 +61,7 @@ Usage:
   argus-reviewer cache list [--dir <cacheDir>]
   argus-reviewer cache prune [name|--all] [--dir <cacheDir>]
   argus-reviewer index [--dir <repo>]
+  argus-reviewer init [--force]
   argus-reviewer --help
 
 Config: vision-e2e.config.ts or vision-e2e.config.json in the working directory
@@ -84,7 +85,7 @@ Options:
   [pattern]          Only run test files whose path contains this substring
   --url <url>        Target URL (falls back to config.target.url)
   --dir <dir>        Tests directory (default: config testsDir or ./tests)
-  --report-dir <dir> Report output dir (default: config reportDir or ./vision-e2e-report)
+  --report-dir <dir> Report output dir (default: config reportDir or ./argus-reviewer-report)
   --cache-dir <dir>  Fingerprint cache dir (default: config cacheDir)
   -h, --help         Show this help`
 
@@ -94,7 +95,7 @@ Reviews the PR diff for the repo/PR referenced by ARGUS_REVIEWER_TRACE using the
 configured code model. Writes code-review.json next to run.json.
 
 Options:
-  --report-dir <dir> Report output dir (default: config reportDir or ./vision-e2e-report)
+  --report-dir <dir> Report output dir (default: config reportDir or ./argus-reviewer-report)
   -h, --help         Show this help`
 
 const CACHE_USAGE = `Usage: argus-reviewer cache <list|prune> [options]
@@ -103,7 +104,7 @@ const CACHE_USAGE = `Usage: argus-reviewer cache <list|prune> [options]
   cache prune [name|--all]   Delete one flow cache, or all with --all
 
 Options:
-  --dir <dir>   Cache directory (default: config cacheDir or ./.vision-e2e-cache)
+  --dir <dir>   Cache directory (default: config cacheDir or ./.argus-reviewer-cache)
   -h, --help    Show this help`
 
 const TEST_FILE_RE = /\.test\.(ts|mts|mjs|js)$/
@@ -133,6 +134,8 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
       return cmdCache(rest, ctx)
     case 'index':
       return cmdIndex(rest, ctx)
+    case 'init':
+      return cmdInit(rest, ctx)
     default:
       ctx.err(`unknown command: ${cmd}`)
       ctx.out(USAGE)
@@ -205,7 +208,13 @@ function warnUnknownProviders(config: Config, ctx: Ctx): void {
 
 async function startTarget(config: Config): Promise<TargetProcess | undefined> {
   const target = config.target
-  if (target === undefined || target.command === '') return undefined
+  if (target === undefined) return undefined
+  if (!target.command) {
+    // No boot command — the app is assumed already running (or a file://
+    // target). Still wait for the URL so `run` fails fast on a dead target.
+    await waitForReady(target.url, target.readyTimeoutMs)
+    return undefined
+  }
   return TargetProcess.start(target)
 }
 
@@ -277,7 +286,7 @@ async function cmdRecord(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
 
     const testsDir = resolve(ctx.cwd, values['tests-dir'] ?? config.testsDir ?? 'tests')
     await mkdir(testsDir, { recursive: true })
-    const cacheDir = config.cacheDir ?? join(ctx.cwd, '.vision-e2e-cache')
+    const cacheDir = config.cacheDir ?? join(ctx.cwd, '.argus-reviewer-cache')
     const flow = await loadFlow(cacheDir, flowName)
     const testFile = join(testsDir, `${flowName}.test.ts`)
     await writeFile(testFile, renderTestFile(flowName, flow?.steps ?? []), 'utf8')
@@ -434,7 +443,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
   const testsDir = resolve(ctx.cwd, values.dir ?? config.testsDir ?? 'tests')
   const reportDir = resolve(
     ctx.cwd,
-    values['report-dir'] ?? config.reportDir ?? 'vision-e2e-report',
+    values['report-dir'] ?? config.reportDir ?? 'argus-reviewer-report',
   )
   const allFiles = await discoverTestFiles(testsDir)
   const files = pattern === undefined ? allFiles : allFiles.filter((f) => f.includes(pattern))
@@ -496,7 +505,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
       runErrors,
       ok: !runFailed,
     })
-    const cacheDir = resolve(ctx.cwd, config.cacheDir ?? '.vision-e2e-cache')
+    const cacheDir = resolve(ctx.cwd, config.cacheDir ?? '.argus-reviewer-cache')
     const path = await writeJournal(cacheDir, entry)
     if (path !== undefined) {
       logger.debug(`journal written: ${path}`)
@@ -654,7 +663,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
   const report = buildRunReport(reports, startedAt, Date.now() - runStart)
   try {
     await mkdir(reportDir, { recursive: true })
-    await writeJunitXml(join(reportDir, 'junit.xml'), 'vision-e2e', junitCases)
+    await writeJunitXml(join(reportDir, 'junit.xml'), 'argus-reviewer', junitCases)
     await writeRunReport(join(reportDir, 'run.json'), report)
   } catch (e) {
     // Report-write failure must not eat the journal — the journal is the
@@ -893,7 +902,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
   const config = await loadConfig(ctx.cwd)
   const reportDir = resolve(
     ctx.cwd,
-    values['report-dir'] ?? config.reportDir ?? 'vision-e2e-report',
+    values['report-dir'] ?? config.reportDir ?? 'argus-reviewer-report',
   )
   await mkdir(reportDir, { recursive: true })
   const codeReviewPath = join(reportDir, 'code-review.json')
@@ -1063,7 +1072,7 @@ async function cmdCache(args: string[], ctx: Ctx): Promise<number> {
   const config = await loadConfig(ctx.cwd)
   const cacheDir = resolve(
     ctx.cwd,
-    values.dir ?? config.cacheDir ?? join(ctx.cwd, '.vision-e2e-cache'),
+    values.dir ?? config.cacheDir ?? join(ctx.cwd, '.argus-reviewer-cache'),
   )
 
   if (sub === 'list') {
@@ -1107,6 +1116,110 @@ async function cmdCache(args: string[], ctx: Ctx): Promise<number> {
     }
   }
   ctx.out(`pruned ${removed} cached flow(s) from ${cacheDir}`)
+  return 0
+}
+
+const INIT_USAGE = `Usage: argus-reviewer init [options]
+
+Scaffolds a working setup in the current directory:
+  argus-reviewer.config.ts               config (target, budget, testsDir)
+  tests/argus/smoke.test.ts              a td-API smoke test
+  .github/workflows/argus-reviewer.yml   PR workflow using the action
+
+Options:
+  --force   Overwrite files that already exist
+  -h, --help`
+
+const INIT_CONFIG = `import { defineConfig } from 'argus-reviewer-e2e'
+
+export default defineConfig({
+  // The app under test. command boots it (omit if it is already running);
+  // argus-reviewer polls url until it responds before running tests.
+  target: {
+    command: 'npm run dev',
+    url: 'http://localhost:3000',
+    readyTimeoutMs: 30_000,
+  },
+  // Hard per-run cap on vision-model spend (USD). Steps replayed from the
+  // fingerprint cache cost $0 regardless of this cap.
+  budgetUsd: 1,
+  testsDir: 'tests/argus',
+})
+`
+
+const INIT_TEST = `test('home renders', async (td) => {
+  const ok = await td.assert('the page rendered without obvious errors')
+  if (!ok) throw new Error('home did not render')
+})
+`
+
+const INIT_WORKFLOW = `name: argus-reviewer
+
+on:
+  pull_request:
+
+jobs:
+  argus:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@v4
+      # Pin a tag or commit for supply-chain safety once releases are cut.
+      - uses: duketopceo/Argus/action@main
+        with:
+          openrouter-api-key: \${{ secrets.OPENROUTER_API_KEY }}
+`
+
+/** `argus-reviewer init` — scaffold config, a smoke test, and the workflow. */
+async function cmdInit(args: string[], ctx: Ctx): Promise<number> {
+  const { values } = parseArgs({
+    args,
+    options: {
+      force: { type: 'boolean', default: false },
+      help: { type: 'boolean', short: 'h', default: false },
+    },
+  })
+  if (values.help) {
+    ctx.out(INIT_USAGE)
+    return 0
+  }
+
+  const configNames = [
+    'argus-reviewer.config.ts',
+    'argus-reviewer.config.json',
+    'vision-e2e.config.ts',
+    'vision-e2e.config.json',
+  ]
+  const files: [string, string][] = [
+    ['tests/argus/smoke.test.ts', INIT_TEST],
+    ['.github/workflows/argus-reviewer.yml', INIT_WORKFLOW],
+  ]
+  const hasConfig = configNames.some((n) => existsSync(join(ctx.cwd, n)))
+  if (!hasConfig || values.force) {
+    files.unshift(['argus-reviewer.config.ts', INIT_CONFIG])
+  }
+
+  for (const [rel, content] of files) {
+    const path = join(ctx.cwd, rel)
+    if (existsSync(path) && !values.force) {
+      ctx.out(`exists, skipping: ${rel}`)
+      continue
+    }
+    await mkdir(join(path, '..'), { recursive: true })
+    await writeFile(path, content, 'utf8')
+    ctx.out(`wrote ${rel}`)
+  }
+
+  ctx.out('')
+  ctx.out('Next steps:')
+  ctx.out('  1. Edit target.url (or pass --url) to point at your app')
+  ctx.out('  2. argus-reviewer run            # replay-or-ground the smoke test')
+  ctx.out('  3. argus-reviewer record "..."   # record a real flow')
+  ctx.out('  4. Add OPENROUTER_API_KEY to repo secrets to enable the PR workflow')
   return 0
 }
 

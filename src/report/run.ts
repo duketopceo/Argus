@@ -41,7 +41,7 @@ export interface RunTotals {
 }
 
 export interface RunReport {
-  tool: 'vision-e2e'
+  tool: 'argus-reviewer'
   startedAt: string
   durationMs: number
   ok: boolean
@@ -65,7 +65,7 @@ export function buildRunReport(
     }
   }
   return {
-    tool: 'vision-e2e',
+    tool: 'argus-reviewer',
     startedAt: startedAt.toISOString(),
     durationMs,
     ok: failed === 0,

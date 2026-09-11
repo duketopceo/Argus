@@ -1,0 +1,66 @@
+{
+  "generatedAt": "2026-09-11T17:27:35.059Z",
+  "suite": "evals/suite",
+  "budgetUsd": 1,
+  "results": [
+    {
+      "model": "google/gemini-2.5-flash-lite",
+      "cold": {
+        "ok": true,
+        "passed": 3,
+        "tests": 3,
+        "visionCalls": 7,
+        "visionCostUsd": 0.001598355,
+        "healEvents": 0,
+        "failures": [],
+        "stdout": "run complete: 3/3 passed, 7 vision calls, $0.001598 vision spend — reports in /home/lukedaduke/Documents/github/personal/vision-e2e/evals/work/google-gemini-2-5-flash-lite/report",
+        "stderr": [
+          ""
+        ],
+        "exitCode": 0
+      },
+      "warm": {
+        "ok": true,
+        "passed": 3,
+        "tests": 3,
+        "visionCalls": 0,
+        "visionCostUsd": 0,
+        "failures": [],
+        "stdout": "run complete: 3/3 passed, 0 vision calls, $0.000000 vision spend — reports in /home/lukedaduke/Documents/github/personal/vision-e2e/evals/work/google-gemini-2-5-flash-lite/report",
+        "exitCode": 0
+      }
+    },
+    {
+      "model": "moonshotai/kimi-k2.5",
+      "cold": {
+        "ok": false,
+        "passed": 2,
+        "tests": 3,
+        "visionCalls": 6,
+        "visionCostUsd": 0.05021765892,
+        "healEvents": 0,
+        "failures": [
+          {
+            "name": "typing fills the name field",
+            "reason": "td.find(\"the \"Name\" input\") failed: model grounded to \"\", which does not match the instruction"
+          }
+        ],
+        "stdout": "run complete: 2/3 passed, 6 vision calls, $0.050218 vision spend — reports in /home/lukedaduke/Documents/github/personal/vision-e2e/evals/work/moonshotai-kimi-k2-5/report",
+        "stderr": [
+          "reason: td.find(\"the \"Name\" input\") failed: model grounded to \"\", which does not match the instruction"
+        ],
+        "exitCode": 1
+      },
+      "warm": {
+        "ok": true,
+        "passed": 3,
+        "tests": 3,
+        "visionCalls": 3,
+        "visionCostUsd": 0.03481873956,
+        "failures": [],
+        "stdout": "run complete: 3/3 passed, 3 vision calls, $0.034819 vision spend — reports in /home/lukedaduke/Documents/github/personal/vision-e2e/evals/work/moonshotai-kimi-k2-5/report",
+        "exitCode": 0
+      }
+    }
+  ]
+}

@@ -32,7 +32,7 @@ export interface RepoIndex {
 
 const EXCLUDE_DIRS = new Set([
   'node_modules', 'dist', 'dist-e2e-vision', '.git', 'coverage',
-  '.vision-e2e-cache', 'journal',
+  '.vision-e2e-cache', '.argus-reviewer-cache', 'argus-reviewer-report', 'vision-e2e-report', 'journal',
 ])
 const SOURCE_RE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/
 const LOCKFILE_RE = /^(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb|composer\.lock|Gemfile\.lock|Cargo\.lock|poetry\.lock)$/
