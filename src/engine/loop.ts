@@ -315,10 +315,12 @@ export class Engine {
         // "(x,y)" coordinates — ask in their native format.
         `Click on the UI element matching this description: ${instruction.replace(/^locate:\s*/i, '')}.`
       : instruction
+    const escalation =
+      specialist || cached ? [this._opts.config.escalation_model] : undefined
     const response = await this._callModel(
       cached ? 'heal' : 'ground',
       buildActionMessages(prompt, observation),
-      cached ? [this._opts.config.escalation_model] : undefined,
+      escalation,
       this._opts.config.grounding_model,
     )
     if (!response) {
@@ -373,7 +375,7 @@ export class Engine {
       const retry = await this._callModel(
         cached ? 'heal' : 'ground',
         buildActionMessages(feedback, observation),
-        cached ? [this._opts.config.escalation_model] : undefined,
+        escalation,
         this._opts.config.grounding_model,
       )
       if (!retry) break
