@@ -1,0 +1,97 @@
+import { spawn } from 'node:child_process';
+const POLL_INTERVAL_MS = 250;
+const STOP_GRACE_MS = 3_000;
+/**
+ * Poll `url` until it answers with HTTP 2xx/3xx or the timeout elapses.
+ * Non-http(s) schemes (e.g. file://) cannot be fetched, so they are treated
+ * as immediately ready — Playwright navigates them directly.
+ */
+export async function waitForReady(url, timeoutMs) {
+    if (!/^https?:/i.test(url))
+        return;
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+        try {
+            const res = await fetch(url, { redirect: 'manual' });
+            if (res.status >= 200 && res.status < 400)
+                return;
+        }
+        catch {
+            // connection refused / not up yet — keep polling
+        }
+        if (Date.now() >= deadline) {
+            throw new Error(`Target did not become ready: ${url} did not respond ` +
+                `with HTTP 2xx/3xx within ${timeoutMs}ms`);
+        }
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    }
+}
+/**
+ * Boot adapter for the run target (R11): spawn a shell command, poll the URL
+ * until it answers with HTTP 2xx/3xx or the ready timeout elapses, then let
+ * the run proceed. stop() kills the whole spawned process tree.
+ */
+export class TargetProcess {
+    child;
+    spec;
+    stopped = false;
+    constructor(child, spec) {
+        this.child = child;
+        this.spec = spec;
+    }
+    get url() {
+        return this.spec.url;
+    }
+    get pid() {
+        return this.child.pid;
+    }
+    static async start(spec) {
+        const child = spawn(spec.command, {
+            shell: true,
+            detached: true,
+            stdio: 'ignore',
+        });
+        const proc = new TargetProcess(child, spec);
+        const childExited = new Promise((_, reject) => {
+            child.once('error', (err) => reject(err));
+            child.once('exit', (code, signal) => reject(new Error(`Target command exited before ${spec.url} became ready ` +
+                `(code=${code ?? 'null'}, signal=${signal ?? 'null'})`)));
+        });
+        const ready = waitForReady(spec.url, spec.readyTimeoutMs);
+        try {
+            await Promise.race([ready, childExited]);
+        }
+        catch (e) {
+            await proc.stop();
+            throw e;
+        }
+        return proc;
+    }
+    /** Kill the spawned process tree (process group). Idempotent. */
+    async stop() {
+        if (this.stopped)
+            return;
+        this.stopped = true;
+        const exited = new Promise((resolve) => {
+            this.child.once('exit', () => resolve());
+            setTimeout(resolve, STOP_GRACE_MS).unref();
+        });
+        try {
+            // Negative pid kills the detached process group — the shell and its children.
+            if (this.child.pid !== undefined)
+                process.kill(-this.child.pid, 'SIGTERM');
+        }
+        catch {
+            // already gone
+        }
+        await exited;
+        try {
+            if (this.child.exitCode === null && this.child.pid !== undefined) {
+                process.kill(-this.child.pid, 'SIGKILL');
+            }
+        }
+        catch {
+            // already gone
+        }
+    }
+}
