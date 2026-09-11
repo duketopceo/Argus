@@ -1,4 +1,5 @@
 import { ProviderRules } from '../config.js'
+import { debug } from '../debug.js'
 import { CallCost, CallKind, makeCallCost, OpenRouterResponse } from './cost.js'
 
 export interface TextContentPart {
@@ -78,6 +79,7 @@ export class OpenRouterClient {
     const errors: Error[] = []
     const kind = opts.kind ?? 'ground'
 
+    debug('openrouter', `kind=${kind} candidates=[${candidates.join(', ')}] messages=${opts.messages.length}`)
     for (let i = 0; i < candidates.length; i++) {
       const model = candidates[i]
       if (model === undefined) continue
@@ -92,6 +94,10 @@ export class OpenRouterClient {
           kind,
         })
         const cost = makeCallCost(response, kind)
+        debug(
+          'openrouter',
+          `model=${response.model} tokens=${cost.tokens} costUsd=${cost.costUsd.toFixed(6)} content_len=${this._extractContent(response).length}`,
+        )
         this._onCall?.({
           id: response.id,
           model: response.model,
@@ -102,7 +108,9 @@ export class OpenRouterClient {
         })
         return { id: response.id, content: this._extractContent(response), cost, model: response.model }
       } catch (e) {
-        errors.push(e as Error)
+        const err = e as Error
+        debug('openrouter', `candidate ${model} failed: ${err.message}`)
+        errors.push(err)
       }
     }
 

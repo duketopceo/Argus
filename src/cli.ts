@@ -15,6 +15,7 @@ import {
   TdSession,
 } from './api.js'
 import { Config, loadConfig, unknownProviderSlugs } from './config.js'
+import { debug } from './debug.js'
 import { BrowserDriver } from './driver/browser.js'
 import { TargetProcess } from './driver/target.js'
 import { Engine, VisionClient } from './engine/loop.js'
@@ -762,6 +763,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
   const repo = (trace?.repo ?? ctx.env.GITHUB_REPOSITORY) as string | undefined
   const pr = trace?.pr
   const token = ctx.env.GITHUB_TOKEN ?? ctx.env.GH_TOKEN
+  debug('code-review', `repo=${repo ?? 'none'} pr=${pr ?? 'none'} model=${config.code_model ?? config.model}`)
 
   const skip = async (reason: string): Promise<number> => {
     ctx.out(`code-review: skipping — ${reason}`)
@@ -815,6 +817,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     )
     return 0
   } catch (e) {
+    debug('code-review', `failed: ${(e as Error).message}`)
     ctx.err(`code review failed: ${(e as Error).message}`)
     return 1
   }

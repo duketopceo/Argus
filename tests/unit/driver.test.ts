@@ -25,7 +25,11 @@ describe('BrowserDriver + Actions (fixture page)', () => {
 
   beforeAll(async () => {
     videoDir = await mkdtemp(join(tmpdir(), 'vision-e2e-test-video-'))
-    driver = await BrowserDriver.launch({ viewport: { width: 1280, height: 720 }, videoDir })
+    driver = await BrowserDriver.launch({
+      viewport: { width: 1280, height: 720 },
+      videoDir,
+      browserTimeoutMs: 8_000,
+    })
     actions = new Actions(driver)
     await driver.goto(`file://${FIXTURE_URL}`)
   })

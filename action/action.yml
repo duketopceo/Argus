@@ -57,6 +57,7 @@ runs:
       env:
         OPENROUTER_API_KEY: ${{ inputs.openrouter-api-key }}
         GITHUB_TOKEN: ${{ github.token }}
+        ARGUS_DEBUG: '1'
         ARGUS_REVIEWER_TRACE: >-
           {"repo":"${{ github.repository }}",
           "pr":"${{ github.event.pull_request.number }}",
@@ -73,6 +74,7 @@ runs:
       continue-on-error: true
       env:
         OPENROUTER_API_KEY: ${{ inputs.openrouter-api-key }}
+        ARGUS_DEBUG: '1'
         ARGUS_REVIEWER_TRACE: >-
           {"repo":"${{ github.repository }}",
           "pr":"${{ github.event.pull_request.number }}",
