@@ -6,6 +6,8 @@ import { FingerprintRecord } from './cache/fingerprint.js'
 import { FlowCache, loadFlow, saveFlow } from './cache/store.js'
 import { Ledger, LedgerState } from './vision/ledger.js'
 import { Config, defineConfig } from './config.js'
+import { ErrorRecord } from './journal/schema.js'
+import { Logger } from './log.js'
 export { defineConfig }
 
 /**
@@ -71,6 +73,12 @@ export interface TdSessionOptions {
   /** Flow name used to load/save the fingerprint cache for this test. */
   flowName?: string
   env?: NodeJS.ProcessEnv
+  /**
+   * Set by the run path when diff-aware invalidation fired — marks every
+   * loaded fingerprint `stale` so they re-ground on first use.
+   */
+  staleReason?: string
+  logger?: Logger
 }
 
 const KEY_ALIASES: Record<string, string> = {
@@ -135,6 +143,10 @@ export class TdSession {
     flow: FlowCache | undefined,
   ) {
     this.flow = flow
+    if (opts.staleReason !== undefined && flow !== undefined) {
+      const reason = opts.staleReason
+      flow.steps = flow.steps.map((step) => ({ ...step, stale: reason }))
+    }
     this.ledger = new Ledger(opts.config.budgetUsd)
     this.actions = new Actions(opts.driver)
     this.engine = new Engine({
@@ -144,6 +156,7 @@ export class TdSession {
       ledger: this.ledger,
       config: opts.config,
       ...(flow?.asserts !== undefined ? { initialAsserts: flow.asserts } : {}),
+      ...(opts.logger !== undefined ? { logger: opts.logger } : {}),
     })
     this.td = this._makeTd()
   }
@@ -158,6 +171,11 @@ export class TdSession {
 
   get visionCalls(): number {
     return this.engine.visionCalls
+  }
+
+  /** Non-fatal anomalies observed by the engine — journaled as evidence. */
+  get errorRecords(): ErrorRecord[] {
+    return this.engine.errorRecords
   }
 
   get failed(): boolean {

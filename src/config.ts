@@ -75,6 +75,21 @@ export interface Config {
    * `risk`/`nit`/`q` findings are surfaced but do not fail the status.
    */
   severity: string[] | undefined
+  /**
+   * Log verbosity — 'debug'|'info'|'warn'|'error'. ARGUS_DEBUG=1 forces
+   * 'debug'. Default 'warn'.
+   */
+  logLevel: 'debug' | 'info' | 'warn' | 'error' | undefined
+  /**
+   * Repo globs naming the app surface the tests exercise (e.g. 'ui/src/**').
+   * Diff-aware invalidation marks flow caches stale when the diff touches
+   * files in this surface's dependency cone.
+   */
+  sourceGlobs: string[] | undefined
+  /** Path (repo-relative) for the generated repo index. Default 'argus.index.json'. */
+  indexPath: string | undefined
+  /** Base ref for diff invalidation (e.g. 'origin/main'); unset = working tree. */
+  diffBase: string | undefined
 }
 
 export type ConfigInput = Partial<Omit<Config, 'provider'>> & { provider?: Partial<ProviderRules> }
@@ -99,6 +114,10 @@ const defaults: Config = {
   browser: 'chromium',
   browserTimeoutMs: 30_000,
   severity: ['bug'],
+  logLevel: undefined,
+  sourceGlobs: undefined,
+  indexPath: undefined,
+  diffBase: undefined,
 }
 
 export function defineConfig(input: ConfigInput): ConfigInput {

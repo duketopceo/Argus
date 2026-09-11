@@ -2,7 +2,7 @@
 import { realpathSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, extname, join, resolve } from 'node:path'
+import { basename, extname, join, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 
@@ -20,6 +20,13 @@ import { BrowserDriver } from './driver/browser.js'
 import { TargetProcess } from './driver/target.js'
 import { Engine, VisionClient } from './engine/loop.js'
 import { Actions } from './engine/actions.js'
+import { diffChangedFiles } from './index/diff.js'
+import { invalidateForDiff } from './index/invalidate.js'
+import { readIndex, scanRepo, writeIndex } from './index/scan.js'
+import { buildJournalEntry } from './journal/build.js'
+import { ErrorRecord } from './journal/schema.js'
+import { newRunId, writeJournal } from './journal/store.js'
+import { createLogger, resolveLogLevel } from './log.js'
 import { JunitCase, writeJunitXml } from './report/junit.js'
 import { buildRunReport, TestReport, writeRunReport } from './report/run.js'
 import { flowPath, loadFlow } from './cache/store.js'
@@ -53,11 +60,12 @@ Usage:
   argus-reviewer code-review [--report-dir <dir>]
   argus-reviewer cache list [--dir <cacheDir>]
   argus-reviewer cache prune [name|--all] [--dir <cacheDir>]
+  argus-reviewer index [--dir <repo>]
   argus-reviewer --help
 
 Config: vision-e2e.config.ts or vision-e2e.config.json in the working directory
 (model, escalation_model, provider rules, budgetUsd, target, cacheDir,
-testsDir, reportDir, secrets).`
+testsDir, reportDir, secrets, logLevel, sourceGlobs, indexPath, diffBase).`
 
 const RECORD_USAGE = `Usage: argus-reviewer record "<flow description>" --url <target> [options]
 
@@ -123,6 +131,8 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
       return cmdCodeReview(rest, ctx, deps)
     case 'cache':
       return cmdCache(rest, ctx)
+    case 'index':
+      return cmdIndex(rest, ctx)
     default:
       ctx.err(`unknown command: ${cmd}`)
       ctx.out(USAGE)
@@ -402,6 +412,17 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
   const config = await loadConfig(ctx.cwd)
   warnUnknownProviders(config, ctx)
   if (values['cache-dir'] !== undefined) config.cacheDir = values['cache-dir']
+  const envBudget = ctx.env.ARGUS_BUDGET_USD
+  if (envBudget !== undefined && envBudget !== '') {
+    const parsed = Number(envBudget)
+    if (Number.isFinite(parsed) && parsed > 0) config.budgetUsd = parsed
+    else ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`)
+  }
+
+  const logger = createLogger(resolveLogLevel(ctx.env, config.logLevel), ctx)
+  const runErrors: ErrorRecord[] = []
+  const runId = newRunId()
+  const startedAt = new Date()
 
   const url = values.url ?? config.target?.url
   if (url === undefined) {
@@ -418,16 +439,73 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
   const allFiles = await discoverTestFiles(testsDir)
   const files = pattern === undefined ? allFiles : allFiles.filter((f) => f.includes(pattern))
 
+  // Diff-aware invalidation (fast path): when the index and a diff are
+  // available, mark flow fingerprints stale so they re-ground proactively.
+  // Index missing or unreadable → content-hash verification remains the
+  // backstop and the run proceeds unchanged.
+  let staleReason: string | undefined
+  {
+    const indexPath = resolve(ctx.cwd, config.indexPath ?? 'argus.index.json')
+    const testPaths = allFiles.map((f) => relative(ctx.cwd, f))
+    const [index, changed] = await Promise.all([
+      readIndex(indexPath),
+      diffChangedFiles(ctx.cwd, config.diffBase ?? ctx.env.ARGUS_DIFF_BASE),
+    ])
+    const result = invalidateForDiff(changed, index, config.sourceGlobs, testPaths)
+    if (result.stale && result.reason !== undefined) {
+      staleReason = result.reason
+      logger.info(`diff invalidation: ${result.reason}`)
+    } else if (index === undefined) {
+      logger.debug(`no usable index at ${indexPath} — hash verification only`)
+    }
+  }
+
   if (files.length === 0) {
     ctx.out(`no test files found under ${testsDir}`)
   }
 
-  const startedAt = new Date()
   const runStart = Date.now()
   const reports: TestReport[] = []
   const junitCases: JunitCase[] = []
   const tmpDir = join(reportDir, '.transpiled')
+  const tagErrors = (recs: ErrorRecord[], tag: string): ErrorRecord[] =>
+    recs.map((r) => ({ ...r, context: r.context ? `${r.context} [${tag}]` : tag }))
+  const makeSession = (flowName: string, driver: BrowserDriver, client: VisionClient) =>
+    TdSession.create({
+      driver,
+      client,
+      config,
+      flowName,
+      env: ctx.env,
+      ...(staleReason !== undefined ? { staleReason } : {}),
+      logger,
+    })
 
+  // Evidence store: one immutable journal record per run — attempted on
+  // every exit path, including an aborted test loop.
+  const journalize = async (): Promise<void> => {
+    const git = await gitInfo(ctx.cwd)
+    const entry = buildJournalEntry({
+      runId,
+      repo: git.repo,
+      commitSha: git.commitSha,
+      branch: git.branch,
+      startedAt,
+      durationMs: Date.now() - runStart,
+      reports,
+      runErrors,
+      ok: !runFailed,
+    })
+    const cacheDir = resolve(ctx.cwd, config.cacheDir ?? '.vision-e2e-cache')
+    const path = await writeJournal(cacheDir, entry)
+    if (path !== undefined) {
+      logger.debug(`journal written: ${path}`)
+    } else {
+      logger.warn('journal write failed — see fs permissions or disk space')
+    }
+  }
+
+  let runFailed = false
   let target: TargetProcess | undefined
   const patches = patchGlobals()
   try {
@@ -444,13 +522,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
 
         // A file-level session so test files that call `td` at module top
         // level (no test() wrapper) still execute as a single named test.
-        const fileSession = await TdSession.create({
-          driver,
-          client,
-          config,
-          flowName: fileSlug,
-          env: ctx.env,
-        })
+        const fileSession = await makeSession(fileSlug, driver, client)
         bindSession(fileSession)
         await driver.goto(target?.url ?? url)
         const importStart = Date.now()
@@ -484,17 +556,12 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
             videoPath: undefined,
           })
           await fileSession.save()
+          runErrors.push(...tagErrors(fileSession.errorRecords, fileSlug))
           ctx.out(`${ok ? 'PASS' : 'FAIL'} ${fileSlug} (${fileName})`)
           if (!ok && failureMessage !== undefined) ctx.err(`  reason: ${failureMessage}`)
         } else {
           for (const registeredTest of registered) {
-            const session = await TdSession.create({
-              driver,
-              client,
-              config,
-              flowName: `${fileSlug}__${slugify(registeredTest.name)}`,
-              env: ctx.env,
-            })
+            const session = await makeSession(`${fileSlug}__${slugify(registeredTest.name)}`, driver, client)
             bindSession(session)
             session.ledger.startSandbox()
             const testStart = Date.now()
@@ -528,6 +595,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
               videoPath: undefined,
             })
             await session.save()
+            runErrors.push(...tagErrors(session.errorRecords, registeredTest.name))
             ctx.out(`${ok ? 'PASS' : 'FAIL'} ${registeredTest.name} (${fileName})`)
             if (!ok && failureMessage !== undefined) ctx.err(`  reason: ${failureMessage}`)
           }
@@ -568,7 +636,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
     }
   } catch (e) {
     ctx.err(`run failed: ${(e as Error).message}`)
-    return 1
+    runFailed = true
   } finally {
     restoreGlobals(patches)
     await target?.stop()
@@ -584,15 +652,26 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
     })
   }
   const report = buildRunReport(reports, startedAt, Date.now() - runStart)
-  await mkdir(reportDir, { recursive: true })
-  await writeJunitXml(join(reportDir, 'junit.xml'), 'vision-e2e', junitCases)
-  await writeRunReport(join(reportDir, 'run.json'), report)
+  try {
+    await mkdir(reportDir, { recursive: true })
+    await writeJunitXml(join(reportDir, 'junit.xml'), 'vision-e2e', junitCases)
+    await writeRunReport(join(reportDir, 'run.json'), report)
+  } catch (e) {
+    // Report-write failure must not eat the journal — the journal is the
+    // evidence store for exactly this kind of failure.
+    const msg = `report write failed: ${(e as Error).message}`
+    runErrors.push({ stage: 'report', message: msg })
+    ctx.err(msg)
+    runFailed = true
+  }
+  await journalize()
+
   ctx.out(
     `run complete: ${report.totals.passed}/${report.totals.tests} passed, ` +
       `${report.totals.visionCalls} vision calls, ` +
       `$${report.totals.visionCostUsd.toFixed(6)} vision spend — reports in ${reportDir}`,
   )
-  return report.ok ? 0 : 1
+  return report.ok && !runFailed ? 0 : 1
 }
 
 const CODE_REVIEW_SCHEMA: JsonSchema = {
@@ -723,7 +802,7 @@ function buildCodeReviewMessages(
       content: [
         {
           type: 'text',
-          text: `Review chunk ${chunkIndex + 1} of ${totalChunks} for ${repo}#${pr}.\n\n${patchText}\n\nReturn JSON: summary, verdict (pass/needs_changes/approve), and findings[].\n\nEach finding must include:\n- file\n- line\n- severity: bug | risk | nit | q\n- message: one line in this format: \`L<line>: <emoji> <severity>: <problem>. <fix>.\`\n\nSeverity emojis:\n- bug = 🔴\n- risk = 🟡\n- nit = 🔵\n- q = ❓\n\nRules for the message:\n- Start with \`L<line>: \`\n- Then the emoji and keyword, e.g. \`🔴 bug:\`, \`🟡 risk:\`, \`🔵 nit:\`, \`❓ q:\`\n- State the concrete problem and a concrete fix\n- No \\\"I noticed\\\", \\\"perhaps\\\", \\\"consider\\\", \\\"maybe\\\", \\\"you might want\\\"\n- Do not restate what the line does\n- Include the why only if the fix is not obvious\n- Put exact symbol/variable/function names in backticks\n\nVerdict rule:\n- If there are no bug or risk findings, use \"approve\".\n- Use \"needs_changes\" only when at least one bug or risk is present.\n- \"pass\" only when there are zero findings.\n\nDo not report issues that are already handled by try/catch, null guards, AbortController, type narrowing, or other existing error checks visible in the diff. Only report real, high-confidence problems.\n\nExamples:\nL42: 🔴 bug: \`user\` can be null after .find(). Add guard before .email.\nL88-140: 🔵 nit: 50-line fn does 4 things. Extract validate/normalize/persist.\nL23: 🟡 risk: no retry on 429. Wrap in withBackoff(3).`,
+          text: `Review chunk ${chunkIndex + 1} of ${totalChunks} for ${repo}#${pr}.\n\n${patchText}\n\nReturn JSON: summary, verdict (pass/needs_changes/approve), and findings[].\n\nEach finding must include:\n- file\n- line\n- severity: bug | risk | nit | q\n- message: one line in this format: \`L<line>: <emoji> <severity>: <problem>. <fix>.\`\n\nSeverity emojis:\n- bug = 🔴\n- risk = 🟡\n- nit = 🔵\n- q = ❓\n\nRules for the message:\n- Start with \`L<line>: \`\n- Then the emoji and keyword, e.g. \`🔴 bug:\`, \`🟡 risk:\`, \`🔵 nit:\`, \`❓ q:\`\n- State the concrete problem and a concrete fix\n- No "I noticed", "perhaps", "consider", "maybe", "you might want"\n- Do not restate what the line does\n- Include the why only if the fix is not obvious\n- Put exact symbol/variable/function names in backticks\n\nVerdict rule:\n- If there are no bug or risk findings, use "approve".\n- Use "needs_changes" only when at least one bug or risk is present.\n- "pass" only when there are zero findings.\n\nDo not report issues that are already handled by try/catch, null guards, AbortController, type narrowing, or other existing error checks visible in the diff. Only report real, high-confidence problems.\n\nExamples:\nL42: 🔴 bug: \`user\` can be null after .find(). Add guard before .email.\nL88-140: 🔵 nit: 50-line fn does 4 things. Extract validate/normalize/persist.\nL23: 🟡 risk: no retry on 429. Wrap in withBackoff(3).`,
         },
       ],
     },
@@ -1051,4 +1130,54 @@ if (invokedAsScript) {
       console.error(`argus-reviewer: ${(e as Error).message}`)
       process.exitCode = 1
     })
+}
+
+/** `argus index` — scan a repo into argus.index.json. */
+async function cmdIndex(args: string[], ctx: Ctx): Promise<number> {
+  const { values } = parseArgs({
+    args,
+    options: {
+      dir: { type: 'string' },
+      out: { type: 'string' },
+      help: { type: 'boolean', short: 'h', default: false },
+    },
+  })
+  if (values.help) {
+    ctx.out('Usage: argus index [--dir <repo>] [--out <path>]\n\n  Scans the repo into argus.index.json: file → purpose → imports → importedBy → package version → content hash. Consumed by `argus run` for diff-aware cache invalidation.')
+    return 0
+  }
+  const root = resolve(ctx.cwd, values.dir ?? '.')
+  const config = await loadConfig(ctx.cwd)
+  const outPath = resolve(ctx.cwd, values.out ?? config.indexPath ?? 'argus.index.json')
+  try {
+    const index = await scanRepo(root)
+    await writeIndex(index, outPath)
+    ctx.out(`indexed ${index.entries.length} files → ${outPath}`)
+  } catch (e) {
+    // Index failure must never abort a run — degrade to hash verification.
+    ctx.err(`argus index failed (continuing without it): ${(e as Error).message}`)
+  }
+  return 0
+}
+
+/** Repo identity for journal records; all probes degrade to 'unknown'. */
+async function gitInfo(cwd: string): Promise<{ repo: string; commitSha?: string; branch?: string }> {
+  const { execFile } = await import('node:child_process')
+  const { promisify } = await import('node:util')
+  const exec = promisify(execFile)
+  const run = (args: string[]): Promise<string> =>
+    exec('git', args, { cwd, timeout: 10_000, maxBuffer: 1024 * 1024 })
+      .then((r) => r.stdout.trim())
+      .catch(() => '')
+  const [remote, sha, branch] = await Promise.all([
+    run(['remote', 'get-url', 'origin']),
+    run(['rev-parse', 'HEAD']),
+    run(['rev-parse', '--abbrev-ref', 'HEAD']),
+  ])
+  const repoMatch = remote.match(/[:/]([^/]+\/[^/]+?)(\.git)?$/)
+  return {
+    repo: repoMatch?.[1] ?? basename(cwd),
+    ...(sha !== '' ? { commitSha: sha } : {}),
+    ...(branch !== '' ? { branch } : {}),
+  }
 }

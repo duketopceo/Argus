@@ -12,8 +12,11 @@ import {
   fnv1a,
   FingerprintRecord,
   Point,
+  ResolveResult,
 } from '../cache/fingerprint.js'
 import { CachedAssert, FlowCache, saveFlow } from '../cache/store.js'
+import { ErrorRecord } from '../journal/schema.js'
+import { Logger } from '../log.js'
 import {
   actionSchema,
   AssertionResult,
@@ -50,6 +53,8 @@ export interface EngineOptions {
   config: Config
   /** Assertion verdicts persisted from a prior run of this flow. */
   initialAsserts?: CachedAssert[]
+  /** Leveled logger; silent when absent. */
+  logger?: Logger
 }
 
 export interface RecordOptions {
@@ -95,6 +100,18 @@ export class Engine {
   private _steps: StepResult[] = []
   private _fingerprints: FingerprintRecord[] = []
   private _assertCache = new Map<string, CachedAssert>()
+  private _errors: ErrorRecord[] = []
+
+  /** Structured, non-fatal anomalies — journaled as evidence, never thrown. */
+  get errorRecords(): ErrorRecord[] {
+    return this._errors
+  }
+
+  private _note(stage: string, message: string, context?: string): void {
+    const rec: ErrorRecord = { stage, message, ...(context !== undefined ? { context } : {}) }
+    this._errors.push(rec)
+    this._opts.logger?.debug(`${stage}: ${message}${context ? ` (${context})` : ''}`)
+  }
 
   constructor(private _opts: EngineOptions) {
     for (const entry of _opts.initialAsserts ?? []) {
@@ -190,9 +207,16 @@ export class Engine {
       const step = flow.steps[i]
       if (!step) continue
       let observation = await this._opts.driver.observe()
-      const regionBuffer = await this._regionScreenshot(step.bbox)
-      const fingerprint = new Fingerprint(step)
-      const resolve = fingerprint.resolve(regionBuffer, observation.a11yYaml)
+      // Diff-invalidated entries skip hash verification entirely and go
+      // straight to the heal path — the diff already told us they're stale.
+      let resolve: ResolveResult
+      if (step.stale !== undefined) {
+        this._note('heal', 'cache entry invalidated by diff', step.stale)
+        resolve = { matched: false, currentHash: '', regionMatched: false, a11yMatched: false }
+      } else {
+        const regionBuffer = await this._regionScreenshot(step.bbox)
+        resolve = new Fingerprint(step).resolve(regionBuffer, observation.a11yYaml)
+      }
 
       if (resolve.matched) {
         await this._executeAction(this._opts.actions, step.action)
@@ -257,6 +281,7 @@ export class Engine {
         response.model,
       )
       flow.steps[i] = newFingerprint
+      this._note('heal', 'fingerprint mismatch healed by model', step.instruction)
 
       this._steps.push({
         instruction: step.instruction,
@@ -284,7 +309,10 @@ export class Engine {
   async locate(instruction: string, cached?: FingerprintRecord): Promise<LocateResult> {
     const observation = await this._opts.driver.observe({ grid: true })
 
-    if (cached) {
+    if (cached && cached.stale !== undefined) {
+      this._note('locate', 'cache entry invalidated by diff', cached.stale)
+    }
+    if (cached && cached.stale === undefined) {
       const regionBuffer = await this._regionScreenshot(cached.bbox)
       const resolve = new Fingerprint(cached).resolve(regionBuffer, observation.a11yYaml)
       if (resolve.matched) {
@@ -315,14 +343,28 @@ export class Engine {
         // "(x,y)" coordinates — ask in their native format.
         `Click on the UI element matching this description: ${instruction.replace(/^locate:\s*/i, '')}.`
       : instruction
+    // A diff-invalidated (stale) entry is a fresh ground, not a heal — heal
+    // implies the fingerprint *checked out as wrong*, stale means we never
+    // verified it. Keeping the kind split honest also keeps the heal-rate
+    // signal in the journal meaningful and avoids spending escalation calls
+    // on entries we already know are stale.
+    const isStale = cached !== undefined && cached.stale !== undefined
+    const useHeal = cached !== undefined && !isStale
     const escalation =
-      specialist || cached ? [this._opts.config.escalation_model] : undefined
-    const response = await this._callModel(
-      cached ? 'heal' : 'ground',
-      buildActionMessages(prompt, observation),
-      escalation,
-      this._opts.config.grounding_model,
-    )
+      specialist || useHeal ? [this._opts.config.escalation_model] : undefined
+    let response
+    try {
+      response = await this._callModel(
+        useHeal ? 'heal' : 'ground',
+        buildActionMessages(prompt, observation),
+        escalation,
+        this._opts.config.grounding_model,
+      )
+    } catch (e) {
+      // Provider failures are hard errors — still journal them as evidence.
+      this._note('locate', 'model call threw', (e as Error).message)
+      throw e
+    }
     if (!response) {
       return {
         ok: false,
@@ -366,18 +408,31 @@ export class Engine {
       }
 
       if (attempt === 1 || !this._opts.ledger.canSpend(0.001)) break
+      this._note(
+        'locate',
+        coordsOk && probe !== null
+          ? 'grounding corrected after probe mismatch'
+          : 'grounding corrected after missing/invalid coords',
+        `attempt=${attempt} instruction=${instruction.slice(0, 80)}`,
+      )
       const feedback = specialist
         ? // ui-tars-class models want their native prompt format.
           `Click on the UI element matching this description: ${instruction.replace(/^locate:\s*/i, '')}.`
         : coordsOk && probe !== null
           ? `Your previous coordinates (${action.x},${action.y}) resolved to "${probe.a11ySnippet}", which does not match the target. Re-examine the grid labels and return corrected coordinates for: ${instruction}`
           : `Your previous response was a "${action.action}" action with no usable coordinates. Return the click point (x, y in CSS pixels) for: ${instruction}`
-      const retry = await this._callModel(
-        cached ? 'heal' : 'ground',
-        buildActionMessages(feedback, observation),
-        escalation,
-        this._opts.config.grounding_model,
-      )
+      let retry
+      try {
+        retry = await this._callModel(
+          useHeal ? 'heal' : 'ground',
+          buildActionMessages(feedback, observation),
+          escalation,
+          this._opts.config.grounding_model,
+        )
+      } catch (e) {
+        this._note('locate', 'correction retry threw', (e as Error).message)
+        break
+      }
       if (!retry) break
       action = this._parseAction(retry.content)
       model = retry.model
@@ -412,6 +467,7 @@ export class Engine {
       action.action === 'click' &&
       !instructionMatchesNode(instruction, resolved.a11ySnippet)
     ) {
+      this._note('locate', 'grounding mismatch rejected', `resolved_hash=${fnv1a(resolved.a11ySnippet)}`)
       return {
         ok: false,
         reason: `model grounded to "${resolved.a11ySnippet}", which does not match the instruction`,
@@ -504,6 +560,7 @@ export class Engine {
         (k) => k in parsed,
       )
       if (parsed.action === undefined && variantKey !== undefined) {
+        this._note('locate', 'tolerant action parse: variant JSON shape', content.slice(0, 80))
         const v = parsed[variantKey]
         const out: Record<string, unknown> = { action: variantKey }
         if (typeof v === 'object' && v !== null) Object.assign(out, v)
@@ -563,6 +620,7 @@ export class Engine {
       const px = coord?.[1] ?? xm?.[1]
       const py = coord?.[2] ?? ym?.[1]
       if (px !== undefined && py !== undefined) {
+        this._note('locate', 'tolerant action parse: coordinate extraction', content.slice(0, 80))
         let x = Number(px)
         let y = Number(py)
         if (x <= 1 && y <= 1) {
@@ -576,6 +634,7 @@ export class Engine {
           reasoning: `coordinate-only response: ${content.slice(0, 120)}`,
         } as ProposedAction
       }
+      this._note('locate', 'model output unparseable', content.slice(0, 80))
       return { action: 'fail', reasoning: `JSON parse failed: ${(e as Error).message}` }
     }
   }

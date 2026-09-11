@@ -6,8 +6,8 @@ inputs:
     description: OpenRouter API key (BYOK). All vision calls are billed through this key.
     required: true
   cli:
-    description: Command used to run argus-reviewer (defaults to `npx argus-reviewer`). For dogfooding this repo, use `node dist/cli.js` after `npm run build`.
-    default: npx argus-reviewer
+    description: Command used to run argus-reviewer (defaults to `npx --no-install argus-reviewer`). For dogfooding this repo, use `node dist/cli.js` after `npm run build`.
+    default: npx --no-install argus-reviewer
     required: false
   config:
     description: Path to the argus-reviewer config file
@@ -18,6 +18,14 @@ inputs:
     required: false
   budget-usd:
     description: Optional per-run budget cap override in USD
+    required: false
+  index:
+    description: Run `argus-reviewer index` before the test run to enable diff-aware cache invalidation
+    default: 'true'
+    required: false
+  diff-base:
+    description: Base ref for diff invalidation (e.g. origin/main); empty = working tree
+    default: ''
     required: false
   node-version:
     description: Node.js version for the harness (Node 20 is deprecated on GH runners)
@@ -57,6 +65,12 @@ runs:
           cp "${{ inputs.config }}" vision-e2e.config.ts
         fi
 
+    - name: Build repo index
+      if: inputs.index == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: ${{ inputs.cli }} index
+
     - name: Run argus-reviewer code review
       id: code-review
       shell: bash
@@ -83,6 +97,8 @@ runs:
       env:
         OPENROUTER_API_KEY: ${{ inputs.openrouter-api-key }}
         ARGUS_DEBUG: '1'
+        ARGUS_DIFF_BASE: ${{ inputs.diff-base }}
+        ARGUS_BUDGET_USD: ${{ inputs.budget-usd }}
         ARGUS_REVIEWER_TRACE: >-
           {"repo":"${{ github.repository }}",
           "pr":"${{ github.event.pull_request.number }}",
