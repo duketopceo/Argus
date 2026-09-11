@@ -5,7 +5,8 @@ import { AssertionResult } from './engine/prompts.js'
 import { FingerprintRecord } from './cache/fingerprint.js'
 import { FlowCache, loadFlow, saveFlow } from './cache/store.js'
 import { Ledger, LedgerState } from './vision/ledger.js'
-import { Config } from './config.js'
+import { Config, defineConfig } from './config.js'
+export { defineConfig }
 
 /**
  * Test-facing API (R13). Test files are plain TypeScript using a `td` object:

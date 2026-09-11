@@ -1,0 +1,14 @@
+{
+  "name": "argus-reviewer-consumer-example",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "argus:record": "argus-reviewer record",
+    "argus:run": "argus-reviewer run"
+  },
+  "devDependencies": {
+    "argus-reviewer-e2e": "file:../..",
+    "typescript": "^5.5.0"
+  }
+}
