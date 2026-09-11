@@ -242,6 +242,27 @@ async function main() {
   const conclusion = !hasKey ? 'neutral' : ok ? 'success' : 'failure'
   const body = !hasKey ? renderMissingKeyBody() : renderBody(report, codeReview, runUrl, ok)
 
+async function postInlineComments(pr, codeReview) {
+  if (!pr || !codeReview || codeReview.skipped || !codeReview.findings) return
+  const inlineSeverities = ['bug', 'risk', 'warning']
+  for (const f of codeReview.findings) {
+    if (!f.file || typeof f.line !== 'number' || !inlineSeverities.includes(f.severity)) continue
+    try {
+      await github.rest.pulls.createReviewComment({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        pull_number: pr.number,
+        commit_id: pr.head.sha,
+        path: f.file,
+        line: f.line,
+        body: `**argus-reviewer ${f.severity}:** ${f.message}`,
+      })
+    } catch (e) {
+      core.warning(`inline review comment failed for ${f.file}:${f.line}: ${e.message}`)
+    }
+  }
+}
+
   if (pr) {
     const { data: comments } = await github.rest.issues.listComments({
       owner,
@@ -265,6 +286,7 @@ async function main() {
         body,
       })
     }
+    await postInlineComments(pr, codeReview)
   }
 
   const sha = pr ? pr.head.sha : context.sha
