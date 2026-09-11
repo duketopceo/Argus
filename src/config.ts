@@ -65,6 +65,11 @@ export interface Config {
    * Defaults to 30 seconds.
    */
   browserTimeoutMs: number | undefined
+  /**
+   * Severity levels that block a pre-merge status. Defaults to `['bug']` so
+   * `risk`/`nit`/`q` findings are surfaced but do not fail the status.
+   */
+  severity: string[] | undefined
 }
 
 export type ConfigInput = Partial<Omit<Config, 'provider'>> & { provider?: Partial<ProviderRules> }
@@ -87,6 +92,7 @@ const defaults: Config = {
   openrouter: undefined,
   browser: 'chromium',
   browserTimeoutMs: 30_000,
+  severity: ['bug'],
 }
 
 export function defineConfig(input: ConfigInput): ConfigInput {
