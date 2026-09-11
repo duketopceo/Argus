@@ -798,9 +798,10 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       kind: 'code',
     })
     const { summary, verdict, findings } = parseCodeReview(response.content)
-    const hasBug = findings.some((f) => (f as { severity?: string }).severity === 'bug')
+    const blockSeverities = config.severity ?? ['bug']
+    const hasBlocker = findings.some((f) => blockSeverities.includes((f as { severity?: string }).severity ?? ''))
     const report: CodeReviewReport = {
-      ok: !hasBug,
+      ok: !hasBlocker,
       skipped: false,
       summary,
       verdict,
