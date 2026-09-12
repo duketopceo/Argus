@@ -237,7 +237,7 @@ export class Engine {
       const response = await this._callModel(
         'heal',
         buildActionMessages(step.instruction, observation),
-        [this._opts.config.escalation_model],
+        { escalationModels: [this._opts.config.escalation_model] },
       )
       if (!response) {
         this._steps.push({
@@ -337,28 +337,75 @@ export class Engine {
       }
     }
 
+    // A diff-invalidated (stale) entry is a fresh ground, not a heal — heal
+    // implies the fingerprint *checked out as wrong*, stale means we never
+    // verified it. Keeping the kind split honest keeps the heal-rate signal
+    // in the journal meaningful and avoids spending escalation calls on
+    // entries we already know are stale.
+    const isStale = cached !== undefined && cached.stale !== undefined
+    const useHeal = cached !== undefined && !isStale
+    const primary = await this._locateWithModel(instruction, observation, useHeal)
+    if (primary.ok) return primary
+
+    // Semantic escalation fallback (issue #14): the model answered but could
+    // not ground — provider-level OpenRouter fallback only covers unavailable
+    // models, not bad answers. Retry once with escalation_model as primary on
+    // a fresh observation; a page may have changed under the failure.
+    const esc = this._opts.config.escalation_model
+    const failedModel = primary.model ?? this._opts.config.model
+    if (
+      esc === undefined ||
+      esc === failedModel ||
+      this._opts.ledger.replayOnly ||
+      !this._opts.ledger.canSpend(0.001)
+    ) {
+      return primary
+    }
+    this._note(
+      'locate',
+      'escalating to fallback model',
+      `failed=${failedModel} esc=${esc} reason=${(primary.reason ?? '').slice(0, 80)}`,
+    )
+    const fresh = await this._opts.driver.observe({ grid: true })
+    return this._locateWithModel(instruction, fresh, useHeal, esc)
+  }
+
+  /**
+   * One locate attempt against a specific model: initial call plus the
+   * verify-then-correct loop. `modelOverride` is the escalation fallback —
+   * it keeps the action schema unless a specialist grounding model is in
+   * play (native "(x,y)" format).
+   */
+  private async _locateWithModel(
+    instruction: string,
+    observation: Observation,
+    useHeal: boolean,
+    modelOverride?: string,
+  ): Promise<LocateResult> {
     const specialist = this._opts.config.grounding_model !== undefined
     const prompt = specialist
       ? // ui-tars-class models ignore JSON schemas and answer with bare
         // "(x,y)" coordinates — ask in their native format.
         `Click on the UI element matching this description: ${instruction.replace(/^locate:\s*/i, '')}.`
       : instruction
-    // A diff-invalidated (stale) entry is a fresh ground, not a heal — heal
-    // implies the fingerprint *checked out as wrong*, stale means we never
-    // verified it. Keeping the kind split honest also keeps the heal-rate
-    // signal in the journal meaningful and avoids spending escalation calls
-    // on entries we already know are stale.
-    const isStale = cached !== undefined && cached.stale !== undefined
-    const useHeal = cached !== undefined && !isStale
+    // The escalation retry (modelOverride) wins; otherwise a specialist's
+    // grounding_model is the primary. Don't also pass esc as the provider
+    // fallback list when esc IS the primary — that just duplicates it.
+    const primaryModel = modelOverride ?? this._opts.config.grounding_model
     const escalation =
-      specialist || useHeal ? [this._opts.config.escalation_model] : undefined
+      (specialist || useHeal) && primaryModel !== this._opts.config.escalation_model
+        ? [this._opts.config.escalation_model]
+        : undefined
     let response
     try {
       response = await this._callModel(
         useHeal ? 'heal' : 'ground',
         buildActionMessages(prompt, observation),
-        escalation,
-        this._opts.config.grounding_model,
+        {
+          ...(escalation !== undefined ? { escalationModels: escalation } : {}),
+          ...(primaryModel !== undefined ? { model: primaryModel } : {}),
+          dropSchema: specialist,
+        },
       )
     } catch (e) {
       // Provider failures are hard errors — still journal them as evidence.
@@ -438,8 +485,11 @@ export class Engine {
         retry = await this._callModel(
           useHeal ? 'heal' : 'ground',
           buildActionMessages(feedback, observation),
-          escalation,
-          this._opts.config.grounding_model,
+          {
+            ...(escalation !== undefined ? { escalationModels: escalation } : {}),
+            ...(primaryModel !== undefined ? { model: primaryModel } : {}),
+            dropSchema: specialist,
+          },
         )
       } catch (e) {
         this._note('locate', 'correction retry threw', (e as Error).message)
@@ -493,7 +543,7 @@ export class Engine {
     return {
       ok: true,
       reason: undefined,
-      healed: cached !== undefined,
+      healed: useHeal,
       point: { x: action.x, y: action.y },
       fingerprint,
       model: response.model,
@@ -534,8 +584,7 @@ export class Engine {
   private async _callModel(
     kind: CallKind,
     messages: Message[],
-    escalationModels?: string[],
-    modelOverride?: string,
+    opts: { escalationModels?: string[]; model?: string; dropSchema?: boolean } = {},
   ): Promise<{ id: string; content: string; cost: CallCost; model: string } | undefined> {
     if (!this._opts.ledger.canSpend(0.001)) {
       return undefined
@@ -543,12 +592,12 @@ export class Engine {
     // Specialist grounding models don't emit JSON — sending response_format
     // plus require_parameters would filter out their providers entirely.
     const schema =
-      modelOverride === undefined ? (kind === 'assert' ? assertionSchema : actionSchema) : undefined
+      opts.dropSchema === true ? undefined : kind === 'assert' ? assertionSchema : actionSchema
     const response = await this._opts.client.complete({
-      model: modelOverride ?? this._opts.config.model,
+      model: opts.model ?? this._opts.config.model,
       messages,
       ...(schema !== undefined ? { schema } : {}),
-      ...(escalationModels ? { escalationModels } : {}),
+      ...(opts.escalationModels !== undefined ? { escalationModels: opts.escalationModels } : {}),
       provider: this._opts.config.provider,
       kind,
     })

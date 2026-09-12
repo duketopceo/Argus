@@ -188,6 +188,85 @@ describe('Engine record/replay', () => {
     expect(failClient.calls.length).toBe(1)
   })
 
+  it('locate escalates to escalation_model when the primary cannot ground', async () => {
+    const actions = new Actions(driver)
+    const client = new FakeClient([
+      { content: JSON.stringify({ action: 'done', reasoning: 'no idea' }) },
+      { content: JSON.stringify({ action: 'done', reasoning: 'still no idea' }) },
+      {
+        content: JSON.stringify({ action: 'click', x: 200, y: 130, reasoning: 'found it' }),
+        model: 'moonshotai/kimi-k2.5',
+      },
+    ])
+    const config = resolveConfig({ budgetUsd: 1 })
+    const engine = new Engine({ driver, actions, client, ledger: new Ledger(config.budgetUsd), config })
+
+    const result = await engine.locate('the "Click me" button')
+    expect(result.ok).toBe(true)
+    expect(client.calls).toHaveLength(3)
+    expect(client.calls[2].model).toBe('moonshotai/kimi-k2.5')
+    expect(result.model).toBe('moonshotai/kimi-k2.5')
+  })
+
+  it('locate returns the escalation failure when both models fail', async () => {
+    const actions = new Actions(driver)
+    const client = new FakeClient([
+      { content: JSON.stringify({ action: 'done', reasoning: 'no' }) },
+      { content: JSON.stringify({ action: 'done', reasoning: 'no' }) },
+      { content: JSON.stringify({ action: 'fail', reasoning: 'escalation could not find it' }), model: 'moonshotai/kimi-k2.5' },
+    ])
+    const config = resolveConfig({ budgetUsd: 1 })
+    const engine = new Engine({ driver, actions, client, ledger: new Ledger(config.budgetUsd), config })
+
+    const result = await engine.locate('the "Click me" button')
+    expect(result.ok).toBe(false)
+    expect(result.reason).toContain('escalation could not find it')
+    expect(client.calls).toHaveLength(3)
+  })
+
+  it('locate skips escalation when the budget cannot cover it', async () => {
+    const actions = new Actions(driver)
+    const client = new FakeClient([
+      { content: JSON.stringify({ action: 'done', reasoning: 'no' }) },
+      { content: JSON.stringify({ action: 'done', reasoning: 'no' }) },
+    ])
+    // 0.0025 covers the initial call + one correction retry (0.001 each) but
+    // leaves 0.0005 — under the 0.001 spend floor — so escalation can't fire.
+    const config = resolveConfig({ budgetUsd: 0.0025 })
+    const engine = new Engine({ driver, actions, client, ledger: new Ledger(config.budgetUsd), config })
+
+    const result = await engine.locate('the "Click me" button')
+    expect(result.ok).toBe(false)
+    expect(client.calls).toHaveLength(2)
+  })
+
+  it('specialist grounding_model is the primary model for locate', async () => {
+    const actions = new Actions(driver)
+    const client = new FakeClient([
+      { content: '(200,130)', model: 'ui-tars/specialist' },
+    ])
+    const config = resolveConfig({ budgetUsd: 1, grounding_model: 'ui-tars/specialist' })
+    const engine = new Engine({ driver, actions, client, ledger: new Ledger(config.budgetUsd), config })
+
+    const result = await engine.locate('the "Click me" button')
+    expect(result.ok).toBe(true)
+    expect(client.calls[0].model).toBe('ui-tars/specialist')
+  })
+
+  it('locate skips escalation when escalation_model equals the failed model', async () => {
+    const actions = new Actions(driver)
+    const client = new FakeClient([
+      { content: JSON.stringify({ action: 'done', reasoning: 'no' }) },
+      { content: JSON.stringify({ action: 'done', reasoning: 'no' }) },
+    ])
+    const config = resolveConfig({ budgetUsd: 1, escalation_model: 'qwen/qwen3.7-flash' })
+    const engine = new Engine({ driver, actions, client, ledger: new Ledger(config.budgetUsd), config })
+
+    const result = await engine.locate('the "Click me" button')
+    expect(result.ok).toBe(false)
+    expect(client.calls).toHaveLength(2)
+  })
+
   it('assert returns a cached verdict without a model call on an unchanged region', async () => {
     const actions = new Actions(driver)
     const client = new FakeClient([
