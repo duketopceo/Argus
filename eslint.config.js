@@ -32,4 +32,18 @@ export default tseslint.config(
       globals: { test: 'readonly', td: 'readonly' },
     },
   },
+  {
+    // Electron renderer runs in a browser context.
+    files: ['electron/renderer.js'],
+    languageOptions: {
+      globals: globals.browser,
+    },
+  },
+  {
+    // ANSI escape handling is the point of these files.
+    files: ['scripts/**'],
+    rules: {
+      'no-control-regex': 'off',
+    },
+  },
 )

@@ -1,16 +1,11 @@
 #!/usr/bin/env node
 // argus-reviewer watch — local-only TUI: PRs, checks, workflow runs, evals,
-// journals. No deps; reads `gh` CLI + local artifacts. `npm run watch`.
-// Keys: r refresh · e run eval · q quit. Auto-refresh every 30s.
+// journals. No deps; reads `gh` CLI + local artifacts via scripts/collect.mjs.
+// `npm run watch`. Keys: r refresh · e run eval · q quit. Auto-refresh 30s.
 
-import { execFile, spawn } from 'node:child_process'
-import { readdir, readFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
-import { promisify } from 'node:util'
+import { spawn } from 'node:child_process'
+import { collect, ROOT } from './collect.mjs'
 
-const exec = promisify(execFile)
-const ROOT = new URL('..', import.meta.url).pathname
 const REFRESH_MS = 30_000
 const MAX_W = 100
 
@@ -22,7 +17,6 @@ const C = {
   green: '\x1b[32m',
   red: '\x1b[31m',
   yellow: '\x1b[33m',
-  magenta: '\x1b[35m',
 }
 const paint = (s, c) => `${c}${s}${C.reset}`
 const ok = (s) => paint(s, C.green)
@@ -35,11 +29,6 @@ const trunc = (s, w = MAX_W - 4) => (strip(s).length > w ? `${strip(s).slice(0, 
 function hr(title) {
   const line = `── ${title} `
   return paint(line + '─'.repeat(Math.max(0, MAX_W - strip(line).length)), C.dim)
-}
-
-async function gh(args) {
-  const { stdout } = await exec('gh', args, { cwd: ROOT, maxBuffer: 8 * 1024 * 1024 })
-  return JSON.parse(stdout)
 }
 
 const state = {
@@ -55,43 +44,7 @@ const state = {
 }
 
 async function fetchData() {
-  try {
-    const [prs, runs] = await Promise.all([
-      gh(['pr', 'list', '--json', 'number,title,mergeStateStatus,reviewDecision,headRefName,state', '--limit', '12']),
-      gh(['run', 'list', '--limit', '8', '--json', 'displayTitle,status,conclusion,workflowName,createdAt,headBranch']),
-    ])
-    state.prs = prs
-    state.runs = runs
-    const checks = await Promise.all(
-      prs.slice(0, 6).map((p) =>
-        gh(['pr', 'checks', String(p.number), '--json', 'name,state,bucket'])
-          .then((c) => [p.number, c])
-          .catch(() => [p.number, []]),
-      ),
-    )
-    state.prChecks = Object.fromEntries(checks)
-    state.error = ''
-  } catch (e) {
-    state.error = `gh: ${e.message.split('\n')[0]}`
-  }
-
-  const evalsDir = join(ROOT, 'docs/evals')
-  if (existsSync(evalsDir)) {
-    const files = (await readdir(evalsDir)).filter((f) => f.endsWith('.md')).sort()
-    const last = files[files.length - 1]
-    if (last) state.evalDoc = await readFile(join(evalsDir, last), 'utf8')
-  }
-
-  const journalDir = join(ROOT, '.argus-reviewer-cache/journal')
-  if (existsSync(journalDir)) {
-    const files = (await readdir(journalDir)).filter((f) => f.endsWith('.json')).sort()
-    const last = files[files.length - 1]
-    if (last) {
-      try {
-        state.journal = JSON.parse(await readFile(join(journalDir, last), 'utf8'))
-      } catch { /* partial write */ }
-    }
-  }
+  Object.assign(state, await collect())
   state.updatedAt = new Date()
 }
 
@@ -118,7 +71,7 @@ function render() {
     const line = `  ${paint(`#${p.number}`, C.cyan)} ${trunc(p.title, 52)}`
     const verdict = p.reviewDecision === 'CHANGES_REQUESTED' ? bad('changes')
       : p.reviewDecision === 'APPROVED' ? ok('approved')
-      : paint(p.mergeStateStatus.toLowerCase(), C.dim)
+      : paint((p.mergeStateStatus ?? '').toLowerCase(), C.dim)
     out.push(`${line}  ${verdict}`)
     for (const c of checks.slice(0, 6)) {
       out.push(`     ${checkIcon(c)} ${trunc(c.name, 40)}`)

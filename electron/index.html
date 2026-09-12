@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>argus-reviewer</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d;
+    --fg: #e6edf3; --dim: #8b949e; --cyan: #39c5cf; --green: #3fb950;
+    --red: #f85149; --yellow: #d29922; --purple: #bc8cff;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 13px/1.5 ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    padding: 16px; overflow-y: auto;
+  }
+  header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+  h1 { font-size: 16px; color: var(--cyan); font-weight: 700; }
+  h1 .eye { color: var(--purple); }
+  #updated { color: var(--dim); font-size: 11px; }
+  #err { color: var(--red); font-size: 11px; margin-left: auto; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px; min-width: 0;
+  }
+  .card.wide { grid-column: 1 / -1; }
+  .card h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--dim); margin-bottom: 10px; font-weight: 600;
+  }
+  .row { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; }
+  .row .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .m { color: var(--dim); font-size: 11px; white-space: nowrap; }
+  .num { color: var(--cyan); }
+  .ok { color: var(--green); } .bad { color: var(--red); }
+  .warn { color: var(--yellow); } .dim { color: var(--dim); }
+  .checks { margin-left: 18px; font-size: 11px; }
+  pre.eval {
+    white-space: pre-wrap; word-break: break-word; font-size: 12px;
+    color: var(--fg); max-height: 340px; overflow-y: auto;
+  }
+  #evallog { max-height: 180px; overflow-y: auto; font-size: 12px; }
+  button {
+    background: var(--panel); border: 1px solid var(--border); color: var(--fg);
+    border-radius: 6px; padding: 4px 12px; font: inherit; cursor: pointer;
+  }
+  button:hover { border-color: var(--cyan); color: var(--cyan); }
+  canvas { display: block; }
+  .spark-title { font-size: 11px; color: var(--dim); margin: 6px 0 2px; }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="eye">◉</span> argus-reviewer</h1>
+  <span id="updated"></span>
+  <button id="refresh">refresh</button>
+  <button id="eval">run eval</button>
+  <span id="err"></span>
+</header>
+<div class="grid">
+  <section class="card"><h2>Pull Requests</h2><div id="prs"></div></section>
+  <section class="card"><h2>Workflow Runs</h2><div id="runs"></div></section>
+  <section class="card wide"><h2>Latest Eval <span id="evalfile" class="dim"></span></h2><pre class="eval" id="evaldoc"></pre></section>
+  <section class="card"><h2>Journal History</h2><div id="jhist"></div><canvas id="spark" width="520" height="60"></canvas></section>
+  <section class="card"><h2>Latest Journal <span id="jfile" class="dim"></span></h2><div id="journal"></div></section>
+  <section class="card wide" id="evalcard" hidden><h2>Eval Log</h2><div id="evallog"></div></section>
+</div>
+<script src="renderer.js"></script>
+</body>
+</html>
