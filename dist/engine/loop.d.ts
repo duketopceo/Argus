@@ -97,6 +97,13 @@ export declare class Engine {
      * fingerprint (R4). The returned point is the viewport-pixel click target.
      */
     locate(instruction: string, cached?: FingerprintRecord): Promise<LocateResult>;
+    /**
+     * One locate attempt against a specific model: initial call plus the
+     * verify-then-correct loop. `modelOverride` is the escalation fallback —
+     * it keeps the action schema unless a specialist grounding model is in
+     * play (native "(x,y)" format).
+     */
+    private _locateWithModel;
     assert(question: string): Promise<AssertResult>;
     private _callModel;
     private _parseAction;
