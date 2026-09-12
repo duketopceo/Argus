@@ -28,11 +28,13 @@
     "typecheck": "tsc --noEmit",
     "prepare": "npm run build && chmod +x dist/cli.js",
     "eval": "node evals/run.mjs",
-    "watch": "node scripts/watch.mjs"
+    "watch": "node scripts/watch.mjs",
+    "app": "electron electron"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
     "@types/node": "^20.0.0",
+    "electron": "^44.2.0",
     "eslint": "^9.0.0",
     "globals": "^15.0.0",
     "prettier": "^3.0.0",

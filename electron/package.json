@@ -1,0 +1,6 @@
+{
+  "name": "argus-reviewer-dash",
+  "private": true,
+  "type": "module",
+  "main": "main.mjs"
+}
