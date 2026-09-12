@@ -27,7 +27,8 @@
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
     "prepare": "npm run build && chmod +x dist/cli.js",
-    "eval": "node evals/run.mjs"
+    "eval": "node evals/run.mjs",
+    "watch": "node scripts/watch.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
