@@ -109,6 +109,37 @@ When using the GitHub Action, pass the `browser` input (it installs the named
 browser) and set the same value in your config. The coordinate grid and video
 recording are browser-agnostic.
 
+### Agent Zero delegation (optional)
+
+If you run an [Agent Zero](https://agent-zero.ai) instance — the launcher, a
+Docker container, or a remote host — Argus can hand it autonomous tasks. `init`
+detects it automatically (via the `a0` CLI, `AGENT_ZERO_HOST`,
+`~/.agent-zero/.env`, or a local probe) and writes `heal: 'a0'` into the
+generated config. Zero extra config is needed when the `a0` CLI already knows
+your instance.
+
+```ts
+// argus-reviewer.config.ts — or let `init` fill this in
+export default defineConfig({
+  a0: { url: 'https://your-a0.example.com', scope: 'browser' },
+  heal: 'a0',
+})
+```
+
+Two things this unlocks:
+
+- `argus-reviewer delegate "click through the signup flow" --url http://localhost:3000`
+  sends the whole task to the instance — it clicks through on its own
+  browser/desktop and streams back the result.
+- `heal: 'a0'` gives every failed test an autonomous second opinion: after a
+  local replay/heal failure, the instance clicks through the app itself and
+  reports whether the app is broken or the expectation is stale. The diagnosis
+  lands in `run.json` as `a0Diagnosis`.
+
+Delegation is a full-cost, non-deterministic agent run — it complements the
+~$0 fingerprint replay, it does not replace it. Keep the `browser` scope
+unless a task genuinely needs full desktop control (`computer_use`).
+
 ## 6. Register a self-hosted runner
 
 On an Ubuntu machine with SSH access:

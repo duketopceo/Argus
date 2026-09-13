@@ -16,6 +16,7 @@ import {
 } from './api.js'
 import { Config, DEFAULT_RECORD_STEP_CAP, loadConfig, unknownProviderSlugs } from './config.js'
 import { debug } from './debug.js'
+import { detectEnvironment, type ExecFn } from './detect.js'
 import { BrowserDriver } from './driver/browser.js'
 import { TargetProcess, waitForReady } from './driver/target.js'
 import { Engine, VisionClient } from './engine/loop.js'
@@ -24,6 +25,7 @@ import { buildReviewContext, CONTEXT_PREFIX } from './index/context.js'
 import { diffChangedFiles } from './index/diff.js'
 import { invalidateForDiff } from './index/invalidate.js'
 import { readIndex, scanRepo, writeIndex } from './index/scan.js'
+import { A0_DEFAULT_TIMEOUT_MS, a0TaskPrompt, runA0Task } from './executor/a0.js'
 import { buildJournalEntry } from './journal/build.js'
 import { ErrorRecord } from './journal/schema.js'
 import { newRunId, writeJournal } from './journal/store.js'
@@ -45,6 +47,8 @@ export interface CliDeps {
   createClient?: (config: Config) => VisionClient
   /** Inject a driver factory (tests may stub browser launch). */
   launchDriver?: (config: Config) => Promise<BrowserDriver>
+  /** Inject a subprocess runner (tests stub `a0`/`gh` detection + delegation). */
+  exec?: ExecFn
 }
 
 interface Ctx {
@@ -60,6 +64,7 @@ Usage:
   argus-reviewer record "<flow description>" --url <target> [--name <flow>] [--tests-dir <dir>] [--max-steps <n>]
   argus-reviewer run [pattern] [--url <target>] [--dir <testsDir>] [--report-dir <dir>]
   argus-reviewer code-review [--report-dir <dir>]
+  argus-reviewer delegate "<task>" [--url <target>] [--host <a0-url>]
   argus-reviewer cache list [--dir <cacheDir>]
   argus-reviewer cache prune [name|--all] [--dir <cacheDir>]
   argus-reviewer index [--dir <repo>]
@@ -134,12 +139,14 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
       return cmdRun(rest, ctx, deps)
     case 'code-review':
       return cmdCodeReview(rest, ctx, deps)
+    case 'delegate':
+      return cmdDelegate(rest, ctx, deps)
     case 'cache':
       return cmdCache(rest, ctx)
     case 'index':
       return cmdIndex(rest, ctx)
     case 'init':
-      return cmdInit(rest, ctx)
+      return cmdInit(rest, ctx, deps)
     default:
       ctx.err(`unknown command: ${cmd}`)
       ctx.out(USAGE)
@@ -676,6 +683,42 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
     await target?.stop()
   }
 
+  // heal: 'a0' — each failed test gets an autonomous second opinion from the
+  // Agent Zero instance: it clicks through the app itself and reports whether
+  // the app or the expectation is wrong. Full-cost per failure, so opt-in.
+  const failedReports = reports.filter((r) => !r.ok)
+  if (config.heal === 'a0' && failedReports.length > 0) {
+    const env = await detectEnvironment(ctx.env, {
+      ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
+    })
+    const a0Host = config.a0?.url ?? env.a0.host
+    if (env.a0.version === undefined && a0Host === undefined) {
+      ctx.err('heal: a0 configured but no Agent Zero found — install the a0 CLI or set a0.url')
+    } else {
+      for (const r of failedReports) {
+        const res = await runA0Task(
+          a0TaskPrompt(
+            `A browser test named "${r.name}" just failed against this app ` +
+              `(reason: ${r.failureMessage ?? 'unknown'}). Click through the ` +
+              `intended flow yourself and report concisely whether the app is ` +
+              `broken or the test expectation is stale.`,
+            url,
+          ),
+          {
+            host: a0Host,
+            ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
+          },
+        )
+        if (res.ok) {
+          r.a0Diagnosis = res.output
+          ctx.out(`a0 diagnosis for "${r.name}": ${res.output}`)
+        } else {
+          ctx.err(`a0 delegation failed for "${r.name}": ${res.output}`)
+        }
+      }
+    }
+  }
+
   for (const report of reports) {
     junitCases.push({
       name: report.name,
@@ -1169,6 +1212,66 @@ async function cmdCache(args: string[], ctx: Ctx): Promise<number> {
   return 0
 }
 
+const DELEGATE_USAGE = `Usage: argus-reviewer delegate "<task>" [options]
+
+Sends a task to an Agent Zero instance (a0 headless). The agent works
+autonomously in its own browser/desktop and streams back its result. Every
+delegation is a full-cost agent run — use for exploratory tasks and failure
+triage, not as a replay path.
+
+Options:
+  --url <url>      App URL the task applies to (falls back to config.target.url)
+  --host <url>     Agent Zero base URL (falls back to config a0.url, then a0
+                   CLI discovery: AGENT_ZERO_HOST, ~/.agent-zero/.env, localhost)
+  --timeout <ms>   Give up after N ms (default ${A0_DEFAULT_TIMEOUT_MS})
+  -h, --help       Show this help`
+
+/** `argus-reviewer delegate` — hand a task to an Agent Zero instance. */
+async function cmdDelegate(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      help: { type: 'boolean', short: 'h', default: false },
+      url: { type: 'string' },
+      host: { type: 'string' },
+      timeout: { type: 'string' },
+    },
+  })
+  if (values.help) {
+    ctx.out(DELEGATE_USAGE)
+    return 0
+  }
+  const task = positionals.join(' ').trim()
+  if (task === '') {
+    ctx.err('no task given — pass it as a positional argument')
+    ctx.out(DELEGATE_USAGE)
+    return 2
+  }
+  let timeoutMs = A0_DEFAULT_TIMEOUT_MS
+  if (values.timeout !== undefined) {
+    const parsed = Number(values.timeout)
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      ctx.err('--timeout must be a positive number of milliseconds')
+      return 2
+    }
+    timeoutMs = Math.floor(parsed)
+  }
+
+  const config = await loadConfig(ctx.cwd)
+  const url = values.url ?? config.target?.url
+  const host = values.host ?? config.a0?.url
+
+  ctx.out(`delegating to agent zero${host !== undefined ? ` (${host})` : ''}…`)
+  const res = await runA0Task(a0TaskPrompt(task, url), {
+    host,
+    timeoutMs,
+    ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
+  })
+  if (res.output !== '') ctx.out(res.output)
+  return res.ok ? 0 : 1
+}
+
 const INIT_USAGE = `Usage: argus-reviewer init [options]
 
 Scaffolds a working setup in the current directory:
@@ -1176,11 +1279,24 @@ Scaffolds a working setup in the current directory:
   tests/argus/smoke.test.ts              a td-API smoke test
   .github/workflows/argus-reviewer.yml   PR workflow using the action
 
+Then reports which optional features your environment already supports
+(OpenRouter key, Playwright browsers, gh auth, Agent Zero).
+
 Options:
   --force   Overwrite files that already exist
   -h, --help`
 
-const INIT_CONFIG = `import { defineConfig } from 'argus-reviewer-e2e'
+function initConfig(a0Host: string | undefined): string {
+  const a0Block =
+    a0Host !== undefined
+      ? `
+  // Agent Zero detected — delegated tasks (argus-reviewer delegate) and
+  // failure escalation (heal) go to this instance.
+  a0: { url: '${a0Host}', scope: 'browser' },
+  heal: 'a0',
+`
+      : ''
+  return `import { defineConfig } from 'argus-reviewer-e2e'
 
 export default defineConfig({
   // The app under test. command boots it (omit if it is already running);
@@ -1193,9 +1309,10 @@ export default defineConfig({
   // Hard per-run cap on vision-model spend (USD). Steps replayed from the
   // fingerprint cache cost $0 regardless of this cap.
   budgetUsd: 1,
-  testsDir: 'tests/argus',
+  testsDir: 'tests/argus',${a0Block}
 })
 `
+}
 
 const INIT_TEST = `test('home renders', async (td) => {
   const ok = await td.assert('the page rendered without obvious errors')
@@ -1225,7 +1342,7 @@ jobs:
 `
 
 /** `argus-reviewer init` — scaffold config, a smoke test, and the workflow. */
-async function cmdInit(args: string[], ctx: Ctx): Promise<number> {
+async function cmdInit(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> {
   const { values } = parseArgs({
     args,
     options: {
@@ -1237,6 +1354,12 @@ async function cmdInit(args: string[], ctx: Ctx): Promise<number> {
     ctx.out(INIT_USAGE)
     return 0
   }
+
+  // Detect first so the generated config can auto-enable what is present
+  // (e.g. an Agent Zero instance → heal: 'a0').
+  const env = await detectEnvironment(ctx.env, {
+    ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
+  })
 
   const configNames = [
     'argus-reviewer.config.ts',
@@ -1250,7 +1373,7 @@ async function cmdInit(args: string[], ctx: Ctx): Promise<number> {
   ]
   const hasConfig = configNames.some((n) => existsSync(join(ctx.cwd, n)))
   if (!hasConfig || values.force) {
-    files.unshift(['argus-reviewer.config.ts', INIT_CONFIG])
+    files.unshift(['argus-reviewer.config.ts', initConfig(env.a0.host)])
   }
 
   for (const [rel, content] of files) {
@@ -1265,11 +1388,40 @@ async function cmdInit(args: string[], ctx: Ctx): Promise<number> {
   }
 
   ctx.out('')
+  ctx.out('argus-reviewer environment')
+  ctx.out(
+    env.openrouterKey
+      ? '  openrouter key  ✓ OPENROUTER_API_KEY set'
+      : '  openrouter key  ✗ export OPENROUTER_API_KEY=… (BYOK — required for vision calls)',
+  )
+  ctx.out(
+    env.playwrightBrowsers.length > 0
+      ? `  playwright      ✓ ${env.playwrightBrowsers.join(' ')}`
+      : '  playwright      ✗ npx playwright install chromium',
+  )
+  ctx.out(
+    env.ghAuth === true
+      ? '  github          ✓ gh authenticated'
+      : env.ghAuth === false
+        ? '  github          ✗ gh auth login (enables PR workflows)'
+        : '  github          - gh CLI not installed (PR workflows need it)',
+  )
+  ctx.out(
+    env.a0.version !== undefined || env.a0.host !== undefined
+      ? `  agent zero      ✓ ${env.a0.version !== undefined ? `a0 ${env.a0.version}` : 'CLI not on PATH'}` +
+          `${env.a0.host !== undefined ? ` → ${env.a0.host}` : ''} (delegation + heal: 'a0')`
+      : "  agent zero      - not found (optional — enables `delegate` and heal: 'a0')",
+  )
+
+  ctx.out('')
   ctx.out('Next steps:')
   ctx.out('  1. Edit target.url (or pass --url) to point at your app')
   ctx.out('  2. argus-reviewer run            # replay-or-ground the smoke test')
   ctx.out('  3. argus-reviewer record "..."   # record a real flow')
   ctx.out('  4. Add OPENROUTER_API_KEY to repo secrets to enable the PR workflow')
+  if (env.a0.version !== undefined || env.a0.host !== undefined) {
+    ctx.out('  5. argus-reviewer delegate "..." # hand a task to Agent Zero')
+  }
   return 0
 }
 

@@ -95,6 +95,24 @@ export interface Config {
      * --max-steps <n>` overrides.
      */
     recordStepCap: number | undefined;
+    /**
+     * Agent Zero instance for delegated tasks (`argus-reviewer delegate`,
+     * `heal: 'a0'`). `url` is the instance base URL — leave unset to let the
+     * `a0` CLI resolve it (saved host, AGENT_ZERO_HOST, Docker discovery).
+     * `scope` documents the least-privilege gateway scope delegated tasks
+     * assume: 'browser' (A0's own browser) or 'computer_use' (full desktop).
+     */
+    a0: {
+        url: string | undefined;
+        scope: 'browser' | 'computer_use' | undefined;
+    } | undefined;
+    /**
+     * Failure escalation for `run`. 'local' (default) heals via the vision
+     * model only. 'a0' additionally sends each failed test to Agent Zero for an
+     * autonomous second opinion — it clicks through the app and reports whether
+     * the app or the expectation is wrong.
+     */
+    heal: 'local' | 'a0' | undefined;
 }
 export type ConfigInput = Partial<Omit<Config, 'provider'>> & {
     provider?: Partial<ProviderRules>;

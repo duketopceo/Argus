@@ -20,6 +20,8 @@ export interface TestReport {
     /** Per-call cost rows for model-level attribution. */
     calls: CallCost[];
     videoPath: string | undefined;
+    /** Agent Zero's autonomous second opinion on a failure (heal: 'a0'). */
+    a0Diagnosis?: string;
 }
 export interface RunTotals {
     tests: number;

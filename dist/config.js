@@ -25,6 +25,8 @@ const defaults = {
     indexPath: undefined,
     diffBase: undefined,
     recordStepCap: DEFAULT_RECORD_STEP_CAP,
+    a0: undefined,
+    heal: 'local',
 };
 export function defineConfig(input) {
     return input;
@@ -37,6 +39,11 @@ export function resolveConfig(input = {}) {
         cap !== undefined && Number.isFinite(cap) && cap >= 1
             ? Math.floor(cap)
             : DEFAULT_RECORD_STEP_CAP;
+    if (resolved.heal !== 'a0')
+        resolved.heal = 'local';
+    if (resolved.a0 !== undefined && resolved.a0.scope !== 'computer_use') {
+        resolved.a0 = { ...resolved.a0, scope: 'browser' };
+    }
     return resolved;
 }
 export async function loadConfig(cwd) {
