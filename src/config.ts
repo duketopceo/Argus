@@ -96,6 +96,21 @@ export interface Config {
    * --max-steps <n>` overrides.
    */
   recordStepCap: number | undefined
+  /**
+   * Agent Zero instance for delegated tasks (`argus-reviewer delegate`,
+   * `heal: 'a0'`). `url` is the instance base URL — leave unset to let the
+   * `a0` CLI resolve it (saved host, AGENT_ZERO_HOST, Docker discovery).
+   * Least-privilege scoping (browser vs full desktop) is configured on the
+   * instance's gateway, not here.
+   */
+  a0: { url: string | undefined } | undefined
+  /**
+   * Failure escalation for `run`. 'local' (default) heals via the vision
+   * model only. 'a0' additionally sends each failed test to Agent Zero for an
+   * autonomous second opinion — it clicks through the app and reports whether
+   * the app or the expectation is wrong.
+   */
+  heal: 'local' | 'a0' | undefined
 }
 
 export type ConfigInput = Partial<Omit<Config, 'provider'>> & { provider?: Partial<ProviderRules> }
@@ -127,6 +142,8 @@ const defaults: Config = {
   indexPath: undefined,
   diffBase: undefined,
   recordStepCap: DEFAULT_RECORD_STEP_CAP,
+  a0: undefined,
+  heal: 'local',
 }
 
 export function defineConfig(input: ConfigInput): ConfigInput {
@@ -141,6 +158,7 @@ export function resolveConfig(input: ConfigInput = {}): Config {
     cap !== undefined && Number.isFinite(cap) && cap >= 1
       ? Math.floor(cap)
       : DEFAULT_RECORD_STEP_CAP
+  if (resolved.heal !== 'a0') resolved.heal = 'local'
   return resolved
 }
 

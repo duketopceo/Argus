@@ -235,6 +235,109 @@ describe('argus-reviewer CLI', () => {
     expect(out.lines.join('\n')).toContain('cache empty')
   })
 
+  it('delegate forwards the task to a0 headless with the resolved host', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-delegate-'))
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({ a0: { url: 'https://a0.example.com' } }),
+    )
+    const seen: { args?: string[] } = {}
+    const code = await main(['delegate', 'click through the signup flow', '--url', 'http://app.local'], {
+      cwd,
+      out: capture().fn,
+      err: capture().fn,
+      exec: async (_cmd, args) => {
+        seen.args = args
+        return { code: 0, stdout: 'signup flow works\n', stderr: '' }
+      },
+    })
+    expect(code).toBe(0)
+    expect(seen.args?.[0]).toBe('headless')
+    expect(seen.args).toContain('https://a0.example.com')
+    const prompt = seen.args?.at(-1) ?? ''
+    expect(prompt).toContain('click through the signup flow')
+    expect(prompt).toContain('http://app.local')
+  })
+
+  it('delegate exits 2 without a task and non-zero when a0 fails', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-delegate-'))
+    const exec = async () => ({ code: 1, stdout: '', stderr: 'connection refused' })
+    expect(await main(['delegate'], { cwd, out: capture().fn, err: capture().fn, exec })).toBe(2)
+    expect(await main(['delegate', 'task'], { cwd, out: capture().fn, err: capture().fn, exec })).toBe(1)
+  })
+
+  it('run with heal:a0 delegates each failed test to Agent Zero', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-heal-'))
+    const testsDir = join(cwd, 'tests')
+    await mkdir(testsDir, { recursive: true })
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({
+        testsDir,
+        reportDir: join(cwd, 'report'),
+        budgetUsd: 1,
+        heal: 'a0',
+        a0: { url: 'https://a0.example.com' },
+      }),
+    )
+    await writeFile(
+      join(testsDir, 'failing.test.mjs'),
+      `test('failing assert', async (td) => {
+  await td.assert('an element that does not exist is visible')
+})
+`,
+    )
+    const client = new StubClient([
+      { content: JSON.stringify({ verdict: 'fail', reasoning: 'no such element on screen' }) },
+    ])
+    const delegated: string[] = []
+    const out = capture()
+    const code = await main(['run', '--url', FIXTURE_URL], {
+      cwd,
+      out: out.fn,
+      err: capture().fn,
+      createClient: () => client,
+      exec: async (_cmd, args) => {
+        if (args[0] === 'headless') {
+          delegated.push(args.at(-1) ?? '')
+          return { code: 0, stdout: 'the app is broken: no marker rendered', stderr: '' }
+        }
+        return { code: 1, stdout: '', stderr: 'unauthenticated' } // gh auth status
+      },
+    })
+    expect(code).toBe(1)
+    expect(delegated.length).toBe(1)
+    expect(delegated[0]).toContain('failing assert')
+    expect(delegated[0]).toContain(FIXTURE_URL)
+    expect(out.lines.join('\n')).toContain('a0 diagnosis')
+    const report = JSON.parse(
+      await readFile(join(cwd, 'report', 'run.json'), 'utf8'),
+    ) as { tests: { a0Diagnosis?: string }[] }
+    expect(report.tests[0]!.a0Diagnosis).toBe('the app is broken: no marker rendered')
+  }, 60_000)
+
+  it('init reports the environment and enables heal:a0 when Agent Zero resolves', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-init-'))
+    const out = capture()
+    const code = await main(['init'], {
+      cwd,
+      out: out.fn,
+      err: capture().fn,
+      env: { ...process.env, AGENT_ZERO_HOST: 'https://a0.example.com' },
+      exec: async (cmd) =>
+        cmd === 'a0'
+          ? { code: 0, stdout: '2.12\n', stderr: '' }
+          : { code: 1, stdout: '', stderr: 'unauthenticated' },
+    })
+    expect(code).toBe(0)
+    const text = out.lines.join('\n')
+    expect(text).toContain('argus-reviewer environment')
+    expect(text).toContain('a0 2.12 → https://a0.example.com')
+    const config = await readFile(join(cwd, 'argus-reviewer.config.ts'), 'utf8')
+    expect(config).toContain("heal: 'a0'")
+    expect(config).toContain("https://a0.example.com")
+  })
+
   it('init scaffolds config, smoke test, and workflow; skips existing files', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'argus-init-'))
     const out = capture()
