@@ -118,6 +118,9 @@ Options:
 
 const TEST_FILE_RE = /\.test\.(ts|mts|mjs|js)$/
 
+/** Total wall-clock budget for all heal:'a0' delegations in one run. */
+const A0_HEAL_BUDGET_MS = 15 * 60_000
+
 export async function main(argv: string[], deps: CliDeps = {}): Promise<number> {
   const ctx: Ctx = {
     cwd: deps.cwd ?? process.cwd(),
@@ -675,48 +678,57 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
         bindSession(undefined)
       }
     }
+
+    // heal: 'a0' — each failed test gets an autonomous second opinion from
+    // the Agent Zero instance: it clicks through the app itself and reports
+    // whether the app or the expectation is wrong. Runs inside the try so an
+    // argus-booted target is still alive; bounded by a shared deadline so N
+    // failures cannot block the run for N × timeout.
+    const failedReports = reports.filter((r) => !r.ok)
+    if (config.heal === 'a0' && failedReports.length > 0) {
+      const env = await detectEnvironment(ctx.env, {
+        ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
+      })
+      const a0Host = config.a0?.url ?? env.a0.host
+      if (env.a0.version === undefined && a0Host === undefined) {
+        ctx.err('heal: a0 configured but no Agent Zero found — install the a0 CLI or set a0.url')
+      } else {
+        const deadline = Date.now() + A0_HEAL_BUDGET_MS
+        for (const r of failedReports) {
+          const remaining = deadline - Date.now()
+          if (remaining <= 0) {
+            ctx.err('heal: a0 budget exhausted — remaining failures get no diagnosis')
+            break
+          }
+          const res = await runA0Task(
+            a0TaskPrompt(
+              `A browser test named "${r.name}" just failed against this app ` +
+                `(reason: ${r.failureMessage ?? 'unknown'}). Click through the ` +
+                `intended flow yourself and report concisely whether the app is ` +
+                `broken or the test expectation is stale.`,
+              url,
+            ),
+            {
+              host: a0Host,
+              timeoutMs: Math.min(remaining, A0_DEFAULT_TIMEOUT_MS),
+              ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
+            },
+          )
+          if (res.ok) {
+            r.a0Diagnosis = res.output
+            ctx.out(`a0 diagnosis for "${r.name}": ${res.output}`)
+          } else {
+            ctx.err(`a0 delegation failed for "${r.name}": ${res.output}`)
+          }
+        }
+      }
+    }
   } catch (e) {
     ctx.err(`run failed: ${(e as Error).message}`)
     runFailed = true
   } finally {
     restoreGlobals(patches)
     await target?.stop()
-  }
-
-  // heal: 'a0' — each failed test gets an autonomous second opinion from the
-  // Agent Zero instance: it clicks through the app itself and reports whether
-  // the app or the expectation is wrong. Full-cost per failure, so opt-in.
-  const failedReports = reports.filter((r) => !r.ok)
-  if (config.heal === 'a0' && failedReports.length > 0) {
-    const env = await detectEnvironment(ctx.env, {
-      ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
-    })
-    const a0Host = config.a0?.url ?? env.a0.host
-    if (env.a0.version === undefined && a0Host === undefined) {
-      ctx.err('heal: a0 configured but no Agent Zero found — install the a0 CLI or set a0.url')
-    } else {
-      for (const r of failedReports) {
-        const res = await runA0Task(
-          a0TaskPrompt(
-            `A browser test named "${r.name}" just failed against this app ` +
-              `(reason: ${r.failureMessage ?? 'unknown'}). Click through the ` +
-              `intended flow yourself and report concisely whether the app is ` +
-              `broken or the test expectation is stale.`,
-            url,
-          ),
-          {
-            host: a0Host,
-            ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
-          },
-        )
-        if (res.ok) {
-          r.a0Diagnosis = res.output
-          ctx.out(`a0 diagnosis for "${r.name}": ${res.output}`)
-        } else {
-          ctx.err(`a0 delegation failed for "${r.name}": ${res.output}`)
-        }
-      }
-    }
   }
 
   for (const report of reports) {
@@ -1292,7 +1304,7 @@ function initConfig(a0Host: string | undefined): string {
       ? `
   // Agent Zero detected — delegated tasks (argus-reviewer delegate) and
   // failure escalation (heal) go to this instance.
-  a0: { url: '${a0Host}', scope: 'browser' },
+  a0: { url: ${JSON.stringify(a0Host)} },
   heal: 'a0',
 `
       : ''

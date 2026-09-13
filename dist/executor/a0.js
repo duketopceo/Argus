@@ -19,13 +19,20 @@ export function buildA0Args(prompt, host) {
 }
 export async function runA0Task(prompt, opts = {}) {
     const exec = opts.exec ?? defaultExec;
-    const res = await exec(opts.cli ?? 'a0', buildA0Args(prompt, opts.host), opts.timeoutMs ?? A0_DEFAULT_TIMEOUT_MS);
-    const output = (res.stdout.trim() || res.stderr.trim()).trim();
-    return { ok: res.code === 0, output };
+    let res;
+    try {
+        res = await exec(opts.cli ?? 'a0', buildA0Args(prompt, opts.host), opts.timeoutMs ?? A0_DEFAULT_TIMEOUT_MS);
+    }
+    catch (e) {
+        // Spawn rejection (ENOENT when a0 is absent, hard timeout) must degrade
+        // to a failed delegation, not abort the calling command.
+        return { ok: false, output: e.message };
+    }
+    return { ok: res.code === 0, output: res.stdout.trim() || res.stderr.trim() };
 }
 /** Prompt wrapper: bind the task to an app URL when one is known. */
 export function a0TaskPrompt(task, url) {
-    return url === undefined
+    return url === undefined || url === ''
         ? task
         : `Open ${url} in your browser, then do this task: ${task}`;
 }

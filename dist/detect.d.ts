@@ -11,7 +11,11 @@ export interface ExecResult {
 export type ExecFn = (cmd: string, args: string[], timeoutMs: number) => Promise<ExecResult>;
 export declare const defaultExec: ExecFn;
 export type ProbeFn = (url: string, timeoutMs: number) => Promise<boolean>;
-/** Any HTTP response — including a login redirect — means the instance is up. */
+/**
+ * Any HTTP response — including a login redirect — means *something* is up,
+ * but port 5080 could be an unrelated service. Require an Agent Zero marker
+ * in the served HTML before trusting the probe result.
+ */
 export declare const defaultProbe: ProbeFn;
 export interface A0Info {
     /** `a0` CLI version string when the binary is on PATH. */

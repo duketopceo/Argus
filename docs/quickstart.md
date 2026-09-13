@@ -121,7 +121,7 @@ your instance.
 ```ts
 // argus-reviewer.config.ts — or let `init` fill this in
 export default defineConfig({
-  a0: { url: 'https://your-a0.example.com', scope: 'browser' },
+  a0: { url: 'https://your-a0.example.com' },
   heal: 'a0',
 })
 ```
@@ -137,8 +137,10 @@ Two things this unlocks:
   lands in `run.json` as `a0Diagnosis`.
 
 Delegation is a full-cost, non-deterministic agent run — it complements the
-~$0 fingerprint replay, it does not replace it. Keep the `browser` scope
-unless a task genuinely needs full desktop control (`computer_use`).
+~$0 fingerprint replay, it does not replace it. Least-privilege scoping
+(browser-only vs full `computer_use`) is configured on the instance's gateway,
+not in this config. `heal: 'a0'` is capped at 15 minutes total per run so a
+failing suite cannot block CI indefinitely.
 
 ## 6. Register a self-hosted runner
 

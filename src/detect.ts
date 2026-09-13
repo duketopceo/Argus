@@ -21,7 +21,9 @@ export const defaultExec: ExecFn = (cmd, args, timeoutMs) =>
   new Promise((resolve) => {
     execFile(cmd, args, { timeout: timeoutMs }, (err, stdout, stderr) => {
       if (err) {
-        resolve({ code: 1, stdout: String(stdout), stderr: String(stderr ?? err.message) })
+        // stderr is '' (not undefined) on spawn ENOENT — fall back to the
+        // error message so callers can distinguish "missing" from "failed".
+        resolve({ code: 1, stdout: String(stdout), stderr: String(stderr) || err.message })
       } else {
         resolve({ code: 0, stdout: String(stdout), stderr: String(stderr) })
       }
@@ -30,14 +32,20 @@ export const defaultExec: ExecFn = (cmd, args, timeoutMs) =>
 
 export type ProbeFn = (url: string, timeoutMs: number) => Promise<boolean>
 
-/** Any HTTP response — including a login redirect — means the instance is up. */
+/**
+ * Any HTTP response — including a login redirect — means *something* is up,
+ * but port 5080 could be an unrelated service. Require an Agent Zero marker
+ * in the served HTML before trusting the probe result.
+ */
 export const defaultProbe: ProbeFn = async (url, timeoutMs) => {
   try {
     const res = await fetch(url, {
       signal: AbortSignal.timeout(timeoutMs),
       redirect: 'manual',
     })
-    return res.status < 500
+    if (res.status >= 500) return false
+    const body = (await res.text()).slice(0, 65_536)
+    return /agent.?zero/i.test(body)
   } catch {
     return false
   }
