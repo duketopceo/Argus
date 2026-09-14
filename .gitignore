@@ -9,4 +9,5 @@ test-results/
 argus-reviewer-report/
 vision-e2e-report/
 *.webm
+*.tgz
 evals/work/
