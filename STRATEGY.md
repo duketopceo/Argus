@@ -39,8 +39,10 @@ Post-launch roadmap (plan: `docs/plans/2026-09-14-006-feat-post-launch-roadmap-p
 1. **Proof & adoption**: demo assets on the README, OIDC trusted-publishing
    releases, clean-install consumer smoke CI. The product works; now it has
    to be seen working.
-2. **Execution-backed review**: run the PR's own tests in a sandbox and
-   link evidence to findings — the differentiation moat vs. review bots.
+2. **Execution-backed review**: staged moat — first link existing-CI
+   evidence to findings ("not exercised" stays full severity), then author
+   probes that execute suspected-defect paths in a sandbox. Reproduced
+   findings, not suspected ones, are the differentiation vs. review bots.
 3. **Agent Zero depth**: live-verify `delegate`/`heal:'a0'`, scope and
    budget controls; optional autonomous desktop/browser addon, never a
    prerequisite.

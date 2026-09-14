@@ -194,3 +194,9 @@ sent with a bounded `> context:` block — the file's purpose plus its top
 importers/imports — so the reviewer model can weigh caller blast radius, not
 just the patch. Index metadata is sanitized before reaching the prompt and
 framed as unverified; no extra config or model calls are needed.
+
+Findings are also **evidence-linked**: Argus reads the PR's check-runs and tags
+each finding with whether the repo's own CI exercised the implicated path —
+`exercised` (test-reachable + test checks passed), `corroborated` (test-reachable
++ a test check failed on this head), `not exercised` (no test file reaches the
+path — severity is never downgraded), or `inconclusive` (no CI/index data).

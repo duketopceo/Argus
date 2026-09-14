@@ -25,6 +25,8 @@ import { buildReviewContext, CONTEXT_PREFIX } from './index/context.js'
 import { diffChangedFiles } from './index/diff.js'
 import { invalidateForDiff } from './index/invalidate.js'
 import { readIndex, scanRepo, writeIndex } from './index/scan.js'
+import { fetchCheckRuns, fetchPrHeadSha } from './evidence/ci.js'
+import { linkFindings, type Evidence } from './evidence/link.js'
 import { A0_DEFAULT_TIMEOUT_MS, a0TaskPrompt, runA0Task } from './executor/a0.js'
 import { buildJournalEntry } from './journal/build.js'
 import { ErrorRecord } from './journal/schema.js'
@@ -799,7 +801,7 @@ interface CodeReviewReport {
   skipped: boolean
   summary: string
   verdict: 'pass' | 'needs_changes' | 'approve'
-  findings: { file: string; line?: number; severity: string; message: string }[]
+  findings: { file: string; line?: number; severity: string; message: string; evidence?: Evidence }[]
   calls: CallCost[]
   visionCostUsd: number
   tokens: number
@@ -1133,6 +1135,18 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       if (verdict !== 'needs_changes') verdict = 'needs_changes'
     }
 
+    // B.1 evidence linkage: tag each finding with whether the PR's own CI
+    // exercised the implicated path. Post-pass annotation only — evidence
+    // never downgrades a finding, and check-run names are sanitized before
+    // they reach the comment.
+    const headSha = await fetchPrHeadSha(repo, pr, token, ctx)
+    const checkRuns = headSha === undefined ? undefined : await fetchCheckRuns(repo, headSha, token, ctx)
+    const linkedFindings = linkFindings(finalFindings, index, checkRuns)
+    debug(
+      'code-review',
+      `evidence: ${linkedFindings.map((f) => f.evidence.status).join(',')}`,
+    )
+
     const blockSeverities = config.severity ?? ['bug']
     const hasBlocker = finalFindings.some((f) => blockSeverities.includes((f as { severity?: string }).severity ?? ''))
     const report: CodeReviewReport = {
@@ -1140,7 +1154,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       skipped: false,
       summary,
       verdict,
-      findings: finalFindings,
+      findings: linkedFindings,
       calls: allCalls,
       visionCostUsd: totalCost,
       tokens: totalTokens,

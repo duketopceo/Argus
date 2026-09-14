@@ -45,11 +45,12 @@ first two land.
 
 **Execution-backed review**
 
-- R4. On a PR, argus can execute the diff's own test suite in an isolated
-  environment and feed pass/fail evidence into the review verdict.
+- R4. On a PR, argus links findings to existing CI evidence (B.1) and can
+  execute authored probes in an isolated environment (B.2), feeding
+  pass/fail evidence into the review verdict.
 - R5. Review findings that claim a runtime defect carry execution evidence
-  when the execution lane ran, so findings are verifiable rather than
-  asserted.
+  when it exists — reproduced, exercised, or explicitly "not exercised" —
+  so findings are verifiable rather than asserted.
 
 **Agent Zero depth**
 
@@ -179,40 +180,68 @@ Phase D scales the operational layer around all of it.
 
 ### Phase B — Execution-backed review
 
-### U5. Sandbox test-execution lane
+**Decided (post-review):** staged moat. B.1 links existing-CI evidence to
+findings — cheap, and it produces the "not exercised" set that becomes the
+probe queue. B.2 adds Argus-authored probes for high-severity unexercised
+findings — the differentiating half of the thesis ("found a defect *and
+reproved it*"), gated on the sandbox security boundary. Evidence-linkage is
+table stakes; reproduced findings are the moat. The vision engine's
+record/replay machinery is the probe executor for browser-level paths.
 
-- **Goal:** Argus executes the PR's own test suite in an isolated
-  environment and captures results.
-- **Requirements:** R4
-- **Dependencies:** Phase A shipped (or parallel); phase-level plan required
-  first — substrate choice, security boundary, and runner image design are
-  non-trivial
-- **Files:** new `src/executor/` sibling (e.g. `src/executor/sandbox.ts`);
-  `action/action.yml` inputs; `src/config.ts` for enablement flags
-- **Approach:** Checkout → detect project test command → run in Docker on
-  the self-hosted runner with resource limits and no network except
-  declared needs → parse results into the run report. Opt-in per repo.
-- **Test scenarios:** passing suite yields positive evidence; failing suite
-  yields negative evidence; timeout/kill-switch honored; sandbox cannot
-  reach undeclared network endpoints.
-- **Verification:** a dogfood PR shows execution evidence in the sticky
-  comment.
+**Evidence semantics (invariant):**
+- A *passing* suite downgrades a finding only when the implicated path was
+  demonstrably exercised — otherwise the finding is marked "not exercised"
+  and keeps its severity.
+- Infrastructure failure ("suite couldn't run") is never negative evidence.
+- Untrusted CI/sandbox output is attacker-controlled: it enters the review
+  prompt delimited and capped, and is never rendered verbatim in PR comments.
 
-### U6. Evidence-linked review findings
+### U5. Evidence linkage over existing CI results
 
-- **Goal:** Review verdict incorporates execution evidence; findings that
-  predicted runtime breakage are cross-checked.
-- **Requirements:** R5
-- **Dependencies:** U5
-- **Files:** `src/report/comment.ts`, `src/report/run.ts`, review prompt
-  assembly in `src/engine/prompts.ts`
-- **Approach:** Feed sandbox results into the review stage so the model can
-  corroborate or withdraw findings; render an "evidence" line on verified
-  findings.
-- **Test scenarios:** finding corroborated by failing test renders with
-  evidence; finding contradicted by passing suite is withdrawn or
-  downgraded.
-- **Verification:** dogfooded PR shows at least one evidence-linked finding.
+- **Goal:** Review findings carry a verdict about whether the PR's own
+  check-runs exercised the implicated path — without Argus executing
+  anything.
+- **Requirements:** R4, R5
+- **Dependencies:** none (no sandbox needed); phase-level plan required
+- **Files:** new `src/evidence/` (check-run fetch + path-coverage mapping);
+  `src/report/comment.ts`; review prompt assembly in `src/engine/prompts.ts`
+- **Approach:** Read the PR's check-runs / job logs via the GitHub API → map
+  findings to exercised paths (coverage artifacts when present, else
+  import-cone heuristics against the diff) → tag each finding `exercised` /
+  `not exercised` / `inconclusive`. Conservative: ambiguous linkage means
+  "not exercised", never a downgrade.
+- **Test scenarios:** covered finding renders with linked evidence;
+  uncovered finding stays "not exercised" at full severity; missing/failed
+  CI renders as "no evidence", not as a pass.
+- **Verification:** dogfooded PR shows an evidence line on at least one
+  finding and the "not exercised" set in the report.
+
+### U6. Sandbox lane + Argus-authored probes
+
+- **Goal:** For high-severity findings tagged "not exercised", Argus authors
+  and executes a probe targeting the suspected defect path — and a
+  reproduction upgrades the finding to a proven defect.
+- **Requirements:** R4, R5
+- **Dependencies:** U5 (the "not exercised" set is the probe queue);
+  phase-level plan required first — substrate choice, security boundary,
+  and runner image design are non-trivial
+- **Files:** new `src/executor/sandbox.ts`; `action/action.yml` inputs;
+  `src/config.ts` enablement flags; probe-authoring prompts in
+  `src/engine/prompts.ts`
+- **Approach:** Sandbox invariants (pinned here): scrubbed environment —
+  no `GITHUB_TOKEN`, no `OPENROUTER_API_KEY`, no repo secrets; resource
+  limits and no network except declared needs; fork/external-contributor PR
+  execution requires explicit maintainer approval. Probe authoring reuses
+  the vision engine's record/replay loop for browser-level paths; unit-level
+  probes run the project's test harness with an Argus-generated test.
+  Reproduced → finding upgraded with evidence; clean probe or
+  author-failure → finding stays "not exercised", severity unchanged.
+- **Test scenarios:** probe reproduces a seeded defect → finding shows
+  reproduction evidence; clean probe → severity preserved; fork PR waits on
+  maintainer gate; sandbox cannot reach undeclared network endpoints;
+  timeout/kill-switch honored.
+- **Verification:** a dogfood PR with a deliberately seeded defect shows a
+  "reproduced" finding in the sticky comment.
 
 ### Phase C — Agent Zero depth
 
