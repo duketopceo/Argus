@@ -367,6 +367,19 @@ describe('loadConfig', () => {
     expect(config.budgetUsd).toBe(0.5)
   })
 
+  it('loads a TypeScript config inside a CommonJS consumer package', async () => {
+    const { loadConfig } = await import('../../src/config.js')
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-cfg-'))
+    // `npm init -y` default — no type field means CommonJS, which makes Node's
+    // native .ts import treat the config as CJS and reject `export default`.
+    await writeFile(join(cwd, 'package.json'), JSON.stringify({ name: 'consumer' }))
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.ts'),
+      `export default { model: 'cjs/model' }\n`,
+    )
+    expect((await loadConfig(cwd)).model).toBe('cjs/model')
+  })
+
   it('still loads a legacy vision-e2e.config.json', async () => {
     const { loadConfig } = await import('../../src/config.js')
     const cwd = await mkdtemp(join(tmpdir(), 'argus-cfg-'))
