@@ -58,28 +58,33 @@ export async function loadConfig(cwd) {
                     const raw = await fs.readFile(file, 'utf8');
                     return resolveConfig(JSON.parse(raw));
                 }
+                // Always transpile .ts to a temp .mjs rather than importing natively:
+                // Node's built-in type stripping resolves the module type from the
+                // *consumer's* package.json, so a CommonJS consumer makes ESM config
+                // fail with 'Cannot use import statement'. The transpiled file is
+                // written next to the config (removed after import) so relative
+                // imports and node_modules resolution behave like the original file;
+                // the package self-import is rewritten to this module's own index so
+                // global/npx installs resolve it too.
+                const ts = await import('typescript');
+                const { readFile, writeFile, rm } = await import('node:fs/promises');
+                const { join, dirname } = await import('node:path');
+                const source = await readFile(file, 'utf8');
+                const js = ts
+                    .transpileModule(source, {
+                    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+                })
+                    .outputText.replace(/(['"])argus-reviewer-e2e\1/g, 
+                // package.json exports '.' → dist/api.js (sibling of this file)
+                JSON.stringify(new URL('./api.js', import.meta.url).href));
+                const out = join(dirname(file), `.argus-config-${process.pid}-${Date.now()}.mjs`);
                 let mod;
                 try {
-                    mod = (await import(pathToFileURL(file).href));
-                }
-                catch (e) {
-                    // Node cannot import .ts directly — transpile to a temp .mjs, matching
-                    // how the CLI loads TypeScript test files.
-                    const code = e.code;
-                    if (code !== 'ERR_UNKNOWN_FILE_EXTENSION')
-                        throw e;
-                    const ts = await import('typescript');
-                    const { readFile, mkdtemp, writeFile } = await import('node:fs/promises');
-                    const { tmpdir } = await import('node:os');
-                    const { join } = await import('node:path');
-                    const source = await readFile(file, 'utf8');
-                    const js = ts.transpileModule(source, {
-                        compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-                    }).outputText;
-                    const dir = await mkdtemp(join(tmpdir(), 'argus-config-'));
-                    const out = join(dir, 'config.mjs');
                     await writeFile(out, js, 'utf8');
                     mod = (await import(pathToFileURL(out).href));
+                }
+                finally {
+                    await rm(out, { force: true }).catch(() => undefined);
                 }
                 const exported = mod.default ?? mod;
                 return resolveConfig(exported);
