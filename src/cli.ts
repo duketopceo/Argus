@@ -1066,6 +1066,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
         messages: buildCodeReviewMessages(repo, pr, chunk, i, chunks.length),
         schema: CODE_REVIEW_SCHEMA,
         kind: 'code',
+        provider: config.provider,
       })
       ledger.recordCall(response.cost)
       allCalls.push(response.cost)
@@ -1093,6 +1094,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
           messages: buildSynthesisMessages(repo, pr, files.map((f) => f.filename), allFindings),
           schema: CODE_REVIEW_SCHEMA,
           kind: 'code',
+          provider: config.provider,
         })
         ledger.recordCall(synthResponse.cost)
         allCalls.push(synthResponse.cost)

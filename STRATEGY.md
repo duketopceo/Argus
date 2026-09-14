@@ -34,15 +34,18 @@ Two lanes, one PR surface:
 
 ## Tracks of work
 
-1. **M0 — Release hygiene** (in progress): finish the rebrand, CHANGELOG,
-   tarball audit, stale-branch cleanup → publish `argus-reviewer-e2e@0.1.0`.
-2. **Vision hardening**: record-prompt termination (#13), multi-browser (#16).
-3. **Review quality**: get argus's own inline findings posting reliably —
-   it has historically dropped `nit`/`q` findings due to severity-schema
-   drift — then close the gap vs. execution-backed reviewers (sandboxed
-   probes, running the diff's own tests).
-4. **Scale**: runner fleet dashboard (#21), org spend caps (#22), GHE/GitLab
-   (#23).
+Post-launch roadmap (plan: `docs/plans/2026-09-14-006-feat-post-launch-roadmap-plan.md`):
+
+1. **Proof & adoption**: demo assets on the README, OIDC trusted-publishing
+   releases, clean-install consumer smoke CI. The product works; now it has
+   to be seen working.
+2. **Execution-backed review**: run the PR's own tests in a sandbox and
+   link evidence to findings — the differentiation moat vs. review bots.
+3. **Agent Zero depth**: live-verify `delegate`/`heal:'a0'`, scope and
+   budget controls; optional autonomous desktop/browser addon, never a
+   prerequisite.
+4. **Scale & ops** (gated on observed external adoption): runner health
+   dashboard (#21), org spend caps (#22), GHE/GitLab (#23).
 
 ## Explicitly out of scope
 

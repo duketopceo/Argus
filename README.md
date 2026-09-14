@@ -17,6 +17,12 @@ npx argus-reviewer record "log in and open settings" --url https://localhost:300
 npx argus-reviewer run             # replays + asserts, zero-cost on cache hit
 ```
 
+<p align="center">
+  <img src="docs/assets/demo.gif" alt="argus-reviewer run — live vision call, PASS, $0.0005 spend" width="900" />
+</p>
+
+*Real `run` output: one vision assert, `PASS`, and the exact dollar figure on the run report.*
+
 Configuration lives in `argus-reviewer.config.ts` (a legacy `vision-e2e.config.*` is still accepted) — see `src/config.ts` for the full shape: `model`, `grounding_model`, `escalation_model`, `provider` routing rules, `budgetUsd`, `target`, `pageSetup`, `secrets`.
 
 ### OpenRouter cost attribution

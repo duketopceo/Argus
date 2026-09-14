@@ -109,6 +109,31 @@ When using the GitHub Action, pass the `browser` input (it installs the named
 browser) and set the same value in your config. The coordinate grid and video
 recording are browser-agnostic.
 
+### Model speed tiers
+
+Because Argus is BYOK, "review speed" is a model + routing choice, not a
+pricing tier. OpenRouter routes each model slug to inference providers —
+including **Cerebras** and **Groq**, which serve supported models in seconds
+instead of tens of seconds. Two knobs:
+
+```ts
+export default defineConfig({
+  // Fast — a high-throughput model routed to fast providers. Provider
+  // preference is applied to every OpenRouter request Argus makes:
+  code_model: 'meta-llama/llama-3.3-70b-instruct',
+  provider: { order: ['cerebras', 'groq'], allow_fallbacks: true },
+  // Deep — for risky changes, a stronger reasoner (and raise
+  // codeReviewBudgetUsd to match):
+  //   code_model: 'anthropic/claude-sonnet-4'
+})
+```
+
+`provider.order` prefers Cerebras/Groq first but still falls back if neither
+serves the model; `provider.only` would hard-restrict instead. Provider slugs
+are validated against a known list and warn on typos. Spend is still yours:
+the `run.json` ledger records the per-run dollar figure regardless of which
+provider served the call.
+
 ### Agent Zero delegation (optional)
 
 If you run an [Agent Zero](https://agent-zero.ai) instance — the launcher, a
