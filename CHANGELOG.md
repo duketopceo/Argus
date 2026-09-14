@@ -3,6 +3,14 @@
 All notable changes to argus-reviewer are documented here. The project is
 pre-1.0; breaking changes may ship without a major bump until `1.0.0`.
 
+## [0.1.1] — 2026-09-12
+
+### Fixed
+- `.ts` config loading in CommonJS consumer projects: configs are always
+  transpiled to ESM (written beside the config so relative imports and
+  `node_modules` resolve normally) and `argus-reviewer-e2e` self-imports are
+  rewritten to the installed package's real API module (#44)
+
 ## [0.1.0] — 2026-09-12
 
 ### Added
