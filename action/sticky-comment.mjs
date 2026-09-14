@@ -197,10 +197,14 @@ function renderBody(report, codeReview, runUrl, ok) {
     lines.push(codeReview.summary)
     lines.push('')
     if (codeReview.findings.length > 0) {
-      lines.push('| File | Severity | Finding |')
-      lines.push('| --- | --- | --- |')
+      const evidenceIcon = { exercised: '✅', corroborated: '🔴', not_exercised: '⚪', inconclusive: '❔' }
+      lines.push('| File | Severity | Evidence | Finding |')
+      lines.push('| --- | --- | --- | --- |')
       for (const f of codeReview.findings) {
-        lines.push(`| \`${f.file}\` | ${f.severity} | ${f.message} |`)
+        const ev = f.evidence
+          ? `${evidenceIcon[f.evidence.status] ?? '❔'} ${f.evidence.detail}`
+          : '—'
+        lines.push(`| \`${f.file}\` | ${f.severity} | ${ev} | ${f.message} |`)
       }
       lines.push('')
     }
@@ -277,7 +281,7 @@ async function postInlineComments(pr, codeReview) {
       path: f.file,
       line: f.line,
       side: 'RIGHT',
-      body: `**argus-reviewer ${f.severity}:** ${f.message}`,
+      body: `**argus-reviewer ${f.severity}:** ${f.message}${f.evidence && f.evidence.status !== 'exercised' ? `\n\n*CI evidence: ${f.evidence.detail}*` : ''}`,
     }))
   if (comments.length === 0) return
 
