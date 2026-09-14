@@ -19,10 +19,12 @@ pauses for maintainer approval after the tag push.
 ## Cut a release
 
 ```bash
-# 1. bump version + changelog entry, merge to main
-npm version patch   # or minor/major — do it in a release PR
+# 1. bump version + changelog entry in a release PR (no commit/tag —
+#    the PR merge carries it to main)
+npm version patch --no-git-tag-version   # or minor/major
 
-# 2. tag and push
+# 2. after the PR merges, tag main and push
+git checkout main && git pull
 git tag v$(node -p 'require("./package.json").version')
 git push origin v$(node -p 'require("./package.json").version')
 ```

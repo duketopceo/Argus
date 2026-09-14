@@ -28,4 +28,4 @@ jobs:
         run: npm pack --pack-destination /tmp
 
       - name: Clean-install consumer smoke
-        run: node scripts/consumer-smoke.mjs /tmp/argus-reviewer-e2e-*.tgz
+        run: node scripts/consumer-smoke.mjs "$(ls -1 /tmp/argus-reviewer-e2e-*.tgz | head -1)"

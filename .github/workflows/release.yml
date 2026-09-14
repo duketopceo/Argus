@@ -43,5 +43,6 @@ jobs:
           npm pack --pack-destination /tmp
           node scripts/consumer-smoke.mjs /tmp/argus-reviewer-e2e-*.tgz
 
+      # Publish the exact tarball the smoke step verified — not a repack.
       - name: Publish with provenance
-        run: npm publish --provenance --access public
+        run: npm publish /tmp/argus-reviewer-e2e-*.tgz --provenance --access public
