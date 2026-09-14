@@ -1,0 +1,47 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Trusted publishing (OIDC) — no long-lived npm token. Configure on npmjs.com:
+# package → Settings → Trusted Publishing → GitHub Actions, repo + this file.
+# The `npm` environment should have a required-reviewer rule so every publish
+# is a deliberate approval, not just a tag push.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 24 ships npm >=11.5.1, required for trusted publishing.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+
+      - name: Tag matches package.json version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p 'require("./package.json").version')"
+          [ "$TAG" = "$PKG" ] || { echo "tag v$TAG != package.json $PKG"; exit 1; }
+
+      - name: Clean-install consumer smoke
+        run: |
+          npm pack --pack-destination /tmp
+          node scripts/consumer-smoke.mjs /tmp/argus-reviewer-e2e-*.tgz
+
+      - name: Publish with provenance
+        run: npm publish --provenance --access public
