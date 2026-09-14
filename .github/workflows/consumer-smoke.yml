@@ -1,0 +1,31 @@
+name: consumer-smoke
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'action/**'
+      - 'scripts/consumer-smoke.mjs'
+      - '.github/workflows/consumer-smoke.yml'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Build
+        run: npm ci && npm run build
+
+      - name: Pack
+        run: npm pack --pack-destination /tmp
+
+      - name: Clean-install consumer smoke
+        run: node scripts/consumer-smoke.mjs /tmp/argus-reviewer-e2e-*.tgz
