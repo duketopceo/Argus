@@ -1,5 +1,9 @@
 # argus-reviewer
 
+<p align="center">
+  <img src="docs/assets/social.png" alt="Argus — vision-model E2E testing" width="640" />
+</p>
+
 Open-source, self-hosted vision-model E2E testing — the hundred-eyed watcher for your UI. Bring your own `OPENROUTER_API_KEY`: record a flow once, fingerprint-cache every step, replay near-free, heal on UI drift, and get results as a check + comment on the GitHub PR.
 
 - **Vision-first**: a model looks at a screenshot and decides where to click — no selectors to write or maintain.
