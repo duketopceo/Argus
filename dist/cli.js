@@ -1205,6 +1205,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      issues: write
       pull-requests: write
       checks: write
       statuses: write
