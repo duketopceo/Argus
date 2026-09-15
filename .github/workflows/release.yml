@@ -5,8 +5,9 @@ on:
     tags:
       - 'v*'
 
-# Trusted publishing (OIDC) — no long-lived npm token. Configure on npmjs.com:
-# package → Settings → Trusted Publishing → GitHub Actions, repo + this file.
+# Publish auth: NPM_PUBLISH_KEY secret (granular token) when set, else OIDC
+# trusted publishing — configure on npmjs.com: package → Settings → Trusted
+# Publishing → GitHub Actions, repo + this file.
 # The `npm` environment should have a required-reviewer rule so every publish
 # is a deliberate approval, not just a tag push.
 permissions:
@@ -17,6 +18,9 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     environment: npm
+    env:
+      # Token path when set; falls back to OIDC trusted publishing when absent.
+      NPM_PUBLISH_KEY: ${{ secrets.NPM_PUBLISH_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -44,12 +48,24 @@ jobs:
           node scripts/consumer-smoke.mjs /tmp/argus-reviewer-e2e-*.tgz
 
       # Publish the exact tarball the smoke step verified — not a repack.
-      - name: Publish with provenance
+      - name: Check whether version is already live
+        id: live
         run: |
           PKG="$(node -p 'require("./package.json").name')"
           VER="$(node -p 'require("./package.json").version')"
           if npm view "${PKG}@${VER}" version >/dev/null 2>&1; then
             echo "${PKG}@${VER} already published — skipping"
-            exit 0
+            echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
-          npm publish /tmp/argus-reviewer-e2e-*.tgz --provenance --access public
+
+      # Token auth cannot produce provenance attestations — plain publish.
+      - name: Publish via token
+        if: env.NPM_PUBLISH_KEY != '' && steps.live.outputs.skip != 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_KEY }}
+        run: npm publish /tmp/argus-reviewer-e2e-*.tgz --access public
+
+      # OIDC trusted publishing — configured on npmjs.com per package.
+      - name: Publish with provenance (OIDC)
+        if: env.NPM_PUBLISH_KEY == '' && steps.live.outputs.skip != 'true'
+        run: npm publish /tmp/argus-reviewer-e2e-*.tgz --provenance --access public
