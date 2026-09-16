@@ -11,4 +11,7 @@ export default {
   testsDir: 'e2e',
   cacheDir: '.argus-reviewer-cache',
   reportDir: 'argus-reviewer-report',
+  // Dogfood the B.2 probe lane: authored probes run in the Docker sandbox on
+  // the self-hosted runner for not_exercised bug/risk findings.
+  sandbox: { enabled: true },
 }

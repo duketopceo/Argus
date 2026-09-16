@@ -10,6 +10,7 @@ Open-source, self-hosted vision-model E2E testing — the hundred-eyed watcher f
 - **Cache-first**: replay costs zero vision calls on an unchanged UI; heals re-spend only on drift and show up as reviewable cache diffs.
 - **Cost-explicit**: every call is metered from OpenRouter's per-call cost and rolled into a per-run dollar figure on the PR.
 - **Grounding specialist**: a `grounding_model` (e.g. a ui-tars-class model) can drive element location with its native coordinate output, verified against the DOM before any click executes.
+- **Execution-backed review**: `code-review` findings carry CI evidence, and with the opt-in sandbox lane (`sandbox: { enabled: true }`) Argus authors a test probe for unexercised findings and runs it in a hardened, network-less Docker container — a finding that fails on head and passes on base is stamped **reproduced**, not just suspected.
 
 ```bash
 npm i -D argus-reviewer-e2e        # or github:duketopceo/argus-reviewer

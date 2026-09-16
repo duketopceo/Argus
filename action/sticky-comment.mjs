@@ -9,6 +9,11 @@ function formatUsd(n) {
   return `$${(n || 0).toFixed(6)}`
 }
 
+/** Escape a report string for one markdown table cell. */
+function cell(s) {
+  return String(s ?? '').replace(/\|/g, '\\|').replace(/[\r\n]+/g, ' ').slice(0, 200)
+}
+
 function renderMissingKeyBody() {
   const lines = []
   lines.push(SENTINEL)
@@ -193,18 +198,32 @@ function renderBody(report, codeReview, runUrl, ok) {
     lines.push('<summary>🧠 Code review</summary>')
     lines.push('')
     lines.push(`**Verdict:** ${codeReview.verdict} · ${codeReview.model} · ${codeReview.tokens}tok ${formatUsd(codeReview.visionCostUsd)}`)
+    if (Array.isArray(codeReview.probes) && codeReview.probes.length > 0) {
+      const reproduced = codeReview.probes.filter((p) => p.outcome === 'reproduced').length
+      lines.push(` · 🧪 ${codeReview.probes.length} probe${codeReview.probes.length === 1 ? '' : 's'} run, ${reproduced} reproduced`)
+    }
+    if (typeof codeReview.probeLaneSkipped === 'string') {
+      lines.push(` · 🧪 probe lane skipped — ${cell(codeReview.probeLaneSkipped)}`)
+    }
     lines.push('')
     lines.push(codeReview.summary)
     lines.push('')
     if (codeReview.findings.length > 0) {
-      const evidenceIcon = { exercised: '✅', corroborated: '🔴', not_exercised: '⚪', inconclusive: '❔' }
+      const evidenceIcon = { exercised: '✅', corroborated: '🔴', not_exercised: '⚪', inconclusive: '❔', reproduced: '🧪' }
       lines.push('| File | Severity | Evidence | Finding |')
       lines.push('| --- | --- | --- | --- |')
-      for (const f of codeReview.findings) {
+      // Findings/evidence strings are model- and probe-emitted — sanitize
+      // for the markdown table and bound the section so an oversized report
+      // can't push the body past GitHub's 65536-char comment limit.
+      const MAX_FINDING_ROWS = 25
+      for (const f of codeReview.findings.slice(0, MAX_FINDING_ROWS)) {
         const ev = f.evidence
-          ? `${evidenceIcon[f.evidence.status] ?? '❔'} ${f.evidence.detail}`
+          ? `${evidenceIcon[f.evidence.status] ?? '❔'} ${cell(f.evidence.detail)}`
           : '—'
-        lines.push(`| \`${f.file}\` | ${f.severity} | ${ev} | ${f.message} |`)
+        lines.push(`| \`${cell(f.file)}\` | ${cell(f.severity)} | ${ev} | ${cell(f.message)} |`)
+      }
+      if (codeReview.findings.length > MAX_FINDING_ROWS) {
+        lines.push(`| … | — | — | ${codeReview.findings.length - MAX_FINDING_ROWS} more findings in \`code-review.json\` |`)
       }
       lines.push('')
     }
@@ -281,14 +300,23 @@ async function postInlineComments(pr, codeReview) {
       path: f.file,
       line: f.line,
       side: 'RIGHT',
-      body: `**argus-reviewer ${f.severity}:** ${f.message}${f.evidence && f.evidence.status !== 'exercised' ? `\n\n*CI evidence: ${f.evidence.detail}*` : ''}`,
+      body: `**argus-reviewer ${f.severity}:** ${f.message}${
+        f.evidence && f.evidence.status === 'reproduced'
+          ? '\n\n*🧪 Reproduced by an Argus probe — fails on this PR head, clean on base. See workflow artifacts.*'
+          : f.evidence && f.evidence.status !== 'exercised'
+            ? `\n\n*CI evidence: ${f.evidence.detail}*`
+            : ''
+      }`,
     }))
   if (comments.length === 0) return
 
   // Re-runs on the same SHA must not duplicate inline comments — the sticky
   // body is upserted but review comments are not. Paginate fully (100/page)
   // and scope dedup to the current head: comments on older commits must not
-  // suppress findings that still apply to this head.
+  // suppress findings that still apply to this head. The key is the body's
+  // first line (the finding itself) — trailing evidence notes like the
+  // `reproduced` upgrade change the body but must not re-post a duplicate.
+  const dedupKey = (path, line, body) => `${path}:${line}:${body.split('\n')[0]}`
   const posted = new Set()
   let page = 1
   for (;;) {
@@ -301,13 +329,13 @@ async function postInlineComments(pr, codeReview) {
     })
     for (const c of existing) {
       if (c.body && c.body.startsWith('**argus-reviewer') && c.commit_id === pr.head.sha) {
-        posted.add(`${c.path}:${c.line}:${c.body}`)
+        posted.add(dedupKey(c.path, c.line, c.body))
       }
     }
     if (existing.length < 100) break
     page += 1
   }
-  const fresh = comments.filter((c) => !posted.has(`${c.path}:${c.line}:${c.body}`))
+  const fresh = comments.filter((c) => !posted.has(dedupKey(c.path, c.line, c.body)))
   if (fresh.length === 0) return
 
   // One batched review instead of N createReviewComment calls — avoids

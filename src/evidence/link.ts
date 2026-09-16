@@ -1,7 +1,17 @@
 import type { RepoIndex } from '../index/scan.js'
 import type { CheckRun } from './ci.js'
 
-export type EvidenceStatus = 'exercised' | 'corroborated' | 'not_exercised' | 'inconclusive'
+/**
+ * `reproduced` is emitted only by the B.2 probe stage — a sandboxed test probe
+ * demonstrated the defect (KTD4). `linkFindings` never produces it; the probe
+ * stage is the only writer and can only move `not_exercised` → `reproduced`.
+ */
+export type EvidenceStatus =
+  | 'exercised'
+  | 'corroborated'
+  | 'not_exercised'
+  | 'inconclusive'
+  | 'reproduced'
 
 export interface Evidence {
   status: EvidenceStatus
@@ -39,8 +49,8 @@ export function testReachableFiles(index: RepoIndex): Set<string> {
   const roots = index.entries.filter((e) => isTestFile(e.path)).map((e) => e.path)
   const seen = new Set<string>(roots)
   const queue = [...roots]
-  while (queue.length > 0) {
-    const cur = queue.shift() as string
+  for (let i = 0; i < queue.length; i++) {
+    const cur = queue[i] as string
     for (const dep of byPath.get(cur)?.imports ?? []) {
       if (!seen.has(dep)) {
         seen.add(dep)

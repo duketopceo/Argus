@@ -17,8 +17,9 @@ import { buildReviewContext, CONTEXT_PREFIX } from './index/context.js';
 import { diffChangedFiles } from './index/diff.js';
 import { invalidateForDiff } from './index/invalidate.js';
 import { readIndex, scanRepo, writeIndex } from './index/scan.js';
-import { fetchCheckRuns, fetchPrHeadSha } from './evidence/ci.js';
+import { fetchCheckRuns, fetchPrMeta, ghGet } from './evidence/ci.js';
 import { linkFindings } from './evidence/link.js';
+import { runProbeLane } from './probe/queue.js';
 import { A0_DEFAULT_TIMEOUT_MS, a0TaskPrompt, runA0Task } from './executor/a0.js';
 import { buildJournalEntry } from './journal/build.js';
 import { newRunId, writeJournal } from './journal/store.js';
@@ -27,6 +28,7 @@ import { liveLog } from './live.js';
 import { writeJunitXml } from './report/junit.js';
 import { buildRunReport, writeRunReport } from './report/run.js';
 import { flowPath, loadFlow } from './cache/store.js';
+import { writeAtomicJson } from './fsutil.js';
 import { OpenRouterClient } from './vision/openrouter.js';
 import { Ledger } from './vision/ledger.js';
 const USAGE = `argus-reviewer — vision-model E2E testing harness (BYOK via OPENROUTER_API_KEY)
@@ -705,41 +707,13 @@ const CHUNK_FILE_OVERHEAD = 100;
 const MAX_PR_FILE_PAGES = 10;
 async function fetchPrFiles(repo, pr, token, ctx) {
     const files = [];
-    let page = 1;
-    while (page <= MAX_PR_FILE_PAGES) {
-        const url = `https://api.github.com/repos/${repo}/pulls/${pr}/files?per_page=100&page=${page}`;
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30_000);
-        try {
-            const res = await fetch(url, {
-                signal: controller.signal,
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    Accept: 'application/vnd.github+json',
-                    'X-GitHub-Api-Version': '2022-11-28',
-                },
-            });
-            if (!res.ok) {
-                ctx.err(`failed to fetch PR files: ${res.status} ${res.statusText}`);
-                return undefined;
-            }
-            const batch = (await res.json());
-            const withPatches = batch.filter((f) => typeof f.patch === 'string' && f.patch.length > 0);
-            files.push(...withPatches);
-            if (batch.length < 100)
-                break;
-            page++;
-        }
-        catch (e) {
-            if (e instanceof Error && e.name === 'AbortError') {
-                ctx.err(`failed to fetch PR files: request timed out after 30s (page ${page})`);
-                return undefined;
-            }
-            throw e;
-        }
-        finally {
-            clearTimeout(timeout);
-        }
+    for (let page = 1; page <= MAX_PR_FILE_PAGES; page++) {
+        const batch = (await ghGet(`https://api.github.com/repos/${repo}/pulls/${pr}/files?per_page=100&page=${page}`, token, ctx));
+        if (batch === undefined)
+            return undefined;
+        files.push(...batch.filter((f) => typeof f.patch === 'string' && f.patch.length > 0));
+        if (batch.length < 100)
+            break;
     }
     return files;
 }
@@ -892,7 +866,7 @@ async function cmdCodeReview(args, ctx, deps) {
             model,
             budgetExceeded: false,
         };
-        await writeFile(codeReviewPath, `${JSON.stringify(skipped, null, 2)}\n`, 'utf8');
+        await writeAtomicJson(codeReviewPath, skipped);
         return 0;
     };
     if (!repo || !pr)
@@ -916,6 +890,9 @@ async function cmdCodeReview(args, ctx, deps) {
     try {
         const client = createClient(deps, config, ctx);
         const ledger = new Ledger(budget);
+        // Kick off PR metadata now — it only needs repo/pr/token and its
+        // round-trip hides behind the model calls. Degrades to undefined.
+        const prMetaPromise = fetchPrMeta(repo, pr, token, ctx).catch(() => undefined);
         const allFindings = [];
         const allCalls = [];
         let totalTokens = 0;
@@ -1003,25 +980,81 @@ async function cmdCodeReview(args, ctx, deps) {
         // exercised the implicated path. Post-pass annotation only — evidence
         // never downgrades a finding, and check-run names are sanitized before
         // they reach the comment.
-        const headSha = await fetchPrHeadSha(repo, pr, token, ctx);
+        // prMeta also carries isFork/authorAssociation/labels — the B.2 probe
+        // lane's fork gate (evidence/gate.ts) consumes them; only headSha feeds
+        // evidence linkage here.
+        const prMeta = await prMetaPromise;
+        const headSha = prMeta?.headSha;
         const checkRuns = headSha === undefined ? undefined : await fetchCheckRuns(repo, headSha, token, ctx);
         const linkedFindings = linkFindings(finalFindings, index, checkRuns);
         debug('code-review', `evidence: ${linkedFindings.map((f) => f.evidence.status).join(',')}`);
         const blockSeverities = config.severity ?? ['bug'];
-        const hasBlocker = finalFindings.some((f) => blockSeverities.includes(f.severity ?? ''));
+        // B.2 probe lane: authored tests executed in the Docker sandbox can
+        // upgrade a not_exercised finding to `reproduced`. Strictly additive —
+        // failures degrade to a detail note and the lane never changes verdict,
+        // ok, or the exit code (KTD8). Opt-in via config.sandbox.enabled or the
+        // ARGUS_SANDBOX=1 env flag (enable-only; other values leave config
+        // authoritative).
+        let probes;
+        let probeLaneSkipped;
+        const sandbox = { ...config.sandbox, enabled: config.sandbox.enabled || ctx.env.ARGUS_SANDBOX === '1' };
+        // pull_request_target runs with the base repo's write token and ambient
+        // secrets — the docs call the lane unsupported there; enforce it in
+        // code too so a miswired workflow fails closed instead of executing
+        // PR code beside real credentials.
+        if (ctx.env.GITHUB_EVENT_NAME === 'pull_request_target')
+            sandbox.enabled = false;
+        if (sandbox.enabled && !ledger.budgetExceeded) {
+            try {
+                const lane = await runProbeLane(linkedFindings, {
+                    cwd: ctx.cwd,
+                    reportDir,
+                    sandbox,
+                    meta: prMeta,
+                    token,
+                    client,
+                    model,
+                    provider: config.provider,
+                    ledger,
+                    budgetUsd: budget,
+                    severityGates: blockSeverities,
+                    index,
+                    calls: allCalls,
+                    exec: deps.exec,
+                    log: (line) => ctx.err(line),
+                });
+                if (lane !== undefined) {
+                    probes = lane.records;
+                    probeLaneSkipped = lane.skipReason;
+                    // Probe authoring spend lands on the shared ledger — the report's
+                    // headline cost fields must count it too or they understate the run.
+                    for (const p of lane.records) {
+                        totalCost += p.costUsd ?? 0;
+                        totalTokens += p.tokens ?? 0;
+                    }
+                }
+            }
+            catch (e) {
+                debug('code-review', `probe lane failed: ${e.message}`);
+                ctx.err(`code-review probe lane failed: ${e.message}`);
+            }
+        }
+        const hasBlocker = finalFindings.some((f) => blockSeverities.includes(f.severity));
         const report = {
             ok: !hasBlocker && !ledger.budgetExceeded,
             skipped: false,
             summary,
             verdict,
             findings: linkedFindings,
+            ...(probes !== undefined ? { probes } : {}),
+            ...(probeLaneSkipped !== undefined ? { probeLaneSkipped } : {}),
             calls: allCalls,
             visionCostUsd: totalCost,
             tokens: totalTokens,
             model: lastModel,
             budgetExceeded: ledger.budgetExceeded,
         };
-        await writeFile(codeReviewPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+        await writeAtomicJson(codeReviewPath, report);
         ctx.out(`code review complete: ${finalFindings.length} findings, verdict ${verdict}, ` +
             `${totalTokens}tok $${totalCost.toFixed(6)}${ledger.budgetExceeded ? ' (budget exceeded)' : ''}`);
         return 0;
@@ -1199,10 +1232,16 @@ const INIT_WORKFLOW = `name: argus-reviewer
 
 on:
   pull_request:
+    # 'labeled' lets a maintainer re-trigger with the argus-probe label when
+    # sandbox probes are enabled for fork PRs.
+    types: [opened, synchronize, reopened, labeled]
 
 jobs:
   argus:
     runs-on: ubuntu-latest
+    # 'labeled' fires on EVERY label — only argus-probe is the fork-gate
+    # signal worth a full review run.
+    if: github.event.action != 'labeled' || github.event.label.name == 'argus-probe'
     permissions:
       contents: read
       issues: write
@@ -1210,7 +1249,11 @@ jobs:
       checks: write
       statuses: write
     steps:
+      # persist-credentials: false keeps the GITHUB_TOKEN out of .git/config —
+      # the probe sandbox masks .git regardless, but don't store it at all.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       # Pin a tag or commit for supply-chain safety once releases are cut.
       - uses: duketopceo/Argus/action@main
         with:
