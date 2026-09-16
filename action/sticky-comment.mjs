@@ -298,7 +298,10 @@ async function postInlineComments(pr, codeReview) {
   // Re-runs on the same SHA must not duplicate inline comments — the sticky
   // body is upserted but review comments are not. Paginate fully (100/page)
   // and scope dedup to the current head: comments on older commits must not
-  // suppress findings that still apply to this head.
+  // suppress findings that still apply to this head. The key is the body's
+  // first line (the finding itself) — trailing evidence notes like the
+  // `reproduced` upgrade change the body but must not re-post a duplicate.
+  const dedupKey = (path, line, body) => `${path}:${line}:${body.split('\n')[0]}`
   const posted = new Set()
   let page = 1
   for (;;) {
@@ -311,13 +314,13 @@ async function postInlineComments(pr, codeReview) {
     })
     for (const c of existing) {
       if (c.body && c.body.startsWith('**argus-reviewer') && c.commit_id === pr.head.sha) {
-        posted.add(`${c.path}:${c.line}:${c.body}`)
+        posted.add(dedupKey(c.path, c.line, c.body))
       }
     }
     if (existing.length < 100) break
     page += 1
   }
-  const fresh = comments.filter((c) => !posted.has(`${c.path}:${c.line}:${c.body}`))
+  const fresh = comments.filter((c) => !posted.has(dedupKey(c.path, c.line, c.body)))
   if (fresh.length === 0) return
 
   // One batched review instead of N createReviewComment calls — avoids

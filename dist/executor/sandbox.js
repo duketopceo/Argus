@@ -63,16 +63,20 @@ export async function dockerAvailable(exec, image, workdir) {
     const probe = await exec('docker', ['run', '--rm', '-v', `${workdir}:${CONTAINER_WORKDIR}:ro`, image, 'test', '-f', `${CONTAINER_WORKDIR}/package.json`], 60_000);
     return probe.code === 0;
 }
+/** Deterministic container name — shared by `docker run --name` and the `rm -f` teardown. */
+function containerName(name) {
+    return `argus-probe-${name}`;
+}
 /**
  * The full `docker run` argv (KTD2). Every flag is pinned here — this is the
- * single place the sandbox boundary lives.
+ * single place the sandbox boundary lives. `name` is the full container name.
  */
-export function buildSandboxArgv(opts, realWork, realScratch, relMount, gitIsDir) {
+export function buildSandboxArgv(opts, name, realWork, realScratch, relMount, gitIsDir) {
     const argv = [
         'run',
         '--rm',
         '--name',
-        `argus-probe-${opts.name}`,
+        name,
         // Mutable tags on a persistent runner can be poisoned by earlier jobs —
         // always resolve from the registry (daemon-side network; the container
         // itself stays offline).
@@ -109,6 +113,10 @@ export function buildSandboxArgv(opts, realWork, realScratch, relMount, gitIsDir
     '--env', 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', '--env', 'HOME=/tmp', '--env', 'npm_config_cache=/tmp/.npm', opts.image, ...opts.cmd);
     return argv;
 }
+/** Daemon-side kill — the non-ignorable half of the R4 wall-clock bound. */
+async function forceRemove(exec, name) {
+    await exec('docker', ['rm', '-f', name], 15_000).catch(() => undefined);
+}
 /**
  * Run one command in the hardened container. On timeout the docker client
  * is killed first, then `docker rm -f` guarantees teardown — SIGKILL via
@@ -123,15 +131,15 @@ export async function runProbeInSandbox(opts) {
         return { exitCode: -1, stdout: '', stderr: checked.reason, durationMs: 0, timedOut: false };
     }
     const gitIsDir = await stat(join(checked.realWork, '.git')).then((s) => s.isDirectory(), () => false);
-    const name = `argus-probe-${opts.name}`;
-    const argv = buildSandboxArgv(opts, checked.realWork, checked.realScratch, checked.relMount, gitIsDir);
+    const name = containerName(opts.name);
+    const argv = buildSandboxArgv(opts, name, checked.realWork, checked.realScratch, checked.relMount, gitIsDir);
     const started = Date.now();
     let res;
     try {
         res = await exec('docker', argv, opts.timeoutMs);
     }
     catch (e) {
-        await exec('docker', ['rm', '-f', name], 15_000).catch(() => undefined);
+        await forceRemove(exec, name);
         return {
             exitCode: -1,
             stdout: '',
@@ -142,7 +150,7 @@ export async function runProbeInSandbox(opts) {
     }
     const durationMs = Date.now() - started;
     if (res.timedOut === true) {
-        await exec('docker', ['rm', '-f', name], 15_000).catch(() => undefined);
+        await forceRemove(exec, name);
     }
     return {
         exitCode: res.code,

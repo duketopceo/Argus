@@ -131,7 +131,6 @@ function laneOpts(
     cwd,
     reportDir,
     sandbox: resolveConfig({ sandbox: { enabled: true } }).sandbox,
-    enabled: true,
     meta: META,
     token: 't',
     client: client(),
@@ -262,7 +261,7 @@ describe('runProbeLane', () => {
     const out = await runProbeLane(
       fs,
       laneOpts(cwd, reportDir, index, exec, {
-        enabled: false,
+        sandbox: resolveConfig({ sandbox: { enabled: false } }).sandbox,
         client: client(async () => {
           authored++
           return { content: PROBE_JSON }

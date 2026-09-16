@@ -42,9 +42,8 @@ export interface ProbeLaneOptions {
     /** PR checkout root (the head tree). */
     cwd: string;
     reportDir: string;
+    /** Caller resolves `sandbox.enabled || ARGUS_SANDBOX=1` into this object. */
     sandbox: Sandbox;
-    /** `sandbox.enabled || ARGUS_SANDBOX=1`, resolved by the caller. */
-    enabled: boolean;
     meta: PrMeta | undefined;
     token: string | undefined;
     client: VisionClient;
@@ -59,8 +58,6 @@ export interface ProbeLaneOptions {
     index: RepoIndex | undefined;
     exec?: ExecFn | undefined;
     log?: ((line: string) => void) | undefined;
-    /** Host token used to fetch the base commit when not already present. */
-    fetchBase?: ((baseSha: string) => Promise<boolean>) | undefined;
 }
 /** Pure selection: not_exercised findings at blocking severities, capped. */
 export declare function selectProbeTargets(findings: LinkedFinding[], severityGates: string[], maxProbes: number): LinkedFinding[];

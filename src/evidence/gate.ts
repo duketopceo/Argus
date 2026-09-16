@@ -1,15 +1,7 @@
 import type { Sandbox } from '../config.js'
-import type { PrMeta } from './ci.js'
+import { isTrustedAssociation, PROBE_LABEL, type PrMeta } from './ci.js'
 
-/** Maintainer-applied PR label that opts a fork PR into sandbox probes. */
-export const PROBE_LABEL = 'argus-probe'
-
-/**
- * GitHub `author_association` values trusted to run probes on fork PRs —
- * repo members/owners/collaborators. CONTRIBUTOR, FIRST_TIME_CONTRIBUTOR,
- * FIRST_TIMER, MANNEQUIN, and NONE are not.
- */
-const TRUSTED_ASSOCIATIONS: ReadonlySet<string> = new Set(['MEMBER', 'OWNER', 'COLLABORATOR'])
+export { PROBE_LABEL }
 
 /**
  * The label approves only the head it was applied to: the `labeled` event
@@ -36,6 +28,6 @@ function labelCoversHead(meta: PrMeta): boolean {
 export function mayProbePr(meta: PrMeta | undefined, sandbox: Sandbox): boolean {
   if (!sandbox.enabled || meta === undefined) return false
   if (sandbox.allowForks || !meta.isFork) return true
-  if (TRUSTED_ASSOCIATIONS.has(meta.authorAssociation ?? '')) return true
+  if (isTrustedAssociation(meta.authorAssociation)) return true
   return meta.labels.includes(PROBE_LABEL) && labelCoversHead(meta)
 }

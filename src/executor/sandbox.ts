@@ -116,12 +116,18 @@ export async function dockerAvailable(
   return probe.code === 0
 }
 
+/** Deterministic container name — shared by `docker run --name` and the `rm -f` teardown. */
+function containerName(name: string): string {
+  return `argus-probe-${name}`
+}
+
 /**
  * The full `docker run` argv (KTD2). Every flag is pinned here — this is the
- * single place the sandbox boundary lives.
+ * single place the sandbox boundary lives. `name` is the full container name.
  */
 export function buildSandboxArgv(
-  opts: Pick<SandboxRunOptions, 'image' | 'name' | 'cmd' | 'memory' | 'cpus' | 'pidsLimit'>,
+  opts: Pick<SandboxRunOptions, 'image' | 'cmd' | 'memory' | 'cpus' | 'pidsLimit'>,
+  name: string,
   realWork: string,
   realScratch: string,
   relMount: string,
@@ -131,7 +137,7 @@ export function buildSandboxArgv(
     'run',
     '--rm',
     '--name',
-    `argus-probe-${opts.name}`,
+    name,
     // Mutable tags on a persistent runner can be poisoned by earlier jobs —
     // always resolve from the registry (daemon-side network; the container
     // itself stays offline).
@@ -180,6 +186,11 @@ export function buildSandboxArgv(
   return argv
 }
 
+/** Daemon-side kill — the non-ignorable half of the R4 wall-clock bound. */
+async function forceRemove(exec: ExecFn, name: string): Promise<void> {
+  await exec('docker', ['rm', '-f', name], 15_000).catch(() => undefined)
+}
+
 /**
  * Run one command in the hardened container. On timeout the docker client
  * is killed first, then `docker rm -f` guarantees teardown — SIGKILL via
@@ -197,14 +208,21 @@ export async function runProbeInSandbox(opts: SandboxRunOptions): Promise<Sandbo
     (s) => s.isDirectory(),
     () => false,
   )
-  const name = `argus-probe-${opts.name}`
-  const argv = buildSandboxArgv(opts, checked.realWork, checked.realScratch, checked.relMount, gitIsDir)
+  const name = containerName(opts.name)
+  const argv = buildSandboxArgv(
+    opts,
+    name,
+    checked.realWork,
+    checked.realScratch,
+    checked.relMount,
+    gitIsDir,
+  )
   const started = Date.now()
   let res
   try {
     res = await exec('docker', argv, opts.timeoutMs)
   } catch (e) {
-    await exec('docker', ['rm', '-f', name], 15_000).catch(() => undefined)
+    await forceRemove(exec, name)
     return {
       exitCode: -1,
       stdout: '',
@@ -215,7 +233,7 @@ export async function runProbeInSandbox(opts: SandboxRunOptions): Promise<Sandbo
   }
   const durationMs = Date.now() - started
   if (res.timedOut === true) {
-    await exec('docker', ['rm', '-f', name], 15_000).catch(() => undefined)
+    await forceRemove(exec, name)
   }
   return {
     exitCode: res.code,

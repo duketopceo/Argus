@@ -34,7 +34,7 @@ function opts(over: Partial<SandboxRunOptions> = {}): SandboxRunOptions {
 
 describe('buildSandboxArgv', () => {
   const argv = () =>
-    buildSandboxArgv(opts(), '/repo', '/repo/argus-reviewer-report/probes-out', 'argus-reviewer-report/probes-out', true)
+    buildSandboxArgv(opts(), 'argus-probe-abc', '/repo', '/repo/argus-reviewer-report/probes-out', 'argus-reviewer-report/probes-out', true)
 
   it('pins the full untrusted-code flag profile', () => {
     const a = argv()
@@ -79,7 +79,7 @@ describe('buildSandboxArgv', () => {
   })
 
   it('skips the .git tmpfs when .git is a worktree file', () => {
-    const a = buildSandboxArgv(opts(), '/repo', '/repo/r/p', 'r/p', false)
+    const a = buildSandboxArgv(opts(), 'argus-probe-abc', '/repo', '/repo/r/p', 'r/p', false)
     expect(a).not.toContain('/work/.git')
   })
 

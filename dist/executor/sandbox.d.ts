@@ -77,9 +77,9 @@ export declare function checkSandboxPaths(workdir: string, scratchDir: string): 
 export declare function dockerAvailable(exec: ExecFn, image: string, workdir: string): Promise<boolean>;
 /**
  * The full `docker run` argv (KTD2). Every flag is pinned here — this is the
- * single place the sandbox boundary lives.
+ * single place the sandbox boundary lives. `name` is the full container name.
  */
-export declare function buildSandboxArgv(opts: Pick<SandboxRunOptions, 'image' | 'name' | 'cmd' | 'memory' | 'cpus' | 'pidsLimit'>, realWork: string, realScratch: string, relMount: string, gitIsDir: boolean): string[];
+export declare function buildSandboxArgv(opts: Pick<SandboxRunOptions, 'image' | 'cmd' | 'memory' | 'cpus' | 'pidsLimit'>, name: string, realWork: string, realScratch: string, relMount: string, gitIsDir: boolean): string[];
 /**
  * Run one command in the hardened container. On timeout the docker client
  * is killed first, then `docker rm -f` guarantees teardown — SIGKILL via

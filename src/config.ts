@@ -206,27 +206,19 @@ export function defineConfig(input: ConfigInput): ConfigInput {
   return input
 }
 
+/** Positive-integer config values fall back to their default, floored. */
+function posInt(v: number | undefined, dflt: number): number {
+  return v !== undefined && Number.isFinite(v) && v >= 1 ? Math.floor(v) : dflt
+}
+
 export function resolveConfig(input: ConfigInput = {}): Config {
   const provider: ProviderRules = { ...defaults.provider, ...(input.provider ?? {}) }
   const sandbox: Sandbox = { ...defaults.sandbox, ...(input.sandbox ?? {}) }
-  sandbox.maxProbes =
-    Number.isFinite(sandbox.maxProbes) && sandbox.maxProbes >= 1
-      ? Math.floor(sandbox.maxProbes)
-      : DEFAULT_SANDBOX.maxProbes
-  sandbox.timeoutMs =
-    Number.isFinite(sandbox.timeoutMs) && sandbox.timeoutMs >= 1
-      ? Math.floor(sandbox.timeoutMs)
-      : DEFAULT_SANDBOX.timeoutMs
-  sandbox.pidsLimit =
-    Number.isFinite(sandbox.pidsLimit) && sandbox.pidsLimit >= 1
-      ? Math.floor(sandbox.pidsLimit)
-      : DEFAULT_SANDBOX.pidsLimit
+  sandbox.maxProbes = posInt(sandbox.maxProbes, DEFAULT_SANDBOX.maxProbes)
+  sandbox.timeoutMs = posInt(sandbox.timeoutMs, DEFAULT_SANDBOX.timeoutMs)
+  sandbox.pidsLimit = posInt(sandbox.pidsLimit, DEFAULT_SANDBOX.pidsLimit)
   const resolved: Config = { ...defaults, ...input, provider, sandbox }
-  const cap = resolved.recordStepCap
-  resolved.recordStepCap =
-    cap !== undefined && Number.isFinite(cap) && cap >= 1
-      ? Math.floor(cap)
-      : DEFAULT_RECORD_STEP_CAP
+  resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP)
   if (resolved.heal !== 'a0') resolved.heal = 'local'
   return resolved
 }

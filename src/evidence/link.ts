@@ -49,8 +49,8 @@ export function testReachableFiles(index: RepoIndex): Set<string> {
   const roots = index.entries.filter((e) => isTestFile(e.path)).map((e) => e.path)
   const seen = new Set<string>(roots)
   const queue = [...roots]
-  while (queue.length > 0) {
-    const cur = queue.shift() as string
+  for (let i = 0; i < queue.length; i++) {
+    const cur = queue[i] as string
     for (const dep of byPath.get(cur)?.imports ?? []) {
       if (!seen.has(dep)) {
         seen.add(dep)

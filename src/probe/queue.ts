@@ -1,5 +1,5 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { dirname, join, relative } from 'node:path'
+import { dirname, join } from 'node:path'
 
 import type { ProviderRules, Sandbox } from '../config.js'
 import { defaultExec, type ExecFn } from '../detect.js'
@@ -19,6 +19,7 @@ import {
   SANDBOX_OUTPUT_CAP,
   SCRATCH_DIR_NAME,
   sandboxLimits,
+  type SandboxRunResult,
 } from '../executor/sandbox.js'
 
 /**
@@ -66,9 +67,8 @@ export interface ProbeLaneOptions {
   /** PR checkout root (the head tree). */
   cwd: string
   reportDir: string
+  /** Caller resolves `sandbox.enabled || ARGUS_SANDBOX=1` into this object. */
   sandbox: Sandbox
-  /** `sandbox.enabled || ARGUS_SANDBOX=1`, resolved by the caller. */
-  enabled: boolean
   meta: PrMeta | undefined
   token: string | undefined
   client: VisionClient
@@ -83,8 +83,6 @@ export interface ProbeLaneOptions {
   index: RepoIndex | undefined
   exec?: ExecFn | undefined
   log?: ((line: string) => void) | undefined
-  /** Host token used to fetch the base commit when not already present. */
-  fetchBase?: ((baseSha: string) => Promise<boolean>) | undefined
 }
 
 /** Pure selection: not_exercised findings at blocking severities, capped. */
@@ -160,17 +158,18 @@ async function authorProbe(
   harness: Harness,
   exemplarPath: string | undefined,
 ): Promise<{ probe: AuthoredProbe; costUsd: number } | { probe: undefined; reason: string }> {
-  const fileContents =
+  const [fileContents, exemplarContent] = await Promise.all([
     target.file === undefined
-      ? undefined
-      : await readFile(join(o.cwd, target.file), 'utf8').catch(() => undefined)
-  const exemplar =
+      ? Promise.resolve(undefined)
+      : readFile(join(o.cwd, target.file), 'utf8').catch(() => undefined),
     exemplarPath === undefined
+      ? Promise.resolve(undefined)
+      : readFile(join(o.cwd, exemplarPath), 'utf8').catch(() => undefined),
+  ])
+  const exemplar =
+    exemplarPath === undefined || exemplarContent === undefined
       ? undefined
-      : {
-          path: exemplarPath,
-          content: await readFile(join(o.cwd, exemplarPath), 'utf8').catch(() => undefined),
-        }
+      : { path: exemplarPath, content: exemplarContent }
   const response = await o.client.complete({
     model: o.model,
     messages: buildProbeMessages(
@@ -181,7 +180,7 @@ async function authorProbe(
         message: target.message ?? '',
       },
       fileContents,
-      exemplar?.content === undefined ? undefined : { path: exemplar.path, content: exemplar.content },
+      exemplar,
       harness,
     ),
     schema: PROBE_SCHEMA,
@@ -209,10 +208,15 @@ function record(
     durationMs: extra.durationMs ?? 0,
     costUsd: extra.costUsd ?? 0,
     detail,
-    ...(extra.headOutcome !== undefined ? { headOutcome: extra.headOutcome } : {}),
-    ...(extra.baseOutcome !== undefined ? { baseOutcome: extra.baseOutcome } : {}),
-    ...(extra.output !== undefined ? { output: extra.output } : {}),
+    headOutcome: extra.headOutcome,
+    baseOutcome: extra.baseOutcome,
+    output: extra.output,
   }
+}
+
+/** `timedOut` or the never-ran `-1` sentinel → infra error; else the harness classifies. */
+function outcomeOf(harness: Harness, r: SandboxRunResult): ProbeOutcome | 'error' {
+  return r.timedOut || r.exitCode === -1 ? 'error' : harness.classify(r)
 }
 
 function probeOutput(stdout: string, stderr: string): string | undefined {
@@ -229,8 +233,8 @@ export async function runProbeLane(
   o: ProbeLaneOptions,
 ): Promise<ProbeRecord[] | undefined> {
   const log = o.log ?? (() => undefined)
-  if (!o.enabled) return undefined
-  const sandbox: Sandbox = { ...o.sandbox, enabled: true }
+  const sandbox = o.sandbox
+  if (!sandbox.enabled) return undefined
   const targets = selectProbeTargets(findings, o.severityGates, sandbox.maxProbes)
   if (targets.length === 0) return undefined
 
@@ -238,15 +242,17 @@ export async function runProbeLane(
     log('probes: skipped — fork gate (needs argus-probe label on this head or allowForks)')
     return undefined
   }
+  // Cheap check first: repos without a supported harness skip before docker
+  // ever runs (a possible image pull would be wasted work).
+  const harness = await detectHarness(o.cwd)
+  if (harness === undefined) {
+    log('probes: skipped — no supported test harness (vitest/jest/node --test)')
+    return undefined
+  }
   const image = resolveSandboxImage(sandbox.image)
   const exec = o.exec ?? defaultExec
   if (!(await dockerAvailable(exec, image, o.cwd))) {
     log('probes: skipped — docker unavailable or cannot see the workspace')
-    return undefined
-  }
-  const harness = await detectHarness(o.cwd)
-  if (harness === undefined) {
-    log('probes: skipped — no supported test harness (vitest/jest/node --test)')
     return undefined
   }
   const scratchDir = join(o.reportDir, SCRATCH_DIR_NAME)
@@ -257,19 +263,19 @@ export async function runProbeLane(
     return undefined
   }
 
-  // The double-run needs a merge-base checkout. Failures here don't block
-  // the lane — head results still record — but without base nothing can
-  // upgrade to `reproduced`.
+  // The double-run needs a merge-base checkout. Started eagerly so the
+  // fetch overlaps the first authoring call; failures don't block the lane —
+  // head results still record, but without base nothing can upgrade to
+  // `reproduced`.
   const wtDir = join(o.reportDir, 'probes-base')
-  let baseDir: string | undefined
-  if (o.meta?.baseSha !== undefined) {
-    baseDir = await addBaseWorktree(exec, o.cwd, wtDir, o.meta.baseSha, o.token)
-  }
-  if (baseDir === undefined) {
-    log('probes: base worktree unavailable — head results will be recorded but cannot reproduce')
-  }
+  const basePromise = (
+    o.meta?.baseSha === undefined
+      ? Promise.resolve(undefined)
+      : addBaseWorktree(exec, o.cwd, wtDir, o.meta.baseSha, o.token)
+  ).catch(() => undefined)
 
   const records: ProbeRecord[] = []
+  let baseDir: string | undefined
   try {
     for (const target of targets) {
       // Authoring stops at the budget edge but must NOT flag the ledger —
@@ -279,27 +285,22 @@ export async function runProbeLane(
         log('probes: authoring budget reached — remaining findings stay not_exercised')
         break
       }
-      const authored = await authorProbe(
-        o,
-        target,
-        harness,
-        target.file === undefined ? undefined : findExemplarTest(o.index, target.file),
-      )
+      const exemplarPath =
+        target.file === undefined ? undefined : findExemplarTest(o.index, target.file)
+      const authored = await authorProbe(o, target, harness, exemplarPath)
       if (authored.probe === undefined) {
         records.push(record(target, undefined, 'error', `authoring failed: ${authored.reason}`))
         continue
       }
       const probe = authored.probe
       const relProbe =
-        target.file === undefined
+        exemplarPath === undefined
           ? probe.filename
-          : join(
-              dirname(findExemplarTest(o.index, target.file) ?? ''),
-              probe.filename,
-            ).replace(/^\.\//, '')
+          : join(dirname(exemplarPath), probe.filename)
 
       // Write on the host — the ro workspace mount exposes it to head, and
       // a copy into the base worktree makes the double-run symmetric.
+      baseDir ??= await basePromise
       try {
         await writeFile(join(o.cwd, relProbe), probe.content, 'utf8')
         if (baseDir !== undefined) {
@@ -312,41 +313,38 @@ export async function runProbeLane(
       }
 
       try {
-        const head = await runProbeInSandbox({
-          workdir: o.cwd,
-          scratchDir,
-          cmd: harness.runCmd(relProbe),
-          image,
-          name: `head-${records.length}`,
-          exec,
-          ...sandboxLimits(sandbox),
-        })
-        // exitCode -1 is the "never ran" sentinel (path check / spawn
-        // rejection) — infra error, not harness output to classify.
-        const headOutcome: ProbeOutcome | 'error' =
-          head.timedOut || head.exitCode === -1 ? 'error' : harness.classify(head)
-
-        let baseOutcome: ProbeOutcome | 'error' | undefined
-        let baseOutput = ''
-        if (baseDir !== undefined) {
-          const baseScratch = join(baseDir, SCRATCH_DIR_NAME)
-          await mkdir(baseScratch, { recursive: true })
-          const base = await runProbeInSandbox({
-            workdir: baseDir,
-            scratchDir: baseScratch,
+        // Head and base runs are independent — distinct workdirs, scratch
+        // dirs, and container names — so they run concurrently.
+        const baseScratch = join(baseDir ?? o.cwd, SCRATCH_DIR_NAME)
+        if (baseDir !== undefined) await mkdir(baseScratch, { recursive: true })
+        const [head, base] = await Promise.all([
+          runProbeInSandbox({
+            workdir: o.cwd,
+            scratchDir,
             cmd: harness.runCmd(relProbe),
             image,
-            name: `base-${records.length}`,
+            name: `head-${records.length}`,
             exec,
             ...sandboxLimits(sandbox),
-          })
-          baseOutcome = base.timedOut || base.exitCode === -1 ? 'error' : harness.classify(base)
-          baseOutput = probeOutput(base.stdout, base.stderr) ?? ''
-        }
+          }),
+          baseDir === undefined
+            ? Promise.resolve(undefined)
+            : runProbeInSandbox({
+                workdir: baseDir,
+                scratchDir: baseScratch,
+                cmd: harness.runCmd(relProbe),
+                image,
+                name: `base-${records.length}`,
+                exec,
+                ...sandboxLimits(sandbox),
+              }),
+        ])
+        const headOutcome = outcomeOf(harness, head)
+        const baseOutcome = base === undefined ? undefined : outcomeOf(harness, base)
 
         const output =
           probeOutput(head.stdout, head.stderr) ??
-          (baseOutput === '' ? undefined : baseOutput)
+          (base === undefined ? undefined : probeOutput(base.stdout, base.stderr))
 
         if (headOutcome === 'failed-test' && baseOutcome === 'clean') {
           target.evidence = {
@@ -363,18 +361,19 @@ export async function runProbeLane(
             }),
           )
         } else {
-          const outcome: ProbeReportOutcome =
-            headOutcome === 'failed-test'
-              ? baseOutcome === undefined
-                ? 'error'
-                : 'load-error' // failed on head but base did not stay clean — probe bug or pre-existing
-              : headOutcome
-          const detail =
-            headOutcome === 'failed-test'
-              ? baseOutcome === undefined
-                ? 'fails on head but base checkout unavailable — unverified'
-                : 'fails on both head and base — probe bug or pre-existing defect'
-              : `head outcome: ${headOutcome}`
+          let outcome: ProbeReportOutcome
+          let detail: string
+          if (headOutcome !== 'failed-test') {
+            outcome = headOutcome
+            detail = `head outcome: ${headOutcome}`
+          } else if (baseOutcome === undefined) {
+            outcome = 'error'
+            detail = 'fails on head but base checkout unavailable — unverified'
+          } else {
+            // Failed on head but base did not stay clean — probe bug or pre-existing
+            outcome = 'load-error'
+            detail = 'fails on both head and base — probe bug or pre-existing defect'
+          }
           records.push(
             record(target, probe, outcome, detail, {
               headOutcome,
@@ -393,7 +392,11 @@ export async function runProbeLane(
       }
     }
   } finally {
-    if (baseDir !== undefined) await removeBaseWorktree(exec, o.cwd, wtDir)
+    // The worktree may exist even when the loop never assigned baseDir
+    // (e.g. every probe failed authoring) — resolve the promise here so the
+    // teardown still runs.
+    const bd = baseDir ?? (await basePromise)
+    if (bd !== undefined) await removeBaseWorktree(exec, o.cwd, wtDir)
   }
   return records
 }

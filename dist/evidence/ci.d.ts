@@ -1,6 +1,14 @@
 interface Ctx {
     err: (line: string) => void;
 }
+/** Maintainer-applied PR label that opts a fork PR into sandbox probes. */
+export declare const PROBE_LABEL = "argus-probe";
+/**
+ * GitHub `author_association` values trusted to run probes on fork PRs —
+ * repo members/owners/collaborators. CONTRIBUTOR, FIRST_TIME_CONTRIBUTOR,
+ * FIRST_TIMER, MANNEQUIN, and NONE are not.
+ */
+export declare function isTrustedAssociation(association: string | undefined): boolean;
 export interface CheckRun {
     name: string;
     /** GitHub check-run conclusion once status === 'completed'; undefined while pending. */
@@ -35,6 +43,12 @@ export interface PrMeta {
      */
     labelApprovedAt: string | undefined;
 }
+/**
+ * Shared GitHub GET scaffold — Bearer auth, API headers, 30s abort timeout,
+ * `ctx.err` on non-ok/timeout, undefined on failure. Reuse for any
+ * api.github.com read (fetchPrFiles in cli.ts paginates over it).
+ */
+export declare function ghGet(url: string, token: string, ctx: Ctx): Promise<unknown | undefined>;
 /**
  * PR metadata for the evidence + probe lanes — the head SHA check-runs attach
  * to, plus the fork/association/label signals the sandbox fork gate (KTD5)

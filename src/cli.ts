@@ -25,7 +25,7 @@ import { buildReviewContext, CONTEXT_PREFIX } from './index/context.js'
 import { diffChangedFiles } from './index/diff.js'
 import { invalidateForDiff } from './index/invalidate.js'
 import { readIndex, scanRepo, writeIndex } from './index/scan.js'
-import { fetchCheckRuns, fetchPrMeta } from './evidence/ci.js'
+import { fetchCheckRuns, fetchPrMeta, ghGet } from './evidence/ci.js'
 import { linkFindings, type Evidence } from './evidence/link.js'
 import { runProbeLane, type ProbeRecord } from './probe/queue.js'
 import { A0_DEFAULT_TIMEOUT_MS, a0TaskPrompt, runA0Task } from './executor/a0.js'
@@ -37,6 +37,7 @@ import { liveLog } from './live.js'
 import { JunitCase, writeJunitXml } from './report/junit.js'
 import { buildRunReport, TestReport, writeRunReport } from './report/run.js'
 import { flowPath, loadFlow } from './cache/store.js'
+import { writeAtomicJson } from './fsutil.js'
 import { CallCost } from './vision/cost.js'
 import { JsonSchema, Message, OpenRouterClient } from './vision/openrouter.js'
 import { Ledger } from './vision/ledger.js'
@@ -818,38 +819,15 @@ const MAX_PR_FILE_PAGES = 10
 
 async function fetchPrFiles(repo: string, pr: string, token: string, ctx: Ctx): Promise<PrFile[] | undefined> {
   const files: PrFile[] = []
-  let page = 1
-  while (page <= MAX_PR_FILE_PAGES) {
-    const url = `https://api.github.com/repos/${repo}/pulls/${pr}/files?per_page=100&page=${page}`
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 30_000)
-    try {
-      const res = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-      })
-      if (!res.ok) {
-        ctx.err(`failed to fetch PR files: ${res.status} ${res.statusText}`)
-        return undefined
-      }
-      const batch = (await res.json()) as PrFile[]
-      const withPatches = batch.filter((f) => typeof f.patch === 'string' && f.patch.length > 0)
-      files.push(...withPatches)
-      if (batch.length < 100) break
-      page++
-    } catch (e) {
-      if (e instanceof Error && e.name === 'AbortError') {
-        ctx.err(`failed to fetch PR files: request timed out after 30s (page ${page})`)
-        return undefined
-      }
-      throw e
-    } finally {
-      clearTimeout(timeout)
-    }
+  for (let page = 1; page <= MAX_PR_FILE_PAGES; page++) {
+    const batch = (await ghGet(
+      `https://api.github.com/repos/${repo}/pulls/${pr}/files?per_page=100&page=${page}`,
+      token,
+      ctx,
+    )) as PrFile[] | undefined
+    if (batch === undefined) return undefined
+    files.push(...batch.filter((f) => typeof f.patch === 'string' && f.patch.length > 0))
+    if (batch.length < 100) break
   }
   return files
 }
@@ -1026,7 +1004,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       model,
       budgetExceeded: false,
     }
-    await writeFile(codeReviewPath, `${JSON.stringify(skipped, null, 2)}\n`, 'utf8')
+    await writeAtomicJson(codeReviewPath, skipped)
     return 0
   }
 
@@ -1055,6 +1033,9 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
   try {
     const client = createClient(deps, config, ctx)
     const ledger = new Ledger(budget)
+    // Kick off PR metadata now — it only needs repo/pr/token and its
+    // round-trip hides behind the model calls. Degrades to undefined.
+    const prMetaPromise = fetchPrMeta(repo, pr, token, ctx).catch(() => undefined)
     const allFindings: CodeReviewReport['findings'] = []
     const allCalls: CallCost[] = []
     let totalTokens = 0
@@ -1145,7 +1126,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     // prMeta also carries isFork/authorAssociation/labels — the B.2 probe
     // lane's fork gate (evidence/gate.ts) consumes them; only headSha feeds
     // evidence linkage here.
-    const prMeta = await fetchPrMeta(repo, pr, token, ctx)
+    const prMeta = await prMetaPromise
     const headSha = prMeta?.headSha
     const checkRuns = headSha === undefined ? undefined : await fetchCheckRuns(repo, headSha, token, ctx)
     const linkedFindings = linkFindings(finalFindings, index, checkRuns)
@@ -1163,14 +1144,13 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     // ARGUS_SANDBOX=1 env flag (enable-only; other values leave config
     // authoritative).
     let probes: ProbeRecord[] | undefined
-    const sandboxEnabled = config.sandbox.enabled || ctx.env.ARGUS_SANDBOX === '1'
-    if (sandboxEnabled && !ledger.budgetExceeded) {
+    const sandbox = { ...config.sandbox, enabled: config.sandbox.enabled || ctx.env.ARGUS_SANDBOX === '1' }
+    if (sandbox.enabled && !ledger.budgetExceeded) {
       try {
         probes = await runProbeLane(linkedFindings, {
           cwd: ctx.cwd,
           reportDir,
-          sandbox: config.sandbox,
-          enabled: sandboxEnabled,
+          sandbox,
           meta: prMeta,
           token,
           client,
@@ -1189,7 +1169,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       }
     }
 
-    const hasBlocker = finalFindings.some((f) => blockSeverities.includes((f as { severity?: string }).severity ?? ''))
+    const hasBlocker = finalFindings.some((f) => blockSeverities.includes(f.severity))
     const report: CodeReviewReport = {
       ok: !hasBlocker && !ledger.budgetExceeded,
       skipped: false,
@@ -1203,7 +1183,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       model: lastModel,
       budgetExceeded: ledger.budgetExceeded,
     }
-    await writeFile(codeReviewPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
+    await writeAtomicJson(codeReviewPath, report)
     ctx.out(
       `code review complete: ${finalFindings.length} findings, verdict ${verdict}, ` +
         `${totalTokens}tok $${totalCost.toFixed(6)}${ledger.budgetExceeded ? ' (budget exceeded)' : ''}`,

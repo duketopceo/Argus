@@ -27,7 +27,10 @@ export type ExecFn = (cmd: string, args: string[], timeoutMs: number) => Promise
 
 export const defaultExec: ExecFn = (cmd, args, timeoutMs) =>
   new Promise((resolve) => {
-    execFile(cmd, args, { timeout: timeoutMs }, (err, stdout, stderr) => {
+    // 4 MiB headroom — the sandbox caps output itself after capture, and a
+    // chatty probe hitting execFile's 1 MiB default would error instead of
+    // reaching the harness classifier.
+    execFile(cmd, args, { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) {
         // stderr is '' (not undefined) on spawn ENOENT — fall back to the
         // error message so callers can distinguish "missing" from "failed".

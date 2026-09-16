@@ -1,11 +1,5 @@
-/** Maintainer-applied PR label that opts a fork PR into sandbox probes. */
-export const PROBE_LABEL = 'argus-probe';
-/**
- * GitHub `author_association` values trusted to run probes on fork PRs —
- * repo members/owners/collaborators. CONTRIBUTOR, FIRST_TIME_CONTRIBUTOR,
- * FIRST_TIMER, MANNEQUIN, and NONE are not.
- */
-const TRUSTED_ASSOCIATIONS = new Set(['MEMBER', 'OWNER', 'COLLABORATOR']);
+import { isTrustedAssociation, PROBE_LABEL } from './ci.js';
+export { PROBE_LABEL };
 /**
  * The label approves only the head it was applied to: the `labeled` event
  * must postdate `head.repo.pushed_at`. A `synchronize` push after approval
@@ -30,7 +24,7 @@ export function mayProbePr(meta, sandbox) {
         return false;
     if (sandbox.allowForks || !meta.isFork)
         return true;
-    if (TRUSTED_ASSOCIATIONS.has(meta.authorAssociation ?? ''))
+    if (isTrustedAssociation(meta.authorAssociation))
         return true;
     return meta.labels.includes(PROBE_LABEL) && labelCoversHead(meta);
 }

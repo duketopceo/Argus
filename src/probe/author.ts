@@ -1,3 +1,4 @@
+import ts from 'typescript'
 import type { JsonSchema, Message } from '../vision/openrouter.js'
 import type { Harness } from './harness.js'
 
@@ -56,8 +57,18 @@ export const PROBE_CONTENT_CAP = 32 * 1024
 /** Reads of secret-looking env vars are forbidden — defense in depth on the stripped container env. */
 const SECRET_ENV_RE = /process\.env\s*(?:\.|\[)\s*['"]?\w*(KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL)/i
 
-/** Only relative repo paths and packages that could plausibly be installed devDeps. */
-const IMPORT_RE = /(?:from\s+|import\s*\(|require\()\s*['"]([^'"]+)['"]/g
+/**
+ * Import specifiers via the TypeScript scanner (same seam as the index) —
+ * a regex misses bare side-effect imports like `import '/abs/x'`.
+ */
+function importSpecifiers(content: string): string[] {
+  try {
+    const info = ts.preProcessFile(content, true, true)
+    return [...info.importedFiles, ...info.referencedFiles].map((f) => f.fileName)
+  } catch {
+    return []
+  }
+}
 
 export function parseProbe(raw: string): ProbeParseResult {
   let parsed: { filename?: unknown; content?: unknown; reasoning?: unknown }
@@ -78,9 +89,7 @@ export function parseProbe(raw: string): ProbeParseResult {
   if (SECRET_ENV_RE.test(parsed.content)) {
     return { ok: false, reason: 'probe reads secret-looking env vars' }
   }
-  for (const m of parsed.content.matchAll(IMPORT_RE)) {
-    const spec = m[1]
-    if (spec === undefined) continue
+  for (const spec of importSpecifiers(parsed.content)) {
     // Relative imports must stay inside the repo (no absolute paths).
     if (spec.startsWith('/') || /^[a-zA-Z]:/.test(spec)) {
       return { ok: false, reason: `absolute import: ${spec}` }

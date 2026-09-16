@@ -1,7 +1,6 @@
 import type { Sandbox } from '../config.js';
-import type { PrMeta } from './ci.js';
-/** Maintainer-applied PR label that opts a fork PR into sandbox probes. */
-export declare const PROBE_LABEL = "argus-probe";
+import { PROBE_LABEL, type PrMeta } from './ci.js';
+export { PROBE_LABEL };
 /**
  * Fork gate for the sandbox probe lane (KTD5). Evaluation order: the lane
  * must be `enabled`; `allowForks: true` runs everywhere; same-repo PRs run

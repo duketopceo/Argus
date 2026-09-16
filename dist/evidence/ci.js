@@ -1,7 +1,21 @@
-import { PROBE_LABEL } from './gate.js';
+/** Maintainer-applied PR label that opts a fork PR into sandbox probes. */
+export const PROBE_LABEL = 'argus-probe';
+/**
+ * GitHub `author_association` values trusted to run probes on fork PRs —
+ * repo members/owners/collaborators. CONTRIBUTOR, FIRST_TIME_CONTRIBUTOR,
+ * FIRST_TIMER, MANNEQUIN, and NONE are not.
+ */
+export function isTrustedAssociation(association) {
+    return (association === 'MEMBER' || association === 'OWNER' || association === 'COLLABORATOR');
+}
 const GH_API = 'https://api.github.com';
 const MAX_CHECK_RUN_PAGES = 5;
-async function ghGet(url, token, ctx) {
+/**
+ * Shared GitHub GET scaffold — Bearer auth, API headers, 30s abort timeout,
+ * `ctx.err` on non-ok/timeout, undefined on failure. Reuse for any
+ * api.github.com read (fetchPrFiles in cli.ts paginates over it).
+ */
+export async function ghGet(url, token, ctx) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30_000);
     try {
@@ -42,7 +56,12 @@ export async function fetchPrMeta(repo, pr, token, ctx) {
     const labels = Array.isArray(data.labels)
         ? data.labels.map((l) => l?.name).filter((n) => typeof n === 'string')
         : [];
-    const labelApprovedAt = labels.includes(PROBE_LABEL)
+    // The timeline call only matters when the label is the deciding signal —
+    // forks from untrusted authors carrying the label. Skip it otherwise.
+    const needsTimeline = data.head?.repo?.fork === true &&
+        !isTrustedAssociation(data.author_association) &&
+        labels.includes(PROBE_LABEL);
+    const labelApprovedAt = needsTimeline
         ? await fetchLabelApprovedAt(repo, pr, token, ctx)
         : undefined;
     return {
