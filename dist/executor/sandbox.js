@@ -54,24 +54,66 @@ export async function checkSandboxPaths(workdir, scratchDir) {
 /**
  * Docker is usable AND resolves the runner's workspace path — bind-mount
  * sources are evaluated by the daemon, so a remote/containerized daemon can
- * silently mount an empty dir. One cheap container run proves both.
+ * silently mount an empty dir. The smoke run uses the SAME hardening
+ * profile as probe runs (plus `--pull always` and an entrypoint override) —
+ * an availability check that ran the image unhardened would bypass every
+ * invariant this module exists to enforce.
  */
 export async function dockerAvailable(exec, image, workdir) {
-    const version = await exec('docker', ['version', '--format', '{{.Server.Version}}'], 10_000);
-    if (version.code !== 0)
+    const name = containerName('avail');
+    let probe;
+    try {
+        const version = await exec('docker', ['version', '--format', '{{.Server.Version}}'], 10_000);
+        if (version.code !== 0)
+            return false;
+        probe = await exec('docker', [
+            'run',
+            '--rm',
+            '--name',
+            name,
+            '--pull',
+            'always',
+            '--network',
+            'none',
+            '--read-only',
+            '--cap-drop',
+            'ALL',
+            '--security-opt',
+            'no-new-privileges',
+            '--user',
+            '65534:65534',
+            '--entrypoint',
+            'test',
+            '-v',
+            `${workdir}:${CONTAINER_WORKDIR}:ro`,
+            image,
+            '-f',
+            `${CONTAINER_WORKDIR}/package.json`,
+        ], 60_000);
+    }
+    catch {
+        // Spawn failure (no docker binary, daemon gone) → unavailable, and the
+        // named container may still be half-created — remove it best-effort.
+        await forceRemove(exec, name);
         return false;
-    const probe = await exec('docker', ['run', '--rm', '-v', `${workdir}:${CONTAINER_WORKDIR}:ro`, image, 'test', '-f', `${CONTAINER_WORKDIR}/package.json`], 60_000);
+    }
+    if (probe.timedOut === true)
+        await forceRemove(exec, name);
     return probe.code === 0;
 }
-/** Deterministic container name — shared by `docker run --name` and the `rm -f` teardown. */
+/**
+ * Container name — shared by `docker run --name` and the `rm -f` teardown.
+ * Includes the pid so two concurrent review jobs on one daemon can't
+ * collide names (or force-remove each other's containers).
+ */
 function containerName(name) {
-    return `argus-probe-${name}`;
+    return `argus-probe-${process.pid}-${name}`;
 }
 /**
  * The full `docker run` argv (KTD2). Every flag is pinned here — this is the
  * single place the sandbox boundary lives. `name` is the full container name.
  */
-export function buildSandboxArgv(opts, name, realWork, realScratch, relMount, gitIsDir) {
+export function buildSandboxArgv(opts, name, checked, gitMode, secretFiles) {
     const argv = [
         'run',
         '--rm',
@@ -100,14 +142,22 @@ export function buildSandboxArgv(opts, name, realWork, realScratch, relMount, gi
         '--tmpfs',
         '/tmp:rw,nosuid,nodev,noexec',
         '-v',
-        `${realWork}:${CONTAINER_WORKDIR}:ro`,
+        `${checked.realWork}:${CONTAINER_WORKDIR}:ro`,
     ];
-    // Shadow the git dir — actions/checkout persists a base64 GITHUB_TOKEN in
-    // .git/config by default; PR code must not read it. Git worktrees make
-    // .git a *file* — tmpfs can't mount over one, so only mask directories.
-    if (gitIsDir)
+    // Shadow .git — actions/checkout persists a base64 GITHUB_TOKEN in
+    // .git/config; PR code must not read it. tmpfs masks a *directory*; a
+    // worktree's `.git` pointer file (or any root-level secret file staged by
+    // earlier steps) is masked with a read-only /dev/null bind.
+    if (gitMode === 'dir')
         argv.push('--tmpfs', `${CONTAINER_WORKDIR}/.git`);
-    argv.push('-v', `${realScratch}:${CONTAINER_WORKDIR}/${relMount}:rw`, '-w', CONTAINER_WORKDIR, 
+    for (const f of gitMode === 'file' ? ['.git', ...secretFiles] : secretFiles) {
+        argv.push('-v', `/dev/null:${CONTAINER_WORKDIR}/${f}:ro`);
+    }
+    for (const mask of opts.masks ?? [])
+        argv.push('--tmpfs', `${CONTAINER_WORKDIR}/${mask}`);
+    for (const m of opts.roMounts ?? [])
+        argv.push('-v', `${m.host}:${m.container}:ro`);
+    argv.push('-v', `${checked.realScratch}:${CONTAINER_WORKDIR}/${checked.relMount}:rw`, '-w', CONTAINER_WORKDIR, 
     // Declared env allowlist only — no host env is inherited. HOME=/tmp
     // because `nobody`'s passwd home is /nonexistent on a read-only root.
     '--env', 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', '--env', 'HOME=/tmp', '--env', 'npm_config_cache=/tmp/.npm', opts.image, ...opts.cmd);
@@ -124,15 +174,21 @@ async function forceRemove(exec, name) {
  * real. Path-check and spawn failures return a `exitCode: -1` result
  * carrying the reason; this function never throws past its callers.
  */
+/** Workspace-root files that commonly carry credentials — masked when present. */
+const SECRET_FILE_NAMES = ['.env', '.npmrc', '.netrc', '.git-credentials'];
 export async function runProbeInSandbox(opts) {
     const exec = opts.exec ?? defaultExec;
     const checked = await checkSandboxPaths(opts.workdir, opts.scratchDir);
     if (!checked.ok) {
         return { exitCode: -1, stdout: '', stderr: checked.reason, durationMs: 0, timedOut: false };
     }
-    const gitIsDir = await stat(join(checked.realWork, '.git')).then((s) => s.isDirectory(), () => false);
+    const gitStat = await stat(join(checked.realWork, '.git')).catch(() => undefined);
+    const gitMode = gitStat === undefined ? 'absent' : gitStat.isDirectory() ? 'dir' : 'file';
+    const secretFiles = (await Promise.all(SECRET_FILE_NAMES.map(async (f) => (await stat(join(checked.realWork, f)).catch(() => undefined))?.isFile() === true
+        ? f
+        : undefined))).filter((f) => f !== undefined);
     const name = containerName(opts.name);
-    const argv = buildSandboxArgv(opts, name, checked.realWork, checked.realScratch, checked.relMount, gitIsDir);
+    const argv = buildSandboxArgv(opts, name, checked, gitMode, secretFiles);
     const started = Date.now();
     let res;
     try {

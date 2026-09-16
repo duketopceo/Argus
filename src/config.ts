@@ -213,7 +213,16 @@ function posInt(v: number | undefined, dflt: number): number {
 
 export function resolveConfig(input: ConfigInput = {}): Config {
   const provider: ProviderRules = { ...defaults.provider, ...(input.provider ?? {}) }
-  const sandbox: Sandbox = { ...defaults.sandbox, ...(input.sandbox ?? {}) }
+  // Wrong-typed sandbox values (e.g. `sandbox: true`, `enabled: 'yes'`,
+  // `memory: 2048`) degrade silently to defaults — the lane is opt-in and a
+  // mis-typed flag must never feed docker argv or self-enable.
+  const raw = typeof input.sandbox === 'object' && input.sandbox !== null ? input.sandbox : {}
+  const sandbox: Sandbox = { ...defaults.sandbox, ...raw }
+  sandbox.enabled = raw.enabled === true
+  sandbox.allowForks = raw.allowForks === true
+  sandbox.image = typeof raw.image === 'string' && raw.image !== '' ? raw.image : undefined
+  sandbox.memory = typeof raw.memory === 'string' && raw.memory !== '' ? raw.memory : DEFAULT_SANDBOX.memory
+  sandbox.cpus = typeof raw.cpus === 'string' && raw.cpus !== '' ? raw.cpus : DEFAULT_SANDBOX.cpus
   sandbox.maxProbes = posInt(sandbox.maxProbes, DEFAULT_SANDBOX.maxProbes)
   sandbox.timeoutMs = posInt(sandbox.timeoutMs, DEFAULT_SANDBOX.timeoutMs)
   sandbox.pidsLimit = posInt(sandbox.pidsLimit, DEFAULT_SANDBOX.pidsLimit)

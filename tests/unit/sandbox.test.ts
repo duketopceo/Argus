@@ -33,8 +33,13 @@ function opts(over: Partial<SandboxRunOptions> = {}): SandboxRunOptions {
 }
 
 describe('buildSandboxArgv', () => {
-  const argv = () =>
-    buildSandboxArgv(opts(), 'argus-probe-abc', '/repo', '/repo/argus-reviewer-report/probes-out', 'argus-reviewer-report/probes-out', true)
+  const CHECKED = {
+    realWork: '/repo',
+    realScratch: '/repo/argus-reviewer-report/probes-out',
+    relMount: 'argus-reviewer-report/probes-out',
+  }
+  const argv = (gitMode: 'dir' | 'file' | 'absent' = 'dir', secretFiles: string[] = []) =>
+    buildSandboxArgv(opts(), 'argus-probe-abc', CHECKED, gitMode, secretFiles)
 
   it('pins the full untrusted-code flag profile', () => {
     const a = argv()
@@ -66,10 +71,10 @@ describe('buildSandboxArgv', () => {
   })
 
   it('masks .git and mounts only the scratch dir writable', () => {
-    const a = argv()
+    const a = argv('dir')
     expect(a).toContain('--tmpfs')
     expect(a[a.indexOf('--tmpfs') + 1]).toBe('/tmp:rw,nosuid,nodev,noexec')
-    expect(a).toContain('/work/.git')
+    expect(a[a.lastIndexOf('--tmpfs') + 1]).toBe('/work/.git')
     const mounts = a.filter((v, i) => a[i - 1] === '-v')
     expect(mounts).toContain('/repo:/work:ro')
     expect(mounts).toContain(
@@ -78,9 +83,28 @@ describe('buildSandboxArgv', () => {
     expect(mounts.filter((m) => m.endsWith(':rw'))).toHaveLength(1)
   })
 
-  it('skips the .git tmpfs when .git is a worktree file', () => {
-    const a = buildSandboxArgv(opts(), 'argus-probe-abc', '/repo', '/repo/r/p', 'r/p', false)
-    expect(a).not.toContain('/work/.git')
+  it('masks a worktree .git pointer file and secret files with /dev/null', () => {
+    const a = argv('file', ['.env', '.npmrc'])
+    const mounts = a.filter((v, i) => a[i - 1] === '-v')
+    expect(mounts).toContain('/dev/null:/work/.git:ro')
+    expect(mounts).toContain('/dev/null:/work/.env:ro')
+    expect(mounts).toContain('/dev/null:/work/.npmrc:ro')
+    expect(a.filter((v, i) => a[i - 1] === '--tmpfs' && v === '/work/.git')).toHaveLength(0)
+    expect(mounts.filter((m) => m.endsWith(':rw'))).toHaveLength(1)
+  })
+
+  it('adds roMounts and extra tmpfs masks', () => {
+    const a = buildSandboxArgv(
+      opts({ roMounts: [{ host: '/repo/node_modules', container: '/work/node_modules' }], masks: ['argus-reviewer-report/probes-base'] }),
+      'argus-probe-abc',
+      CHECKED,
+      'absent',
+      [],
+    )
+    const mounts = a.filter((v, i) => a[i - 1] === '-v')
+    expect(mounts).toContain('/repo/node_modules:/work/node_modules:ro')
+    expect(a).toContain('/work/argus-reviewer-report/probes-base')
+    expect(mounts.filter((m) => m.endsWith(':rw'))).toHaveLength(1)
   })
 
   it('carries only the declared env allowlist — no host env or secrets', () => {
@@ -162,6 +186,37 @@ describe('dockerAvailable', () => {
     expect(calls[1]).toContain('/work/package.json')
   })
 
+  it('runs the availability smoke check under the same hardened profile', async () => {
+    const calls: string[][] = []
+    const exec: ExecFn = async (cmd, args) => {
+      calls.push(args)
+      return { code: 0, stdout: 'ok', stderr: '' }
+    }
+    expect(await dockerAvailable(exec, 'node:22-slim', '/repo')).toBe(true)
+    const smoke = calls[1] ?? []
+    for (const flag of [
+      '--pull',
+      'always',
+      '--network',
+      'none',
+      '--read-only',
+      '--cap-drop',
+      'ALL',
+      'no-new-privileges',
+      '65534:65534',
+      '--entrypoint',
+    ]) {
+      expect(smoke, flag).toContain(flag)
+    }
+  })
+
+  it('is false (not throwing) when the exec itself rejects', async () => {
+    const exec: ExecFn = async () => {
+      throw new Error('spawn docker ENOENT')
+    }
+    expect(await dockerAvailable(exec, 'node:22-slim', '/repo')).toBe(false)
+  })
+
   it('is true when both checks pass', async () => {
     const exec: ExecFn = async () => ({ code: 0, stdout: 'ok', stderr: '' })
     expect(await dockerAvailable(exec, 'node:22-slim', '/repo')).toBe(true)
@@ -201,7 +256,7 @@ describe('runProbeInSandbox', () => {
     const res = await runProbeInSandbox({ ...realOpts, exec })
     expect(res.timedOut).toBe(true)
     const rm = calls.find((a) => a[0] === 'rm')
-    expect(rm).toEqual(['rm', '-f', 'argus-probe-abc'])
+    expect(rm).toEqual(['rm', '-f', `argus-probe-${process.pid}-abc`])
   })
 
   it('degrades instead of running when the scratch path check fails', async () => {

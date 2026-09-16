@@ -10,6 +10,7 @@ import type { VisionClient } from '../../src/engine/loop.js'
 import type { RepoIndex } from '../../src/index/scan.js'
 import {
   findExemplarTest,
+  isSafeRepoPath,
   runProbeLane,
   selectProbeTargets,
   type LinkedFinding,
@@ -159,6 +160,28 @@ describe('selectProbeTargets', () => {
     const out = selectProbeTargets(fs, ['bug'], 3)
     expect(out.map((f) => f.file)).toEqual(['src/a.ts', 'src/d.ts'])
   })
+
+  it('drops findings whose file path is unsafe — traversal is never read', () => {
+    const fs = [
+      finding('../../etc/passwd'),
+      finding('/abs/path.ts'),
+      finding('src/..\\win.ts'),
+      finding('src/safe.ts'),
+    ]
+    const out = selectProbeTargets(fs, ['bug'], 10)
+    expect(out.map((f) => f.file)).toEqual(['src/safe.ts'])
+  })
+})
+
+describe('isSafeRepoPath', () => {
+  it('rejects absolute, backslash, and ..-traversal paths', () => {
+    for (const bad of ['/etc/passwd', '../x', 'a/../../b', 'a\\b', '..']) {
+      expect(isSafeRepoPath(bad), bad).toBe(false)
+    }
+    for (const ok of ['src/a.ts', 'tests/deep/x.test.ts', 'a']) {
+      expect(isSafeRepoPath(ok), ok).toBe(true)
+    }
+  })
 })
 
 describe('findExemplarTest', () => {
@@ -197,11 +220,11 @@ describe('runProbeLane', () => {
       wt,
     )
     const fs = [finding('src/util.ts')]
-    const records = await runProbeLane(fs, laneOpts(cwd, reportDir, index, exec))
+    const res = await runProbeLane(fs, laneOpts(cwd, reportDir, index, exec))
     expect(fs[0]?.evidence.status).toBe('reproduced')
-    expect(records?.[0]?.outcome).toBe('reproduced')
-    expect(records?.[0]?.headOutcome).toBe('failed-test')
-    expect(records?.[0]?.baseOutcome).toBe('clean')
+    expect(res?.records[0]?.outcome).toBe('reproduced')
+    expect(res?.records[0]?.headOutcome).toBe('failed-test')
+    expect(res?.records[0]?.baseOutcome).toBe('clean')
   })
 
   it('does NOT upgrade when the probe fails on base too (probe bug)', async () => {
@@ -214,10 +237,10 @@ describe('runProbeLane', () => {
       wt,
     )
     const fs = [finding('src/util.ts')]
-    const records = await runProbeLane(fs, laneOpts(cwd, reportDir, index, exec))
+    const res = await runProbeLane(fs, laneOpts(cwd, reportDir, index, exec))
     expect(fs[0]?.evidence.status).toBe('not_exercised')
-    expect(records?.[0]?.outcome).toBe('load-error')
-    expect(records?.[0]?.detail).toContain('base')
+    expect(res?.records[0]?.outcome).toBe('load-error')
+    expect(res?.records[0]?.detail).toContain('base')
   })
 
   it('records clean when the probe passes on head', async () => {
@@ -227,17 +250,17 @@ describe('runProbeLane', () => {
       wt,
     )
     const fs = [finding('src/util.ts')]
-    const records = await runProbeLane(fs, laneOpts(cwd, reportDir, index, exec))
+    const res = await runProbeLane(fs, laneOpts(cwd, reportDir, index, exec))
     expect(fs[0]?.evidence.status).toBe('not_exercised')
-    expect(records?.[0]?.outcome).toBe('clean')
+    expect(res?.records[0]?.outcome).toBe('clean')
   })
 
   it('records error when the sandbox spawn rejects', async () => {
     const wt = { path: join(reportDir, 'probes-base') }
     const { exec } = scriptedExec({ headThrows: true }, wt)
     const fs = [finding('src/util.ts')]
-    const records = await runProbeLane(fs, laneOpts(cwd, reportDir, index, exec))
-    expect(records?.[0]?.outcome).toBe('error')
+    const res = await runProbeLane(fs, laneOpts(cwd, reportDir, index, exec))
+    expect(res?.records[0]?.outcome).toBe('error')
     expect(fs[0]?.evidence.status).toBe('not_exercised')
   })
 
@@ -245,13 +268,13 @@ describe('runProbeLane', () => {
     const wt = { path: join(reportDir, 'probes-base') }
     const { exec } = scriptedExec({}, wt)
     const fs = [finding('src/util.ts'), finding('src/util.ts'), finding('src/util.ts'), finding('src/util.ts')]
-    const records = await runProbeLane(
+    const res = await runProbeLane(
       fs,
       laneOpts(cwd, reportDir, index, exec, {
         sandbox: resolveConfig({ sandbox: { enabled: true, maxProbes: 2 } }).sandbox,
       }),
     )
-    expect(records).toHaveLength(2)
+    expect(res?.records).toHaveLength(2)
   })
 
   it('does nothing when disabled — zero authoring calls', async () => {
@@ -272,7 +295,7 @@ describe('runProbeLane', () => {
     expect(authored).toBe(0)
   })
 
-  it('returns undefined when the fork gate denies', async () => {
+  it('skips with a reason when the fork gate denies', async () => {
     const { exec } = scriptedExec({})
     const fs = [finding('src/util.ts')]
     const out = await runProbeLane(
@@ -281,21 +304,24 @@ describe('runProbeLane', () => {
         meta: { ...META, isFork: true, authorAssociation: 'NONE' },
       }),
     )
-    expect(out).toBeUndefined()
+    expect(out?.records).toHaveLength(0)
+    expect(out?.skipReason).toContain('fork gate')
     expect(fs[0]?.evidence.status).toBe('not_exercised')
   })
 
-  it('returns undefined when docker is down', async () => {
+  it('skips with a reason when docker is down', async () => {
     const { exec } = scriptedExec({ dockerDown: true })
     const out = await runProbeLane([finding('src/util.ts')], laneOpts(cwd, reportDir, index, exec))
-    expect(out).toBeUndefined()
+    expect(out?.records).toHaveLength(0)
+    expect(out?.skipReason).toContain('docker')
   })
 
-  it('returns undefined when no harness is detected', async () => {
+  it('skips with a reason when no harness is detected', async () => {
     await writeFile(join(cwd, 'package.json'), JSON.stringify({ scripts: { test: 'echo x' } }), 'utf8')
     const { exec } = scriptedExec({})
     const out = await runProbeLane([finding('src/util.ts')], laneOpts(cwd, reportDir, index, exec))
-    expect(out).toBeUndefined()
+    expect(out?.records).toHaveLength(0)
+    expect(out?.skipReason).toContain('harness')
   })
 
   it('maps a not-collected probe instead of reproducing', async () => {
@@ -308,8 +334,8 @@ describe('runProbeLane', () => {
       wt,
     )
     const fs = [finding('src/util.ts')]
-    const records = await runProbeLane(fs, laneOpts(cwd, reportDir, index, exec))
-    expect(records?.[0]?.outcome).toBe('not-collected')
+    const res = await runProbeLane(fs, laneOpts(cwd, reportDir, index, exec))
+    expect(res?.records[0]?.outcome).toBe('not-collected')
     expect(fs[0]?.evidence.status).toBe('not_exercised')
   })
 
@@ -320,7 +346,7 @@ describe('runProbeLane', () => {
     const ledger = new Ledger(0.0005)
     ledger.recordCall({ model: 'm', provider: 'p', tokens: 1, costUsd: 0.001, kind: 'code' })
     const fs = [finding('src/util.ts'), finding('src/util.ts')]
-    const records = await runProbeLane(
+    const res = await runProbeLane(
       fs,
       laneOpts(cwd, reportDir, index, exec, {
         ledger,
@@ -332,7 +358,7 @@ describe('runProbeLane', () => {
       }),
     )
     expect(authored).toBe(0)
-    expect(records).toHaveLength(0)
+    expect(res?.records).toHaveLength(0)
     expect(ledger.budgetExceeded).toBe(false)
   })
 
@@ -340,7 +366,7 @@ describe('runProbeLane', () => {
     const wt = { path: join(reportDir, 'probes-base') }
     const { exec } = scriptedExec({}, wt)
     const fs = [finding('src/util.ts')]
-    const records = await runProbeLane(
+    const res = await runProbeLane(
       fs,
       laneOpts(cwd, reportDir, index, exec, {
         client: client(async () => ({
@@ -348,8 +374,75 @@ describe('runProbeLane', () => {
         })),
       }),
     )
-    expect(records?.[0]?.outcome).toBe('error')
-    expect(records?.[0]?.detail).toContain('authoring failed')
+    expect(res?.records[0]?.outcome).toBe('error')
+    expect(res?.records[0]?.detail).toContain('authoring failed')
+    expect(fs[0]?.evidence.status).toBe('not_exercised')
+  })
+
+  it('fork PRs ignore PR-supplied allowForks/image — the gate still denies (P0)', async () => {
+    const { exec } = scriptedExec({})
+    const fs = [finding('src/util.ts')]
+    const out = await runProbeLane(
+      fs,
+      laneOpts(cwd, reportDir, index, exec, {
+        // PR-controlled config tries to self-approve — must be ignored.
+        sandbox: resolveConfig({
+          sandbox: { enabled: true, allowForks: true, image: 'evil:latest', memory: '99g' },
+        }).sandbox,
+        meta: { ...META, isFork: true, authorAssociation: 'NONE' },
+      }),
+    )
+    expect(out?.records).toHaveLength(0)
+    expect(out?.skipReason).toContain('fork gate')
+  })
+
+  it('continues to later targets when one authoring call throws', async () => {
+    const wt = { path: join(reportDir, 'probes-base') }
+    const { exec } = scriptedExec({}, wt)
+    let calls = 0
+    const fs = [finding('src/util.ts'), finding('src/util.ts')]
+    const res = await runProbeLane(
+      fs,
+      laneOpts(cwd, reportDir, index, exec, {
+        client: client(async () => {
+          calls++
+          if (calls === 1) throw new Error('openrouter 500')
+          return { content: PROBE_JSON }
+        }),
+      }),
+    )
+    expect(res?.records).toHaveLength(2)
+    expect(res?.records[0]?.outcome).toBe('error')
+    expect(res?.records[0]?.detail).toContain('openrouter 500')
+    // Second target still authored and ran (default script: fail-head ∧ clean-base).
+    expect(res?.records[1]?.outcome).toBe('reproduced')
+  })
+
+  it('never overwrites an existing test file — exclusive create fails closed', async () => {
+    const wt = { path: join(reportDir, 'probes-base') }
+    const { exec } = scriptedExec({}, wt)
+    // Pre-plant a file at the path the probe would take: exemplar is
+    // tests/a.test.ts → probe writes tests/argus-probe-probe-x.test.ts.
+    const collision = join(cwd, 'tests', 'argus-probe-probe-x.test.ts')
+    await writeFile(collision, '// real consumer test', 'utf8')
+    const res = await runProbeLane([finding('src/util.ts')], laneOpts(cwd, reportDir, index, exec))
+    expect(res?.records[0]?.outcome).toBe('error')
+    expect(res?.records[0]?.detail).toContain('probe write failed')
+    const { readFile } = await import('node:fs/promises')
+    expect(await readFile(collision, 'utf8')).toBe('// real consumer test')
+  })
+
+  it('head failure with no base records error, never reproduced', async () => {
+    const { exec } = scriptedExec({
+      head: { code: 1, stdout: ' Test Files  1 failed\n Tests  1 failed', stderr: '' },
+    })
+    const fs = [finding('src/util.ts')]
+    const res = await runProbeLane(
+      fs,
+      laneOpts(cwd, reportDir, index, exec, { meta: { ...META, baseSha: undefined } }),
+    )
+    expect(res?.records[0]?.outcome).toBe('error')
+    expect(res?.records[0]?.detail).toContain('base checkout unavailable')
     expect(fs[0]?.evidence.status).toBe('not_exercised')
   })
 })

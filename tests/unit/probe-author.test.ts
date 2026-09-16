@@ -44,6 +44,19 @@ describe('detectHarness', () => {
     expect(h?.runCmd('t/x.test.ts')).toEqual(['node', '--import', 'tsx', '--test', 't/x.test.ts'])
   })
 
+  it('parses loader flags in space and equals forms', async () => {
+    await writePkg({ scripts: { test: 'node --import=tsx --experimental-strip-types --test' } })
+    const h = await detectHarness(dir)
+    expect(h?.runCmd('t/x.test.ts')).toEqual([
+      'node',
+      '--import',
+      'tsx',
+      '--experimental-strip-types',
+      '--test',
+      't/x.test.ts',
+    ])
+  })
+
   it('returns undefined when no supported harness exists', async () => {
     await writePkg({ scripts: { test: 'echo none' } })
     expect(await detectHarness(dir)).toBeUndefined()
@@ -85,6 +98,32 @@ describe('harness classify', () => {
     expect(classify({ exitCode: 1, stdout: 'not ok 1 - boom\n# fail 1', stderr: '' })).toBe('failed-test')
     expect(classify({ exitCode: 1, stdout: '', stderr: 'ERR_UNKNOWN_FILE_EXTENSION' })).toBe('load-error')
     expect(classify({ exitCode: 0, stdout: 'ok 1\n# pass 1', stderr: '' })).toBe('clean')
+  })
+
+  it('a load failure that still prints failure counts classifies as load-error', async () => {
+    // Vitest counts an unloadable suite as "Test Files 1 failed" — a probe
+    // that can't import must never read as a reproduced test failure.
+    const vitest = await classifyOf({ devDependencies: { vitest: '^3' } }, dir)
+    expect(
+      vitest({
+        exitCode: 1,
+        stdout: ' Test Files  1 failed (1)\n Tests  1 failed',
+        stderr: 'Error: Cannot find module "./missing"',
+      }),
+    ).toBe('load-error')
+    const nodeTest = await classifyOf({ scripts: { test: 'node --test' } }, dir)
+    expect(
+      nodeTest({ exitCode: 1, stdout: 'not ok 1 - probe\n# fail 1', stderr: 'SyntaxError: x' }),
+    ).toBe('load-error')
+  })
+
+  it('exit 0 can never classify as a failure — probe output is attacker-printable', async () => {
+    const vitest = await classifyOf({ devDependencies: { vitest: '^3' } }, dir)
+    expect(vitest({ exitCode: 0, stdout: 'Tests  1 failed', stderr: '' })).toBe('clean')
+    const jest = await classifyOf({ devDependencies: { jest: '^30' } }, dir)
+    expect(jest({ exitCode: 0, stdout: '', stderr: 'Tests: 1 failed' })).toBe('clean')
+    const nodeTest = await classifyOf({ scripts: { test: 'node --test' } }, dir)
+    expect(nodeTest({ exitCode: 0, stdout: 'not ok 1 - forged', stderr: '' })).toBe('clean')
   })
 })
 

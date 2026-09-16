@@ -1,5 +1,4 @@
 import { isTrustedAssociation, PROBE_LABEL } from './ci.js';
-export { PROBE_LABEL };
 /**
  * The label approves only the head it was applied to: the `labeled` event
  * must postdate `head.repo.pushed_at`. A `synchronize` push after approval

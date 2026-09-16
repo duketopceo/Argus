@@ -1,6 +1,5 @@
 import type { Sandbox } from '../config.js';
-import { PROBE_LABEL, type PrMeta } from './ci.js';
-export { PROBE_LABEL };
+import { type PrMeta } from './ci.js';
 /**
  * Fork gate for the sandbox probe lane (KTD5). Evaluation order: the lane
  * must be `enabled`; `allowForks: true` runs everywhere; same-repo PRs run

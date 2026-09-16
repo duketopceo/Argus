@@ -107,6 +107,7 @@ export async function fetchPrMeta(
     | {
         head?: { sha?: string; repo?: { fork?: boolean; pushed_at?: string } | null }
         base?: { sha?: string }
+        merge_base_sha?: string
         author_association?: string
         labels?: ({ name?: string } | null)[] | null
       }
@@ -126,7 +127,10 @@ export async function fetchPrMeta(
     : undefined
   return {
     headSha: data.head?.sha,
-    baseSha: data.base?.sha,
+    // merge_base_sha, NOT base.sha — the control run must test the commit
+    // the PR actually diverged from; base-branch tip can contain fixes the
+    // PR never saw and misattribute them to the change.
+    baseSha: data.merge_base_sha ?? data.base?.sha,
     // head.repo is null when the source fork was deleted — fail closed and
     // treat it as a fork so the probe gate still applies.
     isFork: data.head?.repo?.fork !== false,
@@ -139,10 +143,14 @@ export async function fetchPrMeta(
 }
 
 /**
- * Newest `labeled` event for `argus-probe` on the PR's issue timeline. The
- * label on the payload proves it's currently applied; the event timestamp is
- * what binds approval to the current head (a `synchronize` push after the
- * label must not inherit it). One extra request, only when the label exists.
+ * Newest `labeled` event for `argus-probe` on the PR's issue events feed.
+ * The label on the payload proves it's currently applied; the event
+ * timestamp is what binds approval to the current head (a `synchronize`
+ * push after the label must not inherit it). Uses the *events* endpoint —
+ * not timeline — because it carries only state events (no comments), so a
+ * busy PR's `labeled` event isn't drowned past page one. Pages are
+ * oldest-first with no reverse sort, so we take the newest within a
+ * bounded 3-page scan; a still-busier PR fails closed.
  */
 async function fetchLabelApprovedAt(
   repo: string,
@@ -150,19 +158,24 @@ async function fetchLabelApprovedAt(
   token: string,
   ctx: Ctx,
 ): Promise<string | undefined> {
-  const events = (await ghGet(
-    // per_page=100 widens the single allowed call — the timeline endpoint
-    // pages oldest-first, so a tiny page can miss the newest labeled event.
-    `${GH_API}/repos/${repo}/issues/${pr}/timeline?per_page=100`,
-    token,
-    ctx,
-  )) as ({ event?: string; created_at?: string; label?: { name?: string } | null }[] | undefined)
-  if (!Array.isArray(events)) return undefined
   let latest: string | undefined
-  for (const e of events) {
-    if (e?.event === 'labeled' && e.label?.name === PROBE_LABEL && typeof e.created_at === 'string') {
-      if (latest === undefined || e.created_at > latest) latest = e.created_at
+  for (let page = 1; page <= 3; page++) {
+    const events = (await ghGet(
+      `${GH_API}/repos/${repo}/issues/${pr}/events?per_page=100&page=${page}`,
+      token,
+      ctx,
+    )) as ({ event?: string; created_at?: string; label?: { name?: string } | null }[] | undefined)
+    if (!Array.isArray(events)) return undefined
+    for (const e of events) {
+      if (
+        e?.event === 'labeled' &&
+        e.label?.name === PROBE_LABEL &&
+        typeof e.created_at === 'string'
+      ) {
+        if (latest === undefined || e.created_at > latest) latest = e.created_at
+      }
     }
+    if (events.length < 100) break
   }
   return latest
 }

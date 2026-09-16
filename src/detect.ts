@@ -23,28 +23,43 @@ export interface ExecResult {
   signal?: string | undefined
 }
 
-export type ExecFn = (cmd: string, args: string[], timeoutMs: number) => Promise<ExecResult>
+export type ExecFn = (
+  cmd: string,
+  args: string[],
+  timeoutMs: number,
+  /** Extra env merged over process.env — keeps secrets out of `ps`/`/proc` argv. */
+  env?: Record<string, string>,
+) => Promise<ExecResult>
 
-export const defaultExec: ExecFn = (cmd, args, timeoutMs) =>
+export const defaultExec: ExecFn = (cmd, args, timeoutMs, env) =>
   new Promise((resolve) => {
     // 4 MiB headroom — the sandbox caps output itself after capture, and a
     // chatty probe hitting execFile's 1 MiB default would error instead of
     // reaching the harness classifier.
-    execFile(cmd, args, { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
-      if (err) {
-        // stderr is '' (not undefined) on spawn ENOENT — fall back to the
-        // error message so callers can distinguish "missing" from "failed".
-        resolve({
-          code: 1,
-          stdout: String(stdout),
-          stderr: String(stderr) || err.message,
-          timedOut: err.killed === true,
-          signal: typeof err.signal === 'string' ? err.signal : undefined,
-        })
-      } else {
-        resolve({ code: 0, stdout: String(stdout), stderr: String(stderr) })
-      }
-    })
+    execFile(
+      cmd,
+      args,
+      {
+        timeout: timeoutMs,
+        maxBuffer: 4 * 1024 * 1024,
+        ...(env !== undefined ? { env: { ...process.env, ...env } } : {}),
+      },
+      (err, stdout, stderr) => {
+        if (err) {
+          // stderr is '' (not undefined) on spawn ENOENT — fall back to the
+          // error message so callers can distinguish "missing" from "failed".
+          resolve({
+            code: 1,
+            stdout: String(stdout),
+            stderr: String(stderr) || err.message,
+            timedOut: err.killed === true,
+            signal: typeof err.signal === 'string' ? err.signal : undefined,
+          })
+        } else {
+          resolve({ code: 0, stdout: String(stdout), stderr: String(stderr) })
+        }
+      },
+    )
   })
 
 export type ProbeFn = (url: string, timeoutMs: number) => Promise<boolean>

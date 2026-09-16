@@ -16,7 +16,9 @@ export interface ExecResult {
     /** Signal the process was terminated by, when killed (e.g. 'SIGTERM'). */
     signal?: string | undefined;
 }
-export type ExecFn = (cmd: string, args: string[], timeoutMs: number) => Promise<ExecResult>;
+export type ExecFn = (cmd: string, args: string[], timeoutMs: number, 
+/** Extra env merged over process.env — keeps secrets out of `ps`/`/proc` argv. */
+env?: Record<string, string>) => Promise<ExecResult>;
 export declare const defaultExec: ExecFn;
 export type ProbeFn = (url: string, timeoutMs: number) => Promise<boolean>;
 /**

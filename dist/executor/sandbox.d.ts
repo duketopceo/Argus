@@ -30,12 +30,22 @@ export interface SandboxRunOptions {
     cmd: string[];
     /** Resolved image (`config.sandbox.image` or `node:<host major>-slim`). */
     image: string;
-    /** Container name suffix — becomes `argus-probe-<name>`. */
+    /** Container name suffix — becomes `argus-probe-<pid>-<name>`. */
     name: string;
     timeoutMs: number;
     memory: string;
     cpus: string;
     pidsLimit: number;
+    /**
+     * Extra host dirs bind-mounted read-only at the given container path —
+     * the base run borrows head's node_modules since a git worktree has none.
+     */
+    roMounts?: {
+        host: string;
+        container: string;
+    }[] | undefined;
+    /** Extra container paths (under /work) masked with tmpfs. */
+    masks?: string[] | undefined;
     exec?: ExecFn;
 }
 export interface SandboxRunResult {
@@ -72,21 +82,24 @@ export declare function checkSandboxPaths(workdir: string, scratchDir: string): 
 /**
  * Docker is usable AND resolves the runner's workspace path — bind-mount
  * sources are evaluated by the daemon, so a remote/containerized daemon can
- * silently mount an empty dir. One cheap container run proves both.
+ * silently mount an empty dir. The smoke run uses the SAME hardening
+ * profile as probe runs (plus `--pull always` and an entrypoint override) —
+ * an availability check that ran the image unhardened would bypass every
+ * invariant this module exists to enforce.
  */
 export declare function dockerAvailable(exec: ExecFn, image: string, workdir: string): Promise<boolean>;
+/** How `.git` presents on disk — dir (normal checkout), file (worktree), or absent. */
+type GitMode = 'dir' | 'file' | 'absent';
 /**
  * The full `docker run` argv (KTD2). Every flag is pinned here — this is the
  * single place the sandbox boundary lives. `name` is the full container name.
  */
-export declare function buildSandboxArgv(opts: Pick<SandboxRunOptions, 'image' | 'cmd' | 'memory' | 'cpus' | 'pidsLimit'>, name: string, realWork: string, realScratch: string, relMount: string, gitIsDir: boolean): string[];
-/**
- * Run one command in the hardened container. On timeout the docker client
- * is killed first, then `docker rm -f` guarantees teardown — SIGKILL via
- * the daemon is non-ignorable, which is what makes the R4 wall-clock bound
- * real. Path-check and spawn failures return a `exitCode: -1` result
- * carrying the reason; this function never throws past its callers.
- */
+export declare function buildSandboxArgv(opts: Pick<SandboxRunOptions, 'image' | 'cmd' | 'memory' | 'cpus' | 'pidsLimit' | 'roMounts' | 'masks'>, name: string, checked: {
+    realWork: string;
+    realScratch: string;
+    relMount: string;
+}, gitMode: GitMode, secretFiles: string[]): string[];
 export declare function runProbeInSandbox(opts: SandboxRunOptions): Promise<SandboxRunResult>;
 /** Limits convenience — what `runProbeInSandbox` needs from config.sandbox. */
 export declare function sandboxLimits(sandbox: Sandbox): Pick<SandboxRunOptions, 'timeoutMs' | 'memory' | 'cpus' | 'pidsLimit'>;
+export {};

@@ -38,12 +38,19 @@ export interface SandboxRunOptions {
   cmd: string[]
   /** Resolved image (`config.sandbox.image` or `node:<host major>-slim`). */
   image: string
-  /** Container name suffix — becomes `argus-probe-<name>`. */
+  /** Container name suffix — becomes `argus-probe-<pid>-<name>`. */
   name: string
   timeoutMs: number
   memory: string
   cpus: string
   pidsLimit: number
+  /**
+   * Extra host dirs bind-mounted read-only at the given container path —
+   * the base run borrows head's node_modules since a git worktree has none.
+   */
+  roMounts?: { host: string; container: string }[] | undefined
+  /** Extra container paths (under /work) masked with tmpfs. */
+  masks?: string[] | undefined
   exec?: ExecFn
 }
 
@@ -99,39 +106,81 @@ export async function checkSandboxPaths(
 /**
  * Docker is usable AND resolves the runner's workspace path — bind-mount
  * sources are evaluated by the daemon, so a remote/containerized daemon can
- * silently mount an empty dir. One cheap container run proves both.
+ * silently mount an empty dir. The smoke run uses the SAME hardening
+ * profile as probe runs (plus `--pull always` and an entrypoint override) —
+ * an availability check that ran the image unhardened would bypass every
+ * invariant this module exists to enforce.
  */
 export async function dockerAvailable(
   exec: ExecFn,
   image: string,
   workdir: string,
 ): Promise<boolean> {
-  const version = await exec('docker', ['version', '--format', '{{.Server.Version}}'], 10_000)
-  if (version.code !== 0) return false
-  const probe = await exec(
-    'docker',
-    ['run', '--rm', '-v', `${workdir}:${CONTAINER_WORKDIR}:ro`, image, 'test', '-f', `${CONTAINER_WORKDIR}/package.json`],
-    60_000,
-  )
+  const name = containerName('avail')
+  let probe
+  try {
+    const version = await exec('docker', ['version', '--format', '{{.Server.Version}}'], 10_000)
+    if (version.code !== 0) return false
+    probe = await exec(
+      'docker',
+      [
+        'run',
+        '--rm',
+        '--name',
+        name,
+        '--pull',
+        'always',
+        '--network',
+        'none',
+        '--read-only',
+        '--cap-drop',
+        'ALL',
+        '--security-opt',
+        'no-new-privileges',
+        '--user',
+        '65534:65534',
+        '--entrypoint',
+        'test',
+        '-v',
+        `${workdir}:${CONTAINER_WORKDIR}:ro`,
+        image,
+        '-f',
+        `${CONTAINER_WORKDIR}/package.json`,
+      ],
+      60_000,
+    )
+  } catch {
+    // Spawn failure (no docker binary, daemon gone) → unavailable, and the
+    // named container may still be half-created — remove it best-effort.
+    await forceRemove(exec, name)
+    return false
+  }
+  if (probe.timedOut === true) await forceRemove(exec, name)
   return probe.code === 0
 }
 
-/** Deterministic container name — shared by `docker run --name` and the `rm -f` teardown. */
+/**
+ * Container name — shared by `docker run --name` and the `rm -f` teardown.
+ * Includes the pid so two concurrent review jobs on one daemon can't
+ * collide names (or force-remove each other's containers).
+ */
 function containerName(name: string): string {
-  return `argus-probe-${name}`
+  return `argus-probe-${process.pid}-${name}`
 }
+
+/** How `.git` presents on disk — dir (normal checkout), file (worktree), or absent. */
+type GitMode = 'dir' | 'file' | 'absent'
 
 /**
  * The full `docker run` argv (KTD2). Every flag is pinned here — this is the
  * single place the sandbox boundary lives. `name` is the full container name.
  */
 export function buildSandboxArgv(
-  opts: Pick<SandboxRunOptions, 'image' | 'cmd' | 'memory' | 'cpus' | 'pidsLimit'>,
+  opts: Pick<SandboxRunOptions, 'image' | 'cmd' | 'memory' | 'cpus' | 'pidsLimit' | 'roMounts' | 'masks'>,
   name: string,
-  realWork: string,
-  realScratch: string,
-  relMount: string,
-  gitIsDir: boolean,
+  checked: { realWork: string; realScratch: string; relMount: string },
+  gitMode: GitMode,
+  secretFiles: string[],
 ): string[] {
   const argv = [
     'run',
@@ -161,15 +210,21 @@ export function buildSandboxArgv(
     '--tmpfs',
     '/tmp:rw,nosuid,nodev,noexec',
     '-v',
-    `${realWork}:${CONTAINER_WORKDIR}:ro`,
+    `${checked.realWork}:${CONTAINER_WORKDIR}:ro`,
   ]
-  // Shadow the git dir — actions/checkout persists a base64 GITHUB_TOKEN in
-  // .git/config by default; PR code must not read it. Git worktrees make
-  // .git a *file* — tmpfs can't mount over one, so only mask directories.
-  if (gitIsDir) argv.push('--tmpfs', `${CONTAINER_WORKDIR}/.git`)
+  // Shadow .git — actions/checkout persists a base64 GITHUB_TOKEN in
+  // .git/config; PR code must not read it. tmpfs masks a *directory*; a
+  // worktree's `.git` pointer file (or any root-level secret file staged by
+  // earlier steps) is masked with a read-only /dev/null bind.
+  if (gitMode === 'dir') argv.push('--tmpfs', `${CONTAINER_WORKDIR}/.git`)
+  for (const f of gitMode === 'file' ? ['.git', ...secretFiles] : secretFiles) {
+    argv.push('-v', `/dev/null:${CONTAINER_WORKDIR}/${f}:ro`)
+  }
+  for (const mask of opts.masks ?? []) argv.push('--tmpfs', `${CONTAINER_WORKDIR}/${mask}`)
+  for (const m of opts.roMounts ?? []) argv.push('-v', `${m.host}:${m.container}:ro`)
   argv.push(
     '-v',
-    `${realScratch}:${CONTAINER_WORKDIR}/${relMount}:rw`,
+    `${checked.realScratch}:${CONTAINER_WORKDIR}/${checked.relMount}:rw`,
     '-w',
     CONTAINER_WORKDIR,
     // Declared env allowlist only — no host env is inherited. HOME=/tmp
@@ -198,25 +253,28 @@ async function forceRemove(exec: ExecFn, name: string): Promise<void> {
  * real. Path-check and spawn failures return a `exitCode: -1` result
  * carrying the reason; this function never throws past its callers.
  */
+/** Workspace-root files that commonly carry credentials — masked when present. */
+const SECRET_FILE_NAMES = ['.env', '.npmrc', '.netrc', '.git-credentials']
+
 export async function runProbeInSandbox(opts: SandboxRunOptions): Promise<SandboxRunResult> {
   const exec = opts.exec ?? defaultExec
   const checked = await checkSandboxPaths(opts.workdir, opts.scratchDir)
   if (!checked.ok) {
     return { exitCode: -1, stdout: '', stderr: checked.reason, durationMs: 0, timedOut: false }
   }
-  const gitIsDir = await stat(join(checked.realWork, '.git')).then(
-    (s) => s.isDirectory(),
-    () => false,
-  )
+  const gitStat = await stat(join(checked.realWork, '.git')).catch(() => undefined)
+  const gitMode: GitMode = gitStat === undefined ? 'absent' : gitStat.isDirectory() ? 'dir' : 'file'
+  const secretFiles = (
+    await Promise.all(
+      SECRET_FILE_NAMES.map(async (f) =>
+        (await stat(join(checked.realWork, f)).catch(() => undefined))?.isFile() === true
+          ? f
+          : undefined,
+      ),
+    )
+  ).filter((f): f is string => f !== undefined)
   const name = containerName(opts.name)
-  const argv = buildSandboxArgv(
-    opts,
-    name,
-    checked.realWork,
-    checked.realScratch,
-    checked.relMount,
-    gitIsDir,
-  )
+  const argv = buildSandboxArgv(opts, name, checked, gitMode, secretFiles)
   const started = Date.now()
   let res
   try {

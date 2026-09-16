@@ -996,10 +996,17 @@ async function cmdCodeReview(args, ctx, deps) {
         // ARGUS_SANDBOX=1 env flag (enable-only; other values leave config
         // authoritative).
         let probes;
+        let probeLaneSkipped;
         const sandbox = { ...config.sandbox, enabled: config.sandbox.enabled || ctx.env.ARGUS_SANDBOX === '1' };
+        // pull_request_target runs with the base repo's write token and ambient
+        // secrets — the docs call the lane unsupported there; enforce it in
+        // code too so a miswired workflow fails closed instead of executing
+        // PR code beside real credentials.
+        if (ctx.env.GITHUB_EVENT_NAME === 'pull_request_target')
+            sandbox.enabled = false;
         if (sandbox.enabled && !ledger.budgetExceeded) {
             try {
-                probes = await runProbeLane(linkedFindings, {
+                const lane = await runProbeLane(linkedFindings, {
                     cwd: ctx.cwd,
                     reportDir,
                     sandbox,
@@ -1012,9 +1019,20 @@ async function cmdCodeReview(args, ctx, deps) {
                     budgetUsd: budget,
                     severityGates: blockSeverities,
                     index,
+                    calls: allCalls,
                     exec: deps.exec,
                     log: (line) => ctx.err(line),
                 });
+                if (lane !== undefined) {
+                    probes = lane.records;
+                    probeLaneSkipped = lane.skipReason;
+                    // Probe authoring spend lands on the shared ledger — the report's
+                    // headline cost fields must count it too or they understate the run.
+                    for (const p of lane.records) {
+                        totalCost += p.costUsd;
+                        totalTokens += p.tokens;
+                    }
+                }
             }
             catch (e) {
                 debug('code-review', `probe lane failed: ${e.message}`);
@@ -1029,6 +1047,7 @@ async function cmdCodeReview(args, ctx, deps) {
             verdict,
             findings: linkedFindings,
             ...(probes !== undefined ? { probes } : {}),
+            ...(probeLaneSkipped !== undefined ? { probeLaneSkipped } : {}),
             calls: allCalls,
             visionCostUsd: totalCost,
             tokens: totalTokens,
@@ -1220,6 +1239,9 @@ on:
 jobs:
   argus:
     runs-on: ubuntu-latest
+    # 'labeled' fires on EVERY label — only argus-probe is the fork-gate
+    # signal worth a full review run.
+    if: github.event.action != 'labeled' || github.event.label.name == 'argus-probe'
     permissions:
       contents: read
       issues: write
