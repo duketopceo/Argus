@@ -70,8 +70,9 @@ function scriptedExec(script: ExecScript, wtDir?: { path: string }): { exec: Exe
     if (cmd === 'docker' && args[0] === 'version') {
       return script.dockerDown ? { code: 1, stdout: '', stderr: 'no daemon' } : { code: 0, stdout: '24', stderr: '' }
     }
-    if (cmd === 'docker' && args[0] === 'run' && args.includes('test')) {
-      // mount smoke check
+    if (cmd === 'docker' && args[0] === 'run' && args.includes('--entrypoint')) {
+      // mount smoke check (identified by the test entrypoint, not a bare
+      // 'test' substring — real probe commands can legitimately carry one)
       return { code: 0, stdout: '', stderr: '' }
     }
     if (cmd === 'git' && args.includes('cat-file')) return { code: 0, stdout: '', stderr: '' }

@@ -3,7 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { buildProbeMessages, parseProbe, PROBE_CONTENT_CAP } from '../../src/probe/author.js'
+import {
+  buildProbeMessages,
+  parseProbe,
+  probeImportsSafe,
+  PROBE_CONTENT_CAP,
+} from '../../src/probe/author.js'
 import { detectHarness } from '../../src/probe/harness.js'
 
 describe('detectHarness', () => {
@@ -173,6 +178,27 @@ describe('parseProbe', () => {
       parseProbe(JSON.stringify({ filename: 'p.test.ts', content: "import x from '/etc/passwd'", reasoning: '' })).ok,
     ).toBe(false)
     expect(parseProbe('not json').ok).toBe(false)
+  })
+
+  it('probeImportsSafe bounds relative imports to the write location', () => {
+    const res = parseProbe(okProbe)
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    // tests/ → ../src/f stays inside the repo
+    expect(probeImportsSafe(res.probe, 'tests/argus-probe-a.test.ts')).toBe(true)
+    // a repo-root probe has no parent — ../ escapes the checkout
+    expect(probeImportsSafe(res.probe, 'argus-probe-a.test.ts')).toBe(false)
+    const escaping = parseProbe(
+      JSON.stringify({
+        filename: 'p.test.ts',
+        content: "import x from '../../../../etc/passwd'",
+        reasoning: '',
+      }),
+    )
+    expect(escaping.ok).toBe(true)
+    if (escaping.ok) {
+      expect(probeImportsSafe(escaping.probe, 'tests/argus-probe-p.test.ts')).toBe(false)
+    }
   })
 })
 

@@ -115,7 +115,7 @@ describe('buildSandboxArgv', () => {
     )
     for (const e of envs) {
       expect(e).not.toMatch(/TOKEN|SECRET|KEY/i)
-      expect(e).not.toContain(process.env.HOME ?? '\0')
+      expect(e).not.toContain(process.env.HOME || '\0')
     }
   })
 })

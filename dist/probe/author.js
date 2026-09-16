@@ -1,3 +1,4 @@
+import { dirname, isAbsolute, join, normalize } from 'node:path';
 import ts from 'typescript';
 /**
  * Probe authoring (KTD7): one bounded model call per `not_exercised`
@@ -36,7 +37,9 @@ export const PROBE_CONTENT_CAP = 32 * 1024;
 const SECRET_ENV_RE = /process\.env\s*(?:\.|\[)\s*['"]?\w*(KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL)/i;
 /**
  * Import specifiers via the TypeScript scanner (same seam as the index) —
- * a regex misses bare side-effect imports like `import '/abs/x'`.
+ * a regex misses bare side-effect imports like `import '/abs/x'`. Returns
+ * undefined when the scanner itself fails — fail closed, never silently
+ * skip the import check.
  */
 function importSpecifiers(content) {
     try {
@@ -44,7 +47,7 @@ function importSpecifiers(content) {
         return [...info.importedFiles, ...info.referencedFiles].map((f) => f.fileName);
     }
     catch {
-        return [];
+        return undefined;
     }
 }
 export function parseProbe(raw) {
@@ -67,8 +70,15 @@ export function parseProbe(raw) {
     if (SECRET_ENV_RE.test(parsed.content)) {
         return { ok: false, reason: 'probe reads secret-looking env vars' };
     }
-    for (const spec of importSpecifiers(parsed.content)) {
-        // Relative imports must stay inside the repo (no absolute paths).
+    const imports = importSpecifiers(parsed.content);
+    if (imports === undefined) {
+        return { ok: false, reason: 'probe content failed import scanning' };
+    }
+    for (const spec of imports) {
+        // Absolute imports are rejected here; `..` relative imports are allowed
+        // (a probe in tests/ legitimately imports ../src/x) but MUST resolve
+        // inside the repo — that containment check happens in the queue once
+        // the write location is known (probeImportsSafe).
         if (spec.startsWith('/') || /^[a-zA-Z]:/.test(spec)) {
             return { ok: false, reason: `absolute import: ${spec}` };
         }
@@ -79,8 +89,23 @@ export function parseProbe(raw) {
             filename: parsed.filename,
             content: parsed.content,
             reasoning: typeof parsed.reasoning === 'string' ? parsed.reasoning : '',
+            imports,
         },
     };
+}
+/**
+ * Verify every relative import in a probe resolves inside the repo, given
+ * the probe's repo-relative write path. `../../etc/passwd` from a shallow
+ * dir escapes the checkout — reject.
+ */
+export function probeImportsSafe(probe, relProbePath) {
+    const dir = dirname(relProbePath);
+    return probe.imports.every((spec) => {
+        if (!spec.startsWith('.'))
+            return true; // bare package specifier — resolved from node_modules
+        const resolved = normalize(join(dir, spec));
+        return resolved !== '..' && !resolved.startsWith('../') && !isAbsolute(resolved);
+    });
 }
 export function buildProbeMessages(target, fileContents, exemplarTest, harness) {
     const exemplar = exemplarTest === undefined

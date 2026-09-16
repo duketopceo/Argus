@@ -147,7 +147,10 @@ export async function dockerAvailable(
         '-f',
         `${CONTAINER_WORKDIR}/package.json`,
       ],
-      60_000,
+      // Cold-pull headroom: on a daemon that has never seen the image,
+      // `--pull always` downloads it inside this call — 60s under-runs a
+      // first pull and falsely reports docker as unusable.
+      300_000,
     )
   } catch {
     // Spawn failure (no docker binary, daemon gone) → unavailable, and the

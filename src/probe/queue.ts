@@ -10,7 +10,13 @@ import type { RepoIndex } from '../index/scan.js'
 import type { VisionClient } from '../engine/loop.js'
 import type { CallCost } from '../vision/cost.js'
 import type { Ledger } from '../vision/ledger.js'
-import { buildProbeMessages, parseProbe, PROBE_SCHEMA, type AuthoredProbe } from './author.js'
+import {
+  buildProbeMessages,
+  parseProbe,
+  probeImportsSafe,
+  PROBE_SCHEMA,
+  type AuthoredProbe,
+} from './author.js'
 import { detectHarness, type Harness, type ProbeOutcome } from './harness.js'
 import {
   checkSandboxPaths,
@@ -193,7 +199,9 @@ async function addBaseWorktree(
 }
 
 async function removeBaseWorktree(exec: ExecFn, cwd: string, wtDir: string): Promise<void> {
-  const res = await exec('git', ['-C', cwd, 'worktree', 'remove', '--force', wtDir], 30_000)
+  const res = await exec('git', ['-C', cwd, 'worktree', 'remove', '--force', wtDir], 30_000).catch(
+    () => ({ code: 1, stdout: '', stderr: 'exec failed' }),
+  )
   if (res.code !== 0) {
     // rm fallback AND prune — without prune the stale .git/worktrees entry
     // makes the next `worktree add` fail and every later run degrades to
@@ -361,8 +369,14 @@ export async function runProbeLane(
   if (!dirCheck.ok) return skip(`report dir unsafe — ${dirCheck.reason}`)
   const scratchDir = join(o.reportDir, SCRATCH_DIR_NAME)
   // The single writable mount must actually be writable by nobody (65534).
-  await mkdir(scratchDir, { recursive: true, mode: 0o777 })
-  await chmod(scratchDir, 0o777).catch(() => undefined)
+  // mkdir can reject (EACCES on reportDir, ENOTDIR on a file) — degrade to
+  // a skip, not a lane crash.
+  try {
+    await mkdir(scratchDir, { recursive: true, mode: 0o777 })
+    await chmod(scratchDir, 0o777)
+  } catch (e) {
+    return skip(`scratch dir unusable — ${(e as Error).message}`)
+  }
   const scratchCheck = await checkSandboxPaths(o.cwd, scratchDir)
   if (!scratchCheck.ok) return skip(scratchCheck.reason)
 
@@ -412,6 +426,12 @@ export async function runProbeLane(
         exemplarPath === undefined ? safeFilename : join(dirname(exemplarPath), safeFilename)
       if (!isSafeRepoPath(relProbe)) {
         records.push(record(target, probe, 'error', `unsafe probe path: ${relProbe}`))
+        continue
+      }
+      // `..` imports are legit (tests/ → ../src/x) but must resolve inside
+      // the checkout from the probe's write location.
+      if (!probeImportsSafe(probe, relProbe)) {
+        records.push(record(target, probe, 'error', 'relative import escapes repo'))
         continue
       }
 

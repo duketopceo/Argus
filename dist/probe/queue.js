@@ -4,7 +4,7 @@ import { DEFAULT_SANDBOX } from '../config.js';
 import { defaultExec } from '../detect.js';
 import { mayProbePr } from '../evidence/gate.js';
 import { isTestFile } from '../evidence/link.js';
-import { buildProbeMessages, parseProbe, PROBE_SCHEMA } from './author.js';
+import { buildProbeMessages, parseProbe, probeImportsSafe, PROBE_SCHEMA, } from './author.js';
 import { detectHarness } from './harness.js';
 import { checkSandboxPaths, dockerAvailable, resolveSandboxImage, runProbeInSandbox, SANDBOX_OUTPUT_CAP, SCRATCH_DIR_NAME, sandboxLimits, } from '../executor/sandbox.js';
 /** Pure selection: not_exercised findings at blocking severities, capped. */
@@ -79,7 +79,7 @@ async function addBaseWorktree(exec, cwd, wtDir, baseSha, token) {
     return added.code === 0 ? wtDir : undefined;
 }
 async function removeBaseWorktree(exec, cwd, wtDir) {
-    const res = await exec('git', ['-C', cwd, 'worktree', 'remove', '--force', wtDir], 30_000);
+    const res = await exec('git', ['-C', cwd, 'worktree', 'remove', '--force', wtDir], 30_000).catch(() => ({ code: 1, stdout: '', stderr: 'exec failed' }));
     if (res.code !== 0) {
         // rm fallback AND prune — without prune the stale .git/worktrees entry
         // makes the next `worktree add` fail and every later run degrades to
@@ -220,8 +220,15 @@ export async function runProbeLane(findings, o) {
         return skip(`report dir unsafe — ${dirCheck.reason}`);
     const scratchDir = join(o.reportDir, SCRATCH_DIR_NAME);
     // The single writable mount must actually be writable by nobody (65534).
-    await mkdir(scratchDir, { recursive: true, mode: 0o777 });
-    await chmod(scratchDir, 0o777).catch(() => undefined);
+    // mkdir can reject (EACCES on reportDir, ENOTDIR on a file) — degrade to
+    // a skip, not a lane crash.
+    try {
+        await mkdir(scratchDir, { recursive: true, mode: 0o777 });
+        await chmod(scratchDir, 0o777);
+    }
+    catch (e) {
+        return skip(`scratch dir unusable — ${e.message}`);
+    }
     const scratchCheck = await checkSandboxPaths(o.cwd, scratchDir);
     if (!scratchCheck.ok)
         return skip(scratchCheck.reason);
@@ -262,6 +269,12 @@ export async function runProbeLane(findings, o) {
             const relProbe = exemplarPath === undefined ? safeFilename : join(dirname(exemplarPath), safeFilename);
             if (!isSafeRepoPath(relProbe)) {
                 records.push(record(target, probe, 'error', `unsafe probe path: ${relProbe}`));
+                continue;
+            }
+            // `..` imports are legit (tests/ → ../src/x) but must resolve inside
+            // the checkout from the probe's write location.
+            if (!probeImportsSafe(probe, relProbe)) {
+                records.push(record(target, probe, 'error', 'relative import escapes repo'));
                 continue;
             }
             // Write on the host — the ro workspace mount exposes it to head, and

@@ -1178,8 +1178,8 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
           // Probe authoring spend lands on the shared ledger — the report's
           // headline cost fields must count it too or they understate the run.
           for (const p of lane.records) {
-            totalCost += p.costUsd
-            totalTokens += p.tokens
+            totalCost += p.costUsd ?? 0
+            totalTokens += p.tokens ?? 0
           }
         }
       } catch (e) {

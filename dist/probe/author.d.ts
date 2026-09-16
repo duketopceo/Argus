@@ -20,6 +20,8 @@ export interface AuthoredProbe {
     filename: string;
     content: string;
     reasoning: string;
+    /** Import specifiers extracted at parse time — checked against the write path in the queue. */
+    imports: string[];
 }
 export type ProbeParseResult = {
     ok: true;
@@ -36,6 +38,12 @@ export declare const PROBE_FILENAME_RE: RegExp;
 /** Probe files are bounded — a runaway generation is rejected, not truncated. */
 export declare const PROBE_CONTENT_CAP: number;
 export declare function parseProbe(raw: string): ProbeParseResult;
+/**
+ * Verify every relative import in a probe resolves inside the repo, given
+ * the probe's repo-relative write path. `../../etc/passwd` from a shallow
+ * dir escapes the checkout — reject.
+ */
+export declare function probeImportsSafe(probe: AuthoredProbe, relProbePath: string): boolean;
 export declare function buildProbeMessages(target: ProbeTarget, fileContents: string | undefined, exemplarTest: {
     path: string;
     content: string;
