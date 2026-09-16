@@ -1,5 +1,5 @@
-import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
-import { dirname, isAbsolute, join, normalize, relative, resolve } from 'node:path'
+import { chmod, mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
+import { dirname, isAbsolute, join, posix, relative } from 'node:path'
 
 import { DEFAULT_SANDBOX, type ProviderRules, type Sandbox } from '../config.js'
 import { defaultExec, type ExecFn } from '../detect.js'
@@ -25,6 +25,7 @@ import {
   runProbeInSandbox,
   SANDBOX_OUTPUT_CAP,
   SCRATCH_DIR_NAME,
+  stripControlChars,
   sandboxLimits,
   type SandboxRunResult,
 } from '../executor/sandbox.js'
@@ -133,8 +134,10 @@ export function selectProbeTargets(
  */
 export function isSafeRepoPath(p: string): boolean {
   if (isAbsolute(p) || p.includes('\\')) return false
-  const n = normalize(p)
-  return n !== '..' && !n.startsWith('../') && !isAbsolute(n)
+  // posix normalize — on win32, normalize() turns `../x` into `..\x` and
+  // the startsWith('../') check would miss it.
+  const n = posix.normalize(p)
+  return n !== '..' && !n.startsWith('../') && !posix.isAbsolute(n)
 }
 
 /**
@@ -321,7 +324,12 @@ function outcomeOf(harness: Harness, r: SandboxRunResult): ProbeOutcome | 'error
 }
 
 function probeOutput(stdout: string, stderr: string): string | undefined {
-  const combined = `${stdout}\n${stderr}`.trim()
+  // Strip control chars + ANSI before capping — attacker-influenced probe
+  // output lands in code-review.json and the sticky comment verbatim.
+  const combined = stripControlChars(`${stdout}\n${stderr}`)
+    // eslint-disable-next-line no-control-regex
+    .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')
+    .trim()
   return combined === '' ? undefined : combined.slice(0, SANDBOX_OUTPUT_CAP)
 }
 
@@ -469,7 +477,12 @@ export async function runProbeLane(
         }
         // probes-base sits inside the head run's ro mount — mask it so a
         // head probe can't detect/read the base tree and condition on it.
-        const wtMask = relative(scratchCheck.realWork, resolve(wtDir))
+        // Both sides realpath'd — a symlinked checkout must not silently
+        // drop the mask.
+        const realWt =
+          baseDir === undefined ? undefined : await realpath(baseDir).catch(() => undefined)
+        const wtMask =
+          realWt === undefined ? undefined : relative(scratchCheck.realWork, realWt)
         const [head, base] = await Promise.all([
           runProbeInSandbox({
             workdir: o.cwd,
@@ -478,7 +491,7 @@ export async function runProbeLane(
             image,
             name: `head-${i}`,
             exec,
-            masks: isSafeRepoPath(wtMask) ? [wtMask] : [],
+            masks: wtMask !== undefined && isSafeRepoPath(wtMask) ? [wtMask] : [],
             ...sandboxLimits(sandbox),
           }),
           baseDir === undefined || baseScratch === undefined
@@ -516,7 +529,7 @@ export async function runProbeLane(
         if (headOutcome === 'failed-test' && baseOutcome === 'clean') {
           outcome = 'reproduced'
           detail = `reproduced by Argus probe ${probe.filename} (fails on head, clean on base)`
-          target.evidence = { status: 'reproduced', detail }
+          target.evidence = { ...target.evidence, status: 'reproduced', detail }
         } else if (headOutcome !== 'failed-test') {
           outcome = headOutcome
           detail = `head outcome: ${headOutcome}`

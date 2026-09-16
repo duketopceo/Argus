@@ -77,7 +77,10 @@ const NODE_TEST_FLAG_RE =
 function nodeTestHarness(flags: string[]): Harness {
   return {
     kind: 'node-test',
-    runCmd: (file) => ['node', ...flags, '--test', file],
+    // --test-reporter=tap pins the format `classify` parses — Node ≥22
+    // defaults to the spec reporter (`✖`, not TAP `not ok`) when stdout
+    // is a TTY, and real failures would fall through to load-error.
+    runCmd: (file) => ['node', ...flags, '--test', '--test-reporter=tap', file],
     classify: ({ exitCode, stdout, stderr }) => {
       const out = `${stdout}\n${stderr}`
       if (exitCode === 0) return 'clean'

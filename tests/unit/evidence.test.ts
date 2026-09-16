@@ -286,23 +286,39 @@ describe('fetchPrMeta', () => {
     return seen
   }
 
-  it('uses merge_base_sha (not base-branch tip) as the probe base', async () => {
+  it('derives the probe base from the compare API merge base', async () => {
     stubFetch([
       [
         '/pulls/1',
         {
           head: { sha: 'h1', repo: { fork: false, pushed_at: '2026-09-15T10:00:00Z' } },
           base: { sha: 'basetip' },
-          merge_base_sha: 'diverge',
+          author_association: 'MEMBER',
+          labels: [],
+        },
+      ],
+      ['/compare/', { merge_base_commit: { sha: 'diverge' } }],
+    ])
+    const meta = await fetchPrMeta('o/r', '1', 'tok', ctx)
+    expect(meta?.baseSha).toBe('diverge')
+    expect(meta?.headSha).toBe('h1')
+    expect(meta?.isFork).toBe(false)
+  })
+
+  it('falls back to base tip when the compare call fails', async () => {
+    stubFetch([
+      [
+        '/pulls/1',
+        {
+          head: { sha: 'h1', repo: { fork: false } },
+          base: { sha: 'basetip' },
           author_association: 'MEMBER',
           labels: [],
         },
       ],
     ])
     const meta = await fetchPrMeta('o/r', '1', 'tok', ctx)
-    expect(meta?.baseSha).toBe('diverge')
-    expect(meta?.headSha).toBe('h1')
-    expect(meta?.isFork).toBe(false)
+    expect(meta?.baseSha).toBe('basetip')
   })
 
   it('fails closed when head.repo is null (deleted fork)', async () => {

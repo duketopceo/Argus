@@ -87,8 +87,8 @@ export async function dockerAvailable(exec, image, workdir) {
             '-v',
             `${workdir}:${CONTAINER_WORKDIR}:ro`,
             image,
-            '-f',
-            `${CONTAINER_WORKDIR}/package.json`,
+            '-d',
+            CONTAINER_WORKDIR,
         ], 
         // Cold-pull headroom: on a daemon that has never seen the image,
         // `--pull always` downloads it inside this call — 60s under-runs a

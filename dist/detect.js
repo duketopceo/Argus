@@ -18,7 +18,10 @@ export const defaultExec = (cmd, args, timeoutMs, env) => new Promise((resolve) 
                 code: 1,
                 stdout: String(stdout),
                 stderr: String(stderr) || err.message,
-                timedOut: err.killed === true,
+                // killed is also true on maxBuffer overflow — that's an output
+                // problem, not a timeout; classify by the error code.
+                timedOut: err.killed === true &&
+                    err.code !== 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',
                 signal: typeof err.signal === 'string' ? err.signal : undefined,
             });
         }

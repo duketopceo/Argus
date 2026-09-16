@@ -24,15 +24,17 @@ const TEST_FILE_RE = /(?:^|\/)(?:tests?|e2e|__tests__|__spec__)\/|\.(?:test|spec
 /** Check-run names that look like test jobs (lint/build/status lanes don't count). */
 const TEST_RUN_RE = /\b(test|tests|spec|specs|e2e|smoke|jest|vitest|pytest|rspec|mocha|ava|unittest)\b/i
 
-/** Argus's own check-runs are the reporter, not consumer CI evidence. */
-const ARGUS_RUN_RE = /argus/i
+/** Argus's own check-runs are the reporter, not consumer CI evidence.
+ * Anchored to our own names — a consumer's `argus-unit-tests` lane must
+ * still count. */
+const ARGUS_RUN_RE = /^argus(?:-reviewer)?[\s/]/i
 
 /** Check-run conclusions that mean "didn't actually run" — never evidence. */
 const DID_NOT_RUN = new Set(['neutral', 'skipped', 'cancelled', 'action_required', 'stale', 'startup_failure'])
 
 /** Strip comment-hostile characters — check-run names are repo-controlled and reach the PR comment. */
 export function sanitizeForComment(s: string, max = 80): string {
-  return s.replace(/[|\r\n<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max)
+  return s.replace(/[|\r\n<>`]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max)
 }
 
 export function isTestFile(path: string): boolean {
