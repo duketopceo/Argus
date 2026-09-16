@@ -193,11 +193,15 @@ function renderBody(report, codeReview, runUrl, ok) {
     lines.push('<summary>🧠 Code review</summary>')
     lines.push('')
     lines.push(`**Verdict:** ${codeReview.verdict} · ${codeReview.model} · ${codeReview.tokens}tok ${formatUsd(codeReview.visionCostUsd)}`)
+    if (Array.isArray(codeReview.probes) && codeReview.probes.length > 0) {
+      const reproduced = codeReview.probes.filter((p) => p.outcome === 'reproduced').length
+      lines.push(` · 🧪 ${codeReview.probes.length} probe${codeReview.probes.length === 1 ? '' : 's'} run, ${reproduced} reproduced`)
+    }
     lines.push('')
     lines.push(codeReview.summary)
     lines.push('')
     if (codeReview.findings.length > 0) {
-      const evidenceIcon = { exercised: '✅', corroborated: '🔴', not_exercised: '⚪', inconclusive: '❔' }
+      const evidenceIcon = { exercised: '✅', corroborated: '🔴', not_exercised: '⚪', inconclusive: '❔', reproduced: '🧪' }
       lines.push('| File | Severity | Evidence | Finding |')
       lines.push('| --- | --- | --- | --- |')
       for (const f of codeReview.findings) {
@@ -281,7 +285,13 @@ async function postInlineComments(pr, codeReview) {
       path: f.file,
       line: f.line,
       side: 'RIGHT',
-      body: `**argus-reviewer ${f.severity}:** ${f.message}${f.evidence && f.evidence.status !== 'exercised' ? `\n\n*CI evidence: ${f.evidence.detail}*` : ''}`,
+      body: `**argus-reviewer ${f.severity}:** ${f.message}${
+        f.evidence && f.evidence.status === 'reproduced'
+          ? '\n\n*🧪 Reproduced by an Argus probe — fails on this PR head, clean on base. See workflow artifacts.*'
+          : f.evidence && f.evidence.status !== 'exercised'
+            ? `\n\n*CI evidence: ${f.evidence.detail}*`
+            : ''
+      }`,
     }))
   if (comments.length === 0) return
 

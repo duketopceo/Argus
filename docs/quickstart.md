@@ -200,3 +200,26 @@ each finding with whether the repo's own CI exercised the implicated path —
 `exercised` (test-reachable + test checks passed), `corroborated` (test-reachable
 + a test check failed on this head), `not exercised` (no test file reaches the
 path — severity is never downgraded), or `inconclusive` (no CI/index data).
+
+### Sandbox probes (opt-in, requires Docker)
+
+With `sandbox: { enabled: true }` in config (or the action's `sandbox: 'true'`
+input), Argus goes one step further for `not_exercised` findings at blocking
+severities: it authors a test that asserts the *correct* behavior and runs it
+in a hardened Docker container against the PR head **and** the merge base. Only
+a probe that fails on head and passes on base upgrades the finding to
+`reproduced` 🧪 — a probe that fails on both is a probe bug, not proof.
+
+The container runs with no network, a read-only filesystem, `nobody` UID, all
+capabilities dropped, no ambient env or secrets, `.git` masked, and a hard
+timeout. Fork PRs are gated: probes run only for MEMBER/OWNER/COLLABORATOR
+authors or when a maintainer applies the `argus-probe` label *after* the head
+was pushed (label approvals don't carry across `synchronize` pushes — add
+`labeled` to your workflow's `pull_request.types`). `pull_request_target` is
+not supported. Without Docker or a vitest/jest/`node --test` harness the lane
+degrades cleanly. Probe outcomes are informational — they never change the
+verdict or exit code.
+
+v1 covers Node harnesses (vitest, jest, `node --test`) on the PR's own
+checkout — probes exercise whatever commit `actions/checkout` fetched
+(typically the merge ref).

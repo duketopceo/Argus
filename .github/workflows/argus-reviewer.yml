@@ -2,7 +2,7 @@ name: argus-reviewer PR review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
 jobs:
@@ -18,7 +18,11 @@ jobs:
     env:
       ARGUS_DEBUG: '1'
     steps:
+      # The probe sandbox masks .git anyway — but don't persist the token
+      # into .git/config in the first place.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
