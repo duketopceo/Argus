@@ -16,7 +16,7 @@ self-hosted, BYOK-OpenRouter, and free of per-seat SaaS.
 
 What "full feature" means here (user-confirmed): super-easy onboarding with
 an OpenRouter link and a tested-model list; standing review prompt packs
-(debloat, secrets-leakage, optimization) applied to every PR; an exploratory
+(security, perf, debloat) applied to every PR; an exploratory
 QA agent that walks the app, reads debug logs, and tries to break it;
 and — as the +1 after the milestone — a v0.1 Agent Zero plugin shipped to
 the community Plugin Index. GitLab is out (GHE stays, same API); A0 depth is
@@ -56,12 +56,14 @@ Phase D scale work (#21–23) stays sequenced behind adoption.
   becomes a committed test, not just a comment (testdriver parity: they
   commit generated tests back).
 - R5. An exploratory lane walks `target.url` (or a PR preview URL), captures
-  console/network failures, and reports findings — on PR when enabled, and
-  as the escalation target for A0.
+  console/network failures, and reports findings — on PR when enabled, with
+  A0 as its escalation path for work it cannot reach or that needs a
+  desktop.
 - R6. An `argus` A0 plugin (v0.1) ships to the community Plugin Index —
   standalone repo, `plugin.yaml` + tools at root, index submission PR.
-- R7. `@argus` issue-comment triggers let a user ask for a flow/review in
-  natural language on the PR itself (testdriver's `@testdriverai` parity).
+- R7. `@argus` issue-comment triggers let a user request a flow/review via
+  whitelisted mention commands on the PR itself (testdriver's
+  `@testdriverai` parity).
 - R8. Phase D stays headline-level: runner health (#21), org spend caps
   (#22), GHE (#23 — same-API target only; GitLab deferred).
 - R9. A0 live-verify (#53) and scope/cost controls proceed when a host is
@@ -103,7 +105,7 @@ flowchart TB
   PR[Pull request event] --> CR[Code lane: diff review + prompt packs]
   PR --> EX[Execution lane: authored probes, head vs merge-base]
   PR --> XP[Explore lane: free-explore target.url + console/network capture]
-  XP -->|can't reach / needs desktop| A0[A0 delegate: autonomous QA]
+  XP -->|needs desktop / complex interaction| A0[A0 delegate: autonomous QA]
   CR --> OUT[Sticky comment + inline + status]
   EX --> OUT
   XP --> OUT
@@ -111,21 +113,25 @@ flowchart TB
   CMT[issue_comment: @argus ...] --> PR
 
   subgraph A0 instance [User's A0 instance — optional]
-    A0P[argus plugin tools: review_pr / run_flow / record_flow]
+    A0P[argus plugin tools: review_pr / run_flow]
     A0P -->|npx argus-reviewer| CR
   end
 ```
 
 ### A0 topology (answer to "how does A0 get PRs")
 
-- **Actions → A0 (shipped):** the `pull_request` trigger IS the webhook.
+- **Actions → A0 (topology defined; live verify pending in U7):** the `pull_request` trigger IS the webhook.
   Argus calls `a0 headless -p <task>` into the user's instance with task +
   context; A0 never sees the PR object directly.
 - **A0 → Argus (plugin):** the plugin adds tools the A0 agent invokes on
   chat request or a scheduled task (e.g., poll `gh pr list`, then
   `review_pr`). Requires the user's A0 to reach the repo checkout + a
   GitHub token scoped read (and comment) — onboarding doc covers the
-  least-privilege token shape.
+  least-privilege token shape. Caveat: the plugin shells out to the argus
+  CLI, which loads and executes that checkout's config — pointing a
+  prompt-injected A0 at a hostile checkout is code exec in the A0 host's
+  environment; the doc must tell users to only point the tools at
+  checkouts they trust.
 - **A0-in-Actions:** possible (A0 ships as a container) but heavy; BYO
   persistent instance is the supported shape for v0.1.
 
@@ -143,18 +149,37 @@ flowchart TB
 - **Dependencies:** none
 - **Files:** `src/config.ts`, `src/cli.ts`, `SECURITY.md`,
   `tests/unit/config.test.ts`
-- **Approach:** Preferred: parse the config file as **data, not code** —
-  support `.json` natively and evaluate `.ts` configs in a `node:vm`
-  context with no `require`, no `process`, no imports (or a static
-  allowlist: `defineConfig` only). On `pull_request` events for fork PRs,
-  refuse `.ts` config entirely and require JSON. Document residual risk in
-  SECURITY.md.
+- **Approach:** Trust resolution runs **before** config load —
+  `GITHUB_EVENT_NAME` + `fetchPrMeta` fork status, failing closed to
+  untrusted when metadata is unavailable (today `loadConfig` at
+  `src/cli.ts:979` precedes `fetchPrMeta` — the order must invert or
+  config load must defer to a trust-gated call site). For untrusted
+  checkouts — fork PRs on **any** event type (`pull_request`,
+  `issue_comment`), plus local runs on untrusted trees — the config must
+  be **JSON only**; `.ts` configs are refused outright. `node:vm` is
+  **not** a security boundary (host-realm escapes via constructor chains
+  are trivial; node's own docs say never run untrusted code in it) — do
+  not present vm evaluation as the fix. Trusted trees (same-repo PRs,
+  local dev) keep the current transpile-and-import path so relative
+  imports in consumer configs keep working. Additionally, for untrusted
+  checkouts, **strip exec-bearing config fields** even in JSON:
+  `target.command` (spawned `shell:true` on the host),
+  `pageSetup`/`testsDir` (dynamically imported in-process),
+  `sandbox.image`, `explore.enabled`/`explore.budgetUsd` — mirroring the
+  `DEFAULT_SANDBOX` precedent in `src/probe/queue.ts` (fork PRs already
+  ignore config-supplied image/limits). Document the trusted-field subset
+  and the residual surface (test files imported by `run`, `npm ci`
+  lifecycle scripts) in SECURITY.md — R1 permits the "documented safe
+  surface" branch.
 - **Test scenarios:** a `.ts` config containing `process.env`,
-  `import`, `require`, or top-level side effects is rejected; JSON configs
-  load; same-repo PRs keep TS config support; fork PR with `.ts` config
-  fails closed with a clear message.
+  `import`, `require`, or top-level side effects is rejected on untrusted
+  checkouts; JSON configs load; trusted contexts keep TS config support
+  including relative imports; a fork PR whose JSON config sets
+  `target.command`/`pageSetup` runs with both inert; trust resolution
+  fails closed when `fetchPrMeta` is unavailable.
 - **Verification:** #58 closed; a hostile config cannot read env or
-  exfiltrate during load.
+  exfiltrate during load — verified by an exploit attempt, not by code
+  reading.
 
 ### U2. Review prompt packs + verified model menu
 
@@ -167,17 +192,29 @@ flowchart TB
   `tests/unit/review-packs.test.ts`
 - **Approach:** `reviewProfiles: ('security'|'perf'|'debloat')[]` in config;
   each pack is a rubric block appended to the review prompt. The `security`
-  pack additionally runs a deterministic diff scan for secret-shaped
-  literals (private-key headers, `AKIA[0-9A-Z]{16}`, token patterns) merged
-  into findings before the model call returns. `docs/models.md` lists
-  verified OpenRouter slugs per lane (vision/code/probe) with cost tiers;
-  `init` output prints the short list.
+  pack additionally runs a deterministic scan for secret-shaped literals
+  (private-key headers, `AKIA[0-9A-Z]{16}`, token patterns) merged into
+  findings before the model call returns. Two hard rules for that scan:
+  it runs over a **local `git diff` of head vs merge-base**, not the API
+  `patch` field (GitHub omits `patch` for large/binary files — exactly
+  where real leaks hide); and matched literals are **masked before
+  merging** — findings report file, line, and pattern class only, so a
+  live credential is never republished into comments, artifacts, or
+  prompts. In-tree patterns cover the common shapes; a gitleaks run inside
+  the probe sandbox is a documented follow-up for deeper recall.
+  `docs/models.md` lists verified OpenRouter slugs per lane
+  (vision/code/probe) with cost tiers; `init` output prints the short
+  list; a scheduled CI job validates documented slugs against
+  OpenRouter `/models` so the "verified" table can't silently rot.
 - **Test scenarios:** each pack's rubric appears in the built prompt;
   `security` pack catches a seeded AWS-key-shaped literal deterministically
-  even if the model returns no finding; unknown profile names are rejected
-  at config load; packs compose (security+perf both active in one prompt).
+  even if the model returns no finding, and the seeded literal never
+  appears verbatim in findings or comments; unknown profile names are
+  rejected at config load; packs compose (security+perf both active in one
+  prompt); a seeded-defect fixture repo exists per pack so "measurable
+  recall gap" is an observable signal, not an unfalsifiable deferral.
 - **Verification:** dogfood PR with a seeded fake secret is flagged even
-  under a cheap model.
+  under a cheap model, with the literal masked.
 
 ### U3. Persist reproduced probes as regression tests
 
@@ -188,65 +225,107 @@ flowchart TB
 - **Files:** `src/probe/persist.ts` (new), `src/probe/queue.ts`,
   `action/sticky-comment.mjs`, `src/cli.ts`,
   `tests/unit/probe-persist.test.ts`
-- **Approach:** When a probe reproduces, the report records the probe
-  content + suggested path. A new `persist` mode (config or a maintainer
-  `@argus persist` mention — ties to U6) creates a branch
-  `argus/regression-<pr>-<n>`, commits the probe at the suggested path, and
-  opens a PR against the base branch. Never pushes to the PR branch.
-- **Test scenarios:** reproduced probe → branch + PR created with the
-  exact validated content; non-reproduced probes never persist; the
-  suggested path still respects `isSafeRepoPath` + exclusive create;
-  idempotent on re-run (existing branch/PR detected, not duplicated).
-- **Verification:** a dogfood PR's reproduced probe produces a visible
-  regression-test PR.
+- **Approach:** Two tiers. The always-on tier: when a probe reproduces,
+  the sticky comment already renders the probe content + suggested path —
+  the copy-paste path needs no new machinery and ships free. The
+  automated tier is **mention-gated only** (`@argus persist` — ties to
+  U5): a maintainer's explicit ask creates a branch
+  `argus/regression-<pr>-<n>`, commits the probe at the suggested path,
+  and opens a PR against the base branch. No config-driven auto-persist —
+  a reproduced probe is model output conditioned on PR-controlled file
+  contents, and once merged it runs unsandboxed in the consumer's normal
+  CI; the human merge review is the security boundary, and the generated
+  PR body must say so explicitly (model-generated, PR-derived context,
+  will run with normal CI privileges). Platform constraint to document:
+  PRs opened by `GITHUB_TOKEN` trigger no workflow runs, so the
+  regression PR's body states that checks appear only after a human
+  push — or `workflow_dispatch` the consumer's test workflow on the new
+  branch if in-CI verification is required. Persist needs
+  `contents: write` + `pull-requests: write` — declared as opt-in action
+  inputs, never added silently to the default workflow template. Never
+  pushes to the PR branch; on fork PRs the token is read-only so persist
+  no-ops with a help reply.
+- **Test scenarios:** reproduced probe → mention → branch + PR created
+  with the exact validated content and the disclosure body; non-reproduced
+  probes never persist; the suggested path still respects
+  `isSafeRepoPath` + exclusive create; idempotent on re-run (existing
+  branch/PR detected, not duplicated); fork PR persist no-ops safely.
+- **Verification:** a maintainer `@argus persist` on a dogfood PR's
+  reproduced finding produces a visible regression-test PR.
 
 ### Phase E2 — Exploratory QA lane (detailed)
 
-### U4. Free-explore mode with console/network capture
+### U4. Exploratory QA lane — two increments
 
 - **Goal:** The "agent who walks the app and tries to break it" — without
-  a recorded flow.
+  a recorded flow, delivered in a capture-first then act sequence.
 - **Requirements:** R5
-- **Dependencies:** U1 (config trust), target boot machinery (existing)
+- **Dependencies:** U1 (config trust — `explore` fields are stripped on
+  untrusted checkouts), target boot machinery (existing)
 - **Files:** `src/engine/explore.ts` (new), `src/engine/loop.ts` (explore
   actions), `src/driver/browser.ts` (console/network taps),
   `src/report/` evidence surfaces, `src/config.ts` (`explore` block:
   maxSteps, budgetUsd, enabled), `tests/unit/explore.test.ts`
-- **Approach:** New engine mode: the model receives the screenshot + a
-  compact affordance list and picks exploratory actions (nav, click,
-  submit-bad-input, boundary cases) within a hard step + cost budget.
-  Browser console errors, failed requests, and page errors are captured
-  per step and become findings (`severity: risk|bug` with evidence
-  `observed`). On PR: runs against `target.url` when configured or an
-  env-provided preview URL; findings render in the sticky comment under an
-  "Exploratory" section. Fails closed: unreachable target → no findings,
-  not a failure.
-- **Test scenarios:** a seeded console error on the target produces an
-  `observed` finding; step and dollar budgets both halt exploration;
-  unreachable URL degrades cleanly; a fork PR's explore run respects the
-  same sandbox/gate posture as probes; explore findings never change
-  verdict unless configured to.
+- **Approach:** **U4a (capture):** add console-error / failed-request /
+  page-error taps to the existing replay and probe runs — the milestone's
+  evidence value doesn't require a model-driven policy. Captures become
+  `observed` findings rendered under an "Exploratory" section, with noise
+  controls up front: collapse repeated console signatures, filter
+  third-party origins, cap findings per run. **U4b (act):** the
+  free-explore action policy (nav, click, submit-bad-input, boundary
+  cases) on top of U4a's capture, gated on U4a dogfooding showing
+  un-recorded-path coverage gaps. Target discovery: `target.url` when
+  configured, an env-provided preview URL, or a discovered preview from
+  the PR's check-run `target_url`/deployments API (Vercel/Netlify publish
+  them) — PR CI rarely provides a bootable app, so don't depend on static
+  config alone. Fails closed AND visible: unreachable/absent target emits
+  an explicit "explore skipped — no reachable target" line in the sticky
+  comment (same pattern as `probeLaneSkipped`), never a silent no-op.
+- **Test scenarios:** a seeded console error produces an `observed`
+  finding; repeated identical console errors collapse to one finding;
+  step and dollar budgets halt exploration; unreachable URL produces the
+  explicit skip line; a fork PR's explore run respects the same
+  sandbox/gate posture as probes and its config-supplied `explore` fields
+  are stripped per U1; explore findings never change verdict unless
+  configured to.
 - **Verification:** dogfood app with a seeded broken interaction shows an
-  exploratory finding in the comment.
+  exploratory finding in the comment; a repo with no target shows the
+  skip line, not silence.
 
 ### Phase E3 — Onboarding surface (detailed)
 
 ### U5. `@argus` mention commands + polish
 
-- **Goal:** Natural-language requests on the PR itself — parity with
+- **Goal:** Whitelisted mention commands on the PR itself — parity with
   testdriver's `@testdriverai` UX — plus the last proof/onboarding items.
 - **Requirements:** R3 (finish), R7
-- **Dependencies:** U2
+- **Dependencies:** U2; U3 for the `persist` whitelist entry (ship
+  without it if U3 hasn't landed)
 - **Files:** `.github/workflows` template + `action/` comment-dispatch
-  step, `src/cli.ts` (`mention` command), `docs/quickstart.md`, README
-  demo assets, `tests/unit/mention.test.ts`
+  step, `src/cli.ts` (`mention` command), `docs/quickstart.md`,
+  `STRATEGY.md` (rewrite Tracks to this plan's phases), README demo
+  assets, `tests/unit/mention.test.ts`
 - **Approach:** `issue_comment` trigger filtered to bodies starting with
-  `@argus`; whitelist: `review`, `record "<flow>"`, `persist` (U3), `help`.
-  Same fork gate as probes — untrusted-author mentions no-op. Also finish
-  the Phase-A tail: README demo reel (ce-demo-reel) + npm Trusted
-  Publisher re-add (#57 housekeeping).
+  `@argus`; whitelist: `review`, `record "<flow>"`, `persist` (U3),
+  `help`. **The critical security rule — `issue_comment` runs are
+  strictly more privileged than `pull_request` (repo secrets +
+  write-capable `GITHUB_TOKEN` are present), so mention-triggered runs
+  NEVER check out the PR head.** They operate on a base-ref checkout with
+  the PR diff fetched via the API (the `code-review` path already works
+  this way via `fetchPrFiles`). Gate = commenter association AND
+  head-checkout trust (reusing `fetchPrMeta`/`mayProbePr`'s isFork +
+  head-author association + head-bound `argus-probe` label): for
+  fork-head PRs, every command additionally requires the label covering
+  the current head SHA, and `record`/`persist`/explore are disabled for
+  fork heads entirely. `record` delivery: the generated test + flow cache
+  upload as a workflow artifact and the mention reply links it —
+  committing to the PR branch only works for same-repo PRs and is out of
+  v0.1 scope. Also finish the Phase-A tail: README demo reel
+  (ce-demo-reel) + npm Trusted Publisher re-add (#57 housekeeping).
 - **Test scenarios:** `@argus review` on a PR re-runs review and upserts
-  the sticky comment; untrusted-author mention is ignored; unknown
+  the sticky comment; a trusted-author mention on a fork PR runs against
+  the base-tree config/index only — never head code; `record` replies
+  with an artifact link; untrusted-author mention is ignored; unknown
   commands reply with the help menu; mention runs never bypass the probe
   fork gate.
 - **Verification:** a maintainer comment `@argus review` produces a fresh
@@ -264,11 +343,15 @@ flowchart TB
   `plugin.yaml`, `LICENSE` (MIT), `README.md`, `tools/argus_review.py`,
   `tools/argus_flow.py`; index submission: `plugins/argus/index.yaml` PR to
   `agent0ai/a0-plugins`
-- **Approach:** Thin Tool subclasses invoking the argus CLI
-  (`npx argus-reviewer code-review` / `run`) in a provided checkout dir;
-  settings surface for repo path + GH token env name. Onboarding doc: user
-  installs plugin in their A0, grants a repo-scoped read+comment token,
-  asks A0 "review open PRs on X" or schedules it.
+- **Approach:** Thin Tool subclasses invoking the argus CLI in a provided
+  checkout dir — `npx --no-install argus-reviewer` when the checkout has
+  `argus-reviewer-e2e` installed (matching the action's convention), or
+  `npx -p argus-reviewer-e2e argus-reviewer` for ad-hoc use — bare
+  `npx argus-reviewer` queries the registry for a package that isn't the
+  real one (`argus-reviewer` is the bin name, `argus-reviewer-e2e` the
+  package). Settings surface for repo path + GH token env name.
+  Onboarding doc: user installs plugin in their A0, grants a repo-scoped
+  read+comment token, asks A0 "review open PRs on X" or schedules it.
 - **Test scenarios:** plugin loads in a local A0 (`usr/plugins/argus`);
   `review_pr` tool returns the argus verdict text; missing checkout/token
   fails with a clear message, not a stack trace.
@@ -322,7 +405,16 @@ flowchart TB
 - Whether explore-lane findings should ever block merge — start
   non-blocking, revisit with dogfood data.
 - Whether the A0 plugin needs an argus HTTP surface (vs CLI shell-out) —
-  decide during U6 implementation.
+  decide during U6 implementation. Note: the CLI path assumes node/npm
+  exist inside A0's tool-execution environment — unverified until the
+  local-load test runs; the HTTP surface is the hedge.
+- Whether the secrets pre-scan also covers removed/context diff lines —
+  a rotated-out-but-still-live secret in a `-` line deserves a finding
+  too, but echoing it would republish; decide masking policy at
+  implementation.
+- Which testdriver capabilities are deliberately out of the parity
+  target (hosted desktop sandbox, GitHub App/OIDC install model) so the
+  milestone anchor doesn't silently expand.
 
 ---
 
@@ -330,7 +422,10 @@ flowchart TB
 
 | Risk / dependency | Mitigation |
 | --- | --- |
-| Explore lane is the biggest remaining build (new engine mode + evidence capture) | Phase-gated behind E1; vision engine already owns screenshots/actions/loop |
+| `issue_comment` runs are more privileged than `pull_request` (secrets + write token present) | Mention runs never check out PR head — base-ref + API diff; fork heads need the head-bound label, `record`/`persist` disabled |
+| Explore lane is the biggest remaining build (new engine mode + evidence capture) | Split U4a capture / U4b act; capture value ships without the model policy |
+| Explore lane needs a reachable target, which PR CI rarely provides | Preview-URL discovery via check-run `target_url`/deployments; explicit skip line, never silent |
+| Persisted probes run unsandboxed once merged into consumer CI | Mention-gated only; generated PR body discloses model-generated provenance |
 | A0 host availability gates U7 and plugin dogfooding | Plugin builds host-free (Tool classes are thin CLI wrappers); U7 slides without blocking E-phases |
 | Prompt packs could inflate findings noise | Packs shape rubric only — same severity gate + dedup path; dogfood each pack before documenting it |
 | Secrets pre-scan regex false positives | Entropy + shape checks; findings marked `risk` with deterministic-evidence note |
