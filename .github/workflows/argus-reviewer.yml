@@ -8,6 +8,9 @@ on:
 jobs:
   review:
     runs-on: self-hosted
+    # 'labeled' fires on EVERY label — only argus-probe is the fork-gate
+    # signal worth a full review run.
+    if: github.event.action != 'labeled' || github.event.label.name == 'argus-probe'
     permissions:
       contents: read
       issues: write

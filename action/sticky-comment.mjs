@@ -9,6 +9,11 @@ function formatUsd(n) {
   return `$${(n || 0).toFixed(6)}`
 }
 
+/** Escape a report string for one markdown table cell. */
+function cell(s) {
+  return String(s ?? '').replace(/\|/g, '\\|').replace(/[\r\n]+/g, ' ').slice(0, 200)
+}
+
 function renderMissingKeyBody() {
   const lines = []
   lines.push(SENTINEL)
@@ -197,6 +202,9 @@ function renderBody(report, codeReview, runUrl, ok) {
       const reproduced = codeReview.probes.filter((p) => p.outcome === 'reproduced').length
       lines.push(` · 🧪 ${codeReview.probes.length} probe${codeReview.probes.length === 1 ? '' : 's'} run, ${reproduced} reproduced`)
     }
+    if (typeof codeReview.probeLaneSkipped === 'string') {
+      lines.push(` · 🧪 probe lane skipped — ${cell(codeReview.probeLaneSkipped)}`)
+    }
     lines.push('')
     lines.push(codeReview.summary)
     lines.push('')
@@ -204,11 +212,18 @@ function renderBody(report, codeReview, runUrl, ok) {
       const evidenceIcon = { exercised: '✅', corroborated: '🔴', not_exercised: '⚪', inconclusive: '❔', reproduced: '🧪' }
       lines.push('| File | Severity | Evidence | Finding |')
       lines.push('| --- | --- | --- | --- |')
-      for (const f of codeReview.findings) {
+      // Findings/evidence strings are model- and probe-emitted — sanitize
+      // for the markdown table and bound the section so an oversized report
+      // can't push the body past GitHub's 65536-char comment limit.
+      const MAX_FINDING_ROWS = 25
+      for (const f of codeReview.findings.slice(0, MAX_FINDING_ROWS)) {
         const ev = f.evidence
-          ? `${evidenceIcon[f.evidence.status] ?? '❔'} ${f.evidence.detail}`
+          ? `${evidenceIcon[f.evidence.status] ?? '❔'} ${cell(f.evidence.detail)}`
           : '—'
-        lines.push(`| \`${f.file}\` | ${f.severity} | ${ev} | ${f.message} |`)
+        lines.push(`| \`${cell(f.file)}\` | ${cell(f.severity)} | ${ev} | ${cell(f.message)} |`)
+      }
+      if (codeReview.findings.length > MAX_FINDING_ROWS) {
+        lines.push(`| … | — | — | ${codeReview.findings.length - MAX_FINDING_ROWS} more findings in \`code-review.json\` |`)
       }
       lines.push('')
     }

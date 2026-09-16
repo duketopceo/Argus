@@ -43,7 +43,7 @@ inputs:
     default: argus-reviewer-report
     required: false
   sandbox:
-    description: Enable the B.2 probe lane — authored test probes for unexercised findings run in a hardened Docker container (no network, no secrets, read-only fs). Requires Docker on the runner; unsupported on pull_request_target.
+    description: Enable the B.2 probe lane — authored test probes for unexercised findings run in a hardened Docker container (no network, no secrets, read-only fs). Enable-only — 'false' does not override a config-enabled lane. Requires Docker on the runner; forced off on pull_request_target.
     default: 'false'
     required: false
 outputs:
