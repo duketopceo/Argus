@@ -14,6 +14,42 @@ export interface Target {
   readyTimeoutMs: number
 }
 
+/**
+ * Sandbox probe lane (Phase B.2, KTD5): runs authored test probes against
+ * `not_exercised` code-review findings inside a hardened Docker container.
+ * Opt-in — `enabled` defaults to false. Fork PRs are gated by `allowForks`,
+ * the `argus-probe` label, or a trusted author_association (see
+ * `evidence/gate.ts`).
+ */
+export interface Sandbox {
+  /** Master switch for the probe lane. Default false. */
+  enabled: boolean
+  /**
+   * Docker image probes run in — trusted maintainer config (a custom image
+   * extends the sandbox's trusted computing base). Default undefined →
+   * resolved at probe time as `node:<host Node major>-slim`, because native
+   * `node_modules` are ABI-bound to the Node version that installed them.
+   */
+  image: string | undefined
+  /** Max probes authored/executed per code-review run. Default 3. */
+  maxProbes: number
+  /** Hard wall-clock timeout per probe in milliseconds. Default 120_000. */
+  timeoutMs: number
+  /** Container memory limit (`--memory`). Default '2g'. */
+  memory: string
+  /** Container CPU limit (`--cpus`). Default '2'. */
+  cpus: string
+  /** Container PID limit (`--pids-limit`). Default 256. */
+  pidsLimit: number
+  /**
+   * When true, probes run on fork PRs without further approval. When false,
+   * fork PRs require a head-bound `argus-probe` label (the labeled event must
+   * postdate the head's pushed_at) or a MEMBER/OWNER/COLLABORATOR
+   * author_association. Same-repo PRs are unaffected either way.
+   */
+  allowForks: boolean
+}
+
 export interface Config {
   model: string
   escalation_model: string
@@ -111,11 +147,30 @@ export interface Config {
    * the app or the expectation is wrong.
    */
   heal: 'local' | 'a0' | undefined
+  /**
+   * Sandbox probe lane for `code-review` (Phase B.2). Always populated after
+   * `resolveConfig` — `enabled: false` by default so the lane is opt-in.
+   */
+  sandbox: Sandbox
 }
 
-export type ConfigInput = Partial<Omit<Config, 'provider'>> & { provider?: Partial<ProviderRules> }
+export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox'>> & {
+  provider?: Partial<ProviderRules>
+  sandbox?: Partial<Sandbox>
+}
 
 export const DEFAULT_RECORD_STEP_CAP = 40
+
+export const DEFAULT_SANDBOX: Sandbox = {
+  enabled: false,
+  image: undefined,
+  maxProbes: 3,
+  timeoutMs: 120_000,
+  memory: '2g',
+  cpus: '2',
+  pidsLimit: 256,
+  allowForks: false,
+}
 
 const defaults: Config = {
   model: 'google/gemini-2.5-flash-lite',
@@ -144,6 +199,7 @@ const defaults: Config = {
   recordStepCap: DEFAULT_RECORD_STEP_CAP,
   a0: undefined,
   heal: 'local',
+  sandbox: { ...DEFAULT_SANDBOX },
 }
 
 export function defineConfig(input: ConfigInput): ConfigInput {
@@ -152,7 +208,20 @@ export function defineConfig(input: ConfigInput): ConfigInput {
 
 export function resolveConfig(input: ConfigInput = {}): Config {
   const provider: ProviderRules = { ...defaults.provider, ...(input.provider ?? {}) }
-  const resolved: Config = { ...defaults, ...input, provider }
+  const sandbox: Sandbox = { ...defaults.sandbox, ...(input.sandbox ?? {}) }
+  sandbox.maxProbes =
+    Number.isFinite(sandbox.maxProbes) && sandbox.maxProbes >= 1
+      ? Math.floor(sandbox.maxProbes)
+      : DEFAULT_SANDBOX.maxProbes
+  sandbox.timeoutMs =
+    Number.isFinite(sandbox.timeoutMs) && sandbox.timeoutMs >= 1
+      ? Math.floor(sandbox.timeoutMs)
+      : DEFAULT_SANDBOX.timeoutMs
+  sandbox.pidsLimit =
+    Number.isFinite(sandbox.pidsLimit) && sandbox.pidsLimit >= 1
+      ? Math.floor(sandbox.pidsLimit)
+      : DEFAULT_SANDBOX.pidsLimit
+  const resolved: Config = { ...defaults, ...input, provider, sandbox }
   const cap = resolved.recordStepCap
   resolved.recordStepCap =
     cap !== undefined && Number.isFinite(cap) && cap >= 1

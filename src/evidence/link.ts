@@ -1,7 +1,17 @@
 import type { RepoIndex } from '../index/scan.js'
 import type { CheckRun } from './ci.js'
 
-export type EvidenceStatus = 'exercised' | 'corroborated' | 'not_exercised' | 'inconclusive'
+/**
+ * `reproduced` is emitted only by the B.2 probe stage — a sandboxed test probe
+ * demonstrated the defect (KTD4). `linkFindings` never produces it; the probe
+ * stage is the only writer and can only move `not_exercised` → `reproduced`.
+ */
+export type EvidenceStatus =
+  | 'exercised'
+  | 'corroborated'
+  | 'not_exercised'
+  | 'inconclusive'
+  | 'reproduced'
 
 export interface Evidence {
   status: EvidenceStatus

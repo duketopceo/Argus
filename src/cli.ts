@@ -25,7 +25,7 @@ import { buildReviewContext, CONTEXT_PREFIX } from './index/context.js'
 import { diffChangedFiles } from './index/diff.js'
 import { invalidateForDiff } from './index/invalidate.js'
 import { readIndex, scanRepo, writeIndex } from './index/scan.js'
-import { fetchCheckRuns, fetchPrHeadSha } from './evidence/ci.js'
+import { fetchCheckRuns, fetchPrMeta } from './evidence/ci.js'
 import { linkFindings, type Evidence } from './evidence/link.js'
 import { A0_DEFAULT_TIMEOUT_MS, a0TaskPrompt, runA0Task } from './executor/a0.js'
 import { buildJournalEntry } from './journal/build.js'
@@ -1139,7 +1139,11 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     // exercised the implicated path. Post-pass annotation only — evidence
     // never downgrades a finding, and check-run names are sanitized before
     // they reach the comment.
-    const headSha = await fetchPrHeadSha(repo, pr, token, ctx)
+    // prMeta also carries isFork/authorAssociation/labels — the B.2 probe
+    // lane's fork gate (evidence/gate.ts) consumes them; only headSha feeds
+    // evidence linkage here.
+    const prMeta = await fetchPrMeta(repo, pr, token, ctx)
+    const headSha = prMeta?.headSha
     const checkRuns = headSha === undefined ? undefined : await fetchCheckRuns(repo, headSha, token, ctx)
     const linkedFindings = linkFindings(finalFindings, index, checkRuns)
     debug(
