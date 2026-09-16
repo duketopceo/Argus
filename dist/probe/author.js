@@ -1,4 +1,4 @@
-import { dirname, isAbsolute, join, normalize } from 'node:path';
+import { posix } from 'node:path';
 import ts from 'typescript';
 /**
  * Probe authoring (KTD7): one bounded model call per `not_exercised`
@@ -75,12 +75,15 @@ export function parseProbe(raw) {
         return { ok: false, reason: 'probe content failed import scanning' };
     }
     for (const spec of imports) {
-        // Absolute imports are rejected here; `..` relative imports are allowed
-        // (a probe in tests/ legitimately imports ../src/x) but MUST resolve
-        // inside the repo — that containment check happens in the queue once
-        // the write location is known (probeImportsSafe).
-        if (spec.startsWith('/') || /^[a-zA-Z]:/.test(spec)) {
-            return { ok: false, reason: `absolute import: ${spec}` };
+        // Reject anything that isn't a bare specifier or plain relative path:
+        // absolute paths, drive letters, UNC, and scheme-prefixed specifiers
+        // (`file:///etc/passwd` is a host read, `data:` smuggles a module).
+        // `node:` builtins stay allowed — node-test probes need `node:test`.
+        if (spec.startsWith('/') ||
+            /^[a-zA-Z]:/.test(spec) ||
+            spec.startsWith('\\\\') ||
+            (/^[a-z][a-z0-9+.-]*:/i.test(spec) && !spec.startsWith('node:'))) {
+            return { ok: false, reason: `unsafe import: ${spec}` };
         }
     }
     return {
@@ -99,12 +102,14 @@ export function parseProbe(raw) {
  * dir escapes the checkout — reject.
  */
 export function probeImportsSafe(probe, relProbePath) {
-    const dir = dirname(relProbePath);
+    // Repo-relative paths are always `/`-separated — compute in posix so a
+    // Windows host can't turn `../x` into `..\x` and slip the `../` check.
+    const dir = posix.dirname(relProbePath);
     return probe.imports.every((spec) => {
         if (!spec.startsWith('.'))
             return true; // bare package specifier — resolved from node_modules
-        const resolved = normalize(join(dir, spec));
-        return resolved !== '..' && !resolved.startsWith('../') && !isAbsolute(resolved);
+        const resolved = posix.normalize(posix.join(dir, spec));
+        return resolved !== '..' && !resolved.startsWith('../') && !posix.isAbsolute(resolved);
     });
 }
 export function buildProbeMessages(target, fileContents, exemplarTest, harness) {

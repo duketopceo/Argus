@@ -36,9 +36,12 @@ export async function ghGet(url, token, ctx) {
     catch (e) {
         if (e instanceof Error && e.name === 'AbortError') {
             ctx.err(`evidence: github request timed out — ${url}`);
-            return undefined;
         }
-        throw e;
+        else {
+            // DNS/socket/protocol failures — same contract: undefined, never throw.
+            ctx.err(`evidence: github request failed — ${url} (${e.message})`);
+        }
+        return undefined;
     }
     finally {
         clearTimeout(timeout);
@@ -64,12 +67,17 @@ export async function fetchPrMeta(repo, pr, token, ctx) {
     const labelApprovedAt = needsTimeline
         ? await fetchLabelApprovedAt(repo, pr, token, ctx)
         : undefined;
+    // The pulls payload has NO merge-base field — derive it from the compare
+    // API (merge_base_commit.sha). Base-branch tip is the fallback: it can
+    // contain fixes the PR never saw and misattribute them to the change.
+    const headSha = data.head?.sha;
+    const baseSha = data.base?.sha;
+    const mergeBase = headSha !== undefined && baseSha !== undefined
+        ? await fetchMergeBase(repo, baseSha, headSha, token, ctx)
+        : undefined;
     return {
-        headSha: data.head?.sha,
-        // merge_base_sha, NOT base.sha — the control run must test the commit
-        // the PR actually diverged from; base-branch tip can contain fixes the
-        // PR never saw and misattribute them to the change.
-        baseSha: data.merge_base_sha ?? data.base?.sha,
+        headSha,
+        baseSha: mergeBase ?? baseSha,
         // head.repo is null when the source fork was deleted — fail closed and
         // treat it as a fork so the probe gate still applies.
         isFork: data.head?.repo?.fork !== false,
@@ -78,6 +86,14 @@ export async function fetchPrMeta(repo, pr, token, ctx) {
         pushedAt: data.head?.repo?.pushed_at,
         labelApprovedAt,
     };
+}
+/**
+ * Merge base via the compare API — `GET /compare/{base}...{head}` returns
+ * `merge_base_commit.sha`, the commit the PR actually diverged from.
+ */
+async function fetchMergeBase(repo, base, head, token, ctx) {
+    const data = (await ghGet(`${GH_API}/repos/${repo}/compare/${base}...${head}`, token, ctx));
+    return data?.merge_base_commit?.sha;
 }
 /**
  * Newest `labeled` event for `argus-probe` on the PR's issue events feed.

@@ -46,7 +46,14 @@ describe('detectHarness', () => {
     await writePkg({ scripts: { test: 'node --import tsx --test tests/' } })
     const h = await detectHarness(dir)
     expect(h?.kind).toBe('node-test')
-    expect(h?.runCmd('t/x.test.ts')).toEqual(['node', '--import', 'tsx', '--test', 't/x.test.ts'])
+    expect(h?.runCmd('t/x.test.ts')).toEqual([
+      'node',
+      '--import',
+      'tsx',
+      '--test',
+      '--test-reporter=tap',
+      't/x.test.ts',
+    ])
   })
 
   it('parses loader flags in space and equals forms', async () => {
@@ -58,6 +65,7 @@ describe('detectHarness', () => {
       'tsx',
       '--experimental-strip-types',
       '--test',
+      '--test-reporter=tap',
       't/x.test.ts',
     ])
   })

@@ -183,7 +183,8 @@ describe('dockerAvailable', () => {
     }
     expect(await dockerAvailable(exec, 'node:22-slim', '/repo')).toBe(false)
     expect(calls[1]).toContain('test')
-    expect(calls[1]).toContain('/work/package.json')
+    expect(calls[1]).toContain('-d')
+    expect(calls[1]).toContain('/work')
   })
 
   it('runs the availability smoke check under the same hardened profile', async () => {
