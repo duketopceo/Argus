@@ -17,8 +17,9 @@ import { buildReviewContext, CONTEXT_PREFIX } from './index/context.js';
 import { diffChangedFiles } from './index/diff.js';
 import { invalidateForDiff } from './index/invalidate.js';
 import { readIndex, scanRepo, writeIndex } from './index/scan.js';
-import { fetchCheckRuns, fetchPrHeadSha } from './evidence/ci.js';
+import { fetchCheckRuns, fetchPrMeta } from './evidence/ci.js';
 import { linkFindings } from './evidence/link.js';
+import { runProbeLane } from './probe/queue.js';
 import { A0_DEFAULT_TIMEOUT_MS, a0TaskPrompt, runA0Task } from './executor/a0.js';
 import { buildJournalEntry } from './journal/build.js';
 import { newRunId, writeJournal } from './journal/store.js';
@@ -1003,11 +1004,48 @@ async function cmdCodeReview(args, ctx, deps) {
         // exercised the implicated path. Post-pass annotation only — evidence
         // never downgrades a finding, and check-run names are sanitized before
         // they reach the comment.
-        const headSha = await fetchPrHeadSha(repo, pr, token, ctx);
+        // prMeta also carries isFork/authorAssociation/labels — the B.2 probe
+        // lane's fork gate (evidence/gate.ts) consumes them; only headSha feeds
+        // evidence linkage here.
+        const prMeta = await fetchPrMeta(repo, pr, token, ctx);
+        const headSha = prMeta?.headSha;
         const checkRuns = headSha === undefined ? undefined : await fetchCheckRuns(repo, headSha, token, ctx);
         const linkedFindings = linkFindings(finalFindings, index, checkRuns);
         debug('code-review', `evidence: ${linkedFindings.map((f) => f.evidence.status).join(',')}`);
         const blockSeverities = config.severity ?? ['bug'];
+        // B.2 probe lane: authored tests executed in the Docker sandbox can
+        // upgrade a not_exercised finding to `reproduced`. Strictly additive —
+        // failures degrade to a detail note and the lane never changes verdict,
+        // ok, or the exit code (KTD8). Opt-in via config.sandbox.enabled or the
+        // ARGUS_SANDBOX=1 env flag (enable-only; other values leave config
+        // authoritative).
+        let probes;
+        const sandboxEnabled = config.sandbox.enabled || ctx.env.ARGUS_SANDBOX === '1';
+        if (sandboxEnabled && !ledger.budgetExceeded) {
+            try {
+                probes = await runProbeLane(linkedFindings, {
+                    cwd: ctx.cwd,
+                    reportDir,
+                    sandbox: config.sandbox,
+                    enabled: sandboxEnabled,
+                    meta: prMeta,
+                    token,
+                    client,
+                    model,
+                    provider: config.provider,
+                    ledger,
+                    budgetUsd: budget,
+                    severityGates: blockSeverities,
+                    index,
+                    exec: deps.exec,
+                    log: (line) => ctx.err(line),
+                });
+            }
+            catch (e) {
+                debug('code-review', `probe lane failed: ${e.message}`);
+                ctx.err(`code-review probe lane failed: ${e.message}`);
+            }
+        }
         const hasBlocker = finalFindings.some((f) => blockSeverities.includes(f.severity ?? ''));
         const report = {
             ok: !hasBlocker && !ledger.budgetExceeded,
@@ -1015,6 +1053,7 @@ async function cmdCodeReview(args, ctx, deps) {
             summary,
             verdict,
             findings: linkedFindings,
+            ...(probes !== undefined ? { probes } : {}),
             calls: allCalls,
             visionCostUsd: totalCost,
             tokens: totalTokens,
@@ -1199,6 +1238,9 @@ const INIT_WORKFLOW = `name: argus-reviewer
 
 on:
   pull_request:
+    # 'labeled' lets a maintainer re-trigger with the argus-probe label when
+    # sandbox probes are enabled for fork PRs.
+    types: [opened, synchronize, reopened, labeled]
 
 jobs:
   argus:
@@ -1210,7 +1252,11 @@ jobs:
       checks: write
       statuses: write
     steps:
+      # persist-credentials: false keeps the GITHUB_TOKEN out of .git/config —
+      # the probe sandbox masks .git regardless, but don't store it at all.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       # Pin a tag or commit for supply-chain safety once releases are cut.
       - uses: duketopceo/Argus/action@main
         with:

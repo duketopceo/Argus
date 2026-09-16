@@ -7,7 +7,13 @@ export const defaultExec = (cmd, args, timeoutMs) => new Promise((resolve) => {
         if (err) {
             // stderr is '' (not undefined) on spawn ENOENT — fall back to the
             // error message so callers can distinguish "missing" from "failed".
-            resolve({ code: 1, stdout: String(stdout), stderr: String(stderr) || err.message });
+            resolve({
+                code: 1,
+                stdout: String(stdout),
+                stderr: String(stderr) || err.message,
+                timedOut: err.killed === true,
+                signal: typeof err.signal === 'string' ? err.signal : undefined,
+            });
         }
         else {
             resolve({ code: 0, stdout: String(stdout), stderr: String(stderr) });

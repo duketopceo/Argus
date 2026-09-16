@@ -7,6 +7,14 @@ export interface ExecResult {
     code: number;
     stdout: string;
     stderr: string;
+    /**
+     * The timeout kill fired — execFile killed the process for exceeding
+     * timeoutMs (`err.killed`). Without this a timed-out command is
+     * indistinguishable from a nonzero exit.
+     */
+    timedOut?: boolean;
+    /** Signal the process was terminated by, when killed (e.g. 'SIGTERM'). */
+    signal?: string | undefined;
 }
 export type ExecFn = (cmd: string, args: string[], timeoutMs: number) => Promise<ExecResult>;
 export declare const defaultExec: ExecFn;

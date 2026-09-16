@@ -27,6 +27,7 @@ import { invalidateForDiff } from './index/invalidate.js'
 import { readIndex, scanRepo, writeIndex } from './index/scan.js'
 import { fetchCheckRuns, fetchPrMeta } from './evidence/ci.js'
 import { linkFindings, type Evidence } from './evidence/link.js'
+import { runProbeLane, type ProbeRecord } from './probe/queue.js'
 import { A0_DEFAULT_TIMEOUT_MS, a0TaskPrompt, runA0Task } from './executor/a0.js'
 import { buildJournalEntry } from './journal/build.js'
 import { ErrorRecord } from './journal/schema.js'
@@ -802,6 +803,8 @@ interface CodeReviewReport {
   summary: string
   verdict: 'pass' | 'needs_changes' | 'approve'
   findings: { file: string; line?: number; severity: string; message: string; evidence?: Evidence }[]
+  /** B.2 probe audit records — present only when the sandbox lane ran. */
+  probes?: ProbeRecord[]
   calls: CallCost[]
   visionCostUsd: number
   tokens: number
@@ -1152,6 +1155,40 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     )
 
     const blockSeverities = config.severity ?? ['bug']
+
+    // B.2 probe lane: authored tests executed in the Docker sandbox can
+    // upgrade a not_exercised finding to `reproduced`. Strictly additive —
+    // failures degrade to a detail note and the lane never changes verdict,
+    // ok, or the exit code (KTD8). Opt-in via config.sandbox.enabled or the
+    // ARGUS_SANDBOX=1 env flag (enable-only; other values leave config
+    // authoritative).
+    let probes: ProbeRecord[] | undefined
+    const sandboxEnabled = config.sandbox.enabled || ctx.env.ARGUS_SANDBOX === '1'
+    if (sandboxEnabled && !ledger.budgetExceeded) {
+      try {
+        probes = await runProbeLane(linkedFindings, {
+          cwd: ctx.cwd,
+          reportDir,
+          sandbox: config.sandbox,
+          enabled: sandboxEnabled,
+          meta: prMeta,
+          token,
+          client,
+          model,
+          provider: config.provider,
+          ledger,
+          budgetUsd: budget,
+          severityGates: blockSeverities,
+          index,
+          exec: deps.exec,
+          log: (line) => ctx.err(line),
+        })
+      } catch (e) {
+        debug('code-review', `probe lane failed: ${(e as Error).message}`)
+        ctx.err(`code-review probe lane failed: ${(e as Error).message}`)
+      }
+    }
+
     const hasBlocker = finalFindings.some((f) => blockSeverities.includes((f as { severity?: string }).severity ?? ''))
     const report: CodeReviewReport = {
       ok: !hasBlocker && !ledger.budgetExceeded,
@@ -1159,6 +1196,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       summary,
       verdict,
       findings: linkedFindings,
+      ...(probes !== undefined ? { probes } : {}),
       calls: allCalls,
       visionCostUsd: totalCost,
       tokens: totalTokens,
@@ -1356,6 +1394,9 @@ const INIT_WORKFLOW = `name: argus-reviewer
 
 on:
   pull_request:
+    # 'labeled' lets a maintainer re-trigger with the argus-probe label when
+    # sandbox probes are enabled for fork PRs.
+    types: [opened, synchronize, reopened, labeled]
 
 jobs:
   argus:
@@ -1367,7 +1408,11 @@ jobs:
       checks: write
       statuses: write
     steps:
+      # persist-credentials: false keeps the GITHUB_TOKEN out of .git/config —
+      # the probe sandbox masks .git regardless, but don't store it at all.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       # Pin a tag or commit for supply-chain safety once releases are cut.
       - uses: duketopceo/Argus/action@main
         with:

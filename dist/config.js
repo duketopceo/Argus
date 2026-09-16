@@ -1,5 +1,15 @@
 import { pathToFileURL } from 'node:url';
 export const DEFAULT_RECORD_STEP_CAP = 40;
+export const DEFAULT_SANDBOX = {
+    enabled: false,
+    image: undefined,
+    maxProbes: 3,
+    timeoutMs: 120_000,
+    memory: '2g',
+    cpus: '2',
+    pidsLimit: 256,
+    allowForks: false,
+};
 const defaults = {
     model: 'google/gemini-2.5-flash-lite',
     escalation_model: 'moonshotai/kimi-k2.5',
@@ -27,13 +37,27 @@ const defaults = {
     recordStepCap: DEFAULT_RECORD_STEP_CAP,
     a0: undefined,
     heal: 'local',
+    sandbox: { ...DEFAULT_SANDBOX },
 };
 export function defineConfig(input) {
     return input;
 }
 export function resolveConfig(input = {}) {
     const provider = { ...defaults.provider, ...(input.provider ?? {}) };
-    const resolved = { ...defaults, ...input, provider };
+    const sandbox = { ...defaults.sandbox, ...(input.sandbox ?? {}) };
+    sandbox.maxProbes =
+        Number.isFinite(sandbox.maxProbes) && sandbox.maxProbes >= 1
+            ? Math.floor(sandbox.maxProbes)
+            : DEFAULT_SANDBOX.maxProbes;
+    sandbox.timeoutMs =
+        Number.isFinite(sandbox.timeoutMs) && sandbox.timeoutMs >= 1
+            ? Math.floor(sandbox.timeoutMs)
+            : DEFAULT_SANDBOX.timeoutMs;
+    sandbox.pidsLimit =
+        Number.isFinite(sandbox.pidsLimit) && sandbox.pidsLimit >= 1
+            ? Math.floor(sandbox.pidsLimit)
+            : DEFAULT_SANDBOX.pidsLimit;
+    const resolved = { ...defaults, ...input, provider, sandbox };
     const cap = resolved.recordStepCap;
     resolved.recordStepCap =
         cap !== undefined && Number.isFinite(cap) && cap >= 1
