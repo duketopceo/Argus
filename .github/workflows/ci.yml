@@ -10,14 +10,20 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # engines floor is >=20.19.0 — test the floor and the current LTS.
+      matrix:
+        node-version: ['20', '22']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
       - run: npx playwright install chromium
       - run: npm run typecheck
+      - run: npm run lint
       - run: npm run build
       - run: npm test

@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    # Pin-flavored deps stay exact; let dependabot propose bumps via PR.
+    groups:
+      dev-dependencies:
+        patterns: ['@types/*', 'eslint*', 'prettier', 'typescript*', 'vitest']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5

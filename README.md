@@ -4,6 +4,13 @@
   <img src="docs/assets/social.png" alt="Argus — vision-model E2E testing" width="640" />
 </p>
 
+<p align="center">
+  <a href="https://www.npmjs.com/package/argus-reviewer-e2e"><img src="https://img.shields.io/npm/v/argus-reviewer-e2e" alt="npm version" /></a>
+  <a href="https://github.com/duketopceo/Argus/actions/workflows/ci.yml"><img src="https://github.com/duketopceo/Argus/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license" /></a>
+  <a href="https://github.com/duketopceo/Argus/security/policy"><img src="https://img.shields.io/badge/security-policy-orange" alt="security policy" /></a>
+</p>
+
 Open-source, self-hosted vision-model E2E testing — the hundred-eyed watcher for your UI. Bring your own `OPENROUTER_API_KEY`: record a flow once, fingerprint-cache every step, replay near-free, heal on UI drift, and get results as a check + comment on the GitHub PR.
 
 - **Vision-first**: a model looks at a screenshot and decides where to click — no selectors to write or maintain.
@@ -41,7 +48,10 @@ export default {
 
 The GitHub Action automatically sets `ARGUS_REVIEWER_TRACE` with the repository, PR number, commit, and run id, so every PR review is attributed in OpenRouter without extra config. You can also set `ARGUS_REVIEWER_TRACE` yourself (JSON object) to add more fields.
 
-Status: early development. See `action/` for the composite GitHub Action and `runner/` for self-hosted runner registration.
+Status: early development. See `action/` for the composite GitHub Action,
+`runner/` for self-hosted runner registration, `docs/quickstart.md` for
+setup, `SECURITY.md` for the threat model, and `CONTRIBUTING.md` to hack
+on it.
 
 ## File structure
 
@@ -53,10 +63,14 @@ argus-reviewer/
 ├── runner/                  # Self-hosted runner registration docs + script
 │   ├── README.md
 │   └── register-runner.sh
+├── electron/                # Local observability dashboard (`npm run app`)
 ├── src/
 │   ├── api.ts               # Test-facing `test`/`td` API + generated test file renderer
-│   ├── cli.ts               # `record`, `run`, and `cache` commands
+│   ├── cli.ts               # record · run · code-review · delegate · cache · index · init
 │   ├── config.ts            # `argus-reviewer.config.*` loader (legacy `vision-e2e.config.*` accepted)
+│   ├── cache/
+│   │   ├── fingerprint.ts   # Per-step screenshot/a11y fingerprint + resolve
+│   │   └── store.ts         # Flow cache read/write
 │   ├── driver/
 │   │   ├── browser.ts       # Playwright browser launch (chromium/firefox/webkit) + observation capture
 │   │   └── target.ts        # Optional local dev-server target process
@@ -64,9 +78,19 @@ argus-reviewer/
 │   │   ├── actions.ts       # Low-level page actions (click, type, scroll, …)
 │   │   ├── loop.ts          # Vision model record/replay + healing loop
 │   │   └── prompts.ts       # OpenRouter action/assertion prompts + JSON schemas
-│   ├── cache/
-│   │   ├── fingerprint.ts   # Per-step screenshot/a11y fingerprint + resolve
-│   │   └── store.ts         # Flow cache read/write
+│   ├── evidence/
+│   │   ├── ci.ts            # PR metadata + CI check-run context for findings
+│   │   ├── gate.ts          # Fork-PR trust gate (argus-probe label bound to head SHA)
+│   │   └── link.ts          # Finding → evidence linkage + comment-safe sanitization
+│   ├── executor/
+│   │   ├── a0.ts            # `a0 headless -p` delegation to a user's Agent Zero instance
+│   │   └── sandbox.ts       # Hardened Docker runner for generated probes
+│   ├── index/               # Repo index, diff context, cache invalidation
+│   ├── journal/             # Per-run structured journal entries
+│   ├── probe/
+│   │   ├── author.ts        # Model-authored regression probe generation + validation
+│   │   ├── harness.ts       # vitest/jest/node:test detection + TAP classification
+│   │   └── queue.ts         # Head-vs-merge-base probe orchestration
 │   ├── report/
 │   │   ├── comment.ts       # Markdown PR comment + commit-status rendering
 │   │   ├── junit.ts         # JUnit XML output
