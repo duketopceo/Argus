@@ -67,6 +67,13 @@ export interface Config {
    */
   code_model: string | undefined
   /**
+   * OpenRouter Decisions API model for typed adjudication (Jev). Defaults
+   * to the pinned `typesafe/jev-1.13-20260917` — alias slugs like
+   * `~typesafe/jev-latest` drift silently and thresholds are calibrated
+   * to a version. Set to `''` to disable adjudication (regex-only mode).
+   */
+  decisionModel: string | undefined
+  /**
    * Hard budget for the `argus-reviewer code-review` lane. When set, the
    * review stops early if the cumulative OpenRouter cost exceeds this cap.
    */
@@ -154,11 +161,19 @@ export interface Config {
    * `resolveConfig` — `enabled: false` by default so the lane is opt-in.
    */
   sandbox: Sandbox
+  /**
+   * Code-review policy knobs. Always populated after `resolveConfig`.
+   * `secretsThreshold`: Jev `noul` probability at/above which a
+   * secret-shaped diff literal is reported as a finding (below →
+   * suppressed but audit-recorded). Default 0.3 — tune after dogfooding.
+   */
+  review: { secretsThreshold: number }
 }
 
-export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox'>> & {
+export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review'>> & {
   provider?: Partial<ProviderRules>
   sandbox?: Partial<Sandbox>
+  review?: Partial<Config['review']>
 }
 
 export const DEFAULT_RECORD_STEP_CAP = 40
@@ -179,6 +194,7 @@ const defaults: Config = {
   escalation_model: 'moonshotai/kimi-k2.5',
   grounding_model: undefined,
   code_model: 'deepseek/deepseek-v4.1-flash',
+  decisionModel: 'typesafe/jev-1.13-20260917',
   codeReviewBudgetUsd: undefined,
   provider: {
     ignore: ['siliconflow', 'novitaai', 'atlascloud', 'streamlake', 'chutes'],
@@ -202,6 +218,7 @@ const defaults: Config = {
   a0: undefined,
   heal: 'local',
   sandbox: { ...DEFAULT_SANDBOX },
+  review: { secretsThreshold: 0.3 },
 }
 
 export function defineConfig(input: ConfigInput): ConfigInput {
@@ -228,9 +245,24 @@ export function resolveConfig(input: ConfigInput = {}): Config {
   sandbox.maxProbes = posInt(sandbox.maxProbes, DEFAULT_SANDBOX.maxProbes)
   sandbox.timeoutMs = posInt(sandbox.timeoutMs, DEFAULT_SANDBOX.timeoutMs)
   sandbox.pidsLimit = posInt(sandbox.pidsLimit, DEFAULT_SANDBOX.pidsLimit)
-  const resolved: Config = { ...defaults, ...input, provider, sandbox }
+  const rawReview = typeof input.review === 'object' && input.review !== null ? input.review : {}
+  const review = { ...defaults.review, ...rawReview }
+  // Threshold must be a probability — anything else (NaN, >1, negative)
+  // would silently suppress or flood the secrets lane.
+  if (
+    typeof review.secretsThreshold !== 'number' ||
+    !Number.isFinite(review.secretsThreshold) ||
+    review.secretsThreshold < 0 ||
+    review.secretsThreshold > 1
+  ) {
+    review.secretsThreshold = defaults.review.secretsThreshold
+  }
+  const resolved: Config = { ...defaults, ...input, provider, sandbox, review }
   resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP)
   if (resolved.heal !== 'a0') resolved.heal = 'local'
+  // '' is the documented opt-out — an empty slug would send a broken
+  // model id to the decisions endpoint on every adjudication call.
+  if (resolved.decisionModel === '') resolved.decisionModel = undefined
   return resolved
 }
 

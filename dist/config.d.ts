@@ -61,6 +61,13 @@ export interface Config {
      */
     code_model: string | undefined;
     /**
+     * OpenRouter Decisions API model for typed adjudication (Jev). Defaults
+     * to the pinned `typesafe/jev-1.13-20260917` — alias slugs like
+     * `~typesafe/jev-latest` drift silently and thresholds are calibrated
+     * to a version. Set to `''` to disable adjudication (regex-only mode).
+     */
+    decisionModel: string | undefined;
+    /**
      * Hard budget for the `argus-reviewer code-review` lane. When set, the
      * review stops early if the cumulative OpenRouter cost exceeds this cap.
      */
@@ -153,10 +160,20 @@ export interface Config {
      * `resolveConfig` — `enabled: false` by default so the lane is opt-in.
      */
     sandbox: Sandbox;
+    /**
+     * Code-review policy knobs. Always populated after `resolveConfig`.
+     * `secretsThreshold`: Jev `noul` probability at/above which a
+     * secret-shaped diff literal is reported as a finding (below →
+     * suppressed but audit-recorded). Default 0.3 — tune after dogfooding.
+     */
+    review: {
+        secretsThreshold: number;
+    };
 }
-export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox'>> & {
+export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review'>> & {
     provider?: Partial<ProviderRules>;
     sandbox?: Partial<Sandbox>;
+    review?: Partial<Config['review']>;
 };
 export declare const DEFAULT_RECORD_STEP_CAP = 40;
 export declare const DEFAULT_SANDBOX: Sandbox;

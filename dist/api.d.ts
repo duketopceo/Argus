@@ -7,6 +7,7 @@ import { Config, defineConfig } from './config.js';
 import { ErrorRecord } from './journal/schema.js';
 import { Logger } from './log.js';
 export { defineConfig };
+export { DecisionClient, DecisionError, JEV_DEFAULT_MODEL, type DecisionAnswer, type DecisionClientOptions, type DecisionErrorKind, type DecisionQuestion, } from './vision/decisions.js';
 /**
  * Test-facing API (R13). Test files are plain TypeScript using a `td` object:
  *

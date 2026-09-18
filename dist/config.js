@@ -15,6 +15,7 @@ const defaults = {
     escalation_model: 'moonshotai/kimi-k2.5',
     grounding_model: undefined,
     code_model: 'deepseek/deepseek-v4.1-flash',
+    decisionModel: 'typesafe/jev-1.13-20260917',
     codeReviewBudgetUsd: undefined,
     provider: {
         ignore: ['siliconflow', 'novitaai', 'atlascloud', 'streamlake', 'chutes'],
@@ -38,6 +39,7 @@ const defaults = {
     a0: undefined,
     heal: 'local',
     sandbox: { ...DEFAULT_SANDBOX },
+    review: { secretsThreshold: 0.3 },
 };
 export function defineConfig(input) {
     return input;
@@ -61,10 +63,24 @@ export function resolveConfig(input = {}) {
     sandbox.maxProbes = posInt(sandbox.maxProbes, DEFAULT_SANDBOX.maxProbes);
     sandbox.timeoutMs = posInt(sandbox.timeoutMs, DEFAULT_SANDBOX.timeoutMs);
     sandbox.pidsLimit = posInt(sandbox.pidsLimit, DEFAULT_SANDBOX.pidsLimit);
-    const resolved = { ...defaults, ...input, provider, sandbox };
+    const rawReview = typeof input.review === 'object' && input.review !== null ? input.review : {};
+    const review = { ...defaults.review, ...rawReview };
+    // Threshold must be a probability — anything else (NaN, >1, negative)
+    // would silently suppress or flood the secrets lane.
+    if (typeof review.secretsThreshold !== 'number' ||
+        !Number.isFinite(review.secretsThreshold) ||
+        review.secretsThreshold < 0 ||
+        review.secretsThreshold > 1) {
+        review.secretsThreshold = defaults.review.secretsThreshold;
+    }
+    const resolved = { ...defaults, ...input, provider, sandbox, review };
     resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP);
     if (resolved.heal !== 'a0')
         resolved.heal = 'local';
+    // '' is the documented opt-out — an empty slug would send a broken
+    // model id to the decisions endpoint on every adjudication call.
+    if (resolved.decisionModel === '')
+        resolved.decisionModel = undefined;
     return resolved;
 }
 /**

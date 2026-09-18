@@ -1,4 +1,4 @@
-export type CallKind = 'ground' | 'heal' | 'assert' | 'code';
+export type CallKind = 'ground' | 'heal' | 'assert' | 'code' | 'decide';
 export interface CallCost {
     model: string;
     provider: string;
@@ -30,6 +30,19 @@ export interface OpenRouterResponse {
     usage: Usage;
 }
 export declare function makeCallCost(response: OpenRouterResponse, kind: CallKind): CallCost;
+/** Decisions API (`/api/alpha/decisions`) usage shape — no `cost_details`. */
+export interface DecisionsResponse {
+    id?: string;
+    model?: string;
+    provider?: ProviderValue;
+    answers?: Record<string, unknown>;
+    usage?: {
+        input_tokens?: number;
+        output_tokens?: number;
+        cost?: number;
+    };
+}
+export declare function makeDecisionsCallCost(response: DecisionsResponse, kind: CallKind): CallCost;
 export declare function extractUsageCost(response: OpenRouterResponse): {
     costUsd: number;
     upstreamCostUsd: number;
