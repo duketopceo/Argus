@@ -93,6 +93,10 @@ runs:
       if: inputs.index == 'true'
       shell: bash
       working-directory: ${{ inputs.working-directory }}
+      env:
+        # Token only feeds trust resolution on issue_comment events —
+        # pull_request* events read fork status from the event payload.
+        GITHUB_TOKEN: ${{ github.token }}
       run: ${{ inputs.cli }} index
 
     - name: Run argus-reviewer code review
@@ -121,6 +125,7 @@ runs:
       continue-on-error: true
       env:
         OPENROUTER_API_KEY: ${{ inputs.openrouter-api-key }}
+        GITHUB_TOKEN: ${{ github.token }}
         ARGUS_DEBUG: '1'
         ARGUS_DIFF_BASE: ${{ inputs.diff-base }}
         ARGUS_BUDGET_USD: ${{ inputs.budget-usd }}

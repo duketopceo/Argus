@@ -50,14 +50,51 @@ test probes against the PR's source — on your runner. The boundary:
   trusted computing base. Images are pulled from the registry every run
   (`--pull always`) so a locally poisoned tag is not trusted.
 
-**Accepted gaps:**
+## Checkout trust and config loading
 
+`argus-reviewer.config.ts` is executable code — loading it transpiles and
+imports it on the host beside `OPENROUTER_API_KEY`/`GITHUB_TOKEN`. Trust is
+resolved **before** config load (`src/trust.ts`), and `loadConfig` requires
+a trust value at every call site.
+
+- **Fork PRs are always untrusted** — on `pull_request`,
+  `pull_request_target`, and `issue_comment` events alike, and regardless
+  of `author_association` (a MEMBER can author a hostile fork tree).
+  `pull_request*` events read fork status from `GITHUB_EVENT_PATH` (no
+  token needed); `issue_comment` resolves `issue.number` via the API.
+- **Unlisted CI event names fail closed** — `workflow_run`,
+  `workflow_dispatch`, `push`, etc. resolve untrusted because
+  privileged-CI-over-fork-checkout patterns land there. Maintainers opt
+  out explicitly with `ARGUS_TRUSTED=1`.
+- **Local runs default trusted** — no CI event context means the user
+  checked out the tree themselves. `ARGUS_UNTRUSTED=1` opts into the
+  untrusted path (e.g. reviewing a cloned untrusted repo); it always wins
+  over `ARGUS_TRUSTED`.
+- **Untrusted checkouts load JSON config only**, reduced to an allowlist
+  of policy-free fields (`logLevel`, `sourceGlobs`). `.ts` configs are
+  never transpiled or imported — including one shadowing a committed
+  `.json`. Everything else is ignored: exec-bearing fields
+  (`target.*`, `pageSetup`, `testsDir`, `sandbox.*`, `explore.*`),
+  review policy (`severity`, `review.*`, model/budget/provider fields),
+  credentials (`secrets`), network endpoints (`openrouter.*`, `a0` —
+  `openrouter.headers` can override `Authorization`), and write
+  locations (`cacheDir`, `indexPath`, `reportDir`). The review policy
+  over hostile code must not be authored by that code.
+- The composite action's staged `config:` input is inert on fork PRs by
+  design.
+- `node:vm` is deliberately **not** used as a boundary — Node's own docs
+  warn it cannot run untrusted code safely.
+
+**Residual surface (documented, not yet closed):**
+
+- `run`/`record`/`delegate` on untrusted trees still execute
+  PR-controlled *test files* (the run lane scans `tests/` by default) —
+  and `td.type(name, {secret:true})` falls back to `env[name]`, so env
+  secrets can be typed into PR-chosen origins. Fork-PR workflows must
+  not expose env secrets to those lanes; config stripping alone does
+  not sandbox test execution.
 - The action's `npm ci` runs the PR's dependency lifecycle scripts
-  (postinstall etc.) on the host *before* any sandboxing — that is a
-  pre-existing property of running a project's own test suite in CI and is
-  out of the probe lane's boundary. Do not enable probes (or this action at
-  all) on workflows that hand secrets to untrusted PR code.
-- `argus-reviewer.config.ts` is executed on the host when the config loads —
-  a PR can modify its own config file. Keep `OPENROUTER_API_KEY` scoped to a
-  spend-limited OpenRouter key and treat review findings from hostile PRs as
-  untrusted; the probe sandbox does not cover config load or `npm ci`.
+  (postinstall etc.) on the host *before* any sandboxing — a
+  pre-existing property of running a project's own suite in CI. Do not
+  run this action with secrets on workflows that check out untrusted PR
+  code.
