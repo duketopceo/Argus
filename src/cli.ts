@@ -36,11 +36,9 @@ import { fetchCheckRuns, fetchPrMeta, ghGet, type PrMeta } from './evidence/ci.j
 import { resolveTrust } from './trust.js'
 import { linkFindings, type Evidence } from './evidence/link.js'
 import { DecisionClient } from './vision/decisions.js'
-import {
-  materializeMergeBaseDiff,
-  scanSecrets,
-  type SecretsScanResult,
-} from './review/secrets.js'
+import { materializeMergeBaseDiff, scanSecrets, type SecretsScanResult } from './review/secrets.js'
+import { buildTriageState, routeModel, triagePr, type TriageRecord } from './review/triage.js'
+import { adjudicateFindings, type FindingAdjudicationResult } from './review/adjudicate.js'
 import { runProbeLane, type ProbeRecord } from './probe/queue.js'
 import { A0_DEFAULT_TIMEOUT_MS, a0TaskPrompt, runA0Task } from './executor/a0.js'
 import { buildJournalEntry } from './journal/build.js'
@@ -308,8 +306,7 @@ async function cmdRecord(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
     return 2
   }
   const flowName = values.name ?? slugify(description)
-  const maxSteps =
-    values['max-steps'] !== undefined ? Number(values['max-steps']) : undefined
+  const maxSteps = values['max-steps'] !== undefined ? Number(values['max-steps']) : undefined
   if (maxSteps !== undefined && (!Number.isInteger(maxSteps) || maxSteps < 1)) {
     ctx.err(`--max-steps must be a positive integer, got "${values['max-steps']}"`)
     return 2
@@ -329,11 +326,10 @@ async function cmdRecord(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
 
     ledger.startSandbox()
     await driver.goto(target?.url ?? url)
-    const result = await engine.record(
-      description,
-      actions,
-      { flowName, ...(maxSteps !== undefined ? { stepCap: maxSteps } : {}) },
-    )
+    const result = await engine.record(description, actions, {
+      flowName,
+      ...(maxSteps !== undefined ? { stepCap: maxSteps } : {}),
+    })
     ledger.stopSandbox()
 
     const state = ledger.state
@@ -496,7 +492,9 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
   // cache dir (and ancestors) here once so the first live write lands.
   try {
     await mkdir(liveDir, { recursive: true })
-  } catch { /* liveLog stays best-effort */ }
+  } catch {
+    /* liveLog stays best-effort */
+  }
   const logger = createLogger(resolveLogLevel(ctx.env, config.logLevel), ctx, (l, m) =>
     liveLog(liveDir, 'run', l, m),
   )
@@ -641,7 +639,11 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
           if (!ok && failureMessage !== undefined) ctx.err(`  reason: ${failureMessage}`)
         } else {
           for (const registeredTest of registered) {
-            const session = await makeSession(`${fileSlug}__${slugify(registeredTest.name)}`, driver, client)
+            const session = await makeSession(
+              `${fileSlug}__${slugify(registeredTest.name)}`,
+              driver,
+              client,
+            )
             bindSession(session)
             session.ledger.startSandbox()
             const testStart = Date.now()
@@ -845,6 +847,8 @@ interface CodeReviewReport {
     severity: string
     category?: string
     message: string
+    /** U8 — Jev true-positive probability (absent = unadjudicated). */
+    p?: number
     evidence?: Evidence
   }[]
   /** Inline-comment cap consumed by the sticky poster (Tencent max_comments pull). */
@@ -855,6 +859,10 @@ interface CodeReviewReport {
   probeLaneSkipped?: string
   /** Secrets-lane audit — masked candidates, adjudication verdicts, skip reason. */
   secretsScan?: SecretsScanResult | { skipped: string }
+  /** U7 triage record — Jev pre-review signals (annotate/route, never gates). */
+  triage?: TriageRecord
+  /** U8 adjudication audit — per-finding p + suppressed records. */
+  findingAdjudication?: Omit<FindingAdjudicationResult<never>, 'findings'>
   calls: CallCost[]
   visionCostUsd: number
   tokens: number
@@ -866,7 +874,12 @@ const CHUNK_TOKEN_TARGET = 6000
 const CHUNK_FILE_OVERHEAD = 100
 const MAX_PR_FILE_PAGES = 10
 
-async function fetchPrFiles(repo: string, pr: string, token: string, ctx: Ctx): Promise<PrFile[] | undefined> {
+async function fetchPrFiles(
+  repo: string,
+  pr: string,
+  token: string,
+  ctx: Ctx,
+): Promise<PrFile[] | undefined> {
   const files: PrFile[] = []
   for (let page = 1; page <= MAX_PR_FILE_PAGES; page++) {
     const batch = (await ghGet(
@@ -935,14 +948,13 @@ export async function loadFixture(
     labels: [],
     pushedAt: undefined,
     labelApprovedAt: undefined,
+    title: undefined,
+    body: undefined,
   }
   return { files: filesFromUnifiedDiff(diff.stdout), meta, diff: diff.stdout }
 }
 
-export function buildPatchChunks(
-  files: PrFile[],
-  contexts: Record<string, string> = {},
-): string[] {
+export function buildPatchChunks(files: PrFile[], contexts: Record<string, string> = {}): string[] {
   const section = (c: PrFile): string => {
     const ctxBlock = contexts[c.filename]
     const head = ctxBlock === undefined ? `### ${c.filename}` : `### ${c.filename}\n${ctxBlock}`
@@ -1000,7 +1012,12 @@ function buildCodeReviewMessages(
   ]
 }
 
-function buildSynthesisMessages(repo: string, pr: string, files: string[], findings: CodeReviewReport['findings']): Message[] {
+function buildSynthesisMessages(
+  repo: string,
+  pr: string,
+  files: string[],
+  findings: CodeReviewReport['findings'],
+): Message[] {
   const findingsText = JSON.stringify(findings, null, 2)
   return [
     {
@@ -1055,7 +1072,9 @@ export function parseCodeReview(content: string): {
     }
     const validVerdict = ['pass', 'needs_changes', 'approve'].includes(parsed.verdict ?? '')
       ? (parsed.verdict as 'pass' | 'needs_changes' | 'approve')
-      : (Array.isArray(parsed.findings) && parsed.findings.length === 0 ? 'pass' : 'needs_changes')
+      : Array.isArray(parsed.findings) && parsed.findings.length === 0
+        ? 'pass'
+        : 'needs_changes'
     const findings = Array.isArray(parsed.findings)
       ? parsed.findings.map((f) => {
           const rawCategory = (f as { category?: string }).category
@@ -1071,7 +1090,8 @@ export function parseCodeReview(content: string): {
         })
       : defaultFindings
     return {
-      summary: parsed.summary ?? (validVerdict === 'pass' ? 'No issues found' : 'Code review completed'),
+      summary:
+        parsed.summary ?? (validVerdict === 'pass' ? 'No issues found' : 'Code review completed'),
       verdict: validVerdict,
       findings,
     }
@@ -1136,7 +1156,10 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
   const token = ctx.env.GITHUB_TOKEN ?? ctx.env.GH_TOKEN
   const model = config.code_model ?? config.model
   const budget = config.codeReviewBudgetUsd
-  debug('code-review', `repo=${repo ?? 'none'} pr=${pr ?? 'none'} model=${model} budget=${budget ?? 'unlimited'}`)
+  debug(
+    'code-review',
+    `repo=${repo ?? 'none'} pr=${pr ?? 'none'} model=${model} budget=${budget ?? 'unlimited'}`,
+  )
 
   const skip = async (reason: string): Promise<number> => {
     ctx.out(`code-review: skipping — ${reason}`)
@@ -1163,8 +1186,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
   }
 
   const indexPath = resolve(fixtureDir ?? ctx.cwd, config.indexPath ?? 'argus.index.json')
-  const fixture =
-    fixtureDir !== undefined ? await loadFixture(fixtureDir, deps.exec) : undefined
+  const fixture = fixtureDir !== undefined ? await loadFixture(fixtureDir, deps.exec) : undefined
   if (fixture !== undefined && 'skipped' in fixture) {
     return await skip(`fixture — ${fixture.skipped}`)
   }
@@ -1197,7 +1219,6 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
 
   const chunks = buildPatchChunks(files, contexts)
   debug('code-review', `chunks=${chunks.length} files=${files.length}`)
-  stage(`reviewing ${chunks.length} chunk(s) — model ${model}`)
 
   try {
     const client = createClient(deps, config, ctx)
@@ -1215,13 +1236,64 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     let totalCost = 0
     let lastModel = model
 
+    // U7 triage lane — one batched Jev decide() before chunk review.
+    // Jev routes/annotates, never gates: the loop reviews every chunk
+    // regardless; 'route' only picks the model tier. Needs PR title/body
+    // for state, so when the lane is enabled prMeta resolves here rather
+    // than hiding its round-trip behind the model calls.
+    const apiKey = ctx.env.OPENROUTER_API_KEY
+    const decisionClient =
+      config.decisionModel !== undefined && apiKey !== undefined && apiKey !== ''
+        ? new DecisionClient({
+            apiKey,
+            ...(trace !== undefined ? { trace } : {}),
+            onCall: (c) => {
+              const cost = {
+                model: c.model,
+                provider: c.provider,
+                tokens: c.tokens,
+                costUsd: c.costUsd,
+                kind: 'decide' as const,
+              }
+              ledger.recordCall(cost)
+              allCalls.push(cost)
+              totalTokens += c.tokens
+              totalCost += c.costUsd
+            },
+          })
+        : undefined
+
+    let reviewModel = model
+    let triage: TriageRecord | undefined
+    if (config.review.triage !== 'off' && decisionClient !== undefined) {
+      const metaEarly = await prMetaPromise
+      triage = await triagePr({
+        client: decisionClient,
+        ...(config.decisionModel !== undefined ? { model: config.decisionModel } : {}),
+        state: buildTriageState({ title: metaEarly?.title, body: metaEarly?.body, files }),
+        mode: config.review.triage,
+      })
+      const routed = routeModel({
+        record: triage,
+        configured: model,
+        lowRiskModel: config.review.lowRiskModel,
+      })
+      reviewModel = routed.model
+      stage(
+        `triage — risk ${triage.risk ?? '?'}, deep-review ${triage.needsDeepReview?.toFixed(2) ?? '?'}, area ${triage.topRiskArea ?? '?'}` +
+          (triage.unadjudicated === true ? ' (unadjudicated)' : '') +
+          (reviewModel !== model ? ` — routed to ${reviewModel}` : ''),
+      )
+    }
+    stage(`reviewing ${chunks.length} chunk(s) — model ${reviewModel}`)
+
     for (let i = 0; i < chunks.length; i++) {
       if (ledger.budgetExceeded) break
       debug('code-review', `chunk=${i + 1}/${chunks.length}`)
       const chunk = chunks[i]
       if (chunk === undefined) continue
       const response = await client.complete({
-        model,
+        model: reviewModel,
         messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length),
         schema: CODE_REVIEW_SCHEMA,
         kind: 'code',
@@ -1251,8 +1323,13 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
         debug('code-review', 'synthesis')
         stage('synthesizing chunk findings')
         const synthResponse = await client.complete({
-          model,
-          messages: buildSynthesisMessages(repoName, prNum, files.map((f) => f.filename), allFindings),
+          model: reviewModel,
+          messages: buildSynthesisMessages(
+            repoName,
+            prNum,
+            files.map((f) => f.filename),
+            allFindings,
+          ),
           schema: CODE_REVIEW_SCHEMA,
           kind: 'code',
           provider: config.provider,
@@ -1294,6 +1371,31 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       if (verdict !== 'needs_changes') verdict = 'needs_changes'
     }
 
+    // U8 finding adjudication — one batched Jev noul per synthesized
+    // finding. Runs on the model findings only (secrets findings carry
+    // their own adjudication) and BEFORE the secrets union below so a
+    // suppressed nit can never reach a secret record. bug/risk are
+    // never suppressed, so the verdict computed above is unaffected.
+    let findingAdjudication: Omit<FindingAdjudicationResult<never>, 'findings'> | undefined
+    if (decisionClient !== undefined && finalFindings.length > 0) {
+      const adj = await adjudicateFindings({
+        findings: finalFindings,
+        patchByFile: new Map(files.map((f) => [f.filename, f.patch ?? ''])),
+        threshold: config.review.findingThreshold,
+        client: decisionClient,
+        ...(config.decisionModel !== undefined ? { model: config.decisionModel } : {}),
+      })
+      finalFindings = adj.findings
+      const { findings: _dropped, ...audit } = adj
+      findingAdjudication = audit
+      const suppressed = adj.records.filter((r) => r.suppressed === true).length
+      stage(
+        `finding adjudication — ${adj.records.length} scored, ${suppressed} suppressed` +
+          (adj.unadjudicated === true ? ' (Jev unavailable — none suppressed)' : '') +
+          (adj.overflow > 0 ? `, +${adj.overflow} over cap` : ''),
+      )
+    }
+
     // B.1 evidence linkage: tag each finding with whether the PR's own CI
     // exercised the implicated path. Post-pass annotation only — evidence
     // never downgrades a finding, and check-run names are sanitized before
@@ -1328,27 +1430,6 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
         ctx.err(`secrets scan skipped: ${materialized.skipped}`)
         stage(`secrets scan skipped — ${materialized.skipped}`)
       } else {
-        const apiKey = ctx.env.OPENROUTER_API_KEY
-        const decisionClient =
-          config.decisionModel !== undefined && apiKey !== undefined && apiKey !== ''
-            ? new DecisionClient({
-                apiKey,
-                ...(trace !== undefined ? { trace } : {}),
-                onCall: (c) => {
-                  const cost = {
-                    model: c.model,
-                    provider: c.provider,
-                    tokens: c.tokens,
-                    costUsd: c.costUsd,
-                    kind: 'decide' as const,
-                  }
-                  ledger.recordCall(cost)
-                  allCalls.push(cost)
-                  totalTokens += c.tokens
-                  totalCost += c.costUsd
-                },
-              })
-            : undefined
         secretsScan = await scanSecrets({
           diff: materialized.diff,
           threshold: config.review.secretsThreshold,
@@ -1376,10 +1457,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
         ? undefined
         : await fetchCheckRuns(repoName, headSha, ghToken, ctx)
     const linkedFindings = linkFindings(finalFindings, index, checkRuns)
-    debug(
-      'code-review',
-      `evidence: ${linkedFindings.map((f) => f.evidence.status).join(',')}`,
-    )
+    debug('code-review', `evidence: ${linkedFindings.map((f) => f.evidence.status).join(',')}`)
     stage(`evidence linked — ${linkedFindings.length} finding(s), verdict ${verdict}`)
 
     // severityGate is the consumer-facing alias over `severity` — see
@@ -1399,7 +1477,10 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     // authoritative).
     let probes: ProbeRecord[] | undefined
     let probeLaneSkipped: string | undefined
-    const sandbox = { ...config.sandbox, enabled: config.sandbox.enabled || ctx.env.ARGUS_SANDBOX === '1' }
+    const sandbox = {
+      ...config.sandbox,
+      enabled: config.sandbox.enabled || ctx.env.ARGUS_SANDBOX === '1',
+    }
     // pull_request_target runs with the base repo's write token and ambient
     // secrets — the docs call the lane unsupported there; enforce it in
     // code too so a miswired workflow fails closed instead of executing
@@ -1426,6 +1507,19 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
           ledger,
           budgetUsd: budget,
           severityGates: blockSeverities,
+          // U9 — advisory only: a confident triage area reorders probe
+          // candidates toward the flagged subsystem; absent/unadjudicated
+          // triage leaves the original order.
+          ...(triage?.topRiskArea !== undefined &&
+          triage.topRiskAreaConfidence !== undefined &&
+          triage.unadjudicated !== true
+            ? {
+                triageArea: {
+                  area: triage.topRiskArea,
+                  confidence: triage.topRiskAreaConfidence,
+                },
+              }
+            : {}),
           index,
           calls: allCalls,
           exec: deps.exec,
@@ -1462,6 +1556,8 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       ...(probes !== undefined ? { probes } : {}),
       ...(probeLaneSkipped !== undefined ? { probeLaneSkipped } : {}),
       ...(secretsScan !== undefined ? { secretsScan } : {}),
+      ...(triage !== undefined ? { triage } : {}),
+      ...(findingAdjudication !== undefined ? { findingAdjudication } : {}),
       maxComments,
       calls: allCalls,
       visionCostUsd: totalCost,
@@ -1812,7 +1908,9 @@ async function cmdIndex(args: string[], ctx: Ctx): Promise<number> {
     },
   })
   if (values.help) {
-    ctx.out('Usage: argus index [--dir <repo>] [--out <path>]\n\n  Scans the repo into argus.index.json: file → purpose → imports → importedBy → package version → content hash. Consumed by `argus run` for diff-aware cache invalidation.')
+    ctx.out(
+      'Usage: argus index [--dir <repo>] [--out <path>]\n\n  Scans the repo into argus.index.json: file → purpose → imports → importedBy → package version → content hash. Consumed by `argus run` for diff-aware cache invalidation.',
+    )
     return 0
   }
   const root = resolve(ctx.cwd, values.dir ?? '.')
@@ -1831,7 +1929,9 @@ async function cmdIndex(args: string[], ctx: Ctx): Promise<number> {
 }
 
 /** Repo identity for journal records; all probes degrade to 'unknown'. */
-async function gitInfo(cwd: string): Promise<{ repo: string; commitSha?: string; branch?: string }> {
+async function gitInfo(
+  cwd: string,
+): Promise<{ repo: string; commitSha?: string; branch?: string }> {
   const { execFile } = await import('node:child_process')
   const { promisify } = await import('node:util')
   const exec = promisify(execFile)

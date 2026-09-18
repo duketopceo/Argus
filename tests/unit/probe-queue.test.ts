@@ -23,7 +23,12 @@ import { Ledger } from '../../src/vision/ledger.js'
 // ---------------------------------------------------------------------------
 
 function finding(file: string, severity = 'bug', status = 'not_exercised' as const): LinkedFinding {
-  return { file, severity, message: `${severity} in ${file}`, evidence: { status, detail: 'no test' } }
+  return {
+    file,
+    severity,
+    message: `${severity} in ${file}`,
+    evidence: { status, detail: 'no test' },
+  }
 }
 
 const META: PrMeta = {
@@ -38,7 +43,8 @@ const META: PrMeta = {
 
 const PROBE_JSON = JSON.stringify({
   filename: 'probe-x.test.ts',
-  content: "import { describe, it } from 'vitest'\ndescribe('probe', () => { it('reproduces', () => {}) })",
+  content:
+    "import { describe, it } from 'vitest'\ndescribe('probe', () => { it('reproduces', () => {}) })",
   reasoning: 'asserts correct bound',
 })
 
@@ -63,12 +69,17 @@ interface ExecScript {
   headThrows?: boolean
 }
 
-function scriptedExec(script: ExecScript, wtDir?: { path: string }): { exec: ExecFn; calls: string[][] } {
+function scriptedExec(
+  script: ExecScript,
+  wtDir?: { path: string },
+): { exec: ExecFn; calls: string[][] } {
   const calls: string[][] = []
   const exec: ExecFn = async (cmd, args) => {
     calls.push([cmd, ...args])
     if (cmd === 'docker' && args[0] === 'version') {
-      return script.dockerDown ? { code: 1, stdout: '', stderr: 'no daemon' } : { code: 0, stdout: '24', stderr: '' }
+      return script.dockerDown
+        ? { code: 1, stdout: '', stderr: 'no daemon' }
+        : { code: 0, stdout: '24', stderr: '' }
     }
     if (cmd === 'docker' && args[0] === 'run' && args.includes('--entrypoint')) {
       // mount smoke check (identified by the test entrypoint, not a bare
@@ -89,7 +100,9 @@ function scriptedExec(script: ExecScript, wtDir?: { path: string }): { exec: Exe
       const isBase = wtDir !== undefined && mount.startsWith(wtDir.path)
       if (isBase) return script.base ?? { code: 0, stdout: 'Test Files  1 passed', stderr: '' }
       if (script.headThrows) throw new Error('spawn docker ENOENT')
-      return script.head ?? { code: 1, stdout: 'Test Files  1 failed (1)\n Tests  1 failed', stderr: '' }
+      return (
+        script.head ?? { code: 1, stdout: 'Test Files  1 failed (1)\n Tests  1 failed', stderr: '' }
+      )
     }
     if (cmd === 'docker' && args[0] === 'rm') return { code: 0, stdout: '', stderr: '' }
     return { code: 0, stdout: '', stderr: '' }
@@ -156,7 +169,12 @@ describe('selectProbeTargets', () => {
       finding('src/b.ts', 'nit'),
       { ...finding('src/c.ts'), evidence: { status: 'exercised' as const, detail: '' } },
       finding('src/d.ts'),
-      { file: undefined, severity: 'bug', message: 'x', evidence: { status: 'not_exercised' as const, detail: '' } },
+      {
+        file: undefined,
+        severity: 'bug',
+        message: 'x',
+        evidence: { status: 'not_exercised' as const, detail: '' },
+      },
     ]
     const out = selectProbeTargets(fs, ['bug'], 3)
     expect(out.map((f) => f.file)).toEqual(['src/a.ts', 'src/d.ts'])
@@ -171,6 +189,40 @@ describe('selectProbeTargets', () => {
     ]
     const out = selectProbeTargets(fs, ['bug'], 10)
     expect(out.map((f) => f.file)).toEqual(['src/safe.ts'])
+  })
+
+  it('U9 — a confident triage area reorders candidates toward the flagged subsystem', () => {
+    const fs = [
+      finding('src/readme/gen.ts'),
+      finding('src/auth/session.ts'),
+      finding('src/util/misc.ts'),
+    ]
+    const out = selectProbeTargets(fs, ['bug'], 10, { area: 'auth', confidence: 0.9 })
+    expect(out[0]!.file).toBe('src/auth/session.ts')
+    expect(out).toHaveLength(3)
+  })
+
+  it('U9 — ordering decides the cap winner, not just the sort', () => {
+    const fs = [finding('src/util/misc.ts'), finding('src/billing/charge.ts')]
+    const out = selectProbeTargets(fs, ['bug'], 1, { area: 'billing', confidence: 0.9 })
+    expect(out.map((f) => f.file)).toEqual(['src/billing/charge.ts'])
+  })
+
+  it('U9 — no signal, low confidence, or no path match keeps original order', () => {
+    const fs = [finding('src/a.ts'), finding('src/b.ts')]
+    expect(selectProbeTargets(fs, ['bug'], 10).map((f) => f.file)).toEqual(['src/a.ts', 'src/b.ts'])
+    expect(
+      selectProbeTargets(fs, ['bug'], 10, { area: 'auth', confidence: 0.3 }).map((f) => f.file),
+    ).toEqual(['src/a.ts', 'src/b.ts'])
+    expect(
+      selectProbeTargets(fs, ['bug'], 10, { area: 'auth', confidence: 0.9 }).map((f) => f.file),
+    ).toEqual(['src/a.ts', 'src/b.ts'])
+  })
+
+  it('U9 — metadata.ts does not hit the data area (segment-prefix match)', () => {
+    const fs = [finding('src/metadata.ts'), finding('src/data/seed.ts')]
+    const out = selectProbeTargets(fs, ['bug'], 1, { area: 'data', confidence: 0.9 })
+    expect(out[0]!.file).toBe('src/data/seed.ts')
   })
 })
 
@@ -268,7 +320,12 @@ describe('runProbeLane', () => {
   it('respects maxProbes', async () => {
     const wt = { path: join(reportDir, 'probes-base') }
     const { exec } = scriptedExec({}, wt)
-    const fs = [finding('src/util.ts'), finding('src/util.ts'), finding('src/util.ts'), finding('src/util.ts')]
+    const fs = [
+      finding('src/util.ts'),
+      finding('src/util.ts'),
+      finding('src/util.ts'),
+      finding('src/util.ts'),
+    ]
     const res = await runProbeLane(
       fs,
       laneOpts(cwd, reportDir, index, exec, {
@@ -318,7 +375,11 @@ describe('runProbeLane', () => {
   })
 
   it('skips with a reason when no harness is detected', async () => {
-    await writeFile(join(cwd, 'package.json'), JSON.stringify({ scripts: { test: 'echo x' } }), 'utf8')
+    await writeFile(
+      join(cwd, 'package.json'),
+      JSON.stringify({ scripts: { test: 'echo x' } }),
+      'utf8',
+    )
     const { exec } = scriptedExec({})
     const out = await runProbeLane([finding('src/util.ts')], laneOpts(cwd, reportDir, index, exec))
     expect(out?.records).toHaveLength(0)

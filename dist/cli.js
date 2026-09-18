@@ -21,7 +21,9 @@ import { fetchCheckRuns, fetchPrMeta, ghGet } from './evidence/ci.js';
 import { resolveTrust } from './trust.js';
 import { linkFindings } from './evidence/link.js';
 import { DecisionClient } from './vision/decisions.js';
-import { materializeMergeBaseDiff, scanSecrets, } from './review/secrets.js';
+import { materializeMergeBaseDiff, scanSecrets } from './review/secrets.js';
+import { buildTriageState, routeModel, triagePr } from './review/triage.js';
+import { adjudicateFindings } from './review/adjudicate.js';
 import { runProbeLane } from './probe/queue.js';
 import { A0_DEFAULT_TIMEOUT_MS, a0TaskPrompt, runA0Task } from './executor/a0.js';
 import { buildJournalEntry } from './journal/build.js';
@@ -264,7 +266,10 @@ async function cmdRecord(args, ctx, deps) {
         const engine = new Engine({ driver, actions, client, ledger, config });
         ledger.startSandbox();
         await driver.goto(target?.url ?? url);
-        const result = await engine.record(description, actions, { flowName, ...(maxSteps !== undefined ? { stepCap: maxSteps } : {}) });
+        const result = await engine.record(description, actions, {
+            flowName,
+            ...(maxSteps !== undefined ? { stepCap: maxSteps } : {}),
+        });
         ledger.stopSandbox();
         const state = ledger.state;
         ctx.out(`record ${result.ok ? 'succeeded' : 'FAILED'}: ${result.steps.length} steps, ` +
@@ -412,7 +417,9 @@ async function cmdRun(args, ctx, deps) {
     try {
         await mkdir(liveDir, { recursive: true });
     }
-    catch { /* liveLog stays best-effort */ }
+    catch {
+        /* liveLog stays best-effort */
+    }
     const logger = createLogger(resolveLogLevel(ctx.env, config.logLevel), ctx, (l, m) => liveLog(liveDir, 'run', l, m));
     const runErrors = [];
     const runId = newRunId();
@@ -789,6 +796,8 @@ export async function loadFixture(dir, exec = defaultExec) {
         labels: [],
         pushedAt: undefined,
         labelApprovedAt: undefined,
+        title: undefined,
+        body: undefined,
     };
     return { files: filesFromUnifiedDiff(diff.stdout), meta, diff: diff.stdout };
 }
@@ -890,7 +899,9 @@ export function parseCodeReview(content) {
         const parsed = JSON.parse(content);
         const validVerdict = ['pass', 'needs_changes', 'approve'].includes(parsed.verdict ?? '')
             ? parsed.verdict
-            : (Array.isArray(parsed.findings) && parsed.findings.length === 0 ? 'pass' : 'needs_changes');
+            : Array.isArray(parsed.findings) && parsed.findings.length === 0
+                ? 'pass'
+                : 'needs_changes';
         const findings = Array.isArray(parsed.findings)
             ? parsed.findings.map((f) => {
                 const rawCategory = f.category;
@@ -1017,7 +1028,6 @@ async function cmdCodeReview(args, ctx, deps) {
     }
     const chunks = buildPatchChunks(files, contexts);
     debug('code-review', `chunks=${chunks.length} files=${files.length}`);
-    stage(`reviewing ${chunks.length} chunk(s) — model ${model}`);
     try {
         const client = createClient(deps, config, ctx);
         const ledger = new Ledger(budget);
@@ -1032,6 +1042,52 @@ async function cmdCodeReview(args, ctx, deps) {
         let totalTokens = 0;
         let totalCost = 0;
         let lastModel = model;
+        // U7 triage lane — one batched Jev decide() before chunk review.
+        // Jev routes/annotates, never gates: the loop reviews every chunk
+        // regardless; 'route' only picks the model tier. Needs PR title/body
+        // for state, so when the lane is enabled prMeta resolves here rather
+        // than hiding its round-trip behind the model calls.
+        const apiKey = ctx.env.OPENROUTER_API_KEY;
+        const decisionClient = config.decisionModel !== undefined && apiKey !== undefined && apiKey !== ''
+            ? new DecisionClient({
+                apiKey,
+                ...(trace !== undefined ? { trace } : {}),
+                onCall: (c) => {
+                    const cost = {
+                        model: c.model,
+                        provider: c.provider,
+                        tokens: c.tokens,
+                        costUsd: c.costUsd,
+                        kind: 'decide',
+                    };
+                    ledger.recordCall(cost);
+                    allCalls.push(cost);
+                    totalTokens += c.tokens;
+                    totalCost += c.costUsd;
+                },
+            })
+            : undefined;
+        let reviewModel = model;
+        let triage;
+        if (config.review.triage !== 'off' && decisionClient !== undefined) {
+            const metaEarly = await prMetaPromise;
+            triage = await triagePr({
+                client: decisionClient,
+                ...(config.decisionModel !== undefined ? { model: config.decisionModel } : {}),
+                state: buildTriageState({ title: metaEarly?.title, body: metaEarly?.body, files }),
+                mode: config.review.triage,
+            });
+            const routed = routeModel({
+                record: triage,
+                configured: model,
+                lowRiskModel: config.review.lowRiskModel,
+            });
+            reviewModel = routed.model;
+            stage(`triage — risk ${triage.risk ?? '?'}, deep-review ${triage.needsDeepReview?.toFixed(2) ?? '?'}, area ${triage.topRiskArea ?? '?'}` +
+                (triage.unadjudicated === true ? ' (unadjudicated)' : '') +
+                (reviewModel !== model ? ` — routed to ${reviewModel}` : ''));
+        }
+        stage(`reviewing ${chunks.length} chunk(s) — model ${reviewModel}`);
         for (let i = 0; i < chunks.length; i++) {
             if (ledger.budgetExceeded)
                 break;
@@ -1040,7 +1096,7 @@ async function cmdCodeReview(args, ctx, deps) {
             if (chunk === undefined)
                 continue;
             const response = await client.complete({
-                model,
+                model: reviewModel,
                 messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length),
                 schema: CODE_REVIEW_SCHEMA,
                 kind: 'code',
@@ -1068,7 +1124,7 @@ async function cmdCodeReview(args, ctx, deps) {
                 debug('code-review', 'synthesis');
                 stage('synthesizing chunk findings');
                 const synthResponse = await client.complete({
-                    model,
+                    model: reviewModel,
                     messages: buildSynthesisMessages(repoName, prNum, files.map((f) => f.filename), allFindings),
                     schema: CODE_REVIEW_SCHEMA,
                     kind: 'code',
@@ -1112,6 +1168,28 @@ async function cmdCodeReview(args, ctx, deps) {
             if (verdict !== 'needs_changes')
                 verdict = 'needs_changes';
         }
+        // U8 finding adjudication — one batched Jev noul per synthesized
+        // finding. Runs on the model findings only (secrets findings carry
+        // their own adjudication) and BEFORE the secrets union below so a
+        // suppressed nit can never reach a secret record. bug/risk are
+        // never suppressed, so the verdict computed above is unaffected.
+        let findingAdjudication;
+        if (decisionClient !== undefined && finalFindings.length > 0) {
+            const adj = await adjudicateFindings({
+                findings: finalFindings,
+                patchByFile: new Map(files.map((f) => [f.filename, f.patch ?? ''])),
+                threshold: config.review.findingThreshold,
+                client: decisionClient,
+                ...(config.decisionModel !== undefined ? { model: config.decisionModel } : {}),
+            });
+            finalFindings = adj.findings;
+            const { findings: _dropped, ...audit } = adj;
+            findingAdjudication = audit;
+            const suppressed = adj.records.filter((r) => r.suppressed === true).length;
+            stage(`finding adjudication — ${adj.records.length} scored, ${suppressed} suppressed` +
+                (adj.unadjudicated === true ? ' (Jev unavailable — none suppressed)' : '') +
+                (adj.overflow > 0 ? `, +${adj.overflow} over cap` : ''));
+        }
         // B.1 evidence linkage: tag each finding with whether the PR's own CI
         // exercised the implicated path. Post-pass annotation only — evidence
         // never downgrades a finding, and check-run names are sanitized before
@@ -1145,26 +1223,6 @@ async function cmdCodeReview(args, ctx, deps) {
                 stage(`secrets scan skipped — ${materialized.skipped}`);
             }
             else {
-                const apiKey = ctx.env.OPENROUTER_API_KEY;
-                const decisionClient = config.decisionModel !== undefined && apiKey !== undefined && apiKey !== ''
-                    ? new DecisionClient({
-                        apiKey,
-                        ...(trace !== undefined ? { trace } : {}),
-                        onCall: (c) => {
-                            const cost = {
-                                model: c.model,
-                                provider: c.provider,
-                                tokens: c.tokens,
-                                costUsd: c.costUsd,
-                                kind: 'decide',
-                            };
-                            ledger.recordCall(cost);
-                            allCalls.push(cost);
-                            totalTokens += c.tokens;
-                            totalCost += c.costUsd;
-                        },
-                    })
-                    : undefined;
                 secretsScan = await scanSecrets({
                     diff: materialized.diff,
                     threshold: config.review.secretsThreshold,
@@ -1206,7 +1264,10 @@ async function cmdCodeReview(args, ctx, deps) {
         // authoritative).
         let probes;
         let probeLaneSkipped;
-        const sandbox = { ...config.sandbox, enabled: config.sandbox.enabled || ctx.env.ARGUS_SANDBOX === '1' };
+        const sandbox = {
+            ...config.sandbox,
+            enabled: config.sandbox.enabled || ctx.env.ARGUS_SANDBOX === '1',
+        };
         // pull_request_target runs with the base repo's write token and ambient
         // secrets — the docs call the lane unsupported there; enforce it in
         // code too so a miswired workflow fails closed instead of executing
@@ -1234,6 +1295,19 @@ async function cmdCodeReview(args, ctx, deps) {
                     ledger,
                     budgetUsd: budget,
                     severityGates: blockSeverities,
+                    // U9 — advisory only: a confident triage area reorders probe
+                    // candidates toward the flagged subsystem; absent/unadjudicated
+                    // triage leaves the original order.
+                    ...(triage?.topRiskArea !== undefined &&
+                        triage.topRiskAreaConfidence !== undefined &&
+                        triage.unadjudicated !== true
+                        ? {
+                            triageArea: {
+                                area: triage.topRiskArea,
+                                confidence: triage.topRiskAreaConfidence,
+                            },
+                        }
+                        : {}),
                     index,
                     calls: allCalls,
                     exec: deps.exec,
@@ -1268,6 +1342,8 @@ async function cmdCodeReview(args, ctx, deps) {
             ...(probes !== undefined ? { probes } : {}),
             ...(probeLaneSkipped !== undefined ? { probeLaneSkipped } : {}),
             ...(secretsScan !== undefined ? { secretsScan } : {}),
+            ...(triage !== undefined ? { triage } : {}),
+            ...(findingAdjudication !== undefined ? { findingAdjudication } : {}),
             maxComments,
             calls: allCalls,
             visionCostUsd: totalCost,

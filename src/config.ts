@@ -172,11 +172,24 @@ export interface Config {
    * `severityGate`: consumer-facing alias over `severity` — 'bug'
    * fails on bugs only, 'risk' fails on bug|risk. Unset → `severity`
    * list is authoritative.
+   * `triage`: Jev pre-review lane — 'off' no call, 'annotate' (default)
+   * records risk/deep-review/area into the report + sticky, 'route'
+   * additionally swaps the code model to `lowRiskModel` on low-risk
+   * diffs. Jev routes/annotates, never gates — coverage is constant.
+   * `lowRiskModel`: the cheap code-model slug 'route' falls to; unset →
+   * route keeps `code_model` (annotate-equivalent).
+   * `findingThreshold`: P(false-positive) required to suppress a nit/q
+   * finding after Jev adjudication — 1.0 (default) is annotate-only,
+   * lowering it suppresses progressively more low-confidence nits.
+   * bug/risk are never suppressed.
    */
   review: {
     secretsThreshold: number
     maxComments: number
     severityGate: 'bug' | 'risk' | undefined
+    triage: 'off' | 'annotate' | 'route'
+    lowRiskModel: string | undefined
+    findingThreshold: number
   }
 }
 
@@ -228,7 +241,14 @@ const defaults: Config = {
   a0: undefined,
   heal: 'local',
   sandbox: { ...DEFAULT_SANDBOX },
-  review: { secretsThreshold: 0.3, maxComments: 20, severityGate: undefined },
+  review: {
+    secretsThreshold: 0.3,
+    maxComments: 20,
+    severityGate: undefined,
+    triage: 'annotate',
+    lowRiskModel: undefined,
+    findingThreshold: 1.0,
+  },
 }
 
 export function defineConfig(input: ConfigInput): ConfigInput {
@@ -279,7 +299,8 @@ export function resolveConfig(input: ConfigInput = {}): Config {
   sandbox.enabled = raw.enabled === true
   sandbox.allowForks = raw.allowForks === true
   sandbox.image = typeof raw.image === 'string' && raw.image !== '' ? raw.image : undefined
-  sandbox.memory = typeof raw.memory === 'string' && raw.memory !== '' ? raw.memory : DEFAULT_SANDBOX.memory
+  sandbox.memory =
+    typeof raw.memory === 'string' && raw.memory !== '' ? raw.memory : DEFAULT_SANDBOX.memory
   sandbox.cpus = typeof raw.cpus === 'string' && raw.cpus !== '' ? raw.cpus : DEFAULT_SANDBOX.cpus
   sandbox.maxProbes = posInt(sandbox.maxProbes, DEFAULT_SANDBOX.maxProbes)
   sandbox.timeoutMs = posInt(sandbox.timeoutMs, DEFAULT_SANDBOX.timeoutMs)
@@ -304,6 +325,22 @@ export function resolveConfig(input: ConfigInput = {}): Config {
       : defaults.review.maxComments
   if (review.severityGate !== 'bug' && review.severityGate !== 'risk') {
     review.severityGate = undefined
+  }
+  if (review.triage !== 'off' && review.triage !== 'annotate' && review.triage !== 'route') {
+    review.triage = defaults.review.triage
+  }
+  if (typeof review.lowRiskModel !== 'string' || review.lowRiskModel === '') {
+    review.lowRiskModel = undefined
+  }
+  // Same probability contract as secretsThreshold — a non-[0,1] value
+  // would suppress unpredictably, so it falls back to annotate-only.
+  if (
+    typeof review.findingThreshold !== 'number' ||
+    !Number.isFinite(review.findingThreshold) ||
+    review.findingThreshold < 0 ||
+    review.findingThreshold > 1
+  ) {
+    review.findingThreshold = defaults.review.findingThreshold
   }
   const resolved: Config = { ...defaults, ...input, provider, sandbox, review }
   resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP)
@@ -366,56 +403,58 @@ export async function loadConfig(cwd: string, opts: LoadConfigOpts): Promise<Con
     for (const ext of untrusted ? ['.json'] : ['.ts', '.json']) {
       const file = path.join(cwd, `${name}${ext}`)
       try {
-      const stat = await fs.stat(file)
-      if (!stat.isFile()) continue
+        const stat = await fs.stat(file)
+        if (!stat.isFile()) continue
 
-      if (ext === '.json') {
-        const raw = await fs.readFile(file, 'utf8')
-        const parsed = JSON.parse(raw) as ConfigInput
-        if (untrusted) {
-          opts.note?.(`config: ${name}.json loaded untrusted — honoring ${[...UNTRUSTED_CONFIG_KEYS].join(', ')} only`)
-          return resolveConfig(filterUntrustedConfig(parsed))
+        if (ext === '.json') {
+          const raw = await fs.readFile(file, 'utf8')
+          const parsed = JSON.parse(raw) as ConfigInput
+          if (untrusted) {
+            opts.note?.(
+              `config: ${name}.json loaded untrusted — honoring ${[...UNTRUSTED_CONFIG_KEYS].join(', ')} only`,
+            )
+            return resolveConfig(filterUntrustedConfig(parsed))
+          }
+          return resolveConfig(parsed)
         }
-        return resolveConfig(parsed)
-      }
 
-      // Always transpile .ts to a temp .mjs rather than importing natively:
-      // Node's built-in type stripping resolves the module type from the
-      // *consumer's* package.json, so a CommonJS consumer makes ESM config
-      // fail with 'Cannot use import statement'. The transpiled file is
-      // written next to the config (removed after import) so relative
-      // imports and node_modules resolution behave like the original file;
-      // the package self-import is rewritten to this module's own index so
-      // global/npx installs resolve it too.
-      const ts = await import('typescript')
-      const { readFile, writeFile, rm } = await import('node:fs/promises')
-      const { join, dirname } = await import('node:path')
-      const source = await readFile(file, 'utf8')
-      const js = ts
-        .transpileModule(source, {
-          compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-        })
-        .outputText.replace(
-          /(['"])argus-reviewer-e2e\1/g,
-          // package.json exports '.' → dist/api.js (sibling of this file)
-          JSON.stringify(new URL('./api.js', import.meta.url).href),
-        )
-      const out = join(dirname(file), `.argus-config-${process.pid}-${Date.now()}.mjs`)
-      let mod: { default?: ConfigInput } & ConfigInput
-      try {
-        await writeFile(out, js, 'utf8')
-        mod = (await import(pathToFileURL(out).href)) as typeof mod
-      } finally {
-        await rm(out, { force: true }).catch(() => undefined)
+        // Always transpile .ts to a temp .mjs rather than importing natively:
+        // Node's built-in type stripping resolves the module type from the
+        // *consumer's* package.json, so a CommonJS consumer makes ESM config
+        // fail with 'Cannot use import statement'. The transpiled file is
+        // written next to the config (removed after import) so relative
+        // imports and node_modules resolution behave like the original file;
+        // the package self-import is rewritten to this module's own index so
+        // global/npx installs resolve it too.
+        const ts = await import('typescript')
+        const { readFile, writeFile, rm } = await import('node:fs/promises')
+        const { join, dirname } = await import('node:path')
+        const source = await readFile(file, 'utf8')
+        const js = ts
+          .transpileModule(source, {
+            compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+          })
+          .outputText.replace(
+            /(['"])argus-reviewer-e2e\1/g,
+            // package.json exports '.' → dist/api.js (sibling of this file)
+            JSON.stringify(new URL('./api.js', import.meta.url).href),
+          )
+        const out = join(dirname(file), `.argus-config-${process.pid}-${Date.now()}.mjs`)
+        let mod: { default?: ConfigInput } & ConfigInput
+        try {
+          await writeFile(out, js, 'utf8')
+          mod = (await import(pathToFileURL(out).href)) as typeof mod
+        } finally {
+          await rm(out, { force: true }).catch(() => undefined)
+        }
+        const exported = mod.default ?? mod
+        return resolveConfig(exported as ConfigInput)
+      } catch (e: unknown) {
+        const code = (e as { code?: string }).code
+        if (code === 'ENOENT') continue
+        throw e
       }
-      const exported = mod.default ?? mod
-      return resolveConfig(exported as ConfigInput)
-    } catch (e: unknown) {
-      const code = (e as { code?: string }).code
-      if (code === 'ENOENT') continue
-      throw e
     }
-  }
   }
 
   return resolveConfig()
