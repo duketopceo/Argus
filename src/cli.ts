@@ -22,7 +22,7 @@ import {
   resolveMaxComments,
   unknownProviderSlugs,
 } from './config.js'
-import { debug } from './debug.js'
+import { debug, setLiveDir } from './debug.js'
 import { detectEnvironment, type ExecFn } from './detect.js'
 import { BrowserDriver } from './driver/browser.js'
 import { TargetProcess, waitForReady } from './driver/target.js'
@@ -1047,6 +1047,13 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
   const trace = parseOpenRouterTrace(ctx.env)
   const trustResult = await resolveCheckoutTrust(ctx)
   const config = await loadConfig(ctx.cwd, { trust: trustResult.trust, note: ctx.err })
+  // Stage lines stream to <cacheDir>/live.ndjson — unconditional (liveLog
+  // never throws), so `npm run watch` can follow a running review. Route
+  // debug() writes to the same dir now that the configured one is known.
+  const liveDir = resolve(ctx.cwd, config.cacheDir ?? '.argus-reviewer-cache')
+  setLiveDir(liveDir)
+  const stage = (msg: string): void => liveLog(liveDir, 'code-review', 'info', msg)
+  stage(`trust=${trustResult.trust} config loaded`)
   const reportDir = resolve(
     ctx.cwd,
     values['report-dir'] ?? config.reportDir ?? 'argus-reviewer-report',
@@ -1065,6 +1072,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
 
   const skip = async (reason: string): Promise<number> => {
     ctx.out(`code-review: skipping — ${reason}`)
+    stage(`skipped — ${reason}`)
     const skipped: CodeReviewReport = {
       ok: true,
       skipped: true,
@@ -1090,6 +1098,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     readIndex(indexPath),
   ])
   if (!files || files.length === 0) return await skip('could not fetch PR diff')
+  stage(`fetched ${files.length} changed file(s)`)
 
   const contexts = buildReviewContext(
     index,
@@ -1102,6 +1111,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
 
   const chunks = buildPatchChunks(files, contexts)
   debug('code-review', `chunks=${chunks.length} files=${files.length}`)
+  stage(`reviewing ${chunks.length} chunk(s) — model ${model}`)
 
   try {
     const client = createClient(deps, config, ctx)
@@ -1134,6 +1144,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       lastModel = response.model
       const parsed = parseCodeReview(response.content)
       allFindings.push(...parsed.findings)
+      stage(`chunk ${i + 1}/${chunks.length} — ${parsed.findings.length} finding(s)`)
       if (budget !== undefined && ledger.visionCostUsd > budget) {
         ledger.flagBudgetExceeded()
         ctx.err(`code-review: budget exceeded after chunk ${i + 1}; stopping early`)
@@ -1148,6 +1159,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     if (chunks.length > 1 && !ledger.budgetExceeded) {
       try {
         debug('code-review', 'synthesis')
+        stage('synthesizing chunk findings')
         const synthResponse = await client.complete({
           model,
           messages: buildSynthesisMessages(repo, pr, files.map((f) => f.filename), allFindings),
@@ -1218,6 +1230,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       if ('skipped' in materialized) {
         secretsScan = { skipped: materialized.skipped }
         ctx.err(`secrets scan skipped: ${materialized.skipped}`)
+        stage(`secrets scan skipped — ${materialized.skipped}`)
       } else {
         const apiKey = ctx.env.OPENROUTER_API_KEY
         const decisionClient =
@@ -1249,6 +1262,11 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
         if (secretsScan.findings.length > 0) {
           ctx.err(`secrets scan: ${secretsScan.findings.length} finding(s)`)
         }
+        stage(
+          `secrets scan — ${secretsScan.records.length} candidate(s), ` +
+            `${secretsScan.findings.length} finding(s)` +
+            (secretsScan.overflow > 0 ? `, +${secretsScan.overflow} over cap` : ''),
+        )
         finalFindings = [...finalFindings, ...secretsScan.findings]
       }
     }
@@ -1260,6 +1278,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       'code-review',
       `evidence: ${linkedFindings.map((f) => f.evidence.status).join(',')}`,
     )
+    stage(`evidence linked — ${linkedFindings.length} finding(s), verdict ${verdict}`)
 
     // severityGate is the consumer-facing alias over `severity` — see
     // resolveBlockSeverities for the mapping.
@@ -1286,6 +1305,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     if (ctx.env.GITHUB_EVENT_NAME === 'pull_request_target') sandbox.enabled = false
     if (sandbox.enabled && !ledger.budgetExceeded) {
       try {
+        stage('probe lane running')
         const lane = await runProbeLane(linkedFindings, {
           cwd: ctx.cwd,
           reportDir,
@@ -1306,6 +1326,11 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
         if (lane !== undefined) {
           probes = lane.records
           probeLaneSkipped = lane.skipReason
+          stage(
+            lane.skipReason !== undefined
+              ? `probe lane skipped — ${lane.skipReason}`
+              : `probe lane done — ${lane.records.length} probe(s)`,
+          )
           // Probe authoring spend lands on the shared ledger — the report's
           // headline cost fields must count it too or they understate the run.
           for (const p of lane.records) {
@@ -1337,6 +1362,10 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       budgetExceeded: ledger.budgetExceeded,
     }
     await writeAtomicJson(codeReviewPath, report)
+    stage(
+      `report written — verdict ${verdict}, ${linkedFindings.length} finding(s), ` +
+        `$${totalCost.toFixed(6)}`,
+    )
     ctx.out(
       `code review complete: ${finalFindings.length} findings, verdict ${verdict}, ` +
         `${totalTokens}tok $${totalCost.toFixed(6)}${ledger.budgetExceeded ? ' (budget exceeded)' : ''}`,
@@ -1344,6 +1373,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     return 0
   } catch (e) {
     debug('code-review', `failed: ${(e as Error).message}`)
+    stage(`failed — ${(e as Error).message}`)
     ctx.err(`code review failed: ${(e as Error).message}`)
     return 1
   }
