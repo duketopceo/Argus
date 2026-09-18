@@ -64,6 +64,17 @@ describe('resolveTrust', () => {
     expect(r.trust).toBe('trusted')
   })
 
+  it('a MEMBER-authored fork PR still resolves untrusted — association never feeds trust', async () => {
+    const r = await resolveTrust({
+      env: { GITHUB_EVENT_NAME: 'pull_request', GITHUB_EVENT_PATH: '/tmp/event.json' },
+      readEventFile: async () =>
+        JSON.stringify({
+          pull_request: { head: { repo: { fork: true } }, author_association: 'MEMBER' },
+        }),
+    })
+    expect(r.trust).toBe('untrusted')
+  })
+
   it('pull_request_target follows the same payload rule', async () => {
     const r = await resolveTrust({
       env: { GITHUB_EVENT_NAME: 'pull_request_target', GITHUB_EVENT_PATH: '/tmp/event.json' },

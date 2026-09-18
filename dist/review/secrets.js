@@ -173,6 +173,7 @@ export async function scanSecrets(opts) {
             file: c.file,
             line: c.line,
             severity: adjudicated ? 'bug' : 'risk',
+            category: 'security',
             message: maskFindingMessage(c, adjudicated),
         });
         records.push({
