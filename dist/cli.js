@@ -20,6 +20,8 @@ import { readIndex, scanRepo, writeIndex } from './index/scan.js';
 import { fetchCheckRuns, fetchPrMeta, ghGet } from './evidence/ci.js';
 import { resolveTrust } from './trust.js';
 import { linkFindings } from './evidence/link.js';
+import { DecisionClient } from './vision/decisions.js';
+import { materializeMergeBaseDiff, scanSecrets, } from './review/secrets.js';
 import { runProbeLane } from './probe/queue.js';
 import { A0_DEFAULT_TIMEOUT_MS, a0TaskPrompt, runA0Task } from './executor/a0.js';
 import { buildJournalEntry } from './journal/build.js';
@@ -1009,6 +1011,57 @@ async function cmdCodeReview(args, ctx, deps) {
         // lane's fork gate (evidence/gate.ts) consumes them; only headSha feeds
         // evidence linkage here.
         const prMeta = await prMetaPromise;
+        // Secrets lane: deterministic regex scan over the local merge-base
+        // diff — the PR-files API `patch` omits large/binary files, so the
+        // local diff is the complete scan surface. Findings union into
+        // finalFindings AFTER the synthesis replacement above so a
+        // prompt-injected synthesis can never erase them. Literals are
+        // masked in every output (Jev `state` is the documented exception).
+        let secretsScan;
+        if (prMeta?.baseSha !== undefined) {
+            const materialized = await materializeMergeBaseDiff({
+                cwd: ctx.cwd,
+                baseSha: prMeta.baseSha,
+                token,
+                ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
+            });
+            if ('skipped' in materialized) {
+                secretsScan = { skipped: materialized.skipped };
+                ctx.err(`secrets scan skipped: ${materialized.skipped}`);
+            }
+            else {
+                const apiKey = ctx.env.OPENROUTER_API_KEY;
+                const decisionClient = config.decisionModel !== undefined && apiKey !== undefined && apiKey !== ''
+                    ? new DecisionClient({
+                        apiKey,
+                        ...(trace !== undefined ? { trace } : {}),
+                        onCall: (c) => {
+                            const cost = {
+                                model: c.model,
+                                provider: 'unknown',
+                                tokens: c.tokens,
+                                costUsd: c.costUsd,
+                                kind: 'decide',
+                            };
+                            ledger.recordCall(cost);
+                            allCalls.push(cost);
+                            totalTokens += c.tokens;
+                            totalCost += c.costUsd;
+                        },
+                    })
+                    : undefined;
+                secretsScan = await scanSecrets({
+                    diff: materialized.diff,
+                    threshold: config.review.secretsThreshold,
+                    ...(decisionClient !== undefined ? { client: decisionClient } : {}),
+                    ...(config.decisionModel !== undefined ? { model: config.decisionModel } : {}),
+                });
+                if (secretsScan.findings.length > 0) {
+                    ctx.err(`secrets scan: ${secretsScan.findings.length} finding(s)`);
+                }
+                finalFindings = [...finalFindings, ...secretsScan.findings];
+            }
+        }
         const headSha = prMeta?.headSha;
         const checkRuns = headSha === undefined ? undefined : await fetchCheckRuns(repo, headSha, token, ctx);
         const linkedFindings = linkFindings(finalFindings, index, checkRuns);
@@ -1073,6 +1126,7 @@ async function cmdCodeReview(args, ctx, deps) {
             findings: linkedFindings,
             ...(probes !== undefined ? { probes } : {}),
             ...(probeLaneSkipped !== undefined ? { probeLaneSkipped } : {}),
+            ...(secretsScan !== undefined ? { secretsScan } : {}),
             calls: allCalls,
             visionCostUsd: totalCost,
             tokens: totalTokens,
