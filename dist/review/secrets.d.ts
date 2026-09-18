@@ -38,6 +38,7 @@ export interface SecretsScanResult {
         file: string;
         line?: number;
         severity: string;
+        category?: string;
         message: string;
     }[];
     /** Audit records for report.secretsScan — literals never included. */

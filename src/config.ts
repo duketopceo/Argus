@@ -166,8 +166,17 @@ export interface Config {
    * `secretsThreshold`: Jev `noul` probability at/above which a
    * secret-shaped diff literal is reported as a finding (below →
    * suppressed but audit-recorded). Default 0.3 — tune after dogfooding.
+   * `maxComments`: cap on inline review comments posted per run
+   * (default 20) — overflow is summarized count-only in the sticky.
+   * `severityGate`: consumer-facing alias over `severity` — 'bug'
+   * fails on bugs only, 'risk' fails on bug|risk. Unset → `severity`
+   * list is authoritative.
    */
-  review: { secretsThreshold: number }
+  review: {
+    secretsThreshold: number
+    maxComments: number
+    severityGate: 'bug' | 'risk' | undefined
+  }
 }
 
 export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review'>> & {
@@ -218,7 +227,7 @@ const defaults: Config = {
   a0: undefined,
   heal: 'local',
   sandbox: { ...DEFAULT_SANDBOX },
-  review: { secretsThreshold: 0.3 },
+  review: { secretsThreshold: 0.3, maxComments: 20, severityGate: undefined },
 }
 
 export function defineConfig(input: ConfigInput): ConfigInput {
@@ -228,6 +237,35 @@ export function defineConfig(input: ConfigInput): ConfigInput {
 /** Positive-integer config values fall back to their default, floored. */
 function posInt(v: number | undefined, dflt: number): number {
   return v !== undefined && Number.isFinite(v) && v >= 1 ? Math.floor(v) : dflt
+}
+
+/**
+ * Which severities fail the review status. `review.severityGate` is the
+ * consumer-facing alias over `severity` — 'risk' fails on bug|risk,
+ * 'bug' on bugs only; unset → the `severity` list is authoritative.
+ */
+export function resolveBlockSeverities(config: Config): string[] {
+  if (config.review.severityGate === 'risk') return ['bug', 'risk']
+  if (config.review.severityGate === 'bug') return ['bug']
+  return config.severity ?? ['bug']
+}
+
+/**
+ * Inline-comment cap: `ARGUS_MAX_COMMENTS` (the action's `max-comments`
+ * input) wins when it parses as a non-negative integer — it's set by the
+ * workflow author, so an untrusted PR config can't reach it (`review`
+ * isn't on the untrusted allowlist). Anything else → `review.maxComments`.
+ */
+export function resolveMaxComments(
+  env: Record<string, string | undefined>,
+  config: Config,
+): number {
+  const raw = env.ARGUS_MAX_COMMENTS
+  if (raw !== undefined && raw.trim() !== '') {
+    const n = Number(raw)
+    if (Number.isInteger(n) && n >= 0) return n
+  }
+  return config.review.maxComments
 }
 
 export function resolveConfig(input: ConfigInput = {}): Config {
@@ -256,6 +294,15 @@ export function resolveConfig(input: ConfigInput = {}): Config {
     review.secretsThreshold > 1
   ) {
     review.secretsThreshold = defaults.review.secretsThreshold
+  }
+  review.maxComments =
+    typeof review.maxComments === 'number' &&
+    Number.isInteger(review.maxComments) &&
+    review.maxComments >= 0
+      ? review.maxComments
+      : defaults.review.maxComments
+  if (review.severityGate !== 'bug' && review.severityGate !== 'risk') {
+    review.severityGate = undefined
   }
   const resolved: Config = { ...defaults, ...input, provider, sandbox, review }
   resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP)

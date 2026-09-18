@@ -210,8 +210,8 @@ function renderBody(report, codeReview, runUrl, ok) {
     lines.push('')
     if (codeReview.findings.length > 0) {
       const evidenceIcon = { exercised: '✅', corroborated: '🔴', not_exercised: '⚪', inconclusive: '❔', reproduced: '🧪' }
-      lines.push('| File | Severity | Evidence | Finding |')
-      lines.push('| --- | --- | --- | --- |')
+      lines.push('| File | Severity | Category | Evidence | Finding |')
+      lines.push('| --- | --- | --- | --- | --- |')
       // Findings/evidence strings are model- and probe-emitted — sanitize
       // for the markdown table and bound the section so an oversized report
       // can't push the body past GitHub's 65536-char comment limit.
@@ -220,12 +220,38 @@ function renderBody(report, codeReview, runUrl, ok) {
         const ev = f.evidence
           ? `${evidenceIcon[f.evidence.status] ?? '❔'} ${cell(f.evidence.detail)}`
           : '—'
-        lines.push(`| \`${cell(f.file)}\` | ${cell(f.severity)} | ${ev} | ${cell(f.message)} |`)
+        lines.push(`| \`${cell(f.file)}\` | ${cell(f.severity)} | ${cell(f.category ?? '—')} | ${ev} | ${cell(f.message)} |`)
       }
       if (codeReview.findings.length > MAX_FINDING_ROWS) {
-        lines.push(`| … | — | — | ${codeReview.findings.length - MAX_FINDING_ROWS} more findings in \`code-review.json\` |`)
+        lines.push(`| … | — | — | — | ${codeReview.findings.length - MAX_FINDING_ROWS} more findings in \`code-review.json\` |`)
       }
       lines.push('')
+      // Inline-comment cap note — findings eligible for inline review that
+      // the review.maxComments budget didn't post (TCA max_comments).
+      const inlineCap = typeof codeReview.maxComments === 'number' ? codeReview.maxComments : 20
+      const inlineWorthy = codeReview.findings.filter(
+        (f) => f.file && typeof f.line === 'number' && ['bug', 'risk'].includes(f.severity),
+      ).length
+      if (inlineWorthy > inlineCap) {
+        lines.push(`*+${inlineWorthy - inlineCap} inline-eligible finding(s) not posted — \`review.maxComments\` cap ${inlineCap}.*`)
+        lines.push('')
+      }
+      // Secrets-lane audit line — adjudicated/suppressed counts, never literals.
+      if (codeReview.secretsScan) {
+        if (typeof codeReview.secretsScan.skipped === 'string') {
+          lines.push(`*🔐 secrets scan skipped — ${cell(codeReview.secretsScan.skipped)}*`)
+        } else if (Array.isArray(codeReview.secretsScan.records)) {
+          const suppressed = codeReview.secretsScan.records.filter((r) => r.suppressed).length
+          const unadj = codeReview.secretsScan.records.filter((r) => !r.adjudicated).length
+          lines.push(
+            `*🔐 secrets scan: ${codeReview.secretsScan.records.length} candidate(s)` +
+              `${suppressed > 0 ? `, ${suppressed} adjudicated-suppressed` : ''}` +
+              `${unadj > 0 ? `, ${unadj} unadjudicated` : ''}` +
+              `${codeReview.secretsScan.overflow > 0 ? `, +${codeReview.secretsScan.overflow} over cap` : ''}.*`,
+          )
+        }
+        lines.push('')
+      }
     }
     lines.push('</details>')
     lines.push('')
@@ -301,6 +327,8 @@ async function postInlineComments(pr, codeReview) {
       line: f.line,
       side: 'RIGHT',
       body: `**argus-reviewer ${f.severity}:** ${f.message}${
+        f.category ? ` \`${f.category}\`` : ''
+      }${
         f.evidence && f.evidence.status === 'reproduced'
           ? '\n\n*🧪 Reproduced by an Argus probe — fails on this PR head, clean on base. See workflow artifacts.*'
           : f.evidence && f.evidence.status !== 'exercised'
@@ -338,6 +366,11 @@ async function postInlineComments(pr, codeReview) {
   const fresh = comments.filter((c) => !posted.has(dedupKey(c.path, c.line, c.body)))
   if (fresh.length === 0) return
 
+  // review.maxComments caps inline noise (TCA max_comments) — applied
+  // after dedup so already-posted comments don't eat the budget.
+  const cap = typeof codeReview.maxComments === 'number' ? codeReview.maxComments : 20
+  const capped = fresh.slice(0, cap)
+
   // One batched review instead of N createReviewComment calls — avoids
   // secondary rate limits on large findings sets.
   try {
@@ -347,7 +380,7 @@ async function postInlineComments(pr, codeReview) {
       pull_number: pr.number,
       commit_id: pr.head.sha,
       event: 'COMMENT',
-      comments: fresh,
+      comments: capped,
     })
   } catch (e) {
     core.warning(`inline review failed: ${e.message}`)

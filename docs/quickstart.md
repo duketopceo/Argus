@@ -201,6 +201,35 @@ each finding with whether the repo's own CI exercised the implicated path —
 + a test check failed on this head), `not exercised` (no test file reaches the
 path — severity is never downgraded), or `inconclusive` (no CI/index data).
 
+### Review policy
+
+The `review` config block tunes the GitHub-facing posture:
+
+```ts
+export default defineConfig({
+  review: {
+    // Cap on inline comments posted per run. Overflow stays in
+    // code-review.json and is summarized count-only in the sticky.
+    // The action's `max-comments` input overrides this.
+    maxComments: 20,
+    // Check-failure threshold: 'bug' fails on bugs only (default),
+    // 'risk' fails on bug|risk findings. Overrides `severity`.
+    severityGate: 'risk',
+    // Jev adjudication cutoff for the secrets lane: candidates scored
+    // below this probability are suppressed (still audited, masked).
+    secretsThreshold: 0.3,
+  },
+  // Jev decision model for secrets adjudication. '' disables
+  // adjudication — regex-only findings, still fully reported.
+  decisionModel: 'typesafe/jev-1.13-20260917',
+})
+```
+
+Each finding carries a `category` (`correctness`, `security`,
+`performance`, `usability`, `convention`, `other`) shown in the sticky
+table and inline comments. All findings land in `code-review.json`
+regardless of the comment cap.
+
 ### Sandbox probes (opt-in, requires Docker)
 
 With `sandbox: { enabled: true }` in config (or the action's `sandbox: 'true'`

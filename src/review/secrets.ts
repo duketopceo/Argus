@@ -39,7 +39,7 @@ export interface SecretScanRecord {
 
 export interface SecretsScanResult {
   /** Findings to union into the review — messages are fully masked. */
-  findings: { file: string; line?: number; severity: string; message: string }[]
+  findings: { file: string; line?: number; severity: string; category?: string; message: string }[]
   /** Audit records for report.secretsScan — literals never included. */
   records: SecretScanRecord[]
   /** Candidates past MAX_CANDIDATES — reported count-only, never sent to Jev. */
@@ -245,6 +245,7 @@ export async function scanSecrets(opts: {
       file: c.file,
       line: c.line,
       severity: adjudicated ? 'bug' : 'risk',
+      category: 'security',
       message: maskFindingMessage(c, adjudicated),
     })
     records.push({

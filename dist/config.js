@@ -39,7 +39,7 @@ const defaults = {
     a0: undefined,
     heal: 'local',
     sandbox: { ...DEFAULT_SANDBOX },
-    review: { secretsThreshold: 0.3 },
+    review: { secretsThreshold: 0.3, maxComments: 20, severityGate: undefined },
 };
 export function defineConfig(input) {
     return input;
@@ -47,6 +47,33 @@ export function defineConfig(input) {
 /** Positive-integer config values fall back to their default, floored. */
 function posInt(v, dflt) {
     return v !== undefined && Number.isFinite(v) && v >= 1 ? Math.floor(v) : dflt;
+}
+/**
+ * Which severities fail the review status. `review.severityGate` is the
+ * consumer-facing alias over `severity` — 'risk' fails on bug|risk,
+ * 'bug' on bugs only; unset → the `severity` list is authoritative.
+ */
+export function resolveBlockSeverities(config) {
+    if (config.review.severityGate === 'risk')
+        return ['bug', 'risk'];
+    if (config.review.severityGate === 'bug')
+        return ['bug'];
+    return config.severity ?? ['bug'];
+}
+/**
+ * Inline-comment cap: `ARGUS_MAX_COMMENTS` (the action's `max-comments`
+ * input) wins when it parses as a non-negative integer — it's set by the
+ * workflow author, so an untrusted PR config can't reach it (`review`
+ * isn't on the untrusted allowlist). Anything else → `review.maxComments`.
+ */
+export function resolveMaxComments(env, config) {
+    const raw = env.ARGUS_MAX_COMMENTS;
+    if (raw !== undefined && raw.trim() !== '') {
+        const n = Number(raw);
+        if (Number.isInteger(n) && n >= 0)
+            return n;
+    }
+    return config.review.maxComments;
 }
 export function resolveConfig(input = {}) {
     const provider = { ...defaults.provider, ...(input.provider ?? {}) };
@@ -72,6 +99,15 @@ export function resolveConfig(input = {}) {
         review.secretsThreshold < 0 ||
         review.secretsThreshold > 1) {
         review.secretsThreshold = defaults.review.secretsThreshold;
+    }
+    review.maxComments =
+        typeof review.maxComments === 'number' &&
+            Number.isInteger(review.maxComments) &&
+            review.maxComments >= 0
+            ? review.maxComments
+            : defaults.review.maxComments;
+    if (review.severityGate !== 'bug' && review.severityGate !== 'risk') {
+        review.severityGate = undefined;
     }
     const resolved = { ...defaults, ...input, provider, sandbox, review };
     resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP);

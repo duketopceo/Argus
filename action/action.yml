@@ -46,6 +46,10 @@ inputs:
     description: Enable the B.2 probe lane — authored test probes for unexercised findings run in a hardened Docker container (no network, no secrets, read-only fs). Enable-only — 'false' does not override a config-enabled lane. Requires Docker on the runner; forced off on pull_request_target.
     default: 'false'
     required: false
+  max-comments:
+    description: Cap on inline review comments posted per run; overflow is summarized in the sticky. Overrides review.maxComments.
+    default: '20'
+    required: false
 outputs:
   conclusion:
     description: 'Run conclusion: success, failure, or neutral'
@@ -108,6 +112,7 @@ runs:
         OPENROUTER_API_KEY: ${{ inputs.openrouter-api-key }}
         GITHUB_TOKEN: ${{ github.token }}
         ARGUS_SANDBOX: ${{ inputs.sandbox == 'true' && '1' || '' }}
+        ARGUS_MAX_COMMENTS: ${{ inputs.max-comments }}
         ARGUS_DEBUG: '1'
         ARGUS_REVIEWER_TRACE: >-
           {"repo":"${{ github.repository }}",
