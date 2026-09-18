@@ -433,15 +433,100 @@ npm run demo: --fixture fixture repo → local code-review → TUI watch
   watches trust → config → scan → adjudication → review → findings
   stream live end-to-end.
 
+---
+
+## Extension: Jev-everywhere (U7–U9)
+
+Added after the pace-server Jev dogfood validated the two-round pattern
+(cheap typed-probability triage across all PRs → deeper interrogation on
+flagged ones). Same client, same discipline: **Jev routes and annotates,
+never gates** — the deterministic severity verdict stays authoritative,
+and Jev failure degrades open (full-depth review, no suppression).
+
+### U7. PR triage lane (pre-review)
+
+- **Goal:** one batched `decide` call before chunking produces a triage
+  record: `needs_deep_review` (noul), `risk` (score 1–5), `top_risk_area`
+  (choice: auth/billing/data/ops/none), recorded in `code-review.json`
+  and rendered in the sticky.
+- **Requirements:** R3, R5
+- **Dependencies:** U2 (DecisionClient), U3 (lane pattern)
+- **Files:** `src/review/triage.ts` (new), `src/cli.ts`, `src/config.ts`
+  (`review.triage: 'off' | 'annotate' | 'route'`, default `'annotate'`),
+  `action/sticky-comment.mjs` (triage table), `tests/unit/triage.test.ts`
+- **Approach:** state = PR title/body + file list + bounded diff excerpt
+  (the pace pattern). `'annotate'` only writes the record; `'route'`
+  additionally selects the code-model tier for the run (cheap model for
+  low-risk diffs, configured `code_model` otherwise). Coverage is never
+  reduced — triage picks effort shape, not whether review happens.
+- **Test scenarios:** triage record lands in report; `'route'` picks the
+  cheap tier on low risk and the configured model otherwise; Jev failure
+  → full-depth annotate run with `triage.unadjudicated`; disabled
+  (`decisionModel: ''`) → no call, no record.
+- **Verification:** report carries a triage block; sticky renders it;
+  demo shows the triage line before chunk stages.
+
+### U8. Finding adjudication
+
+- **Goal:** synthesized findings get a Jev `noul` true-positive
+  probability before posting — the FP-noise counterpart to the secrets
+  lane.
+- **Requirements:** R3, R4
+- **Dependencies:** U7 (lane pattern), U2
+- **Files:** `src/review/adjudicate.ts` (new), `src/cli.ts`,
+  `src/config.ts` (`review.findingThreshold`, default 1.0 = annotate
+  only), `action/sticky-comment.mjs` (confidence column),
+  `tests/unit/adjudicate.test.ts`
+- **Approach:** batched noul per finding (file + line + message + patch
+  excerpt as state, ≤50 cap shared with the secrets lane). Default is
+  **annotate-only**: probability lands on the finding record and in the
+  sticky. Lowering `findingThreshold` suppresses only `nit`/`q`
+  severities below it — `bug`/`risk` are never suppressed (fail-open,
+  same direction as secrets). Suppressed findings stay in
+  `code-review.json` audit records.
+- **Test scenarios:** annotate mode keeps all findings with p fields;
+  threshold mode suppresses a low-p nit but never a bug; Jev failure →
+  all unadjudicated, none suppressed; cap overflow → count-only.
+- **Verification:** sticky shows confidence; suppressed nits visible in
+  report audit, absent from inline comments.
+
+### U9. Probe targeting from triage
+
+- **Goal:** `top_risk_area` (U7) steers the sandbox probe lane's
+  selection — probes prioritize findings in the flagged subsystem.
+- **Requirements:** R3
+- **Dependencies:** U7, existing probe lane
+- **Files:** `src/probe/queue.ts`, `src/cli.ts`,
+  `tests/unit/probe-queue.test.ts`
+- **Approach:** when `review.triage` produced a `top_risk_area` with
+  confidence above a small floor, probe candidate ordering prefers
+  findings whose file path overlaps the area; otherwise existing order.
+  Advisory only — probe count, gates, and verdict behavior unchanged.
+- **Test scenarios:** flagged area reorders probe selection; no triage
+  record → existing order; low-confidence area ignored.
+- **Verification:** probe audit shows triage-informed ordering; lane
+  unchanged when Jev absent.
+
+### Deferred (Jev-everywhere)
+
+- **Run-lane assert adjudication** — Jev scoring vision-assert verdicts
+  from their text artifacts (question + reasoning + step context). Jev
+  is text-only; this competes with escalating to a stronger vision
+  model. Revisit if assert FPs prove costly in dogfood.
+- **Triage `'route'` actually skipping chunks** — real spend savings but
+  a crafted PR could game the triage into under-reviewing; coverage
+  stays constant until the routing earns trust in dogfood.
+
 ## Scope Boundaries
 
 - **Not in this tranche:** roadmap U2's `reviewProfiles` prompt-pack
   system (secrets scan ships standalone here; packs remain U2);
   roadmap U3 persist, U4 explore, U5 mentions, U6/U7 Agent Zero,
   U8–U10 ops — all unchanged in the roadmap.
-- **Jev breadth:** client + secrets adjudication only. Severity
-  scoring, finding dedup, probe-worthiness gating consume the same
-  `DecisionClient` later — designed for, not built here.
+- **Jev breadth:** the extension section (U7–U9) extends adjudication
+  to triage, findings, and probe targeting — annotate/route posture,
+  never verdict-gating. Run-lane assert adjudication and
+  triage-driven coverage skipping stay deferred (see Deferred).
 - **Electron:** untouched except it benefits from the `debug()` dir
   fix; the shared tail helper may later replace its inline `tailLive`.
 - **Local-web demo variant** (collect.mjs + tail over SSE): deferred —
