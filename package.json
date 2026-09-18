@@ -1,7 +1,7 @@
 {
   "name": "argus-reviewer-e2e",
   "version": "0.1.3",
-  "description": "argus-reviewer — open-source vision-model E2E testing harness. Record, replay, heal, and assert with any OpenRouter model under a hard budget cap.",
+  "description": "argus-reviewer \u2014 open-source vision-model E2E testing harness. Record, replay, heal, and assert with any OpenRouter model under a hard budget cap.",
   "type": "module",
   "license": "MIT",
   "author": "Luke Kimball",
@@ -42,7 +42,8 @@
     "prepare": "npm run build && chmod +x dist/cli.js",
     "eval": "node evals/run.mjs",
     "watch": "node scripts/watch.mjs",
-    "app": "electron electron"
+    "app": "electron electron",
+    "demo": "node scripts/demo.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

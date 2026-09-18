@@ -3,6 +3,7 @@ import { Config } from './config.js';
 import { type ExecFn } from './detect.js';
 import { BrowserDriver } from './driver/browser.js';
 import { VisionClient } from './engine/loop.js';
+import { type PrMeta } from './evidence/ci.js';
 import { type Evidence } from './evidence/link.js';
 import { type SecretsScanResult } from './review/secrets.js';
 import { type ProbeRecord } from './probe/queue.js';
@@ -54,6 +55,26 @@ interface CodeReviewReport {
     model: string;
     budgetExceeded: boolean;
 }
+/**
+ * Split `git diff` text into per-file PrFile entries — the local-diff
+ * equivalent of the PR-files API response (which also reports `patch`
+ * per file). `+++ b/` names new/copied files; `--- a/` covers deletions.
+ */
+export declare function filesFromUnifiedDiff(diff: string): PrFile[];
+/**
+ * `--fixture <dir>` seam: the dir is a real git repo with an
+ * `argus-fixture-base` ref (the merge base) and HEAD at the PR head —
+ * scripts/demo.mjs materializes it. Returns the same diff/files/meta
+ * the GitHub paths would produce, so every downstream lane (chunking,
+ * secrets scan, evidence linkage) runs its real code path.
+ */
+export declare function loadFixture(dir: string, exec?: ExecFn): Promise<{
+    files: PrFile[];
+    meta: PrMeta;
+    diff: string;
+} | {
+    skipped: string;
+}>;
 export declare function buildPatchChunks(files: PrFile[], contexts?: Record<string, string>): string[];
 export declare function parseCodeReview(content: string): {
     summary: string;

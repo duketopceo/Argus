@@ -23,7 +23,7 @@ import {
   unknownProviderSlugs,
 } from './config.js'
 import { debug, setLiveDir } from './debug.js'
-import { detectEnvironment, type ExecFn } from './detect.js'
+import { defaultExec, detectEnvironment, type ExecFn } from './detect.js'
 import { BrowserDriver } from './driver/browser.js'
 import { TargetProcess, waitForReady } from './driver/target.js'
 import { Engine, VisionClient } from './engine/loop.js'
@@ -32,7 +32,7 @@ import { buildReviewContext, CONTEXT_PREFIX } from './index/context.js'
 import { diffChangedFiles } from './index/diff.js'
 import { invalidateForDiff } from './index/invalidate.js'
 import { readIndex, scanRepo, writeIndex } from './index/scan.js'
-import { fetchCheckRuns, fetchPrMeta, ghGet } from './evidence/ci.js'
+import { fetchCheckRuns, fetchPrMeta, ghGet, type PrMeta } from './evidence/ci.js'
 import { resolveTrust } from './trust.js'
 import { linkFindings, type Evidence } from './evidence/link.js'
 import { DecisionClient } from './vision/decisions.js'
@@ -123,6 +123,8 @@ configured code model. Writes code-review.json next to run.json.
 
 Options:
   --report-dir <dir> Report output dir (default: config reportDir or ./argus-reviewer-report)
+  --fixture <dir>    Review a local fixture repo (ref argus-fixture-base vs HEAD)
+                     instead of a live PR — no GitHub API calls. Used by npm run demo.
   -h, --help         Show this help`
 
 const CACHE_USAGE = `Usage: argus-reviewer cache <list|prune> [options]
@@ -879,6 +881,60 @@ async function fetchPrFiles(repo: string, pr: string, token: string, ctx: Ctx): 
   return files
 }
 
+/**
+ * Split `git diff` text into per-file PrFile entries — the local-diff
+ * equivalent of the PR-files API response (which also reports `patch`
+ * per file). `+++ b/` names new/copied files; `--- a/` covers deletions.
+ */
+export function filesFromUnifiedDiff(diff: string): PrFile[] {
+  const files: PrFile[] = []
+  for (const sec of diff.split(/^(?=diff --git )/m)) {
+    if (!sec.startsWith('diff --git ')) continue
+    const name =
+      /^\+\+\+ b\/(.+)$/m.exec(sec)?.[1] ??
+      /^--- a\/(.+)$/m.exec(sec)?.[1] ??
+      /^diff --git a\/(.+?) b\//.exec(sec)?.[1]
+    if (name === undefined) continue
+    files.push({ filename: name, patch: sec })
+  }
+  return files
+}
+
+/**
+ * `--fixture <dir>` seam: the dir is a real git repo with an
+ * `argus-fixture-base` ref (the merge base) and HEAD at the PR head —
+ * scripts/demo.mjs materializes it. Returns the same diff/files/meta
+ * the GitHub paths would produce, so every downstream lane (chunking,
+ * secrets scan, evidence linkage) runs its real code path.
+ */
+export async function loadFixture(
+  dir: string,
+  exec: ExecFn = defaultExec,
+): Promise<{ files: PrFile[]; meta: PrMeta; diff: string } | { skipped: string }> {
+  const base = await exec('git', ['-C', dir, 'rev-parse', 'argus-fixture-base'], 30_000)
+  if (base.code !== 0) {
+    return { skipped: 'no argus-fixture-base ref — materialize the fixture with scripts/demo.mjs' }
+  }
+  const head = await exec('git', ['-C', dir, 'rev-parse', 'HEAD'], 30_000)
+  if (head.code !== 0) return { skipped: 'fixture has no HEAD commit' }
+  const baseSha = base.stdout.trim()
+  const headSha = head.stdout.trim()
+  const diff = await exec('git', ['-C', dir, 'diff', `${baseSha}..${headSha}`], 60_000)
+  if (diff.code !== 0) {
+    return { skipped: `git diff failed: ${diff.stderr.trim().slice(0, 200)}` }
+  }
+  const meta: PrMeta = {
+    headSha,
+    baseSha,
+    isFork: false,
+    authorAssociation: 'OWNER',
+    labels: [],
+    pushedAt: undefined,
+    labelApprovedAt: undefined,
+  }
+  return { files: filesFromUnifiedDiff(diff.stdout), meta, diff: diff.stdout }
+}
+
 export function buildPatchChunks(
   files: PrFile[],
   contexts: Record<string, string> = {},
@@ -1031,6 +1087,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     options: {
       help: { type: 'boolean', short: 'h', default: false },
       'report-dir': { type: 'string' },
+      fixture: { type: 'string' },
     },
   })
   if (values.help) {
@@ -1061,10 +1118,17 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
   await mkdir(reportDir, { recursive: true })
   const codeReviewPath = join(reportDir, 'code-review.json')
 
-  const repo = (trace?.repo ?? ctx.env.GITHUB_REPOSITORY) as string | undefined
+  // --fixture <dir>: review a local fixture repo (argus-fixture-base vs
+  // HEAD) with zero GitHub API calls — the demo path. Trust still resolves
+  // (locally → trusted) and every downstream lane runs its real code.
+  const fixtureDir = values.fixture !== undefined ? resolve(ctx.cwd, values.fixture) : undefined
+  const repo =
+    fixtureDir !== undefined
+      ? basename(fixtureDir)
+      : ((trace?.repo ?? ctx.env.GITHUB_REPOSITORY) as string | undefined)
   // `||` not `??`: the action renders `pr` as "" on issue_comment events
   // (github.event.pull_request.number is empty), and '' is not nullish.
-  const pr = trace?.pr || trustResult.pr
+  const pr = fixtureDir !== undefined ? '0' : trace?.pr || trustResult.pr
   const token = ctx.env.GITHUB_TOKEN ?? ctx.env.GH_TOKEN
   const model = config.code_model ?? config.model
   const budget = config.codeReviewBudgetUsd
@@ -1089,16 +1153,34 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     return 0
   }
 
-  if (!repo || !pr) return await skip('missing repo/pr in trace')
-  if (!token) return await skip('missing GITHUB_TOKEN')
+  if (fixtureDir === undefined) {
+    if (!repo || !pr) return await skip('missing repo/pr in trace')
+    if (!token) return await skip('missing GITHUB_TOKEN')
+  }
 
-  const indexPath = resolve(ctx.cwd, config.indexPath ?? 'argus.index.json')
+  const indexPath = resolve(fixtureDir ?? ctx.cwd, config.indexPath ?? 'argus.index.json')
+  const fixture =
+    fixtureDir !== undefined ? await loadFixture(fixtureDir, deps.exec) : undefined
+  if (fixture !== undefined && 'skipped' in fixture) {
+    return await skip(`fixture — ${fixture.skipped}`)
+  }
+  // Narrowed: fixture mode sets both; the guards above return early in
+  // live-PR mode when either is missing.
+  const repoName = repo as string
+  const prNum = pr as string
+  const ghToken = token as string
   const [files, index] = await Promise.all([
-    fetchPrFiles(repo, pr, token, ctx),
+    fixture !== undefined
+      ? Promise.resolve(fixture.files)
+      : fetchPrFiles(repoName, prNum, ghToken, ctx),
     readIndex(indexPath),
   ])
   if (!files || files.length === 0) return await skip('could not fetch PR diff')
-  stage(`fetched ${files.length} changed file(s)`)
+  stage(
+    fixture !== undefined
+      ? `fixture mode — ${files.length} changed file(s) from ${basename(fixtureDir as string)}`
+      : `fetched ${files.length} changed file(s)`,
+  )
 
   const contexts = buildReviewContext(
     index,
@@ -1118,7 +1200,11 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     const ledger = new Ledger(budget)
     // Kick off PR metadata now — it only needs repo/pr/token and its
     // round-trip hides behind the model calls. Degrades to undefined.
-    const prMetaPromise = fetchPrMeta(repo, pr, token, ctx).catch(() => undefined)
+    // Fixture mode supplies it locally — same shape, no API call.
+    const prMetaPromise =
+      fixture !== undefined
+        ? Promise.resolve(fixture.meta)
+        : fetchPrMeta(repoName, prNum, ghToken, ctx).catch(() => undefined)
     const allFindings: CodeReviewReport['findings'] = []
     const allCalls: CallCost[] = []
     let totalTokens = 0
@@ -1132,7 +1218,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       if (chunk === undefined) continue
       const response = await client.complete({
         model,
-        messages: buildCodeReviewMessages(repo, pr, chunk, i, chunks.length),
+        messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length),
         schema: CODE_REVIEW_SCHEMA,
         kind: 'code',
         provider: config.provider,
@@ -1162,7 +1248,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
         stage('synthesizing chunk findings')
         const synthResponse = await client.complete({
           model,
-          messages: buildSynthesisMessages(repo, pr, files.map((f) => f.filename), allFindings),
+          messages: buildSynthesisMessages(repoName, prNum, files.map((f) => f.filename), allFindings),
           schema: CODE_REVIEW_SCHEMA,
           kind: 'code',
           provider: config.provider,
@@ -1221,12 +1307,18 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     // masked in every output (Jev `state` is the documented exception).
     let secretsScan: SecretsScanResult | { skipped: string } | undefined
     if (prMeta?.baseSha !== undefined) {
-      const materialized = await materializeMergeBaseDiff({
-        cwd: ctx.cwd,
-        baseSha: prMeta.baseSha,
-        token,
-        ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
-      })
+      // Fixture mode already produced the same `git diff base..HEAD`
+      // output inside the fixture repo — reuse it rather than shelling
+      // out again (the scan surface is identical).
+      const materialized =
+        fixture !== undefined
+          ? { diff: fixture.diff }
+          : await materializeMergeBaseDiff({
+              cwd: ctx.cwd,
+              baseSha: prMeta.baseSha,
+              ...(token !== undefined ? { token } : {}),
+              ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
+            })
       if ('skipped' in materialized) {
         secretsScan = { skipped: materialized.skipped }
         ctx.err(`secrets scan skipped: ${materialized.skipped}`)
@@ -1272,7 +1364,10 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     }
 
     const headSha = prMeta?.headSha
-    const checkRuns = headSha === undefined ? undefined : await fetchCheckRuns(repo, headSha, token, ctx)
+    const checkRuns =
+      headSha === undefined || fixture !== undefined
+        ? undefined
+        : await fetchCheckRuns(repoName, headSha, ghToken, ctx)
     const linkedFindings = linkFindings(finalFindings, index, checkRuns)
     debug(
       'code-review',
@@ -1303,6 +1398,12 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     // code too so a miswired workflow fails closed instead of executing
     // PR code beside real credentials.
     if (ctx.env.GITHUB_EVENT_NAME === 'pull_request_target') sandbox.enabled = false
+    // Fixture mode reviews a local repo, not the cwd checkout — probes
+    // would execute against the wrong tree.
+    if (fixtureDir !== undefined && sandbox.enabled) {
+      sandbox.enabled = false
+      probeLaneSkipped = 'fixture mode — probes need a real PR checkout'
+    }
     if (sandbox.enabled && !ledger.budgetExceeded) {
       try {
         stage('probe lane running')
@@ -1311,7 +1412,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
           reportDir,
           sandbox,
           meta: prMeta,
-          token,
+          token: ghToken,
           client,
           model,
           provider: config.provider,

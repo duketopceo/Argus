@@ -230,6 +230,15 @@ Each finding carries a `category` (`correctness`, `security`,
 table and inline comments. All findings land in `code-review.json`
 regardless of the comment cap.
 
+### Local demo (`npm run demo`)
+
+To see the whole pipeline without a PR: `npm run demo` materializes
+`fixtures/demo-pr` (a real seeded bug + a doc-shaped key + a live-format
+key) into a temp repo and runs `code-review --fixture` against it — the
+real chunking, model review, secrets scan, and Jev adjudication, zero
+GitHub API calls. Run `npm run watch` in a second terminal to stream the
+stage lines live. Requires `OPENROUTER_API_KEY` (BYOK, real model calls).
+
 ### Sandbox probes (opt-in, requires Docker)
 
 With `sandbox: { enabled: true }` in config (or the action's `sandbox: 'true'`
