@@ -4,7 +4,9 @@
 // `npm run watch`. Keys: r refresh · e run eval · q quit. Auto-refresh 30s.
 
 import { spawn } from 'node:child_process'
-import { collect, ROOT } from './collect.mjs'
+import { join } from 'node:path'
+import { collect, ROOT, safe } from './collect.mjs'
+import { createLiveTailer } from './tail-live.mjs'
 
 const REFRESH_MS = 30_000
 const MAX_W = 100
@@ -39,6 +41,8 @@ const state = {
   journal: undefined,
   evalRunning: false,
   evalLog: [],
+  live: [],
+  review: undefined,
   error: '',
   updatedAt: new Date(),
 }
@@ -114,6 +118,32 @@ function render() {
   }
   out.push('')
 
+  out.push(hr('Code Review'))
+  const rv = state.review
+  if (rv) {
+    const v = rv.verdict === 'needs_changes' ? bad(rv.verdict)
+      : rv.verdict === 'approve' || rv.verdict === 'pass' ? ok(rv.verdict)
+      : warn(rv.verdict)
+    out.push(
+      `  ${v}  ${rv.findings} finding(s)  $${(rv.costUsd ?? 0).toFixed(4)}  ` +
+        paint(`${rv.tokens}tok · ${rv.model}${rv.budgetExceeded ? ' · budget exceeded' : ''}`, C.dim),
+    )
+  } else {
+    out.push(paint('  no code-review.json in argus-reviewer-report/ yet', C.dim))
+  }
+  out.push('')
+
+  out.push(hr('Live'))
+  if (state.live.length === 0) {
+    out.push(paint('  no live.ndjson yet — starts when an argus command runs', C.dim))
+  }
+  for (const e of state.live.slice(-12)) {
+    const t = new Date(e.ts).toLocaleTimeString()
+    const lvl = e.level === 'error' ? bad(e.source) : paint(e.source, C.cyan)
+    out.push(`  ${paint(t, C.dim)} ${lvl} ${trunc(e.msg, 72)}`)
+  }
+  out.push('')
+
   process.stdout.write(`\x1b[2J\x1b[H${out.join('\n')}\n`)
 }
 
@@ -146,6 +176,20 @@ function runEval() {
 async function main() {
   await fetchData()
   render()
+  // Stream live.ndjson between refreshes — argus commands (code-review,
+  // run, debug) append stage lines here while they work.
+  createLiveTailer(join(ROOT, '.argus-reviewer-cache/live.ndjson'), {
+    onLine: (e) => {
+      state.live.push({
+        ts: e.ts ?? Date.now(),
+        source: safe(e.source),
+        level: safe(e.level),
+        msg: safe(e.msg),
+      })
+      if (state.live.length > 50) state.live = state.live.slice(-50)
+      render()
+    },
+  }).start(2000)
   const timer = setInterval(async () => {
     await fetchData()
     render()

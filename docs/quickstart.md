@@ -212,8 +212,9 @@ export default defineConfig({
     // code-review.json and is summarized count-only in the sticky.
     // The action's `max-comments` input overrides this.
     maxComments: 20,
-    // Check-failure threshold: 'bug' fails on bugs only (default),
-    // 'risk' fails on bug|risk findings. Overrides `severity`.
+    // Check-failure threshold: 'bug' fails on bugs only, 'risk' fails
+    // on bug|risk findings. Unset → the top-level `severity` list is
+    // authoritative (defaults to ['bug']).
     severityGate: 'risk',
     // Jev adjudication cutoff for the secrets lane: candidates scored
     // below this probability are suppressed (still audited, masked).
@@ -229,6 +230,15 @@ Each finding carries a `category` (`correctness`, `security`,
 `performance`, `usability`, `convention`, `other`) shown in the sticky
 table and inline comments. All findings land in `code-review.json`
 regardless of the comment cap.
+
+### Local demo (`npm run demo`)
+
+To see the whole pipeline without a PR: `npm run demo` materializes
+`fixtures/demo-pr` (a real seeded bug + a doc-shaped key + a live-format
+key) into a temp repo and runs `code-review --fixture` against it — the
+real chunking, model review, secrets scan, and Jev adjudication, zero
+GitHub API calls. Run `npm run watch` in a second terminal to stream the
+stage lines live. Requires `OPENROUTER_API_KEY` (BYOK, real model calls).
 
 ### Sandbox probes (opt-in, requires Docker)
 

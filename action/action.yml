@@ -47,8 +47,8 @@ inputs:
     default: 'false'
     required: false
   max-comments:
-    description: Cap on inline review comments posted per run; overflow is summarized in the sticky. Overrides review.maxComments.
-    default: '20'
+    description: Cap on inline review comments posted per run; overflow is summarized in the sticky. Overrides review.maxComments when set.
+    default: ''
     required: false
 outputs:
   conclusion:

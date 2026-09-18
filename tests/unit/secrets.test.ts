@@ -82,6 +82,39 @@ describe('scanDiffForSecrets', () => {
     expect(cands[1]?.contextExcerpt).not.toContain(SK_LIVE)
   })
 
+  it('treats +++/--- lines inside a hunk as content, not file headers', () => {
+    // A diff line adding `++ x` reads `+++ x` — the pre-hunk-zone parser
+    // must not mistake it for a `+++ b/` header and zero out `file`,
+    // which would skip every later added line in that file.
+    const diff = [
+      'diff --git a/x.ts b/x.ts',
+      '--- a/x.ts',
+      '+++ b/x.ts',
+      '@@ -1,2 +1,4 @@',
+      ' ctx',
+      '--- old double-dash content',
+      '+++ new double-plus content',
+      `+STRIPE_KEY=${SK_LIVE}`,
+    ].join('\n')
+    const cands = scanDiffForSecrets(diff)
+    expect(cands).toHaveLength(1)
+    expect(cands[0]).toMatchObject({ file: 'x.ts', line: 3, patternClass: 'stripe-live' })
+  })
+
+  it('carries the raw line for Jev state even when context contains ***', () => {
+    const diff = [
+      'diff --git a/x.md b/x.md',
+      '--- a/x.md',
+      '+++ b/x.md',
+      '@@ -1,1 +1,1 @@',
+      `+note *** STRIPE_KEY=${SK_LIVE}`,
+    ].join('\n')
+    const cands = scanDiffForSecrets(diff)
+    expect(cands).toHaveLength(1)
+    expect(cands[0]?.rawText).toContain(SK_LIVE)
+    expect(cands[0]?.contextExcerpt).not.toContain(SK_LIVE)
+  })
+
   it('detects private keys, github pats, slack tokens, jwt, generic assignments', () => {
     const diff = [
       '+++ b/f.txt',
@@ -147,7 +180,7 @@ describe('scanSecrets', () => {
     expect(r.records.every((rec) => rec.adjudicated === false)).toBe(true)
   })
 
-  it('caps candidates at MAX_CANDIDATES and reports overflow count-only', async () => {
+  it('caps candidates at MAX_CANDIDATES, reports overflow + a synthetic finding', async () => {
     const many = Array.from(
       { length: MAX_CANDIDATES + 25 },
       (_, i) => `+token = "abcd1234efgh5678ijkl${i}"`,
@@ -156,6 +189,11 @@ describe('scanSecrets', () => {
     const r = await scanSecrets({ diff })
     expect(r.records).toHaveLength(MAX_CANDIDATES)
     expect(r.overflow).toBe(25)
+    // 50 unadjudicated candidates + 1 overflow finding — the over-cap gap
+    // must be visible to reviewers, not just counted.
+    const overflowFinding = r.findings.find((f) => f.file === '-')
+    expect(overflowFinding?.severity).toBe('risk')
+    expect(overflowFinding?.message).toContain('25')
   })
 })
 
@@ -163,7 +201,12 @@ describe('materializeMergeBaseDiff', () => {
   it('returns the git diff when the base object exists', async () => {
     const exec: ExecFn = async (_cmd, args) => {
       if (args.includes('cat-file')) return { code: 0, stdout: '', stderr: '' }
-      if (args.includes('diff')) return { code: 0, stdout: 'diff body', stderr: '' }
+      if (args.includes('diff')) {
+        // core.quotePath=false keeps non-ASCII paths raw — the default
+        // C-escapes them and mangles `file` in findings.
+        expect(args.join(' ')).toContain('core.quotePath=false')
+        return { code: 0, stdout: 'diff body', stderr: '' }
+      }
       return { code: 1, stdout: '', stderr: 'unexpected' }
     }
     const r = await materializeMergeBaseDiff({ cwd: '/x', baseSha: 'abc123', exec })
@@ -177,6 +220,8 @@ describe('materializeMergeBaseDiff', () => {
       if (args.includes('fetch')) {
         sawFetch = true
         expect(args.join(' ')).not.toContain('x-access-token')
+        // The credential itself must not ride argv either (e.g. tok@host).
+        expect(args.join(' ')).not.toContain('tok')
         const b64 = env?.GIT_CONFIG_VALUE_0?.split(' ').pop() ?? ''
         expect(Buffer.from(b64, 'base64').toString()).toBe('x-access-token:tok')
         return { code: 0, stdout: '', stderr: '' }

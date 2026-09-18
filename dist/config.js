@@ -1,4 +1,5 @@
 import { pathToFileURL } from 'node:url';
+import { JEV_DEFAULT_MODEL } from './vision/decisions.js';
 export const DEFAULT_RECORD_STEP_CAP = 40;
 export const DEFAULT_SANDBOX = {
     enabled: false,
@@ -15,7 +16,7 @@ const defaults = {
     escalation_model: 'moonshotai/kimi-k2.5',
     grounding_model: undefined,
     code_model: 'deepseek/deepseek-v4.1-flash',
-    decisionModel: 'typesafe/jev-1.13-20260917',
+    decisionModel: JEV_DEFAULT_MODEL,
     codeReviewBudgetUsd: undefined,
     provider: {
         ignore: ['siliconflow', 'novitaai', 'atlascloud', 'streamlake', 'chutes'],
@@ -67,11 +68,10 @@ export function resolveBlockSeverities(config) {
  * isn't on the untrusted allowlist). Anything else → `review.maxComments`.
  */
 export function resolveMaxComments(env, config) {
-    const raw = env.ARGUS_MAX_COMMENTS;
-    if (raw !== undefined && raw.trim() !== '') {
-        const n = Number(raw);
-        if (Number.isInteger(n) && n >= 0)
-            return n;
+    const raw = env.ARGUS_MAX_COMMENTS?.trim();
+    // ^\d+$ — Number() would also accept '0x10', '1e2', ' 4 ', 'Infinity'.
+    if (raw !== undefined && /^\d+$/.test(raw)) {
+        return Number(raw);
     }
     return config.review.maxComments;
 }
