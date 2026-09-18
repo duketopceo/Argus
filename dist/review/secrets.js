@@ -30,15 +30,26 @@ export function scanDiffForSecrets(diffText) {
     const out = [];
     let file = '';
     let newLine = 0;
+    // `+++ `/`--- ` are file headers only in the pre-hunk zone — inside a
+    // hunk they are added/removed content lines (`+` + `++ x`, `-` + `-- x`)
+    // and must not reset `file` or `inHunk`.
+    let inHunk = false;
     for (const raw of diffText.split('\n')) {
-        if (raw.startsWith('+++ ')) {
-            const m = /^\+\+\+ b\/(.+)$/.exec(raw);
-            file = m?.[1] ?? '';
+        if (raw.startsWith('diff --git')) {
+            inHunk = false;
             continue;
         }
         if (raw.startsWith('@@')) {
+            inHunk = true;
             const m = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw);
             newLine = m !== null ? parseInt(m[1], 10) : 0;
+            continue;
+        }
+        if (!inHunk) {
+            if (raw.startsWith('+++ ')) {
+                const m = /^\+\+\+ b\/(.+)$/.exec(raw);
+                file = m?.[1] ?? '';
+            }
             continue;
         }
         // Context lines consume a new-file line number; `-` lines don't.
@@ -58,8 +69,9 @@ export function scanDiffForSecrets(diffText) {
                 file,
                 line: newLine,
                 patternClass: cls,
-                contextExcerpt: text.replace(literal, '***'),
+                contextExcerpt: text.replaceAll(literal, '***'),
                 literal,
+                rawText: text,
             });
             break; // first matching class wins — one candidate per line
         }
@@ -102,7 +114,9 @@ export async function materializeMergeBaseDiff(opts) {
     if (!have) {
         return { skipped: `base ${opts.baseSha.slice(0, 12)} not available locally and unfetchable` };
     }
-    const diff = await exec('git', ['-C', opts.cwd, 'diff', `${opts.baseSha}..HEAD`], 60_000);
+    // core.quotePath=false — the default C-escapes non-ASCII/odd-byte paths
+    // ("b/\"f\\303\\251e.ts\""), mangling `file` in findings.
+    const diff = await exec('git', ['-c', 'core.quotePath=false', '-C', opts.cwd, 'diff', `${opts.baseSha}..HEAD`], 60_000);
     if (diff.code !== 0) {
         return { skipped: `git diff failed: ${diff.stderr.trim().slice(0, 200)}` };
     }
@@ -135,7 +149,7 @@ export async function scanSecrets(opts) {
             const state = candidates.map((c) => ({
                 file: c.file,
                 line: c.line,
-                lineText: c.contextExcerpt.replace('***', c.literal),
+                lineText: c.rawText,
                 literal: c.literal,
             }));
             const { answers } = await opts.client.decide({
@@ -184,5 +198,18 @@ export async function scanSecrets(opts) {
             ...(pLive !== undefined ? { pLive } : {}),
         });
     });
+    // Candidates past the cap were never adjudicated — a real secret could
+    // sit in the overflow. Surface that gap as a finding, not just a count.
+    if (overflow > 0) {
+        findings.push({
+            file: '-',
+            line: 0,
+            severity: 'risk',
+            category: 'security',
+            message: `L0: 🟡 risk: ${overflow} secret-shaped literal(s) exceeded the ` +
+                `${MAX_CANDIDATES}-candidate adjudication cap and were not evaluated — ` +
+                'review the diff for secrets manually.',
+        });
+    }
     return { findings, records, overflow };
 }

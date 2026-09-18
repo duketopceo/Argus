@@ -40,7 +40,7 @@ function renderNoReportBody(reportDir, runUrl) {
   return lines.join('\n')
 }
 
-function renderBody(report, codeReview, runUrl, ok) {
+function renderBody(report, codeReview, runUrl, ok, inlinePlan) {
   if (!report) return renderMissingKeyBody()
 
   const lines = []
@@ -226,14 +226,10 @@ function renderBody(report, codeReview, runUrl, ok) {
         lines.push(`| … | — | — | — | ${codeReview.findings.length - MAX_FINDING_ROWS} more findings in \`code-review.json\` |`)
       }
       lines.push('')
-      // Inline-comment cap note — findings eligible for inline review that
-      // the review.maxComments budget didn't post (TCA max_comments).
-      const inlineCap = typeof codeReview.maxComments === 'number' ? codeReview.maxComments : 20
-      const inlineWorthy = codeReview.findings.filter(
-        (f) => f.file && typeof f.line === 'number' && ['bug', 'risk'].includes(f.severity),
-      ).length
-      if (inlineWorthy > inlineCap) {
-        lines.push(`*+${inlineWorthy - inlineCap} inline-eligible finding(s) not posted — \`review.maxComments\` cap ${inlineCap}.*`)
+      // Inline-comment cap note — dedup'd fresh findings the
+      // review.maxComments budget didn't post (TCA max_comments).
+      if (inlinePlan !== undefined && inlinePlan.dropped > 0) {
+        lines.push(`*+${inlinePlan.dropped} inline-eligible finding(s) not posted — \`review.maxComments\` cap ${inlinePlan.cap}.*`)
         lines.push('')
       }
       // Secrets-lane audit line — adjudicated/suppressed counts, never literals.
@@ -309,14 +305,20 @@ async function main() {
   const codeReviewOk = codeReview != null && codeReview.ok === true
   const ok = (report?.ok === true) && codeReviewOk
   const conclusion = !hasKey ? 'neutral' : ok ? 'success' : 'failure'
+  const inlinePlan =
+    hasKey && report !== undefined ? await planInlineComments(pr, codeReview) : undefined
   const body = !hasKey
     ? renderMissingKeyBody()
     : report === undefined
       ? renderNoReportBody(reportDir, runUrl)
-      : renderBody(report, codeReview, runUrl, ok)
+      : renderBody(report, codeReview, runUrl, ok, inlinePlan)
 
-async function postInlineComments(pr, codeReview) {
-  if (!pr || !codeReview || codeReview.skipped || !codeReview.findings) return
+// Eligibility + dedup for inline comments, computed before the sticky
+// body renders so the "+N not posted" note counts the *fresh* set — the
+// cap is applied to fresh, not to raw findings (already-posted comments
+// must not inflate the dropped count).
+async function planInlineComments(pr, codeReview) {
+  if (!pr || !codeReview || codeReview.skipped || !codeReview.findings) return undefined
   // Must match the severity vocabulary emitted by the code-review schema
   // (src/cli.ts): bug/risk are inline-worthy; nit/q stay in the sticky body.
   const inlineSeverities = ['bug', 'risk']
@@ -336,7 +338,7 @@ async function postInlineComments(pr, codeReview) {
             : ''
       }`,
     }))
-  if (comments.length === 0) return
+  if (comments.length === 0) return { capped: [], dropped: 0, cap: 0 }
 
   // Re-runs on the same SHA must not duplicate inline comments — the sticky
   // body is upserted but review comments are not. Paginate fully (100/page)
@@ -364,13 +366,17 @@ async function postInlineComments(pr, codeReview) {
     page += 1
   }
   const fresh = comments.filter((c) => !posted.has(dedupKey(c.path, c.line, c.body)))
-  if (fresh.length === 0) return
 
   // review.maxComments caps inline noise (TCA max_comments) — applied
-  // after dedup so already-posted comments don't eat the budget.
+  // after dedup so already-posted comments don't eat the budget. A cap of
+  // 0 disables inline posting entirely (no empty review).
   const cap = typeof codeReview.maxComments === 'number' ? codeReview.maxComments : 20
   const capped = fresh.slice(0, cap)
+  return { capped, dropped: fresh.length - capped.length, cap }
+}
 
+async function postInlineComments(pr, plan) {
+  if (plan === undefined || plan.capped.length === 0) return
   // One batched review instead of N createReviewComment calls — avoids
   // secondary rate limits on large findings sets.
   try {
@@ -380,7 +386,7 @@ async function postInlineComments(pr, codeReview) {
       pull_number: pr.number,
       commit_id: pr.head.sha,
       event: 'COMMENT',
-      comments: capped,
+      comments: plan.capped,
     })
   } catch (e) {
     core.warning(`inline review failed: ${e.message}`)
@@ -410,7 +416,7 @@ async function postInlineComments(pr, codeReview) {
         body,
       })
     }
-    await postInlineComments(pr, codeReview)
+    await postInlineComments(pr, inlinePlan)
   }
 
   const sha = pr ? pr.head.sha : context.sha

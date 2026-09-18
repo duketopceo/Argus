@@ -820,7 +820,7 @@ const CODE_REVIEW_SCHEMA: JsonSchema = {
             },
             message: { type: 'string' },
           },
-          required: ['file', 'message', 'severity'],
+          required: ['file', 'message', 'severity', 'category'],
         },
       },
     },
@@ -919,7 +919,11 @@ export async function loadFixture(
   if (head.code !== 0) return { skipped: 'fixture has no HEAD commit' }
   const baseSha = base.stdout.trim()
   const headSha = head.stdout.trim()
-  const diff = await exec('git', ['-C', dir, 'diff', `${baseSha}..${headSha}`], 60_000)
+  const diff = await exec(
+    'git',
+    ['-c', 'core.quotePath=false', '-C', dir, 'diff', `${baseSha}..${headSha}`],
+    60_000,
+  )
   if (diff.code !== 0) {
     return { skipped: `git diff failed: ${diff.stderr.trim().slice(0, 200)}` }
   }
@@ -1333,7 +1337,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
                 onCall: (c) => {
                   const cost = {
                     model: c.model,
-                    provider: 'unknown',
+                    provider: c.provider,
                     tokens: c.tokens,
                     costUsd: c.costUsd,
                     kind: 'decide' as const,
@@ -1361,6 +1365,9 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
         )
         finalFindings = [...finalFindings, ...secretsScan.findings]
       }
+    } else {
+      // Distinguish "ran, clean" from "never ran" in the report.
+      secretsScan = { skipped: 'no merge-base SHA — lane did not run' }
     }
 
     const headSha = prMeta?.headSha

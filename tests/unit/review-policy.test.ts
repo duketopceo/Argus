@@ -93,7 +93,7 @@ describe('resolveMaxComments', () => {
 
   it('unparseable env falls back to config', () => {
     const c = resolveConfig({ review: { maxComments: 7 } })
-    for (const bad of ['abc', '2.5', '-1', '']) {
+    for (const bad of ['abc', '2.5', '-1', '', '0x10', '1e2', 'Infinity']) {
       expect(resolveMaxComments({ ARGUS_MAX_COMMENTS: bad }, c)).toBe(7)
     }
   })

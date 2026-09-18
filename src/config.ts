@@ -1,6 +1,7 @@
 import { pathToFileURL } from 'node:url'
 
 import type { Trust } from './trust.js'
+import { JEV_DEFAULT_MODEL } from './vision/decisions.js'
 
 export interface ProviderRules {
   only?: string[]
@@ -203,7 +204,7 @@ const defaults: Config = {
   escalation_model: 'moonshotai/kimi-k2.5',
   grounding_model: undefined,
   code_model: 'deepseek/deepseek-v4.1-flash',
-  decisionModel: 'typesafe/jev-1.13-20260917',
+  decisionModel: JEV_DEFAULT_MODEL,
   codeReviewBudgetUsd: undefined,
   provider: {
     ignore: ['siliconflow', 'novitaai', 'atlascloud', 'streamlake', 'chutes'],
@@ -260,10 +261,10 @@ export function resolveMaxComments(
   env: Record<string, string | undefined>,
   config: Config,
 ): number {
-  const raw = env.ARGUS_MAX_COMMENTS
-  if (raw !== undefined && raw.trim() !== '') {
-    const n = Number(raw)
-    if (Number.isInteger(n) && n >= 0) return n
+  const raw = env.ARGUS_MAX_COMMENTS?.trim()
+  // ^\d+$ — Number() would also accept '0x10', '1e2', ' 4 ', 'Infinity'.
+  if (raw !== undefined && /^\d+$/.test(raw)) {
+    return Number(raw)
   }
   return config.review.maxComments
 }

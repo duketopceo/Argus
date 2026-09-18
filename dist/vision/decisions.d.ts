@@ -1,4 +1,4 @@
-import { CallCost, ProviderValue } from './cost.js';
+import type { CallCost, ProviderValue } from './cost.js';
 /**
  * Pinned Jev slug — the alias `~typesafe/jev-latest` drifts silently and
  * adjudication thresholds are calibrated to a version. The alias stays
@@ -55,6 +55,7 @@ export interface DecisionClientOptions {
     onCall?: (call: {
         id: string;
         model: string;
+        provider: string;
         kind: 'decide';
         costUsd: number;
         tokens: number;

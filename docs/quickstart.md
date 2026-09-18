@@ -212,8 +212,9 @@ export default defineConfig({
     // code-review.json and is summarized count-only in the sticky.
     // The action's `max-comments` input overrides this.
     maxComments: 20,
-    // Check-failure threshold: 'bug' fails on bugs only (default),
-    // 'risk' fails on bug|risk findings. Overrides `severity`.
+    // Check-failure threshold: 'bug' fails on bugs only, 'risk' fails
+    // on bug|risk findings. Unset → the top-level `severity` list is
+    // authoritative (defaults to ['bug']).
     severityGate: 'risk',
     // Jev adjudication cutoff for the secrets lane: candidates scored
     // below this probability are suppressed (still audited, masked).

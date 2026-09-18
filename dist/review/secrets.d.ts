@@ -17,10 +17,12 @@ export interface SecretCandidate {
     /** Line number in the post-change file. */
     line: number;
     patternClass: string;
-    /** Diff line text with the literal replaced by `***`. */
+    /** Diff line text with every occurrence of the literal replaced by `***`. */
     contextExcerpt: string;
     /** Raw literal — Jev `state` only, never emitted. */
     literal: string;
+    /** Full raw added-line text — Jev `state` only, never emitted. */
+    rawText: string;
 }
 export interface SecretScanRecord {
     file: string;

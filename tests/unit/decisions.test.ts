@@ -175,6 +175,18 @@ describe('DecisionClient', () => {
     })
   })
 
+  it('a prototype-chain choice answer fails as unexpected', async () => {
+    // 'constructor' in {} is true via the prototype chain — the criteria
+    // check must use Object.hasOwn so inherited names are not valid IDs.
+    const { f } = stubFetch(() =>
+      okResponse({ answers: { ...ANSWERS, lane: { choice: 'constructor' } } }),
+    )
+    const client = new DecisionClient({ apiKey: 'k', fetch: f })
+    await expect(client.decide({ state: 's', questions: QUESTIONS })).rejects.toMatchObject({
+      kind: 'unexpected',
+    })
+  })
+
   it('local validation throws before any fetch: 0 questions', async () => {
     const { f, calls } = stubFetch(() => okResponse())
     const client = new DecisionClient({ apiKey: 'k', fetch: f })

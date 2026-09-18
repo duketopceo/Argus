@@ -1,10 +1,6 @@
 import { debug } from '../debug.js'
-import {
-  CallCost,
-  DecisionsResponse,
-  makeDecisionsCallCost,
-  ProviderValue,
-} from './cost.js'
+import { makeDecisionsCallCost } from './cost.js'
+import type { CallCost, DecisionsResponse, ProviderValue } from './cost.js'
 
 /**
  * Pinned Jev slug — the alias `~typesafe/jev-latest` drifts silently and
@@ -91,6 +87,7 @@ export interface DecisionClientOptions {
   onCall?: (call: {
     id: string
     model: string
+    provider: string
     kind: 'decide'
     costUsd: number
     tokens: number
@@ -159,7 +156,7 @@ function validateAnswers(
       }
       out[id] = { noul: a.noul }
     } else if (q.type === 'choice') {
-      if (typeof a.choice !== 'string' || !(a.choice in q.criteria)) {
+      if (typeof a.choice !== 'string' || !Object.hasOwn(q.criteria, a.choice)) {
         throw new DecisionError('unexpected', `decide: bad choice answer for "${id}"`, false)
       }
       out[id] = a as unknown as ChoiceAnswer
@@ -282,6 +279,7 @@ export class DecisionClient {
         this._onCall?.({
           id: data.id ?? '',
           model: cost.model,
+          provider: cost.provider,
           kind: 'decide',
           costUsd: cost.costUsd,
           tokens: cost.tokens,
