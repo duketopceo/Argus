@@ -18,6 +18,7 @@ import { diffChangedFiles } from './index/diff.js';
 import { invalidateForDiff } from './index/invalidate.js';
 import { readIndex, scanRepo, writeIndex } from './index/scan.js';
 import { fetchCheckRuns, fetchPrMeta, ghGet } from './evidence/ci.js';
+import { resolveTrust } from './trust.js';
 import { linkFindings } from './evidence/link.js';
 import { runProbeLane } from './probe/queue.js';
 import { A0_DEFAULT_TIMEOUT_MS, a0TaskPrompt, runA0Task } from './executor/a0.js';
@@ -120,6 +121,19 @@ export async function main(argv, deps = {}) {
             return 2;
     }
 }
+/**
+ * Checkout trust for config loading — resolved before `loadConfig` at every
+ * call site so a hostile tree never executes config code (#58). `fetchMeta`
+ * is only invoked on `issue_comment` or when a pull_request* payload is
+ * unreadable; pull_request* events read fork status from the payload.
+ */
+function resolveCheckoutTrust(ctx) {
+    return resolveTrust({
+        env: ctx.env,
+        fetchMeta: (repo, pr, token) => fetchPrMeta(repo, pr, token, ctx),
+        note: (line) => ctx.err(line),
+    });
+}
 function parseOpenRouterTrace(env) {
     const raw = env.ARGUS_REVIEWER_TRACE;
     if (!raw)
@@ -219,7 +233,8 @@ async function cmdRecord(args, ctx, deps) {
         ctx.err('record requires a flow description: argus-reviewer record "<flow>" --url <target>');
         return 2;
     }
-    const config = await loadConfig(ctx.cwd);
+    const { trust } = await resolveCheckoutTrust(ctx);
+    const config = await loadConfig(ctx.cwd, { trust, note: ctx.err });
     warnUnknownProviders(config, ctx);
     const url = values.url ?? config.target?.url;
     if (url === undefined) {
@@ -374,7 +389,8 @@ async function cmdRun(args, ctx, deps) {
         ctx.out(RUN_USAGE);
         return 0;
     }
-    const config = await loadConfig(ctx.cwd);
+    const { trust } = await resolveCheckoutTrust(ctx);
+    const config = await loadConfig(ctx.cwd, { trust, note: ctx.err });
     warnUnknownProviders(config, ctx);
     if (values['cache-dir'] !== undefined)
         config.cacheDir = values['cache-dir'];
@@ -841,13 +857,22 @@ async function cmdCodeReview(args, ctx, deps) {
         ctx.out(CODE_REVIEW_USAGE);
         return 0;
     }
-    const config = await loadConfig(ctx.cwd);
+    // Trust resolves BEFORE config load — a hostile tree's .ts config must
+    // never execute beside the runner's secrets (#58). The inputs need no
+    // config: pull_request* events read fork status from the event payload,
+    // issue_comment derives `pr` from `issue.number` (ARGUS_REVIEWER_TRACE.pr
+    // is empty on that event — the action builds it from
+    // github.event.pull_request.number).
+    const trace = parseOpenRouterTrace(ctx.env);
+    const trustResult = await resolveCheckoutTrust(ctx);
+    const config = await loadConfig(ctx.cwd, { trust: trustResult.trust, note: ctx.err });
     const reportDir = resolve(ctx.cwd, values['report-dir'] ?? config.reportDir ?? 'argus-reviewer-report');
     await mkdir(reportDir, { recursive: true });
     const codeReviewPath = join(reportDir, 'code-review.json');
-    const trace = parseOpenRouterTrace(ctx.env);
     const repo = (trace?.repo ?? ctx.env.GITHUB_REPOSITORY);
-    const pr = trace?.pr;
+    // `||` not `??`: the action renders `pr` as "" on issue_comment events
+    // (github.event.pull_request.number is empty), and '' is not nullish.
+    const pr = trace?.pr || trustResult.pr;
     const token = ctx.env.GITHUB_TOKEN ?? ctx.env.GH_TOKEN;
     const model = config.code_model ?? config.model;
     const budget = config.codeReviewBudgetUsd;
@@ -1080,7 +1105,8 @@ async function cmdCache(args, ctx) {
         ctx.out(CACHE_USAGE);
         return sub === undefined || values.help ? 0 : 2;
     }
-    const config = await loadConfig(ctx.cwd);
+    const { trust } = await resolveCheckoutTrust(ctx);
+    const config = await loadConfig(ctx.cwd, { trust, note: ctx.err });
     const cacheDir = resolve(ctx.cwd, values.dir ?? config.cacheDir ?? join(ctx.cwd, '.argus-reviewer-cache'));
     if (sub === 'list') {
         let names = [];
@@ -1171,7 +1197,8 @@ async function cmdDelegate(args, ctx, deps) {
         }
         timeoutMs = Math.floor(parsed);
     }
-    const config = await loadConfig(ctx.cwd);
+    const { trust } = await resolveCheckoutTrust(ctx);
+    const config = await loadConfig(ctx.cwd, { trust, note: ctx.err });
     const url = values.url ?? config.target?.url;
     const host = values.host ?? config.a0?.url;
     ctx.out(`delegating to agent zero${host !== undefined ? ` (${host})` : ''}…`);
@@ -1363,7 +1390,8 @@ async function cmdIndex(args, ctx) {
         return 0;
     }
     const root = resolve(ctx.cwd, values.dir ?? '.');
-    const config = await loadConfig(ctx.cwd);
+    const { trust } = await resolveCheckoutTrust(ctx);
+    const config = await loadConfig(ctx.cwd, { trust, note: ctx.err });
     const outPath = resolve(ctx.cwd, values.out ?? config.indexPath ?? 'argus.index.json');
     try {
         const index = await scanRepo(root);
