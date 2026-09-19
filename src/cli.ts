@@ -1292,7 +1292,13 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
                 mode: triageMode,
               }),
             )
-            .catch(() => undefined)
+            .catch((e) => {
+              // triagePr already degrades DecisionError internally —
+              // reaching here means a chain bug (e.g. buildTriageState
+              // threw); keep the breadcrumb so it isn't invisible.
+              debug('triage', `triage chain failed: ${(e as Error).message}`)
+              return undefined
+            })
         : undefined
     const triageLine = (t: TriageRecord): string =>
       `triage — risk ${t.risk ?? '?'}, deep-review ${t.needsDeepReview?.toFixed(2) ?? '?'}, ` +
@@ -1400,25 +1406,26 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     // their own adjudication) and BEFORE the secrets union below so a
     // suppressed nit can never reach a secret record. bug/risk are
     // never suppressed, so the verdict computed above is unaffected.
+    // Kicked off as a promise — its decide() round-trip overlaps the
+    // secrets lane's materialize+scan below (the two lanes are
+    // independent; results apply in order: adjudication, then union).
+    // Skipped when the budget is already blown — no trailing spend.
+    // blockSeverities flows in so a user-blocking severity (e.g. a
+    // config severity list containing 'nit') can never be suppressed —
+    // Jev must not be able to flip the commit-status gate.
+    const blockSeverities = resolveBlockSeverities(config)
     let findingAdjudication: FindingAdjudicationAudit | undefined
-    if (decisionClient !== undefined && finalFindings.length > 0) {
-      const adj = await adjudicateFindings({
-        findings: finalFindings,
-        patchByFile: new Map(files.map((f) => [f.filename, f.patch ?? ''])),
-        threshold: config.review.findingThreshold,
-        client: decisionClient,
-        ...(config.decisionModel !== undefined ? { model: config.decisionModel } : {}),
-      })
-      finalFindings = adj.findings
-      const { findings: _dropped, ...audit } = adj
-      findingAdjudication = audit
-      const suppressed = adj.records.filter((r) => r.suppressed === true).length
-      stage(
-        `finding adjudication — ${adj.records.length} scored, ${suppressed} suppressed` +
-          (adj.unadjudicated === true ? ' (Jev unavailable — none suppressed)' : '') +
-          (adj.overflow > 0 ? `, +${adj.overflow} over cap` : ''),
-      )
-    }
+    const adjudicationPromise =
+      decisionClient !== undefined && !ledger.budgetExceeded && finalFindings.length > 0
+        ? adjudicateFindings({
+            findings: finalFindings,
+            patchByFile: new Map(files.map((f) => [f.filename, f.patch ?? ''])),
+            threshold: config.review.findingThreshold,
+            blockSeverities,
+            client: decisionClient,
+            ...(config.decisionModel !== undefined ? { model: config.decisionModel } : {}),
+          })
+        : undefined
 
     // B.1 evidence linkage: tag each finding with whether the PR's own CI
     // exercised the implicated path. Post-pass annotation only — evidence
@@ -1436,6 +1443,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     // prompt-injected synthesis can never erase them. Literals are
     // masked in every output (Jev `state` is the documented exception).
     let secretsScan: SecretsScanResult | { skipped: string } | undefined
+    const secretsFindings: SecretsScanResult['findings'] = []
     if (prMeta?.baseSha !== undefined) {
       // Fixture mode already produced the same `git diff base..HEAD`
       // output inside the fixture repo — reuse it rather than shelling
@@ -1468,12 +1476,30 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
             `${secretsScan.findings.length} finding(s)` +
             (secretsScan.overflow > 0 ? `, +${secretsScan.overflow} over cap` : ''),
         )
-        finalFindings = [...finalFindings, ...secretsScan.findings]
+        // Union is deferred until adjudication resolves below —
+        // suppressed nits leave before secrets findings join.
+        secretsFindings.push(...secretsScan.findings)
       }
     } else {
       // Distinguish "ran, clean" from "never ran" in the report.
       secretsScan = { skipped: 'no merge-base SHA — lane did not run' }
     }
+
+    // Resolve the deferred adjudication kicked off above, then union —
+    // order preserved: adjudicated model findings first, secrets after.
+    if (adjudicationPromise !== undefined) {
+      const adj = await adjudicationPromise
+      finalFindings = adj.findings
+      const { findings: _dropped, ...audit } = adj
+      findingAdjudication = audit
+      const suppressed = adj.records.filter((r) => r.suppressed === true).length
+      stage(
+        `finding adjudication — ${adj.records.length} scored, ${suppressed} suppressed` +
+          (adj.unadjudicated === true ? ' (Jev unavailable — none suppressed)' : '') +
+          (adj.overflow > 0 ? `, +${adj.overflow} over cap` : ''),
+      )
+    }
+    finalFindings = [...finalFindings, ...secretsFindings]
 
     const headSha = prMeta?.headSha
     const checkRuns =
@@ -1483,10 +1509,6 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     const linkedFindings = linkFindings(finalFindings, index, checkRuns)
     debug('code-review', `evidence: ${linkedFindings.map((f) => f.evidence.status).join(',')}`)
     stage(`evidence linked — ${linkedFindings.length} finding(s), verdict ${verdict}`)
-
-    // severityGate is the consumer-facing alias over `severity` — see
-    // resolveBlockSeverities for the mapping.
-    const blockSeverities = resolveBlockSeverities(config)
 
     // ARGUS_MAX_COMMENTS (action input) overrides the config cap — the
     // workflow author controls it; an untrusted PR config can't reach it

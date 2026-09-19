@@ -10,7 +10,7 @@ import type { RepoIndex } from '../index/scan.js'
 import type { VisionClient } from '../engine/loop.js'
 import type { CallCost } from '../vision/cost.js'
 import type { Ledger } from '../vision/ledger.js'
-import type { TriageArea } from '../review/triage.js'
+import type { TriageArea, TriageAreaSignal } from '../review/triage.js'
 import {
   buildProbeMessages,
   parseProbe,
@@ -99,7 +99,7 @@ export interface ProbeLaneOptions {
   severityGates: string[]
   index: RepoIndex | undefined
   /** U9 — triage top_risk_area; advisory reorder of probe candidates. */
-  triageArea?: { area: TriageArea; confidence: number } | undefined
+  triageArea?: TriageAreaSignal | undefined
   /** Report sink — authored probe CallCosts are pushed here for the report. */
   calls?: CallCost[] | undefined
   exec?: ExecFn | undefined
@@ -111,16 +111,19 @@ const MIN_AREA_CONFIDENCE = 0.5
 
 /**
  * U9 triage-informed ordering: a finding's file path "hits" the flagged
- * risk area when a path segment starts with the area token —
- * `src/auth/session.ts` and `billingAddress.ts` hit auth/billing, while
- * `metadata.ts` does not hit data. Advisory only.
+ * risk area when a path segment equals the area token or starts with
+ * it at a camelCase/digit boundary — `src/auth/session.ts` and
+ * `dataStore.ts` hit auth/data, while `author.ts` and `database.ts`
+ * do not. Advisory only.
  */
 function fileHitsArea(file: string, area: TriageArea): boolean {
   const token = area.toLowerCase()
-  return file
-    .toLowerCase()
-    .split(/[/._-]+/)
-    .some((segment) => segment.startsWith(token))
+  return file.split(/[/._-]+/).some((segment) => {
+    const lower = segment.toLowerCase()
+    if (lower === token) return true
+    if (!lower.startsWith(token)) return false
+    return /[A-Z0-9]/.test(segment.charAt(token.length))
+  })
 }
 
 /** Pure selection: not_exercised findings at blocking severities, capped. */
@@ -128,7 +131,7 @@ export function selectProbeTargets(
   findings: LinkedFinding[],
   severityGates: string[],
   maxProbes: number,
-  triageArea?: { area: TriageArea; confidence: number },
+  triageArea?: TriageAreaSignal,
 ): LinkedFinding[] {
   const eligible = findings.filter(
     (f) =>

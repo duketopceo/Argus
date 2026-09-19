@@ -4,6 +4,8 @@ import { resolveTrust } from '../../src/trust.js'
 import type { PrMeta } from '../../src/evidence/ci.js'
 
 const META_FORK: PrMeta = {
+  title: undefined,
+  body: undefined,
   headSha: 'abc',
   baseSha: 'def',
   isFork: true,

@@ -1,6 +1,11 @@
 import { defaultExec, type ExecFn } from '../detect.js'
 import { debug } from '../debug.js'
-import { DecisionClient, describeDecisionError, MAX_CANDIDATES } from '../vision/decisions.js'
+import {
+  DecisionClient,
+  describeDecisionError,
+  isNoulAnswer,
+  MAX_CANDIDATES,
+} from '../vision/decisions.js'
 
 /**
  * Deterministic secrets scan over the PR's local merge-base diff,
@@ -244,7 +249,7 @@ export async function scanSecrets(opts: {
       })
       candidates.forEach((_c, i) => {
         const a = answers[`cand_${i}`]
-        pLiveByIdx[i] = a !== undefined && 'noul' in a ? a.noul : undefined
+        pLiveByIdx[i] = a !== undefined && isNoulAnswer(a) ? a.noul : undefined
       })
     } catch (e) {
       adjudicationFailed = true
@@ -257,7 +262,7 @@ export async function scanSecrets(opts: {
   candidates.forEach((c, i) => {
     const pLive = pLiveByIdx[i]
     const adjudicated = pLive !== undefined && !adjudicationFailed
-    if (adjudicated && (pLive as number) < threshold) {
+    if (adjudicated && pLive !== undefined && pLive < threshold) {
       records.push({
         file: c.file,
         line: c.line,

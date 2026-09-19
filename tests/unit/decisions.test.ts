@@ -149,42 +149,42 @@ describe('DecisionClient', () => {
     })
   })
 
-  it('malformed answers fail the whole call as unexpected', async () => {
-    const { f } = stubFetch(() => okResponse({ answers: { is_live: { noul: 7 } } }))
+  it('a malformed answer is dropped; the valid answers survive', async () => {
+    // Per-question salvage: one bad answer must not void the batch —
+    // callers degrade open per item (unadjudicated), so the call resolves.
+    const { f } = stubFetch(() => okResponse({ answers: { ...ANSWERS, is_live: { noul: 7 } } }))
     const client = new DecisionClient({ apiKey: 'k', fetch: f })
-    await expect(client.decide({ state: 's', questions: QUESTIONS })).rejects.toMatchObject({
-      kind: 'unexpected',
-    })
+    const { answers } = await client.decide({ state: 's', questions: QUESTIONS })
+    expect(answers.is_live).toBeUndefined()
+    expect(answers.lane).toMatchObject({ choice: 'b' })
+    expect(answers.rubric).toMatchObject({ score: 2.1 })
   })
 
-  it('an answer missing a sent question ID fails as unexpected', async () => {
+  it('a question with no answer is simply absent from the result', async () => {
     const { f } = stubFetch(() => okResponse({ answers: { is_live: { noul: 0.5 } } }))
     const client = new DecisionClient({ apiKey: 'k', fetch: f })
-    await expect(client.decide({ state: 's', questions: QUESTIONS })).rejects.toMatchObject({
-      kind: 'unexpected',
-    })
+    const { answers } = await client.decide({ state: 's', questions: QUESTIONS })
+    expect(answers).toEqual({ is_live: { noul: 0.5 } })
   })
 
-  it('a choice answer outside the criteria fails as unexpected', async () => {
-    const { f } = stubFetch(() =>
-      okResponse({ answers: { ...ANSWERS, lane: { choice: 'z' } } }),
-    )
+  it('a choice answer outside the criteria is dropped', async () => {
+    const { f } = stubFetch(() => okResponse({ answers: { ...ANSWERS, lane: { choice: 'z' } } }))
     const client = new DecisionClient({ apiKey: 'k', fetch: f })
-    await expect(client.decide({ state: 's', questions: QUESTIONS })).rejects.toMatchObject({
-      kind: 'unexpected',
-    })
+    const { answers } = await client.decide({ state: 's', questions: QUESTIONS })
+    expect(answers.lane).toBeUndefined()
+    expect(answers.is_live).toMatchObject({ noul: 0.21 })
   })
 
-  it('a prototype-chain choice answer fails as unexpected', async () => {
+  it('a prototype-chain choice answer is dropped', async () => {
     // 'constructor' in {} is true via the prototype chain — the criteria
     // check must use Object.hasOwn so inherited names are not valid IDs.
     const { f } = stubFetch(() =>
       okResponse({ answers: { ...ANSWERS, lane: { choice: 'constructor' } } }),
     )
     const client = new DecisionClient({ apiKey: 'k', fetch: f })
-    await expect(client.decide({ state: 's', questions: QUESTIONS })).rejects.toMatchObject({
-      kind: 'unexpected',
-    })
+    const { answers } = await client.decide({ state: 's', questions: QUESTIONS })
+    expect(answers.lane).toBeUndefined()
+    expect(answers.is_live).toMatchObject({ noul: 0.21 })
   })
 
   it('local validation throws before any fetch: 0 questions', async () => {
@@ -196,7 +196,9 @@ describe('DecisionClient', () => {
 
   it('local validation throws before any fetch: >255 choice options', async () => {
     const { f, calls } = stubFetch(() => okResponse())
-    const criteria = Object.fromEntries(Array.from({ length: 256 }, (_, i) => [`o${i}`, `opt ${i}`]))
+    const criteria = Object.fromEntries(
+      Array.from({ length: 256 }, (_, i) => [`o${i}`, `opt ${i}`]),
+    )
     const client = new DecisionClient({ apiKey: 'k', fetch: f })
     await expect(
       client.decide({
@@ -214,7 +216,11 @@ describe('DecisionClient', () => {
       client.decide({
         state: 's',
         questions: {
-          q: { type: 'score', instructions: 'i', criteria: Array.from({ length: 11 }, (_, i) => `${i}`) },
+          q: {
+            type: 'score',
+            instructions: 'i',
+            criteria: Array.from({ length: 11 }, (_, i) => `${i}`),
+          },
         },
       }),
     ).rejects.toMatchObject({ kind: 'validation' })

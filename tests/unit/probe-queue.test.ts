@@ -32,6 +32,8 @@ function finding(file: string, severity = 'bug', status = 'not_exercised' as con
 }
 
 const META: PrMeta = {
+  title: undefined,
+  body: undefined,
   headSha: 'head1',
   baseSha: 'base1',
   isFork: false,
@@ -223,6 +225,22 @@ describe('selectProbeTargets', () => {
     const fs = [finding('src/metadata.ts'), finding('src/data/seed.ts')]
     const out = selectProbeTargets(fs, ['bug'], 1, { area: 'data', confidence: 0.9 })
     expect(out[0]!.file).toBe('src/data/seed.ts')
+  })
+
+  it('U9 — prefix false positives miss: author.ts → auth, database.ts → data', () => {
+    const fs = [finding('src/author.ts'), finding('src/auth/login.ts')]
+    const out = selectProbeTargets(fs, ['bug'], 1, { area: 'auth', confidence: 0.9 })
+    expect(out[0]!.file).toBe('src/auth/login.ts')
+    const fs2 = [finding('src/database.ts'), finding('src/dataStore.ts')]
+    const out2 = selectProbeTargets(fs2, ['bug'], 1, { area: 'data', confidence: 0.9 })
+    // 'dataStore' hits at the camelCase boundary; 'database' is a miss.
+    expect(out2[0]!.file).toBe('src/dataStore.ts')
+  })
+
+  it('U9 — confidence exactly at the 0.5 floor still reorders', () => {
+    const fs = [finding('src/util/misc.ts'), finding('src/auth/session.ts')]
+    const out = selectProbeTargets(fs, ['bug'], 1, { area: 'auth', confidence: 0.5 })
+    expect(out[0]!.file).toBe('src/auth/session.ts')
   })
 })
 

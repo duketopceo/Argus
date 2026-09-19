@@ -42,6 +42,8 @@ export interface TriageRecord {
   topRiskArea?: TriageArea
   /** Choice-answer confidence when the API provides one. */
   topRiskAreaConfidence?: number
+  /** Chars of diff evidence Jev saw — route mode won't downgrade on 0. */
+  diffExcerptChars?: number
   /** decide() failed or answers failed validation — degrade-open marker. */
   unadjudicated?: boolean
   /** Decision model that produced (or attempted) the record. */
@@ -50,6 +52,8 @@ export interface TriageRecord {
 
 /** Diff excerpt bound — triage needs shape, not full fidelity. */
 const MAX_DIFF_STATE_CHARS = 12_000
+/** Per-file bound — one huge patch must not starve every other file. */
+const MAX_FILE_EXCERPT = 4_000
 const MAX_TITLE_CHARS = 300
 const MAX_BODY_CHARS = 2_000
 const MAX_FILE_LIST = 100
@@ -72,7 +76,7 @@ export function buildTriageState(opts: {
   for (const f of opts.files) {
     if (budget <= 0) break
     if (f.patch === undefined) continue
-    const take = f.patch.slice(0, budget)
+    const take = f.patch.slice(0, Math.min(budget, MAX_FILE_EXCERPT))
     excerpts.push(take)
     budget -= take.length
   }
@@ -131,7 +135,11 @@ export async function triagePr(opts: {
     const deep = answers[Q.deep]
     const risk = answers[Q.risk]
     const area = answers[Q.area]
-    const rec: TriageRecord = { mode: opts.mode, model }
+    const rec: TriageRecord = {
+      mode: opts.mode,
+      model,
+      diffExcerptChars: opts.state.diffExcerpt.length,
+    }
     if (deep !== undefined && isNoulAnswer(deep)) rec.needsDeepReview = deep.noul
     if (risk !== undefined && isScoreAnswer(risk)) rec.risk = risk.score
     if (
@@ -159,9 +167,11 @@ export async function triagePr(opts: {
 
 /**
  * 'route' mode model selection — cheap tier only on a clear low-risk
- * signal (risk ≤ 2 AND deep-review < 0.5). Any ambiguity (missing
- * fields, unadjudicated, unset lowRiskModel) keeps the configured model:
- * coverage stays constant and the expensive path is the default.
+ * signal (risk ≤ 2 AND deep-review < 0.5) backed by actual diff
+ * evidence. Any ambiguity (missing fields, unadjudicated, unset
+ * lowRiskModel, or a title/body-only triage — fully attacker-steerable
+ * text) keeps the configured model: coverage stays constant and the
+ * expensive path is the default.
  */
 export function routeModel(opts: {
   record: TriageRecord | undefined
@@ -175,7 +185,8 @@ export function routeModel(opts: {
     rec.unadjudicated === true ||
     opts.lowRiskModel === undefined ||
     rec.risk === undefined ||
-    rec.needsDeepReview === undefined
+    rec.needsDeepReview === undefined ||
+    (rec.diffExcerptChars ?? 0) === 0
   ) {
     return { model: opts.configured, reason: 'no routing signal' }
   }
@@ -191,18 +202,24 @@ export function routeModel(opts: {
   }
 }
 
+/** U9 ordering signal consumed by the probe lane. */
+export interface TriageAreaSignal {
+  area: TriageArea
+  confidence: number
+}
+
 /**
  * U9 — the probe lane's advisory ordering signal. Present only when
- * triage adjudicated an area with its confidence attached; the
+ * triage adjudicated a real area with its confidence attached; 'none'
+ * is the null-area sentinel, not an ordering signal, and the
  * confidence floor itself is queue policy (MIN_AREA_CONFIDENCE).
  */
-export function triageAreaSignal(
-  rec: TriageRecord | undefined,
-): { area: TriageArea; confidence: number } | undefined {
+export function triageAreaSignal(rec: TriageRecord | undefined): TriageAreaSignal | undefined {
   if (
     rec === undefined ||
     rec.unadjudicated === true ||
     rec.topRiskArea === undefined ||
+    rec.topRiskArea === 'none' ||
     rec.topRiskAreaConfidence === undefined
   ) {
     return undefined

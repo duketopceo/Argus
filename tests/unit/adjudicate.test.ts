@@ -97,4 +97,93 @@ describe('adjudicateFindings', () => {
     expect(r.findings).toHaveLength(3)
     expect(r.findings.every((f) => f.p === undefined)).toBe(true)
   })
+
+  it('never suppresses a severity the user configured as blocking — Jev cannot flip the gate', async () => {
+    // severity:['nit'] in config makes nit verdict-blocking; a low-p nit
+    // must stay or the commit-status gate silently flips (never-gates).
+    const r = await adjudicateFindings({
+      findings: FINDINGS,
+      threshold: 0.8, // nit (0.1) and q (0.05) would normally suppress
+      blockSeverities: ['nit'],
+      client: jevClient([0.1, 0.1, 0.05]),
+    })
+    expect(r.findings).toHaveLength(2)
+    expect(r.findings.map((f) => f.severity)).toEqual(['bug', 'nit'])
+    expect(r.records.find((rec) => rec.severity === 'nit')!.suppressed).toBeUndefined()
+    expect(r.records.find((rec) => rec.severity === 'q')!.suppressed).toBe(true)
+  })
+
+  it('boundary — p exactly at the cutoff does not suppress (strict <)', async () => {
+    // cutoff p < 1 - 0.9 = 0.1; the nit at exactly 0.1 survives.
+    const r = await adjudicateFindings({
+      findings: FINDINGS,
+      threshold: 0.9,
+      client: jevClient([0.1, 0.1, 0.05]),
+    })
+    expect(r.findings.map((f) => f.severity)).toEqual(['bug', 'nit'])
+    expect(r.records.find((rec) => rec.severity === 'q')!.suppressed).toBe(true)
+  })
+
+  it('audit records carry message and category so suppressed findings stay auditable', async () => {
+    const r = await adjudicateFindings({
+      findings: [{ ...FINDINGS[1]!, category: 'convention' }],
+      threshold: 0.8,
+      client: jevClient([0.05]),
+    })
+    expect(r.records[0]).toMatchObject({
+      severity: 'nit',
+      category: 'convention',
+      message: 'L8: 🔵 nit: label the example',
+      suppressed: true,
+    })
+  })
+
+  it('strips a model-emitted p — only Jev may attach the field', async () => {
+    const spoofed = FINDINGS.map((f) => ({ ...f, p: 0.01 }))
+    const r = await adjudicateFindings({
+      findings: spoofed,
+      threshold: 1.0,
+      client: jevClient([0.9, 0.8, 0.7]),
+    })
+    // Jev answers overwrite the spoofed value...
+    expect(r.findings.map((f) => f.p)).toEqual([0.9, 0.8, 0.7])
+    // ...and with Jev down the spoofed p is stripped, not forwarded.
+    const failed = await adjudicateFindings({
+      findings: spoofed,
+      threshold: 1.0,
+      client: failingClient(),
+    })
+    expect(failed.findings.every((f) => f.p === undefined)).toBe(true)
+  })
+
+  it('caps aggregate patch state — 50 unique files cannot ship ~200KB', async () => {
+    let sentState: { patches?: Record<string, string> } | undefined
+    const f = (async (_url: unknown, init?: RequestInit) => {
+      sentState = JSON.parse(String(init?.body ?? '{}')).state
+      return new Response(
+        JSON.stringify({
+          answers: {},
+          model: 'm',
+          usage: { input_tokens: 1, output_tokens: 1, cost: 0 },
+        }),
+        { status: 200 },
+      )
+    }) as unknown as typeof fetch
+    const many = Array.from({ length: 10 }, (_, i) => ({
+      file: `src/f${i}.ts`,
+      severity: 'bug',
+      message: `finding ${i}`,
+    }))
+    const patchByFile = new Map(many.map((m) => [m.file, 'x'.repeat(4000)]))
+    await adjudicateFindings({
+      findings: many,
+      threshold: 1.0,
+      patchByFile,
+      client: new DecisionClient({ apiKey: 'k', fetch: f }),
+    })
+    const total = Object.values(sentState?.patches ?? {}).reduce((n, p) => n + p.length, 0)
+    expect(total).toBeLessThanOrEqual(24_000)
+    // 10 x 4000 = 40KB would have fit individually — the aggregate cap wins.
+    expect(Object.keys(sentState?.patches ?? {}).length).toBeLessThan(10)
+  })
 })

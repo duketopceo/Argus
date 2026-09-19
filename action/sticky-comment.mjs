@@ -250,7 +250,7 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
     } else {
       lines.push(
         ` · 🧭 triage: risk ${t.risk ?? '?'}/5` +
-          `${t.needsDeepReview !== undefined ? ` · deep-review ${t.needsDeepReview.toFixed(2)}` : ''}` +
+          `${typeof t.needsDeepReview === 'number' ? ` · deep-review ${t.needsDeepReview.toFixed(2)}` : ''}` +
           `${t.topRiskArea !== undefined ? ` · top area \`${cell(t.topRiskArea)}\`` : ''}` +
           ` (${cell(t.mode)})`,
       )
@@ -328,14 +328,18 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
   // findings table and in code-review.json records.
   if (codeReview.findingAdjudication && Array.isArray(codeReview.findingAdjudication.records)) {
     const fa = codeReview.findingAdjudication
-    const suppressed = fa.records.filter((r) => r.suppressed).length
-    const unadj = fa.records.filter((r) => !r.adjudicated).length
-    lines.push(
-      `*🧮 adjudication: ${fa.records.length} finding(s) scored` +
-        `${suppressed > 0 ? `, ${suppressed} suppressed (nit/q)` : ''}` +
-        `${unadj > 0 ? `, ${unadj} unadjudicated` : ''}` +
-        `${fa.overflow > 0 ? `, +${fa.overflow} over cap` : ''}.*`,
-    )
+    if (fa.unadjudicated === true) {
+      lines.push('*🧮 adjudication: unadjudicated — Jev unavailable, nothing suppressed.*')
+    } else {
+      const suppressed = fa.records.filter((r) => r.suppressed).length
+      const unadj = fa.records.filter((r) => !r.adjudicated).length
+      lines.push(
+        `*🧮 adjudication: ${fa.records.length} finding(s) scored` +
+          `${suppressed > 0 ? `, ${suppressed} suppressed (nit/q)` : ''}` +
+          `${unadj > 0 ? `, ${unadj} unadjudicated` : ''}` +
+          `${fa.overflow > 0 ? `, +${fa.overflow} over cap` : ''}.*`,
+      )
+    }
     lines.push('')
   }
   lines.push('</details>')
@@ -402,6 +406,82 @@ function renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan) {
   return lines.join('\n')
 }
 
+async function planInlineComments(pr, codeReview) {
+  if (!pr || !codeReview || codeReview.skipped || !codeReview.findings) return undefined
+  // Must match the severity vocabulary emitted by the code-review schema
+  // (src/cli.ts): bug/risk are inline-worthy; nit/q stay in the sticky body.
+  const inlineSeverities = ['bug', 'risk']
+  const comments = codeReview.findings
+    .filter((f) => f.file && typeof f.line === 'number' && inlineSeverities.includes(f.severity))
+    .map((f) => ({
+      path: f.file,
+      line: f.line,
+      side: 'RIGHT',
+      body: `**argus-reviewer ${f.severity}:** ${f.message}${
+        f.category ? ` \`${f.category}\`` : ''
+      }${
+        f.evidence && f.evidence.status === 'reproduced'
+          ? '\n\n*🧪 Reproduced by an Argus probe — fails on this PR head, clean on base. See workflow artifacts.*'
+          : f.evidence && f.evidence.status !== 'exercised'
+            ? `\n\n*CI evidence: ${f.evidence.detail}*`
+            : ''
+      }`,
+    }))
+  if (comments.length === 0) return { capped: [], dropped: 0, cap: 0 }
+
+  // Re-runs on the same SHA must not duplicate inline comments — the sticky
+  // body is upserted but review comments are not. Paginate fully (100/page)
+  // and scope dedup to the current head: comments on older commits must not
+  // suppress findings that still apply to this head. The key is the body's
+  // first line (the finding itself) — trailing evidence notes like the
+  // `reproduced` upgrade change the body but must not re-post a duplicate.
+  const dedupKey = (path, line, body) => `${path}:${line}:${body.split('\n')[0]}`
+  const posted = new Set()
+  let page = 1
+  for (;;) {
+    const { data: existing } = await github.rest.pulls.listReviewComments({
+      owner: context.repo.owner,
+      repo: context.repo.repo,
+      pull_number: pr.number,
+      per_page: 100,
+      page,
+    })
+    for (const c of existing) {
+      if (c.body && c.body.startsWith('**argus-reviewer') && c.commit_id === pr.head.sha) {
+        posted.add(dedupKey(c.path, c.line, c.body))
+      }
+    }
+    if (existing.length < 100) break
+    page += 1
+  }
+  const fresh = comments.filter((c) => !posted.has(dedupKey(c.path, c.line, c.body)))
+
+  // review.maxComments caps inline noise (TCA max_comments) — applied
+  // after dedup so already-posted comments don't eat the budget. A cap of
+  // 0 disables inline posting entirely (no empty review).
+  const cap = typeof codeReview.maxComments === 'number' ? codeReview.maxComments : 20
+  const capped = fresh.slice(0, cap)
+  return { capped, dropped: fresh.length - capped.length, cap }
+}
+
+async function postInlineComments(pr, plan) {
+  if (plan === undefined || plan.capped.length === 0) return
+  // One batched review instead of N createReviewComment calls — avoids
+  // secondary rate limits on large findings sets.
+  try {
+    await github.rest.pulls.createReview({
+      owner: context.repo.owner,
+      repo: context.repo.repo,
+      pull_number: pr.number,
+      commit_id: pr.head.sha,
+      event: 'COMMENT',
+      comments: plan.capped,
+    })
+  } catch (e) {
+    core.warning(`inline review failed: ${e.message}`)
+  }
+}
+
 async function main() {
   const pr = context.payload && context.payload.pull_request
   const owner = context.repo.owner
@@ -454,82 +534,6 @@ async function main() {
   // body renders so the "+N not posted" note counts the *fresh* set — the
   // cap is applied to fresh, not to raw findings (already-posted comments
   // must not inflate the dropped count).
-  async function planInlineComments(pr, codeReview) {
-    if (!pr || !codeReview || codeReview.skipped || !codeReview.findings) return undefined
-    // Must match the severity vocabulary emitted by the code-review schema
-    // (src/cli.ts): bug/risk are inline-worthy; nit/q stay in the sticky body.
-    const inlineSeverities = ['bug', 'risk']
-    const comments = codeReview.findings
-      .filter((f) => f.file && typeof f.line === 'number' && inlineSeverities.includes(f.severity))
-      .map((f) => ({
-        path: f.file,
-        line: f.line,
-        side: 'RIGHT',
-        body: `**argus-reviewer ${f.severity}:** ${f.message}${
-          f.category ? ` \`${f.category}\`` : ''
-        }${
-          f.evidence && f.evidence.status === 'reproduced'
-            ? '\n\n*🧪 Reproduced by an Argus probe — fails on this PR head, clean on base. See workflow artifacts.*'
-            : f.evidence && f.evidence.status !== 'exercised'
-              ? `\n\n*CI evidence: ${f.evidence.detail}*`
-              : ''
-        }`,
-      }))
-    if (comments.length === 0) return { capped: [], dropped: 0, cap: 0 }
-
-    // Re-runs on the same SHA must not duplicate inline comments — the sticky
-    // body is upserted but review comments are not. Paginate fully (100/page)
-    // and scope dedup to the current head: comments on older commits must not
-    // suppress findings that still apply to this head. The key is the body's
-    // first line (the finding itself) — trailing evidence notes like the
-    // `reproduced` upgrade change the body but must not re-post a duplicate.
-    const dedupKey = (path, line, body) => `${path}:${line}:${body.split('\n')[0]}`
-    const posted = new Set()
-    let page = 1
-    for (;;) {
-      const { data: existing } = await github.rest.pulls.listReviewComments({
-        owner: context.repo.owner,
-        repo: context.repo.repo,
-        pull_number: pr.number,
-        per_page: 100,
-        page,
-      })
-      for (const c of existing) {
-        if (c.body && c.body.startsWith('**argus-reviewer') && c.commit_id === pr.head.sha) {
-          posted.add(dedupKey(c.path, c.line, c.body))
-        }
-      }
-      if (existing.length < 100) break
-      page += 1
-    }
-    const fresh = comments.filter((c) => !posted.has(dedupKey(c.path, c.line, c.body)))
-
-    // review.maxComments caps inline noise (TCA max_comments) — applied
-    // after dedup so already-posted comments don't eat the budget. A cap of
-    // 0 disables inline posting entirely (no empty review).
-    const cap = typeof codeReview.maxComments === 'number' ? codeReview.maxComments : 20
-    const capped = fresh.slice(0, cap)
-    return { capped, dropped: fresh.length - capped.length, cap }
-  }
-
-  async function postInlineComments(pr, plan) {
-    if (plan === undefined || plan.capped.length === 0) return
-    // One batched review instead of N createReviewComment calls — avoids
-    // secondary rate limits on large findings sets.
-    try {
-      await github.rest.pulls.createReview({
-        owner: context.repo.owner,
-        repo: context.repo.repo,
-        pull_number: pr.number,
-        commit_id: pr.head.sha,
-        event: 'COMMENT',
-        comments: plan.capped,
-      })
-    } catch (e) {
-      core.warning(`inline review failed: ${e.message}`)
-    }
-  }
-
   if (pr) {
     const { data: comments } = await github.rest.issues.listComments({
       owner,

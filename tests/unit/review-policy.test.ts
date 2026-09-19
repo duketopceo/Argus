@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { parseCodeReview } from '../../src/cli.js'
-import {
-  resolveBlockSeverities,
-  resolveConfig,
-  resolveMaxComments,
-} from '../../src/config.js'
+import { resolveBlockSeverities, resolveConfig, resolveMaxComments } from '../../src/config.js'
 
 describe('review policy config', () => {
   it('defaults: secretsThreshold 0.3, maxComments 20, severityGate unset', () => {
@@ -52,6 +48,37 @@ describe('review policy config', () => {
     const c = resolveConfig({ review: 'yes' as unknown as { secretsThreshold: number } })
     expect(c.review.maxComments).toBe(20)
     expect(c.review.secretsThreshold).toBe(0.3)
+  })
+
+  it('Jev-lane keys default: triage annotate, findingThreshold 1.0, lowRiskModel unset', () => {
+    const c = resolveConfig({})
+    expect(c.review.triage).toBe('annotate')
+    expect(c.review.findingThreshold).toBe(1.0)
+    expect(c.review.lowRiskModel).toBeUndefined()
+  })
+
+  it('rejects unknown triage modes — falls back to annotate', () => {
+    for (const bad of ['gate', 'skip', '', 3]) {
+      expect(resolveConfig({ review: { triage: bad as 'route' } }).review.triage).toBe('annotate')
+    }
+    expect(resolveConfig({ review: { triage: 'route' } }).review.triage).toBe('route')
+    expect(resolveConfig({ review: { triage: 'off' } }).review.triage).toBe('off')
+  })
+
+  it('clamps out-of-range findingThreshold to annotate-only 1.0', () => {
+    for (const bad of [1.5, -0.2, NaN]) {
+      expect(resolveConfig({ review: { findingThreshold: bad } }).review.findingThreshold).toBe(1.0)
+    }
+    expect(resolveConfig({ review: { findingThreshold: 0.4 } }).review.findingThreshold).toBe(0.4)
+  })
+
+  it('empty/non-string lowRiskModel degrades to undefined — no routing tier', () => {
+    for (const bad of ['', 7 as unknown as string, undefined]) {
+      expect(resolveConfig({ review: { lowRiskModel: bad } }).review.lowRiskModel).toBeUndefined()
+    }
+    expect(resolveConfig({ review: { lowRiskModel: 'cheap/model' } }).review.lowRiskModel).toBe(
+      'cheap/model',
+    )
   })
 })
 

@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
 import { DecisionClient } from '../../src/vision/decisions.js'
-import { buildTriageState, routeModel, triagePr } from '../../src/review/triage.js'
+import {
+  buildTriageState,
+  routeModel,
+  triageAreaSignal,
+  triagePr,
+} from '../../src/review/triage.js'
 
 const FILES = [
   { filename: 'src/auth/session.ts', patch: '@@ +token check removed' },
@@ -56,6 +61,31 @@ describe('buildTriageState', () => {
     expect(s.files).toEqual(['src/auth/session.ts', 'docs/readme.md'])
     expect(s.diffExcerpt.length).toBeLessThanOrEqual(12_000)
   })
+
+  it('caps each file excerpt so one huge patch cannot starve the rest', () => {
+    const s = buildTriageState({
+      files: [
+        { filename: 'a-lock.json', patch: 'x'.repeat(50_000) },
+        { filename: 'src/risky.ts', patch: '@@ +dangerous change' },
+      ],
+    })
+    // Without the per-file cap the 50KB first patch would consume the
+    // entire 12KB budget and the risky file would contribute nothing.
+    expect(s.diffExcerpt).toContain('dangerous change')
+    expect(s.diffExcerpt.length).toBeLessThanOrEqual(12_000)
+  })
+
+  it('skips patch-less files and reports totalFiles beyond the 100-name cap', () => {
+    const s = buildTriageState({
+      files: [
+        ...Array.from({ length: 150 }, (_, i) => ({ filename: `f${i}.ts` })),
+        { filename: 'binary.png' },
+      ],
+    })
+    expect(s.files).toHaveLength(100)
+    expect(s.totalFiles).toBe(151)
+    expect(s.diffExcerpt).toBe('')
+  })
 })
 
 describe('triagePr', () => {
@@ -105,10 +135,72 @@ describe('triagePr', () => {
     })
     expect(rec.unadjudicated).toBe(true)
   })
+
+  it('salvages valid answers when one is malformed — no all-or-nothing loss', async () => {
+    const f = (async (_url: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}')) as {
+        questions: Record<string, { type: string }>
+      }
+      const answers: Record<string, unknown> = {}
+      for (const [id, q] of Object.entries(body.questions)) {
+        if (q.type === 'noul') answers[id] = { noul: 0.9 }
+        if (q.type === 'score') answers[id] = 'not-an-answer-object'
+        if (q.type === 'choice') answers[id] = { choice: 'billing', confidence: 0.7 }
+      }
+      return new Response(
+        JSON.stringify({
+          answers,
+          model: 'm',
+          usage: { input_tokens: 1, output_tokens: 1, cost: 0 },
+        }),
+        { status: 200 },
+      )
+    }) as unknown as typeof fetch
+    const rec = await triagePr({
+      client: new DecisionClient({ apiKey: 'k', fetch: f }),
+      state: STATE,
+      mode: 'annotate',
+    })
+    // The bad score answer degrades per-question — the good ones survive.
+    expect(rec.needsDeepReview).toBe(0.9)
+    expect(rec.topRiskArea).toBe('billing')
+    expect(rec.risk).toBeUndefined()
+    expect(rec.unadjudicated).toBeUndefined()
+  })
+
+  it('rejects out-of-rubric score answers — a malformed low score must not route cheap', async () => {
+    // Jev legitimately emits fractional rubric positions (e.g. 2.1), so
+    // only values outside [1, rubric-levels] — or non-finite — are dropped.
+    for (const score of [0, 0.5, -2, 99, NaN]) {
+      const rec = await triagePr({
+        client: jevClient({ noul: 0.1, score, choice: 'none', confidence: 0.9 }),
+        state: STATE,
+        mode: 'route',
+      })
+      expect(rec.risk).toBeUndefined()
+    }
+    const rec = await triagePr({
+      client: jevClient({ noul: 0.1, score: 1.5, choice: 'none', confidence: 0.9 }),
+      state: STATE,
+      mode: 'route',
+    })
+    expect(rec.risk).toBe(1.5)
+  })
+
+  it('rejects NaN and out-of-range noul answers', async () => {
+    for (const noul of [NaN, -0.1, 1.1]) {
+      const rec = await triagePr({
+        client: jevClient({ noul, score: 4, choice: 'none' }),
+        state: STATE,
+        mode: 'annotate',
+      })
+      expect(rec.needsDeepReview).toBeUndefined()
+    }
+  })
 })
 
 describe('routeModel', () => {
-  const base = { mode: 'route' as const, model: 'jev' }
+  const base = { mode: 'route' as const, model: 'jev', diffExcerptChars: 500 }
 
   it('routes to lowRiskModel only on a clear low-risk signal', () => {
     const r = routeModel({
@@ -152,5 +244,53 @@ describe('routeModel', () => {
         lowRiskModel: undefined,
       }).model,
     ).toBe('strong/model')
+  })
+
+  it('never downgrades on a title/body-only triage — diff evidence required', () => {
+    // PR title/body are fully attacker-controlled text; a "low risk"
+    // read with zero diff content must not swap in the cheap model.
+    for (const diffExcerptChars of [0, undefined]) {
+      expect(
+        routeModel({
+          record: { mode: 'route', model: 'jev', risk: 1, needsDeepReview: 0.1, diffExcerptChars },
+          configured: 'strong/model',
+          lowRiskModel: 'cheap/model',
+        }).model,
+      ).toBe('strong/model')
+    }
+  })
+})
+
+describe('triageAreaSignal', () => {
+  it('emits the signal only for a real adjudicated area with confidence', () => {
+    expect(
+      triageAreaSignal({
+        mode: 'annotate',
+        model: 'jev',
+        topRiskArea: 'billing',
+        topRiskAreaConfidence: 0.9,
+      }),
+    ).toEqual({ area: 'billing', confidence: 0.9 })
+  })
+
+  it('suppresses the none sentinel — no meaningful area is not an ordering signal', () => {
+    expect(
+      triageAreaSignal({
+        mode: 'annotate',
+        model: 'jev',
+        topRiskArea: 'none',
+        topRiskAreaConfidence: 0.95,
+      }),
+    ).toBeUndefined()
+  })
+
+  it('suppresses unadjudicated, absent, and confidence-less records', () => {
+    expect(triageAreaSignal(undefined)).toBeUndefined()
+    expect(
+      triageAreaSignal({ mode: 'annotate', model: 'jev', unadjudicated: true }),
+    ).toBeUndefined()
+    expect(
+      triageAreaSignal({ mode: 'annotate', model: 'jev', topRiskArea: 'auth' }),
+    ).toBeUndefined()
   })
 })
