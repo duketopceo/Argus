@@ -1243,12 +1243,17 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     let lastModel = model
 
     // Shared spend sink — chunk, synthesis, probe, and every decide()
-    // call funnel through here so the ledger/report never drift.
+    // call funnel through here so the ledger/report never drift. The
+    // over-budget flag lives here too: a decide() that crosses the cap
+    // must trip it just like a chunk does, or later lanes keep spending.
     const recordSpend = (c: CallCost): void => {
       ledger.recordCall(c)
       allCalls.push(c)
       totalTokens += c.tokens
       totalCost += c.costUsd
+      if (budget !== undefined && ledger.visionCostUsd > budget) {
+        ledger.flagBudgetExceeded()
+      }
     }
 
     const apiKey = ctx.env.OPENROUTER_API_KEY
@@ -1333,8 +1338,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       const parsed = parseCodeReview(response.content)
       allFindings.push(...parsed.findings)
       stage(`chunk ${i + 1}/${chunks.length} — ${parsed.findings.length} finding(s)`)
-      if (budget !== undefined && ledger.visionCostUsd > budget) {
-        ledger.flagBudgetExceeded()
+      if (ledger.budgetExceeded) {
         ctx.err(`code-review: budget exceeded after chunk ${i + 1}; stopping early`)
         break
       }
@@ -1366,8 +1370,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
         summary = parsed.summary
         verdict = parsed.verdict
         finalFindings = parsed.findings.length > 0 ? parsed.findings : allFindings
-        if (budget !== undefined && ledger.visionCostUsd > budget) {
-          ledger.flagBudgetExceeded()
+        if (ledger.budgetExceeded) {
           ctx.err('code-review: budget exceeded after synthesis; stopping early')
         }
       } catch (e) {
