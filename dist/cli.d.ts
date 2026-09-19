@@ -6,6 +6,8 @@ import { VisionClient } from './engine/loop.js';
 import { type PrMeta } from './evidence/ci.js';
 import { type Evidence } from './evidence/link.js';
 import { type SecretsScanResult } from './review/secrets.js';
+import { type TriageRecord } from './review/triage.js';
+import { type FindingAdjudicationResult } from './review/adjudicate.js';
 import { type ProbeRecord } from './probe/queue.js';
 import { CallCost } from './vision/cost.js';
 export interface CliDeps {
@@ -37,6 +39,8 @@ interface CodeReviewReport {
         severity: string;
         category?: string;
         message: string;
+        /** U8 — Jev true-positive probability (absent = unadjudicated). */
+        p?: number;
         evidence?: Evidence;
     }[];
     /** Inline-comment cap consumed by the sticky poster (Tencent max_comments pull). */
@@ -49,6 +53,10 @@ interface CodeReviewReport {
     secretsScan?: SecretsScanResult | {
         skipped: string;
     };
+    /** U7 triage record — Jev pre-review signals (annotate/route, never gates). */
+    triage?: TriageRecord;
+    /** U8 adjudication audit — per-finding p + suppressed records. */
+    findingAdjudication?: Omit<FindingAdjudicationResult<never>, 'findings'>;
     calls: CallCost[];
     visionCostUsd: number;
     tokens: number;

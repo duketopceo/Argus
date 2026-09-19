@@ -1,6 +1,11 @@
 import { defaultExec, type ExecFn } from '../detect.js'
 import { debug } from '../debug.js'
-import { DecisionClient, DecisionError } from '../vision/decisions.js'
+import {
+  DecisionClient,
+  describeDecisionError,
+  isNoulAnswer,
+  MAX_CANDIDATES,
+} from '../vision/decisions.js'
 
 /**
  * Deterministic secrets scan over the PR's local merge-base diff,
@@ -50,11 +55,16 @@ export interface SecretsScanResult {
   skipped?: string
 }
 
-export const MAX_CANDIDATES = 50
+// Owned by vision/decisions.ts — re-exported here so existing import
+// paths (tests, lanes) keep resolving.
+export { MAX_CANDIDATES } from '../vision/decisions.js'
 export const DEFAULT_SECRETS_THRESHOLD = 0.3
 
 const PATTERNS: { cls: string; re: RegExp; group?: number }[] = [
-  { cls: 'private-key', re: /-----BEGIN (?:RSA |EC |OPENSSH |PGP |DSA )?PRIVATE KEY(?: BLOCK)?-----/ },
+  {
+    cls: 'private-key',
+    re: /-----BEGIN (?:RSA |EC |OPENSSH |PGP |DSA )?PRIVATE KEY(?: BLOCK)?-----/,
+  },
   { cls: 'aws-access-key', re: /\bAKIA[0-9A-Z]{16}\b/ },
   { cls: 'stripe-live', re: /\b(?:sk|rk)_live_[0-9a-zA-Z]{16,}\b/ },
   { cls: 'stripe-webhook-secret', re: /\bwhsec_[0-9a-zA-Z]{16,}\b/ },
@@ -152,11 +162,16 @@ async function ensureBaseObject(
   if (token === undefined) return false
   // Auth rides env config like actions/checkout's extraheader — keeps the
   // token out of process argv where co-tenant jobs could scrape /proc.
-  const fetched = await exec('git', ['-C', cwd, 'fetch', '--depth', '1', 'origin', baseSha], 60_000, {
-    GIT_CONFIG_COUNT: '1',
-    GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
-    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`,
-  })
+  const fetched = await exec(
+    'git',
+    ['-C', cwd, 'fetch', '--depth', '1', 'origin', baseSha],
+    60_000,
+    {
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
+      GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`,
+    },
+  )
   return fetched.code === 0
 }
 
@@ -234,14 +249,11 @@ export async function scanSecrets(opts: {
       })
       candidates.forEach((_c, i) => {
         const a = answers[`cand_${i}`]
-        pLiveByIdx[i] = a !== undefined && 'noul' in a ? a.noul : undefined
+        pLiveByIdx[i] = a !== undefined && isNoulAnswer(a) ? a.noul : undefined
       })
     } catch (e) {
       adjudicationFailed = true
-      debug(
-        'secrets',
-        `adjudication failed — degrading to regex-only: ${e instanceof DecisionError ? e.kind : (e as Error).message}`,
-      )
+      debug('secrets', `adjudication failed — degrading to regex-only: ${describeDecisionError(e)}`)
     }
   }
 
@@ -250,7 +262,7 @@ export async function scanSecrets(opts: {
   candidates.forEach((c, i) => {
     const pLive = pLiveByIdx[i]
     const adjudicated = pLive !== undefined && !adjudicationFailed
-    if (adjudicated && (pLive as number) < threshold) {
+    if (adjudicated && pLive !== undefined && pLive < threshold) {
       records.push({
         file: c.file,
         line: c.line,

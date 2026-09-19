@@ -170,11 +170,24 @@ export interface Config {
      * `severityGate`: consumer-facing alias over `severity` — 'bug'
      * fails on bugs only, 'risk' fails on bug|risk. Unset → `severity`
      * list is authoritative.
+     * `triage`: Jev pre-review lane — 'off' no call, 'annotate' (default)
+     * records risk/deep-review/area into the report + sticky, 'route'
+     * additionally swaps the code model to `lowRiskModel` on low-risk
+     * diffs. Jev routes/annotates, never gates — coverage is constant.
+     * `lowRiskModel`: the cheap code-model slug 'route' falls to; unset →
+     * route keeps `code_model` (annotate-equivalent).
+     * `findingThreshold`: P(false-positive) required to suppress a nit/q
+     * finding after Jev adjudication — 1.0 (default) is annotate-only,
+     * lowering it suppresses progressively more low-confidence nits.
+     * bug/risk are never suppressed.
      */
     review: {
         secretsThreshold: number;
         maxComments: number;
         severityGate: 'bug' | 'risk' | undefined;
+        triage: 'off' | 'annotate' | 'route';
+        lowRiskModel: string | undefined;
+        findingThreshold: number;
     };
 }
 export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review'>> & {

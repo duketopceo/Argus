@@ -10,6 +10,7 @@ import type { RepoIndex } from '../index/scan.js'
 import type { VisionClient } from '../engine/loop.js'
 import type { CallCost } from '../vision/cost.js'
 import type { Ledger } from '../vision/ledger.js'
+import type { TriageArea, TriageAreaSignal } from '../review/triage.js'
 import {
   buildProbeMessages,
   parseProbe,
@@ -54,12 +55,7 @@ export interface LinkedFinding {
   evidence: Evidence
 }
 
-export type ProbeReportOutcome =
-  | 'reproduced'
-  | 'clean'
-  | 'load-error'
-  | 'not-collected'
-  | 'error'
+export type ProbeReportOutcome = 'reproduced' | 'clean' | 'load-error' | 'not-collected' | 'error'
 
 export interface ProbeRecord {
   /** Probe filename (basename — it is written beside the exemplar test). */
@@ -102,10 +98,32 @@ export interface ProbeLaneOptions {
   /** Configured blocking severities — the queue only admits those. */
   severityGates: string[]
   index: RepoIndex | undefined
+  /** U9 — triage top_risk_area; advisory reorder of probe candidates. */
+  triageArea?: TriageAreaSignal | undefined
   /** Report sink — authored probe CallCosts are pushed here for the report. */
   calls?: CallCost[] | undefined
   exec?: ExecFn | undefined
   log?: ((line: string) => void) | undefined
+}
+
+/** U9 — below this confidence the triage area signal is ignored. */
+const MIN_AREA_CONFIDENCE = 0.5
+
+/**
+ * U9 triage-informed ordering: a finding's file path "hits" the flagged
+ * risk area when a path segment equals the area token or starts with
+ * it at a camelCase/digit boundary — `src/auth/session.ts` and
+ * `dataStore.ts` hit auth/data, while `author.ts` and `database.ts`
+ * do not. Advisory only.
+ */
+function fileHitsArea(file: string, area: TriageArea): boolean {
+  const token = area.toLowerCase()
+  return file.split(/[/._-]+/).some((segment) => {
+    const lower = segment.toLowerCase()
+    if (lower === token) return true
+    if (!lower.startsWith(token)) return false
+    return /[A-Z0-9]/.test(segment.charAt(token.length))
+  })
 }
 
 /** Pure selection: not_exercised findings at blocking severities, capped. */
@@ -113,16 +131,25 @@ export function selectProbeTargets(
   findings: LinkedFinding[],
   severityGates: string[],
   maxProbes: number,
+  triageArea?: TriageAreaSignal,
 ): LinkedFinding[] {
-  return findings
-    .filter(
-      (f) =>
-        f.evidence.status === 'not_exercised' &&
-        f.file !== undefined &&
-        isSafeRepoPath(f.file) &&
-        severityGates.includes(f.severity ?? ''),
-    )
-    .slice(0, Math.max(0, maxProbes))
+  const eligible = findings.filter(
+    (f) =>
+      f.evidence.status === 'not_exercised' &&
+      f.file !== undefined &&
+      isSafeRepoPath(f.file) &&
+      severityGates.includes(f.severity ?? ''),
+  )
+  // U9 — a confident triage top_risk_area reorders candidates so probes
+  // prefer the flagged subsystem. Stable sort keeps the original order
+  // within each group; probe count/gates/verdict are unchanged.
+  if (triageArea !== undefined && triageArea.confidence >= MIN_AREA_CONFIDENCE) {
+    // Hit flags precomputed once — the comparator would re-derive them
+    // O(n log n) times otherwise.
+    const hit = new Map(eligible.map((f) => [f, fileHitsArea(f.file ?? '', triageArea.area)]))
+    eligible.sort((a, b) => Number(hit.get(b)) - Number(hit.get(a)))
+  }
+  return eligible.slice(0, Math.max(0, maxProbes))
 }
 
 /**
@@ -147,7 +174,10 @@ export function isSafeRepoPath(p: string): boolean {
  * Index paths are filtered through isSafeRepoPath — a committed/crafted
  * index could otherwise aim the host write outside the checkout.
  */
-export function findExemplarTest(index: RepoIndex | undefined, findingFile: string): string | undefined {
+export function findExemplarTest(
+  index: RepoIndex | undefined,
+  findingFile: string,
+): string | undefined {
   const tests =
     index?.entries.map((e) => e.path).filter((p) => isTestFile(p) && isSafeRepoPath(p)) ?? []
   if (tests.length === 0) return undefined
@@ -197,7 +227,11 @@ async function addBaseWorktree(
     )
     if (fetched.code !== 0) return undefined
   }
-  const added = await exec('git', ['-C', cwd, 'worktree', 'add', '--detach', wtDir, baseSha], 60_000)
+  const added = await exec(
+    'git',
+    ['-C', cwd, 'worktree', 'add', '--detach', wtDir, baseSha],
+    60_000,
+  )
   return added.code === 0 ? wtDir : undefined
 }
 
@@ -284,14 +318,24 @@ async function authorProbe(
       ...(o.provider !== undefined ? { provider: o.provider } : {}),
     })
   } catch (e) {
-    return { probe: undefined, reason: `authoring call failed: ${(e as Error).message}`, costUsd: 0, tokens: 0 }
+    return {
+      probe: undefined,
+      reason: `authoring call failed: ${(e as Error).message}`,
+      costUsd: 0,
+      tokens: 0,
+    }
   }
   o.ledger.recordCall(response.cost)
   o.calls?.push(response.cost)
   const parsed = parseProbe(response.content)
   if (!parsed.ok) {
     // Failed parses still cost the call — carry the spend on the record.
-    return { probe: undefined, reason: parsed.reason, costUsd: response.cost.costUsd, tokens: response.cost.tokens }
+    return {
+      probe: undefined,
+      reason: parsed.reason,
+      costUsd: response.cost.costUsd,
+      tokens: response.cost.tokens,
+    }
   }
   return { probe: parsed.probe, costUsd: response.cost.costUsd, tokens: response.cost.tokens }
 }
@@ -354,7 +398,7 @@ export async function runProbeLane(
   // image/limits/allowForks would self-approve the gate. Forks always run
   // on DEFAULT_SANDBOX and approve only via trusted author or the label.
   const sandbox: Sandbox = o.meta?.isFork ? { ...DEFAULT_SANDBOX, enabled: true } : o.sandbox
-  const targets = selectProbeTargets(findings, o.severityGates, sandbox.maxProbes)
+  const targets = selectProbeTargets(findings, o.severityGates, sandbox.maxProbes, o.triageArea)
   if (targets.length === 0) return { records: [] }
 
   if (!mayProbePr(o.meta, sandbox)) {
@@ -388,8 +432,7 @@ export async function runProbeLane(
   const scratchCheck = await checkSandboxPaths(o.cwd, scratchDir)
   if (!scratchCheck.ok) return skip(scratchCheck.reason)
 
-  const indexPaths =
-    o.index === undefined ? undefined : new Set(o.index.entries.map((e) => e.path))
+  const indexPaths = o.index === undefined ? undefined : new Set(o.index.entries.map((e) => e.path))
 
   // The double-run needs a merge-base checkout. Started eagerly so the
   // fetch overlaps the first authoring call; failures don't block the lane —
@@ -469,7 +512,8 @@ export async function runProbeLane(
         // only), so head's deps are bind-mounted ro — without it every
         // vitest/jest base run load-errors and `reproduced` can never fire.
         const nodeModules = join(o.cwd, 'node_modules')
-        const hasNodeModules = (await stat(nodeModules).catch(() => undefined))?.isDirectory() === true
+        const hasNodeModules =
+          (await stat(nodeModules).catch(() => undefined))?.isDirectory() === true
         const baseScratch = baseDir === undefined ? undefined : join(baseDir, SCRATCH_DIR_NAME)
         if (baseScratch !== undefined) {
           await mkdir(baseScratch, { recursive: true, mode: 0o777 })
@@ -481,8 +525,7 @@ export async function runProbeLane(
         // drop the mask.
         const realWt =
           baseDir === undefined ? undefined : await realpath(baseDir).catch(() => undefined)
-        const wtMask =
-          realWt === undefined ? undefined : relative(scratchCheck.realWork, realWt)
+        const wtMask = realWt === undefined ? undefined : relative(scratchCheck.realWork, realWt)
         const [head, base] = await Promise.all([
           runProbeInSandbox({
             workdir: o.cwd,

@@ -11,7 +11,10 @@ function formatUsd(n) {
 
 /** Escape a report string for one markdown table cell. */
 function cell(s) {
-  return String(s ?? '').replace(/\|/g, '\\|').replace(/[\r\n]+/g, ' ').slice(0, 200)
+  return String(s ?? '')
+    .replace(/\|/g, '\\|')
+    .replace(/[\r\n]+/g, ' ')
+    .slice(0, 200)
 }
 
 function renderMissingKeyBody() {
@@ -20,7 +23,9 @@ function renderMissingKeyBody() {
   lines.push('')
   lines.push('## argus-reviewer ⚪ skipped')
   lines.push('')
-  lines.push('`OPENROUTER_API_KEY` is not configured. Add it as a repository or workflow secret to run argus-reviewer.')
+  lines.push(
+    '`OPENROUTER_API_KEY` is not configured. Add it as a repository or workflow secret to run argus-reviewer.',
+  )
   lines.push('')
   lines.push('This status is intentionally neutral, not a failure.')
   lines.push('')
@@ -33,7 +38,9 @@ function renderNoReportBody(reportDir, runUrl) {
   lines.push('')
   lines.push('## argus-reviewer ⚠️ no report')
   lines.push('')
-  lines.push(`The run step produced no \`run.json\` under \`${reportDir}\`. The commit status fails closed — check the action logs before merging.`)
+  lines.push(
+    `The run step produced no \`run.json\` under \`${reportDir}\`. The commit status fails closed — check the action logs before merging.`,
+  )
   lines.push('')
   lines.push(`[View run](${runUrl})`)
   lines.push('')
@@ -73,7 +80,9 @@ function renderBody(report, codeReview, runUrl, ok, inlinePlan) {
     lines.push(`- \`${path.basename(t.file)}\` — ${t.name}`)
   }
   lines.push('')
-  lines.push(`**Risk:** ${ok ? 'Low — UI regression tests and code review passed; no heals or failures.' : 'High — investigate failures before merge.'}`)
+  lines.push(
+    `**Risk:** ${ok ? 'Low — UI regression tests and code review passed; no heals or failures.' : 'High — investigate failures before merge.'}`,
+  )
   lines.push('')
   if (Object.keys(trace).length > 0) {
     lines.push('**Trace**')
@@ -92,7 +101,9 @@ function renderBody(report, codeReview, runUrl, ok, inlinePlan) {
   lines.push('| --- | --- | ---: | ---: | ---: | ---: |')
   for (const t of report.tests) {
     const result = t.ok ? '✅ pass' : '❌ fail'
-    lines.push(`| ${t.name} | ${result} | ${t.visionCalls} | ${formatUsd(t.visionCostUsd)} | ${t.healEvents?.length ?? 0} | ${t.asserts?.length ?? 0} |`)
+    lines.push(
+      `| ${t.name} | ${result} | ${t.visionCalls} | ${formatUsd(t.visionCostUsd)} | ${t.healEvents?.length ?? 0} | ${t.asserts?.length ?? 0} |`,
+    )
   }
   lines.push('')
   lines.push('</details>')
@@ -178,14 +189,24 @@ function renderBody(report, codeReview, runUrl, ok, inlinePlan) {
   lines.push('')
   lines.push('| Check | Status | Explanation |')
   lines.push('| --- | --- | --- |')
-  lines.push(`| Tests | ${report.ok ? '✅ Passed' : '❌ Failed'} | ${report.totals.passed}/${report.totals.tests} tests passed |`)
-  lines.push(`| Budget | ${report.totals.budgetExceeded ? '⚠️ Warning' : '✅ Passed'} | ${formatUsd(report.totals.visionCostUsd)} spent${budgetCap > 0 ? ` of ${formatUsd(budgetCap)}` : ''} |`)
-  lines.push(`| Heal events | ${healCount === 0 ? '✅ Passed' : '⚠️ Warning'} | ${healCount} heal event${healCount === 1 ? '' : 's'} |`)
-  lines.push(`| Assertions | ${assertFails === 0 ? '✅ Passed' : '❌ Failed'} | ${assertFails === 0 ? assertCount : `${assertFails} failed`} assertion${assertCount === 1 ? '' : 's'} |`)
+  lines.push(
+    `| Tests | ${report.ok ? '✅ Passed' : '❌ Failed'} | ${report.totals.passed}/${report.totals.tests} tests passed |`,
+  )
+  lines.push(
+    `| Budget | ${report.totals.budgetExceeded ? '⚠️ Warning' : '✅ Passed'} | ${formatUsd(report.totals.visionCostUsd)} spent${budgetCap > 0 ? ` of ${formatUsd(budgetCap)}` : ''} |`,
+  )
+  lines.push(
+    `| Heal events | ${healCount === 0 ? '✅ Passed' : '⚠️ Warning'} | ${healCount} heal event${healCount === 1 ? '' : 's'} |`,
+  )
+  lines.push(
+    `| Assertions | ${assertFails === 0 ? '✅ Passed' : '❌ Failed'} | ${assertFails === 0 ? assertCount : `${assertFails} failed`} assertion${assertCount === 1 ? '' : 's'} |`,
+  )
   lines.push(`| OpenRouter key | ✅ Passed | \`OPENROUTER_API_KEY\` configured |`)
   if (codeReview && !codeReview.skipped) {
     const codeStatus = codeReview.ok ? '✅ Passed' : '❌ Failed'
-    lines.push(`| Code review | ${codeStatus} | ${codeReview.findings.length} findings (${codeReview.model}) |`)
+    lines.push(
+      `| Code review | ${codeStatus} | ${codeReview.findings.length} findings (${codeReview.model}) |`,
+    )
   } else {
     lines.push(`| Code review | ⚪ Skipped | ${codeReview?.summary ?? 'no report'} |`)
   }
@@ -218,10 +239,28 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
   lines.push('<details>')
   lines.push('<summary>🧠 Code review</summary>')
   lines.push('')
-  lines.push(`**Verdict:** ${codeReview.verdict} · ${codeReview.model} · ${codeReview.tokens}tok ${formatUsd(codeReview.visionCostUsd)}`)
+  lines.push(
+    `**Verdict:** ${codeReview.verdict} · ${codeReview.model} · ${codeReview.tokens}tok ${formatUsd(codeReview.visionCostUsd)}`,
+  )
+  // U7 triage record — Jev annotate/route signals, never the gate.
+  if (codeReview.triage) {
+    const t = codeReview.triage
+    if (t.unadjudicated === true) {
+      lines.push(` · 🧭 triage unadjudicated — Jev unavailable`)
+    } else {
+      lines.push(
+        ` · 🧭 triage: risk ${t.risk ?? '?'}/5` +
+          `${typeof t.needsDeepReview === 'number' ? ` · deep-review ${t.needsDeepReview.toFixed(2)}` : ''}` +
+          `${t.topRiskArea !== undefined ? ` · top area \`${cell(t.topRiskArea)}\`` : ''}` +
+          ` (${cell(t.mode)})`,
+      )
+    }
+  }
   if (Array.isArray(codeReview.probes) && codeReview.probes.length > 0) {
     const reproduced = codeReview.probes.filter((p) => p.outcome === 'reproduced').length
-    lines.push(` · 🧪 ${codeReview.probes.length} probe${codeReview.probes.length === 1 ? '' : 's'} run, ${reproduced} reproduced`)
+    lines.push(
+      ` · 🧪 ${codeReview.probes.length} probe${codeReview.probes.length === 1 ? '' : 's'} run, ${reproduced} reproduced`,
+    )
   }
   if (typeof codeReview.probeLaneSkipped === 'string') {
     lines.push(` · 🧪 probe lane skipped — ${cell(codeReview.probeLaneSkipped)}`)
@@ -230,9 +269,15 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
   lines.push(codeReview.summary)
   lines.push('')
   if (codeReview.findings.length > 0) {
-    const evidenceIcon = { exercised: '✅', corroborated: '🔴', not_exercised: '⚪', inconclusive: '❔', reproduced: '🧪' }
-    lines.push('| File | Severity | Category | Evidence | Finding |')
-    lines.push('| --- | --- | --- | --- | --- |')
+    const evidenceIcon = {
+      exercised: '✅',
+      corroborated: '🔴',
+      not_exercised: '⚪',
+      inconclusive: '❔',
+      reproduced: '🧪',
+    }
+    lines.push('| File | Severity | p | Category | Evidence | Finding |')
+    lines.push('| --- | --- | --- | --- | --- | --- |')
     // Findings/evidence strings are model- and probe-emitted — sanitize
     // for the markdown table and bound the section so an oversized report
     // can't push the body past GitHub's 65536-char comment limit.
@@ -241,16 +286,24 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
       const ev = f.evidence
         ? `${evidenceIcon[f.evidence.status] ?? '❔'} ${cell(f.evidence.detail)}`
         : '—'
-      lines.push(`| \`${cell(f.file)}\` | ${cell(f.severity)} | ${cell(f.category ?? '—')} | ${ev} | ${cell(f.message)} |`)
+      // U8 — Jev P(true positive); unadjudicated findings render '—'.
+      const p = typeof f.p === 'number' ? f.p.toFixed(2) : '—'
+      lines.push(
+        `| \`${cell(f.file)}\` | ${cell(f.severity)} | ${p} | ${cell(f.category ?? '—')} | ${ev} | ${cell(f.message)} |`,
+      )
     }
     if (codeReview.findings.length > MAX_FINDING_ROWS) {
-      lines.push(`| … | — | — | — | ${codeReview.findings.length - MAX_FINDING_ROWS} more findings in \`code-review.json\` |`)
+      lines.push(
+        `| … | — | — | — | — | ${codeReview.findings.length - MAX_FINDING_ROWS} more findings in \`code-review.json\` |`,
+      )
     }
     lines.push('')
     // Inline-comment cap note — dedup'd fresh findings the
     // review.maxComments budget didn't post (TCA max_comments).
     if (inlinePlan !== undefined && inlinePlan.dropped > 0) {
-      lines.push(`*+${inlinePlan.dropped} inline-eligible finding(s) not posted — \`review.maxComments\` cap ${inlinePlan.cap}.*`)
+      lines.push(
+        `*+${inlinePlan.dropped} inline-eligible finding(s) not posted — \`review.maxComments\` cap ${inlinePlan.cap}.*`,
+      )
       lines.push('')
     }
     // Secrets-lane audit line — adjudicated/suppressed counts, never literals.
@@ -270,6 +323,25 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
       lines.push('')
     }
   }
+  // U8 adjudication audit — outside the findings guard so suppressed-
+  // only reviews still show what Jev removed. p values live on the
+  // findings table and in code-review.json records.
+  if (codeReview.findingAdjudication && Array.isArray(codeReview.findingAdjudication.records)) {
+    const fa = codeReview.findingAdjudication
+    if (fa.unadjudicated === true) {
+      lines.push('*🧮 adjudication: unadjudicated — Jev unavailable, nothing suppressed.*')
+    } else {
+      const suppressed = fa.records.filter((r) => r.suppressed).length
+      const unadj = fa.records.filter((r) => !r.adjudicated).length
+      lines.push(
+        `*🧮 adjudication: ${fa.records.length} finding(s) scored` +
+          `${suppressed > 0 ? `, ${suppressed} suppressed (nit/q)` : ''}` +
+          `${unadj > 0 ? `, ${unadj} unadjudicated` : ''}` +
+          `${fa.overflow > 0 ? `, +${fa.overflow} over cap` : ''}.*`,
+      )
+    }
+    lines.push('')
+  }
   lines.push('</details>')
   lines.push('')
 }
@@ -283,9 +355,13 @@ function renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan) {
   lines.push(`## argus-reviewer ${ok ? '✅ PASS' : '❌ FAIL'}`)
   lines.push('')
   if (!codeReview) {
-    lines.push('**Summary:** code-review only (run lane disabled) — no `code-review.json` found. The review step crashed or produced no report; the commit status fails closed — check the action logs before merging.')
+    lines.push(
+      '**Summary:** code-review only (run lane disabled) — no `code-review.json` found. The review step crashed or produced no report; the commit status fails closed — check the action logs before merging.',
+    )
   } else if (codeReview.skipped) {
-    lines.push(`**Summary:** code-review only (run lane disabled) — review skipped: ${cell(codeReview.summary)}`)
+    lines.push(
+      `**Summary:** code-review only (run lane disabled) — review skipped: ${cell(codeReview.summary)}`,
+    )
   } else {
     lines.push(
       `**Summary:** code review only (run lane disabled) · verdict **${codeReview.verdict}** · ` +
@@ -302,9 +378,13 @@ function renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan) {
   lines.push('| OpenRouter key | ✅ Passed | `OPENROUTER_API_KEY` configured |')
   if (codeReview && !codeReview.skipped) {
     const codeStatus = codeReview.ok ? '✅ Passed' : '❌ Failed'
-    lines.push(`| Code review | ${codeStatus} | ${codeReview.findings.length} findings (${codeReview.model}) |`)
+    lines.push(
+      `| Code review | ${codeStatus} | ${codeReview.findings.length} findings (${codeReview.model}) |`,
+    )
   } else {
-    lines.push(`| Code review | ${codeReview ? '⚪ Skipped' : '❌ Failed'} | ${cell(codeReview?.summary ?? 'no report')} |`)
+    lines.push(
+      `| Code review | ${codeReview ? '⚪ Skipped' : '❌ Failed'} | ${cell(codeReview?.summary ?? 'no report')} |`,
+    )
   }
   lines.push('')
   lines.push('</details>')
@@ -326,58 +406,6 @@ function renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan) {
   return lines.join('\n')
 }
 
-async function main() {
-  const pr = context.payload && context.payload.pull_request
-  const owner = context.repo.owner
-  const repo = context.repo.repo
-  const hasKey = !!process.env.OPENROUTER_API_KEY
-  const workDir = process.env.VISION_E2E_WORKING_DIR || ''
-  const reportDir = path.resolve(
-    process.env.GITHUB_WORKSPACE,
-    workDir,
-    process.env.ARGUS_REPORT_DIR || 'argus-reviewer-report',
-  )
-  const runUrl = `${process.env.GITHUB_SERVER_URL}/${owner}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`
-
-  let report
-  let codeReview
-  if (hasKey) {
-    try {
-      const raw = fs.readFileSync(path.join(reportDir, 'run.json'), 'utf8')
-      report = JSON.parse(raw)
-    } catch {
-      report = undefined
-    }
-    try {
-      const raw = fs.readFileSync(path.join(reportDir, 'code-review.json'), 'utf8')
-      codeReview = JSON.parse(raw)
-    } catch {
-      codeReview = undefined
-    }
-  }
-
-  // Missing code-review.json after a continue-on-error step means the review
-  // crashed, not that it skipped — an intentional skip writes ok+skipped.
-  // Fail closed rather than reporting it as a clean skip.
-  const codeReviewOk = codeReview != null && codeReview.ok === true
-  // run: 'false' consumers have no run.json by design — the conclusion then
-  // reflects the code-review verdict alone.
-  const runDisabled = process.env.ARGUS_RUN_DISABLED === '1'
-  const ok = (runDisabled || report?.ok === true) && codeReviewOk
-  const conclusion = !hasKey ? 'neutral' : ok ? 'success' : 'failure'
-  const inlinePlan = hasKey ? await planInlineComments(pr, codeReview) : undefined
-  const body = !hasKey
-    ? renderMissingKeyBody()
-    : runDisabled
-      ? renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan)
-      : report === undefined
-        ? renderNoReportBody(reportDir, runUrl)
-        : renderBody(report, codeReview, runUrl, ok, inlinePlan)
-
-// Eligibility + dedup for inline comments, computed before the sticky
-// body renders so the "+N not posted" note counts the *fresh* set — the
-// cap is applied to fresh, not to raw findings (already-posted comments
-// must not inflate the dropped count).
 async function planInlineComments(pr, codeReview) {
   if (!pr || !codeReview || codeReview.skipped || !codeReview.findings) return undefined
   // Must match the severity vocabulary emitted by the code-review schema
@@ -454,6 +482,58 @@ async function postInlineComments(pr, plan) {
   }
 }
 
+async function main() {
+  const pr = context.payload && context.payload.pull_request
+  const owner = context.repo.owner
+  const repo = context.repo.repo
+  const hasKey = !!process.env.OPENROUTER_API_KEY
+  const workDir = process.env.VISION_E2E_WORKING_DIR || ''
+  const reportDir = path.resolve(
+    process.env.GITHUB_WORKSPACE,
+    workDir,
+    process.env.ARGUS_REPORT_DIR || 'argus-reviewer-report',
+  )
+  const runUrl = `${process.env.GITHUB_SERVER_URL}/${owner}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`
+
+  let report
+  let codeReview
+  if (hasKey) {
+    try {
+      const raw = fs.readFileSync(path.join(reportDir, 'run.json'), 'utf8')
+      report = JSON.parse(raw)
+    } catch {
+      report = undefined
+    }
+    try {
+      const raw = fs.readFileSync(path.join(reportDir, 'code-review.json'), 'utf8')
+      codeReview = JSON.parse(raw)
+    } catch {
+      codeReview = undefined
+    }
+  }
+
+  // Missing code-review.json after a continue-on-error step means the review
+  // crashed, not that it skipped — an intentional skip writes ok+skipped.
+  // Fail closed rather than reporting it as a clean skip.
+  const codeReviewOk = codeReview != null && codeReview.ok === true
+  // run: 'false' consumers have no run.json by design — the conclusion then
+  // reflects the code-review verdict alone.
+  const runDisabled = process.env.ARGUS_RUN_DISABLED === '1'
+  const ok = (runDisabled || report?.ok === true) && codeReviewOk
+  const conclusion = !hasKey ? 'neutral' : ok ? 'success' : 'failure'
+  const inlinePlan = hasKey ? await planInlineComments(pr, codeReview) : undefined
+  const body = !hasKey
+    ? renderMissingKeyBody()
+    : runDisabled
+      ? renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan)
+      : report === undefined
+        ? renderNoReportBody(reportDir, runUrl)
+        : renderBody(report, codeReview, runUrl, ok, inlinePlan)
+
+  // Eligibility + dedup for inline comments, computed before the sticky
+  // body renders so the "+N not posted" note counts the *fresh* set — the
+  // cap is applied to fresh, not to raw findings (already-posted comments
+  // must not inflate the dropped count).
   if (pr) {
     const { data: comments } = await github.rest.issues.listComments({
       owner,

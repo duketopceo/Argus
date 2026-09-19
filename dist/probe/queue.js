@@ -7,14 +7,40 @@ import { isTestFile } from '../evidence/link.js';
 import { buildProbeMessages, parseProbe, probeImportsSafe, PROBE_SCHEMA, } from './author.js';
 import { detectHarness } from './harness.js';
 import { checkSandboxPaths, dockerAvailable, resolveSandboxImage, runProbeInSandbox, SANDBOX_OUTPUT_CAP, SCRATCH_DIR_NAME, stripControlChars, sandboxLimits, } from '../executor/sandbox.js';
+/** U9 — below this confidence the triage area signal is ignored. */
+export const MIN_AREA_CONFIDENCE = 0.5;
+/**
+ * U9 triage-informed ordering: a finding's file path "hits" the flagged
+ * risk area when a path segment starts with the area token —
+ * `src/auth/session.ts` and `billingAddress.ts` hit auth/billing, while
+ * `metadata.ts` does not hit data. Advisory only.
+ */
+function fileHitsArea(file, area) {
+    const token = area.toLowerCase();
+    return file
+        .toLowerCase()
+        .split(/[/._-]+/)
+        .some((segment) => segment === token || segment.startsWith(token));
+}
 /** Pure selection: not_exercised findings at blocking severities, capped. */
-export function selectProbeTargets(findings, severityGates, maxProbes) {
-    return findings
-        .filter((f) => f.evidence.status === 'not_exercised' &&
+export function selectProbeTargets(findings, severityGates, maxProbes, triageArea) {
+    const eligible = findings.filter((f) => f.evidence.status === 'not_exercised' &&
         f.file !== undefined &&
         isSafeRepoPath(f.file) &&
-        severityGates.includes(f.severity ?? ''))
-        .slice(0, Math.max(0, maxProbes));
+        severityGates.includes(f.severity ?? ''));
+    // U9 — a confident triage top_risk_area reorders candidates so probes
+    // prefer the flagged subsystem. Stable sort keeps the original order
+    // within each group; probe count/gates/verdict are unchanged.
+    if (triageArea !== undefined &&
+        triageArea.confidence >= MIN_AREA_CONFIDENCE &&
+        triageArea.area !== '') {
+        eligible.sort((a, b) => {
+            const ah = fileHitsArea(a.file ?? '', triageArea.area) ? 0 : 1;
+            const bh = fileHitsArea(b.file ?? '', triageArea.area) ? 0 : 1;
+            return ah - bh;
+        });
+    }
+    return eligible.slice(0, Math.max(0, maxProbes));
 }
 /**
  * Repo-relative path gate for anything model- or index-derived that is read
@@ -145,14 +171,24 @@ async function authorProbe(o, target, harness, exemplarPath, indexPaths) {
         });
     }
     catch (e) {
-        return { probe: undefined, reason: `authoring call failed: ${e.message}`, costUsd: 0, tokens: 0 };
+        return {
+            probe: undefined,
+            reason: `authoring call failed: ${e.message}`,
+            costUsd: 0,
+            tokens: 0,
+        };
     }
     o.ledger.recordCall(response.cost);
     o.calls?.push(response.cost);
     const parsed = parseProbe(response.content);
     if (!parsed.ok) {
         // Failed parses still cost the call — carry the spend on the record.
-        return { probe: undefined, reason: parsed.reason, costUsd: response.cost.costUsd, tokens: response.cost.tokens };
+        return {
+            probe: undefined,
+            reason: parsed.reason,
+            costUsd: response.cost.costUsd,
+            tokens: response.cost.tokens,
+        };
     }
     return { probe: parsed.probe, costUsd: response.cost.costUsd, tokens: response.cost.tokens };
 }
@@ -203,7 +239,7 @@ export async function runProbeLane(findings, o) {
     // image/limits/allowForks would self-approve the gate. Forks always run
     // on DEFAULT_SANDBOX and approve only via trusted author or the label.
     const sandbox = o.meta?.isFork ? { ...DEFAULT_SANDBOX, enabled: true } : o.sandbox;
-    const targets = selectProbeTargets(findings, o.severityGates, sandbox.maxProbes);
+    const targets = selectProbeTargets(findings, o.severityGates, sandbox.maxProbes, o.triageArea);
     if (targets.length === 0)
         return { records: [] };
     if (!mayProbePr(o.meta, sandbox)) {

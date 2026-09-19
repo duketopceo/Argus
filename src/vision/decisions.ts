@@ -16,13 +16,7 @@ const MIN_SCORE_LEVELS = 2
 const MAX_SCORE_LEVELS = 10
 
 export type DecisionErrorKind =
-  | 'auth'
-  | 'validation'
-  | 'rate_limited'
-  | 'overloaded'
-  | 'server_error'
-  | 'timeout'
-  | 'unexpected'
+  'auth' | 'validation' | 'rate_limited' | 'overloaded' | 'server_error' | 'timeout' | 'unexpected'
 
 export class DecisionError extends Error {
   constructor(
@@ -78,6 +72,19 @@ export interface ScoreAnswer {
 
 export type DecisionAnswer = NoulAnswer | ChoiceAnswer | ScoreAnswer
 
+/** Type guards over the answer union — one `in` check per lane otherwise. */
+export const isNoulAnswer = (a: DecisionAnswer): a is NoulAnswer => 'noul' in a
+export const isChoiceAnswer = (a: DecisionAnswer): a is ChoiceAnswer => 'choice' in a
+export const isScoreAnswer = (a: DecisionAnswer): a is ScoreAnswer => 'score' in a
+
+/** Short error label for lane debug lines: DecisionError kind, else message. */
+export function describeDecisionError(e: unknown): string {
+  return e instanceof DecisionError ? e.kind : (e as Error).message
+}
+
+/** Shared per-call batch cap for the Jev lanes (secrets, findings, triage). */
+export const MAX_CANDIDATES = 50
+
 export interface DecisionClientOptions {
   apiKey: string
   fetch?: typeof fetch
@@ -127,11 +134,7 @@ function validateQuestions(questions: Record<string, DecisionQuestion>): void {
         )
       }
     } else if (q.type !== 'noul') {
-      throw new DecisionError(
-        'validation',
-        `decide: question "${id}" has unknown type`,
-        false,
-      )
+      throw new DecisionError('validation', `decide: question "${id}" has unknown type`, false)
     }
   }
 }
@@ -140,31 +143,39 @@ function validateAnswers(
   questions: Record<string, DecisionQuestion>,
   answers: Record<string, unknown>,
 ): Record<string, DecisionAnswer> {
+  // Per-question salvage: a missing or malformed answer is skipped, not
+  // fatal — every caller degrades open per item (undefined answer →
+  // unadjudicated), so one bad f_i must not void the whole batch.
   const out: Record<string, DecisionAnswer> = {}
   for (const [id, q] of Object.entries(questions)) {
     const a = answers[id]
-    if (!isRecord(a)) {
-      throw new DecisionError(
-        'unexpected',
-        `decide: missing or malformed answer for question "${id}"`,
-        false,
-      )
-    }
+    if (!isRecord(a)) continue
     if (q.type === 'noul') {
-      if (typeof a.noul !== 'number' || a.noul < 0 || a.noul > 1) {
-        throw new DecisionError('unexpected', `decide: bad noul answer for "${id}"`, false)
+      if (typeof a.noul === 'number' && Number.isFinite(a.noul) && a.noul >= 0 && a.noul <= 1) {
+        out[id] = { noul: a.noul }
       }
-      out[id] = { noul: a.noul }
     } else if (q.type === 'choice') {
-      if (typeof a.choice !== 'string' || !Object.hasOwn(q.criteria, a.choice)) {
-        throw new DecisionError('unexpected', `decide: bad choice answer for "${id}"`, false)
+      const confOk =
+        a.confidence === undefined ||
+        (typeof a.confidence === 'number' &&
+          Number.isFinite(a.confidence) &&
+          a.confidence >= 0 &&
+          a.confidence <= 1)
+      if (typeof a.choice === 'string' && Object.hasOwn(q.criteria, a.choice) && confOk) {
+        out[id] = a as unknown as ChoiceAnswer
       }
-      out[id] = a as unknown as ChoiceAnswer
     } else {
-      if (typeof a.score !== 'number') {
-        throw new DecisionError('unexpected', `decide: bad score answer for "${id}"`, false)
+      // Score answers must land inside the rubric — an out-of-range
+      // score could otherwise satisfy a low-risk routing predicate.
+      const maxScore = Array.isArray(q.criteria) ? q.criteria.length : 0
+      if (
+        typeof a.score === 'number' &&
+        Number.isFinite(a.score) &&
+        a.score >= 1 &&
+        a.score <= maxScore
+      ) {
+        out[id] = a as unknown as ScoreAnswer
       }
-      out[id] = a as unknown as ScoreAnswer
     }
   }
   return out
@@ -294,7 +305,11 @@ export class DecisionClient {
         }
         const err = e as Error
         if (err.name === 'AbortError') {
-          lastErr = new DecisionError('timeout', `decide: timed out after ${this._timeoutMs}ms`, true)
+          lastErr = new DecisionError(
+            'timeout',
+            `decide: timed out after ${this._timeoutMs}ms`,
+            true,
+          )
           if (attempt === 0) {
             debug('decisions', 'timeout — retrying once')
             continue
