@@ -1,6 +1,10 @@
 import { debug } from '../debug.js'
-import { DecisionClient, DecisionError } from '../vision/decisions.js'
-import { MAX_CANDIDATES } from './secrets.js'
+import {
+  DecisionClient,
+  describeDecisionError,
+  isNoulAnswer,
+  MAX_CANDIDATES,
+} from '../vision/decisions.js'
 
 /**
  * U8 finding adjudication — one batched Jev decide() scores each
@@ -36,14 +40,20 @@ export interface FindingAdjudicationRecord {
   suppressed?: boolean
 }
 
-export interface FindingAdjudicationResult<T extends AdjudicableFinding> {
-  /** Surviving findings — adjudicated ones carry `p`. */
-  findings: (T & { p?: number })[]
+/** The audit half of the result — what report.findingAdjudication stores. */
+export interface FindingAdjudicationAudit {
   records: FindingAdjudicationRecord[]
   /** Findings past MAX_CANDIDATES — unadjudicated, never suppressed. */
   overflow: number
   /** Whole-call failure — nothing adjudicated, nothing suppressed. */
   unadjudicated?: boolean
+}
+
+export interface FindingAdjudicationResult<
+  T extends AdjudicableFinding,
+> extends FindingAdjudicationAudit {
+  /** Surviving findings — adjudicated ones carry `p`. */
+  findings: (T & { p?: number })[]
 }
 
 /** Suppression is scoped to severities that never drive the verdict. */
@@ -72,19 +82,31 @@ export async function adjudicateFindings<T extends AdjudicableFinding>(opts: {
         questions[`f_${i}`] = {
           type: 'noul',
           instructions:
-            `state[${i}]: is this code-review finding a real problem the PR author ` +
-            'should act on? Answer no for speculative style nits, issues already ' +
-            'handled by guards visible in the patch, and findings that merely ' +
-            'restate what the code does.',
+            `state.findings[${i}]: is this code-review finding a real problem the ` +
+            'PR author should act on? Its file patch is under state.patches. ' +
+            'Answer no for speculative style nits, issues already handled by ' +
+            'guards visible in the patch, and findings that merely restate ' +
+            'what the code does.',
         }
       })
-      const state = capped.map((f) => ({
-        file: f.file,
-        line: f.line,
-        severity: f.severity,
-        message: f.message,
-        patch: opts.patchByFile?.get(f.file)?.slice(0, MAX_PATCH_EXCERPT),
-      }))
+      // Each finding references its patch by filename — sending patches
+      // once keyed by file avoids repeating a 4KB excerpt per finding
+      // on the same file.
+      const patches: Record<string, string> = {}
+      for (const f of capped) {
+        if (patches[f.file] !== undefined) continue
+        const p = opts.patchByFile?.get(f.file)
+        if (p !== undefined) patches[f.file] = p.slice(0, MAX_PATCH_EXCERPT)
+      }
+      const state = {
+        findings: capped.map((f) => ({
+          file: f.file,
+          line: f.line,
+          severity: f.severity,
+          message: f.message,
+        })),
+        patches,
+      }
       const { answers } = await opts.client.decide({
         ...(opts.model !== undefined ? { model: opts.model } : {}),
         state,
@@ -92,14 +114,11 @@ export async function adjudicateFindings<T extends AdjudicableFinding>(opts: {
       })
       capped.forEach((_f, i) => {
         const a = answers[`f_${i}`]
-        pByIdx[i] = a !== undefined && 'noul' in a ? a.noul : undefined
+        pByIdx[i] = a !== undefined && isNoulAnswer(a) ? a.noul : undefined
       })
     } catch (e) {
       adjudicationFailed = true
-      debug(
-        'adjudicate',
-        `decision call failed — no suppression: ${e instanceof DecisionError ? e.kind : (e as Error).message}`,
-      )
+      debug('adjudicate', `decision call failed — no suppression: ${describeDecisionError(e)}`)
     }
   }
 

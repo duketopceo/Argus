@@ -10,10 +10,28 @@
  * consumer; they never reach the verdict path.
  */
 import { debug } from '../debug.js'
-import { DecisionError, type DecisionClient, type DecisionQuestion } from '../vision/decisions.js'
+import {
+  describeDecisionError,
+  isChoiceAnswer,
+  isNoulAnswer,
+  isScoreAnswer,
+  JEV_DEFAULT_MODEL,
+  type DecisionClient,
+  type DecisionQuestion,
+} from '../vision/decisions.js'
 
-export const TRIAGE_AREAS = ['auth', 'billing', 'data', 'ops', 'none'] as const
-export type TriageArea = (typeof TRIAGE_AREAS)[number]
+// The choice criteria own the vocabulary — TRIAGE_AREAS derives from
+// it so an offered option can never drift out of the record type.
+const RISK_AREA_CRITERIA = {
+  auth: 'authentication, authorization, tokens, sessions, permissions',
+  billing: 'payments, invoices, usage metering, cost accounting',
+  data: 'persistence, migrations, integrity, serialization, caching',
+  ops: 'CI, deploy, infra, configuration, tooling, observability',
+  none: 'no meaningful risk area in this diff',
+} as const
+
+export const TRIAGE_AREAS = Object.keys(RISK_AREA_CRITERIA) as TriageArea[]
+export type TriageArea = keyof typeof RISK_AREA_CRITERIA
 
 export interface TriageRecord {
   mode: 'annotate' | 'route'
@@ -26,7 +44,7 @@ export interface TriageRecord {
   topRiskAreaConfidence?: number
   /** decide() failed or answers failed validation — degrade-open marker. */
   unadjudicated?: boolean
-  /** Decision model that produced the record (empty when none ran). */
+  /** Decision model that produced (or attempted) the record. */
   model: string
 }
 
@@ -34,11 +52,13 @@ export interface TriageRecord {
 const MAX_DIFF_STATE_CHARS = 12_000
 const MAX_TITLE_CHARS = 300
 const MAX_BODY_CHARS = 2_000
+const MAX_FILE_LIST = 100
 
 export interface TriageState {
   title: string
   body: string
   files: string[]
+  totalFiles: number
   diffExcerpt: string
 }
 
@@ -50,7 +70,8 @@ export function buildTriageState(opts: {
   let budget = MAX_DIFF_STATE_CHARS
   const excerpts: string[] = []
   for (const f of opts.files) {
-    if (f.patch === undefined || budget <= 0) continue
+    if (budget <= 0) break
+    if (f.patch === undefined) continue
     const take = f.patch.slice(0, budget)
     excerpts.push(take)
     budget -= take.length
@@ -58,21 +79,25 @@ export function buildTriageState(opts: {
   return {
     title: (opts.title ?? '').slice(0, MAX_TITLE_CHARS),
     body: (opts.body ?? '').slice(0, MAX_BODY_CHARS),
-    files: opts.files.map((f) => f.filename),
+    files: opts.files.slice(0, MAX_FILE_LIST).map((f) => f.filename),
+    totalFiles: opts.files.length,
     diffExcerpt: excerpts.join('\n\n'),
   }
 }
 
-export function buildTriageQuestions(): Record<string, DecisionQuestion> {
+/** Question IDs — one spelling for builder and reader. */
+const Q = { deep: 'needs_deep_review', risk: 'risk', area: 'top_risk_area' } as const
+
+function buildTriageQuestions(): Record<string, DecisionQuestion> {
   return {
-    needs_deep_review: {
+    [Q.deep]: {
       type: 'noul',
       instructions:
         'does this PR warrant careful review beyond a skim? yes for changes touching ' +
         'auth, money, data integrity, concurrency, secrets handling, public APIs, or ' +
         'irreversible ops; no for docs, comments, formatting, or metadata-only changes.',
     },
-    risk: {
+    [Q.risk]: {
       type: 'score',
       instructions: 'blast radius if this PR merges broken — pick the closest rubric level.',
       criteria: [
@@ -83,16 +108,10 @@ export function buildTriageQuestions(): Record<string, DecisionQuestion> {
         'severe — auth, billing, or data-loss surface',
       ],
     },
-    top_risk_area: {
+    [Q.area]: {
       type: 'choice',
       instructions: 'the single subsystem most likely to hide a defect in this diff.',
-      criteria: {
-        auth: 'authentication, authorization, tokens, sessions, permissions',
-        billing: 'payments, invoices, usage metering, cost accounting',
-        data: 'persistence, migrations, integrity, serialization, caching',
-        ops: 'CI, deploy, infra, configuration, tooling, observability',
-        none: 'no meaningful risk area in this diff',
-      },
+      criteria: RISK_AREA_CRITERIA,
     },
   }
 }
@@ -103,25 +122,25 @@ export async function triagePr(opts: {
   state: TriageState
   mode: 'annotate' | 'route'
 }): Promise<TriageRecord> {
-  const questions = buildTriageQuestions()
   try {
     const { answers, model } = await opts.client.decide({
       ...(opts.model !== undefined ? { model: opts.model } : {}),
       state: opts.state,
-      questions,
+      questions: buildTriageQuestions(),
     })
-    const deep = answers['needs_deep_review']
-    const risk = answers['risk']
-    const area = answers['top_risk_area']
+    const deep = answers[Q.deep]
+    const risk = answers[Q.risk]
+    const area = answers[Q.area]
     const rec: TriageRecord = { mode: opts.mode, model }
-    if (deep !== undefined && 'noul' in deep) rec.needsDeepReview = deep.noul
-    if (risk !== undefined && 'score' in risk) rec.risk = risk.score
-    if (area !== undefined && 'choice' in area) {
-      const c = area.choice as TriageArea
-      if (TRIAGE_AREAS.includes(c)) {
-        rec.topRiskArea = c
-        if (area.confidence !== undefined) rec.topRiskAreaConfidence = area.confidence
-      }
+    if (deep !== undefined && isNoulAnswer(deep)) rec.needsDeepReview = deep.noul
+    if (risk !== undefined && isScoreAnswer(risk)) rec.risk = risk.score
+    if (
+      area !== undefined &&
+      isChoiceAnswer(area) &&
+      TRIAGE_AREAS.includes(area.choice as TriageArea)
+    ) {
+      rec.topRiskArea = area.choice as TriageArea
+      if (area.confidence !== undefined) rec.topRiskAreaConfidence = area.confidence
     }
     // A call that answered none of the typed questions adjudicated nothing.
     if (
@@ -133,11 +152,8 @@ export async function triagePr(opts: {
     }
     return rec
   } catch (e) {
-    debug(
-      'triage',
-      `adjudication failed — degrading to annotate: ${e instanceof DecisionError ? e.kind : (e as Error).message}`,
-    )
-    return { mode: opts.mode, model: opts.model ?? '', unadjudicated: true }
+    debug('triage', `adjudication failed — degrading to annotate: ${describeDecisionError(e)}`)
+    return { mode: opts.mode, model: opts.model ?? JEV_DEFAULT_MODEL, unadjudicated: true }
   }
 }
 
@@ -173,4 +189,23 @@ export function routeModel(opts: {
     model: opts.configured,
     reason: `risk=${rec.risk}, needsDeepReview=${rec.needsDeepReview.toFixed(2)}`,
   }
+}
+
+/**
+ * U9 — the probe lane's advisory ordering signal. Present only when
+ * triage adjudicated an area with its confidence attached; the
+ * confidence floor itself is queue policy (MIN_AREA_CONFIDENCE).
+ */
+export function triageAreaSignal(
+  rec: TriageRecord | undefined,
+): { area: TriageArea; confidence: number } | undefined {
+  if (
+    rec === undefined ||
+    rec.unadjudicated === true ||
+    rec.topRiskArea === undefined ||
+    rec.topRiskAreaConfidence === undefined
+  ) {
+    return undefined
+  }
+  return { area: rec.topRiskArea, confidence: rec.topRiskAreaConfidence }
 }

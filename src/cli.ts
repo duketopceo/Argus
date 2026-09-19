@@ -37,8 +37,14 @@ import { resolveTrust } from './trust.js'
 import { linkFindings, type Evidence } from './evidence/link.js'
 import { DecisionClient } from './vision/decisions.js'
 import { materializeMergeBaseDiff, scanSecrets, type SecretsScanResult } from './review/secrets.js'
-import { buildTriageState, routeModel, triagePr, type TriageRecord } from './review/triage.js'
-import { adjudicateFindings, type FindingAdjudicationResult } from './review/adjudicate.js'
+import {
+  buildTriageState,
+  routeModel,
+  triageAreaSignal,
+  triagePr,
+  type TriageRecord,
+} from './review/triage.js'
+import { adjudicateFindings, type FindingAdjudicationAudit } from './review/adjudicate.js'
 import { runProbeLane, type ProbeRecord } from './probe/queue.js'
 import { A0_DEFAULT_TIMEOUT_MS, a0TaskPrompt, runA0Task } from './executor/a0.js'
 import { buildJournalEntry } from './journal/build.js'
@@ -862,7 +868,7 @@ interface CodeReviewReport {
   /** U7 triage record — Jev pre-review signals (annotate/route, never gates). */
   triage?: TriageRecord
   /** U8 adjudication audit — per-finding p + suppressed records. */
-  findingAdjudication?: Omit<FindingAdjudicationResult<never>, 'findings'>
+  findingAdjudication?: FindingAdjudicationAudit
   calls: CallCost[]
   visionCostUsd: number
   tokens: number
@@ -1236,54 +1242,71 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     let totalCost = 0
     let lastModel = model
 
-    // U7 triage lane — one batched Jev decide() before chunk review.
-    // Jev routes/annotates, never gates: the loop reviews every chunk
-    // regardless; 'route' only picks the model tier. Needs PR title/body
-    // for state, so when the lane is enabled prMeta resolves here rather
-    // than hiding its round-trip behind the model calls.
+    // Shared spend sink — chunk, synthesis, probe, and every decide()
+    // call funnel through here so the ledger/report never drift.
+    const recordSpend = (c: CallCost): void => {
+      ledger.recordCall(c)
+      allCalls.push(c)
+      totalTokens += c.tokens
+      totalCost += c.costUsd
+    }
+
     const apiKey = ctx.env.OPENROUTER_API_KEY
     const decisionClient =
       config.decisionModel !== undefined && apiKey !== undefined && apiKey !== ''
         ? new DecisionClient({
             apiKey,
             ...(trace !== undefined ? { trace } : {}),
-            onCall: (c) => {
-              const cost = {
+            onCall: (c) =>
+              recordSpend({
                 model: c.model,
                 provider: c.provider,
                 tokens: c.tokens,
                 costUsd: c.costUsd,
-                kind: 'decide' as const,
-              }
-              ledger.recordCall(cost)
-              allCalls.push(cost)
-              totalTokens += c.tokens
-              totalCost += c.costUsd
-            },
+                kind: 'decide',
+              }),
           })
         : undefined
 
+    // U7 triage lane — one batched Jev decide(). 'route' needs the
+    // signal before chunk review to pick the model tier, so it awaits
+    // here; 'annotate' (default) overlaps the decide() round-trip with
+    // the chunk loop and resolves before the probe lane below. Jev
+    // routes/annotates, never gates: every chunk is still reviewed.
     let reviewModel = model
     let triage: TriageRecord | undefined
-    if (config.review.triage !== 'off' && decisionClient !== undefined) {
-      const metaEarly = await prMetaPromise
-      triage = await triagePr({
-        client: decisionClient,
-        ...(config.decisionModel !== undefined ? { model: config.decisionModel } : {}),
-        state: buildTriageState({ title: metaEarly?.title, body: metaEarly?.body, files }),
-        mode: config.review.triage,
-      })
+    // Hoisted so the !== 'off' narrowing reaches the closure below.
+    const triageMode = config.review.triage
+    const triagePromise =
+      decisionClient !== undefined && triageMode !== 'off'
+        ? prMetaPromise
+            .then((metaEarly) =>
+              triagePr({
+                client: decisionClient,
+                ...(config.decisionModel !== undefined ? { model: config.decisionModel } : {}),
+                state: buildTriageState({
+                  title: metaEarly?.title,
+                  body: metaEarly?.body,
+                  files,
+                }),
+                mode: triageMode,
+              }),
+            )
+            .catch(() => undefined)
+        : undefined
+    const triageLine = (t: TriageRecord): string =>
+      `triage — risk ${t.risk ?? '?'}, deep-review ${t.needsDeepReview?.toFixed(2) ?? '?'}, ` +
+      `area ${t.topRiskArea ?? '?'}` +
+      (t.unadjudicated === true ? ' (unadjudicated)' : '')
+    if (config.review.triage === 'route' && triagePromise !== undefined) {
+      triage = await triagePromise
       const routed = routeModel({
         record: triage,
         configured: model,
         lowRiskModel: config.review.lowRiskModel,
       })
       reviewModel = routed.model
-      stage(
-        `triage — risk ${triage.risk ?? '?'}, deep-review ${triage.needsDeepReview?.toFixed(2) ?? '?'}, area ${triage.topRiskArea ?? '?'}` +
-          (triage.unadjudicated === true ? ' (unadjudicated)' : '') +
-          (reviewModel !== model ? ` — routed to ${reviewModel}` : ''),
-      )
+      if (triage !== undefined) stage(`${triageLine(triage)} — ${routed.reason}`)
     }
     stage(`reviewing ${chunks.length} chunk(s) — model ${reviewModel}`)
 
@@ -1299,10 +1322,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
         kind: 'code',
         provider: config.provider,
       })
-      ledger.recordCall(response.cost)
-      allCalls.push(response.cost)
-      totalTokens += response.cost.tokens
-      totalCost += response.cost.costUsd
+      recordSpend(response.cost)
       lastModel = response.model
       const parsed = parseCodeReview(response.content)
       allFindings.push(...parsed.findings)
@@ -1334,10 +1354,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
           kind: 'code',
           provider: config.provider,
         })
-        ledger.recordCall(synthResponse.cost)
-        allCalls.push(synthResponse.cost)
-        totalTokens += synthResponse.cost.tokens
-        totalCost += synthResponse.cost.costUsd
+        recordSpend(synthResponse.cost)
         lastModel = synthResponse.model
         const parsed = parseCodeReview(synthResponse.content)
         summary = parsed.summary
@@ -1371,12 +1388,19 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       if (verdict !== 'needs_changes') verdict = 'needs_changes'
     }
 
+    // Annotate-mode triage overlapped the chunk loop — resolve it here,
+    // before the probe lane and report read the record.
+    if (triage === undefined && triagePromise !== undefined) {
+      triage = await triagePromise
+      if (triage !== undefined) stage(triageLine(triage))
+    }
+
     // U8 finding adjudication — one batched Jev noul per synthesized
     // finding. Runs on the model findings only (secrets findings carry
     // their own adjudication) and BEFORE the secrets union below so a
     // suppressed nit can never reach a secret record. bug/risk are
     // never suppressed, so the verdict computed above is unaffected.
-    let findingAdjudication: Omit<FindingAdjudicationResult<never>, 'findings'> | undefined
+    let findingAdjudication: FindingAdjudicationAudit | undefined
     if (decisionClient !== undefined && finalFindings.length > 0) {
       const adj = await adjudicateFindings({
         findings: finalFindings,
@@ -1502,24 +1526,16 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
           meta: prMeta,
           token: ghToken,
           client,
+          // Probe authoring deliberately stays on the configured model —
+          // triage routing is a review-depth decision, not an authoring one.
           model,
           provider: config.provider,
           ledger,
           budgetUsd: budget,
           severityGates: blockSeverities,
-          // U9 — advisory only: a confident triage area reorders probe
-          // candidates toward the flagged subsystem; absent/unadjudicated
-          // triage leaves the original order.
-          ...(triage?.topRiskArea !== undefined &&
-          triage.topRiskAreaConfidence !== undefined &&
-          triage.unadjudicated !== true
-            ? {
-                triageArea: {
-                  area: triage.topRiskArea,
-                  confidence: triage.topRiskAreaConfidence,
-                },
-              }
-            : {}),
+          // U9 — advisory only: a confident adjudicated triage area
+          // reorders probe candidates toward the flagged subsystem.
+          triageArea: triageAreaSignal(triage),
           index,
           calls: allCalls,
           exec: deps.exec,

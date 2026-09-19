@@ -16,13 +16,7 @@ const MIN_SCORE_LEVELS = 2
 const MAX_SCORE_LEVELS = 10
 
 export type DecisionErrorKind =
-  | 'auth'
-  | 'validation'
-  | 'rate_limited'
-  | 'overloaded'
-  | 'server_error'
-  | 'timeout'
-  | 'unexpected'
+  'auth' | 'validation' | 'rate_limited' | 'overloaded' | 'server_error' | 'timeout' | 'unexpected'
 
 export class DecisionError extends Error {
   constructor(
@@ -78,6 +72,19 @@ export interface ScoreAnswer {
 
 export type DecisionAnswer = NoulAnswer | ChoiceAnswer | ScoreAnswer
 
+/** Type guards over the answer union — one `in` check per lane otherwise. */
+export const isNoulAnswer = (a: DecisionAnswer): a is NoulAnswer => 'noul' in a
+export const isChoiceAnswer = (a: DecisionAnswer): a is ChoiceAnswer => 'choice' in a
+export const isScoreAnswer = (a: DecisionAnswer): a is ScoreAnswer => 'score' in a
+
+/** Short error label for lane debug lines: DecisionError kind, else message. */
+export function describeDecisionError(e: unknown): string {
+  return e instanceof DecisionError ? e.kind : (e as Error).message
+}
+
+/** Shared per-call batch cap for the Jev lanes (secrets, findings, triage). */
+export const MAX_CANDIDATES = 50
+
 export interface DecisionClientOptions {
   apiKey: string
   fetch?: typeof fetch
@@ -127,11 +134,7 @@ function validateQuestions(questions: Record<string, DecisionQuestion>): void {
         )
       }
     } else if (q.type !== 'noul') {
-      throw new DecisionError(
-        'validation',
-        `decide: question "${id}" has unknown type`,
-        false,
-      )
+      throw new DecisionError('validation', `decide: question "${id}" has unknown type`, false)
     }
   }
 }
@@ -294,7 +297,11 @@ export class DecisionClient {
         }
         const err = e as Error
         if (err.name === 'AbortError') {
-          lastErr = new DecisionError('timeout', `decide: timed out after ${this._timeoutMs}ms`, true)
+          lastErr = new DecisionError(
+            'timeout',
+            `decide: timed out after ${this._timeoutMs}ms`,
+            true,
+          )
           if (attempt === 0) {
             debug('decisions', 'timeout — retrying once')
             continue

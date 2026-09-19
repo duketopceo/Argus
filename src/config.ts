@@ -260,6 +260,11 @@ function posInt(v: number | undefined, dflt: number): number {
   return v !== undefined && Number.isFinite(v) && v >= 1 ? Math.floor(v) : dflt
 }
 
+/** Probability config values (must be in [0,1]) fall back to their default. */
+function prob01(v: number | undefined, dflt: number): number {
+  return v !== undefined && Number.isFinite(v) && v >= 0 && v <= 1 ? v : dflt
+}
+
 /**
  * Which severities fail the review status. `review.severityGate` is the
  * consumer-facing alias over `severity` — 'risk' fails on bug|risk,
@@ -307,16 +312,9 @@ export function resolveConfig(input: ConfigInput = {}): Config {
   sandbox.pidsLimit = posInt(sandbox.pidsLimit, DEFAULT_SANDBOX.pidsLimit)
   const rawReview = typeof input.review === 'object' && input.review !== null ? input.review : {}
   const review = { ...defaults.review, ...rawReview }
-  // Threshold must be a probability — anything else (NaN, >1, negative)
-  // would silently suppress or flood the secrets lane.
-  if (
-    typeof review.secretsThreshold !== 'number' ||
-    !Number.isFinite(review.secretsThreshold) ||
-    review.secretsThreshold < 0 ||
-    review.secretsThreshold > 1
-  ) {
-    review.secretsThreshold = defaults.review.secretsThreshold
-  }
+  // Thresholds must be probabilities — anything else (NaN, >1,
+  // negative) would silently suppress or flood the Jev lanes.
+  review.secretsThreshold = prob01(review.secretsThreshold, defaults.review.secretsThreshold)
   review.maxComments =
     typeof review.maxComments === 'number' &&
     Number.isInteger(review.maxComments) &&
@@ -332,16 +330,7 @@ export function resolveConfig(input: ConfigInput = {}): Config {
   if (typeof review.lowRiskModel !== 'string' || review.lowRiskModel === '') {
     review.lowRiskModel = undefined
   }
-  // Same probability contract as secretsThreshold — a non-[0,1] value
-  // would suppress unpredictably, so it falls back to annotate-only.
-  if (
-    typeof review.findingThreshold !== 'number' ||
-    !Number.isFinite(review.findingThreshold) ||
-    review.findingThreshold < 0 ||
-    review.findingThreshold > 1
-  ) {
-    review.findingThreshold = defaults.review.findingThreshold
-  }
+  review.findingThreshold = prob01(review.findingThreshold, defaults.review.findingThreshold)
   const resolved: Config = { ...defaults, ...input, provider, sandbox, review }
   resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP)
   if (resolved.heal !== 'a0') resolved.heal = 'local'

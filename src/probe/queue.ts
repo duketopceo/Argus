@@ -10,6 +10,7 @@ import type { RepoIndex } from '../index/scan.js'
 import type { VisionClient } from '../engine/loop.js'
 import type { CallCost } from '../vision/cost.js'
 import type { Ledger } from '../vision/ledger.js'
+import type { TriageArea } from '../review/triage.js'
 import {
   buildProbeMessages,
   parseProbe,
@@ -98,7 +99,7 @@ export interface ProbeLaneOptions {
   severityGates: string[]
   index: RepoIndex | undefined
   /** U9 — triage top_risk_area; advisory reorder of probe candidates. */
-  triageArea?: { area: string; confidence: number } | undefined
+  triageArea?: { area: TriageArea; confidence: number } | undefined
   /** Report sink — authored probe CallCosts are pushed here for the report. */
   calls?: CallCost[] | undefined
   exec?: ExecFn | undefined
@@ -106,7 +107,7 @@ export interface ProbeLaneOptions {
 }
 
 /** U9 — below this confidence the triage area signal is ignored. */
-export const MIN_AREA_CONFIDENCE = 0.5
+const MIN_AREA_CONFIDENCE = 0.5
 
 /**
  * U9 triage-informed ordering: a finding's file path "hits" the flagged
@@ -114,12 +115,12 @@ export const MIN_AREA_CONFIDENCE = 0.5
  * `src/auth/session.ts` and `billingAddress.ts` hit auth/billing, while
  * `metadata.ts` does not hit data. Advisory only.
  */
-function fileHitsArea(file: string, area: string): boolean {
+function fileHitsArea(file: string, area: TriageArea): boolean {
   const token = area.toLowerCase()
   return file
     .toLowerCase()
     .split(/[/._-]+/)
-    .some((segment) => segment === token || segment.startsWith(token))
+    .some((segment) => segment.startsWith(token))
 }
 
 /** Pure selection: not_exercised findings at blocking severities, capped. */
@@ -127,7 +128,7 @@ export function selectProbeTargets(
   findings: LinkedFinding[],
   severityGates: string[],
   maxProbes: number,
-  triageArea?: { area: string; confidence: number },
+  triageArea?: { area: TriageArea; confidence: number },
 ): LinkedFinding[] {
   const eligible = findings.filter(
     (f) =>
@@ -139,16 +140,11 @@ export function selectProbeTargets(
   // U9 — a confident triage top_risk_area reorders candidates so probes
   // prefer the flagged subsystem. Stable sort keeps the original order
   // within each group; probe count/gates/verdict are unchanged.
-  if (
-    triageArea !== undefined &&
-    triageArea.confidence >= MIN_AREA_CONFIDENCE &&
-    triageArea.area !== ''
-  ) {
-    eligible.sort((a, b) => {
-      const ah = fileHitsArea(a.file ?? '', triageArea.area) ? 0 : 1
-      const bh = fileHitsArea(b.file ?? '', triageArea.area) ? 0 : 1
-      return ah - bh
-    })
+  if (triageArea !== undefined && triageArea.confidence >= MIN_AREA_CONFIDENCE) {
+    // Hit flags precomputed once — the comparator would re-derive them
+    // O(n log n) times otherwise.
+    const hit = new Map(eligible.map((f) => [f, fileHitsArea(f.file ?? '', triageArea.area)]))
+    eligible.sort((a, b) => Number(hit.get(b)) - Number(hit.get(a)))
   }
   return eligible.slice(0, Math.max(0, maxProbes))
 }
