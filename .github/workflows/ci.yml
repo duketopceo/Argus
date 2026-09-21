@@ -12,9 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      # engines floor is >=20.19.0 — test the floor and the current LTS.
+      # npm ci installs devDeps — electron@44 needs node >=22.12, so the dev
+      # toolchain floor is 22 (the published package's own >=20.19 floor is
+      # unaffected: consumers never install devDependencies).
       matrix:
-        node-version: ['20', '22']
+        node-version: ['22', '24']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
