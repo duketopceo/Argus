@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { realpathSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { resolveConfig } from '../../src/config.js'
@@ -282,7 +283,7 @@ describe('runProbeLane', () => {
   })
 
   it('upgrades to reproduced on fail-head ∧ clean-base (KTD6)', async () => {
-    const wt = { path: join(reportDir, 'probes-base') }
+    const wt = { path: join(realpathSync(reportDir), 'probes-base') }
     const { exec } = scriptedExec(
       {
         head: { code: 1, stdout: ' Test Files  1 failed\n Tests  1 failed', stderr: '' },
@@ -299,7 +300,7 @@ describe('runProbeLane', () => {
   })
 
   it('does NOT upgrade when the probe fails on base too (probe bug)', async () => {
-    const wt = { path: join(reportDir, 'probes-base') }
+    const wt = { path: join(realpathSync(reportDir), 'probes-base') }
     const { exec } = scriptedExec(
       {
         head: { code: 1, stdout: ' Test Files  1 failed\n Tests  1 failed', stderr: '' },
@@ -315,7 +316,7 @@ describe('runProbeLane', () => {
   })
 
   it('records clean when the probe passes on head', async () => {
-    const wt = { path: join(reportDir, 'probes-base') }
+    const wt = { path: join(realpathSync(reportDir), 'probes-base') }
     const { exec } = scriptedExec(
       { head: { code: 0, stdout: ' Test Files  1 passed', stderr: '' } },
       wt,
@@ -327,7 +328,7 @@ describe('runProbeLane', () => {
   })
 
   it('records error when the sandbox spawn rejects', async () => {
-    const wt = { path: join(reportDir, 'probes-base') }
+    const wt = { path: join(realpathSync(reportDir), 'probes-base') }
     const { exec } = scriptedExec({ headThrows: true }, wt)
     const fs = [finding('src/util.ts')]
     const res = await runProbeLane(fs, laneOpts(cwd, reportDir, index, exec))
@@ -336,7 +337,7 @@ describe('runProbeLane', () => {
   })
 
   it('respects maxProbes', async () => {
-    const wt = { path: join(reportDir, 'probes-base') }
+    const wt = { path: join(realpathSync(reportDir), 'probes-base') }
     const { exec } = scriptedExec({}, wt)
     const fs = [
       finding('src/util.ts'),
@@ -405,7 +406,7 @@ describe('runProbeLane', () => {
   })
 
   it('maps a not-collected probe instead of reproducing', async () => {
-    const wt = { path: join(reportDir, 'probes-base') }
+    const wt = { path: join(realpathSync(reportDir), 'probes-base') }
     const { exec } = scriptedExec(
       {
         head: { code: 1, stdout: '', stderr: 'No test files found, exiting with code 1' },
@@ -421,7 +422,7 @@ describe('runProbeLane', () => {
 
   it('stops authoring when the shared budget is spent', async () => {
     let authored = 0
-    const wt = { path: join(reportDir, 'probes-base') }
+    const wt = { path: join(realpathSync(reportDir), 'probes-base') }
     const { exec } = scriptedExec({}, wt)
     const ledger = new Ledger(0.0005)
     ledger.recordCall({ model: 'm', provider: 'p', tokens: 1, costUsd: 0.001, kind: 'code' })
@@ -443,7 +444,7 @@ describe('runProbeLane', () => {
   })
 
   it('records error when authoring returns an unsafe probe', async () => {
-    const wt = { path: join(reportDir, 'probes-base') }
+    const wt = { path: join(realpathSync(reportDir), 'probes-base') }
     const { exec } = scriptedExec({}, wt)
     const fs = [finding('src/util.ts')]
     const res = await runProbeLane(
@@ -477,7 +478,7 @@ describe('runProbeLane', () => {
   })
 
   it('continues to later targets when one authoring call throws', async () => {
-    const wt = { path: join(reportDir, 'probes-base') }
+    const wt = { path: join(realpathSync(reportDir), 'probes-base') }
     const { exec } = scriptedExec({}, wt)
     let calls = 0
     const fs = [finding('src/util.ts'), finding('src/util.ts')]
@@ -499,7 +500,7 @@ describe('runProbeLane', () => {
   })
 
   it('never overwrites an existing test file — exclusive create fails closed', async () => {
-    const wt = { path: join(reportDir, 'probes-base') }
+    const wt = { path: join(realpathSync(reportDir), 'probes-base') }
     const { exec } = scriptedExec({}, wt)
     // Pre-plant a file at the path the probe would take: exemplar is
     // tests/a.test.ts → probe writes tests/argus-probe-probe-x.test.ts.
