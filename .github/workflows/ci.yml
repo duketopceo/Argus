@@ -11,10 +11,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      # This repo's own CI checks out our own code — trusted by definition.
-      # Without this, push/workflow_dispatch events resolve untrusted
-      # (fail-closed) and tests exercising trusted-path lanes skip/fail.
-      ARGUS_TRUSTED: '1'
+      # Own-repo pushes/dispatches check out our own code — trusted by
+      # definition. Must NOT apply on pull_request: the override beats the
+      # event-based fork check, so a fork PR's code would run trusted lanes.
+      # On PR events this resolves empty → the trust gate decides per-payload.
+      ARGUS_TRUSTED: ${{ github.event_name != 'pull_request' && '1' || '' }}
     strategy:
       fail-fast: false
       # npm ci installs devDeps — electron@44 needs node >=22.12, so the dev
