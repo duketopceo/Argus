@@ -6,7 +6,7 @@ export const PROBE_LABEL = 'argus-probe';
  * FIRST_TIMER, MANNEQUIN, and NONE are not.
  */
 export function isTrustedAssociation(association) {
-    return (association === 'MEMBER' || association === 'OWNER' || association === 'COLLABORATOR');
+    return association === 'MEMBER' || association === 'OWNER' || association === 'COLLABORATOR';
 }
 const GH_API = 'https://api.github.com';
 const MAX_CHECK_RUN_PAGES = 5;
@@ -85,6 +85,8 @@ export async function fetchPrMeta(repo, pr, token, ctx) {
         labels,
         pushedAt: data.head?.repo?.pushed_at,
         labelApprovedAt,
+        title: typeof data.title === 'string' ? data.title : undefined,
+        body: typeof data.body === 'string' ? data.body : undefined,
     };
 }
 /**

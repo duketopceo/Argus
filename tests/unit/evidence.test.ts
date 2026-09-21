@@ -32,6 +32,8 @@ function run(name: string, conclusion: string | undefined, completed = true): Ch
 
 function prMeta(over: Partial<PrMeta> = {}): PrMeta {
   return {
+    title: undefined,
+    body: undefined,
     headSha: 'abc123',
     baseSha: 'def456',
     isFork: false,
@@ -132,7 +134,10 @@ describe('linkFindings', () => {
   })
 
   it('not_exercised: never downgraded by a passing suite', () => {
-    const out = linkFindings([{ file: 'src/b.ts' }], index, [run('test', 'success'), run('e2e', 'success')])
+    const out = linkFindings([{ file: 'src/b.ts' }], index, [
+      run('test', 'success'),
+      run('e2e', 'success'),
+    ])
     expect(out[0].evidence.status).toBe('not_exercised')
   })
 
@@ -223,7 +228,12 @@ describe('mayProbePr', () => {
       { labelApprovedAt: undefined },
       { labelApprovedAt: '2026-09-15T11:00:00Z', pushedAt: undefined },
     ]) {
-      const meta = prMeta({ isFork: true, authorAssociation: 'NONE', labels: ['argus-probe'], ...over })
+      const meta = prMeta({
+        isFork: true,
+        authorAssociation: 'NONE',
+        labels: ['argus-probe'],
+        ...over,
+      })
       expect(mayProbePr(meta, sandboxOn()), JSON.stringify(over)).toBe(false)
     }
   })
@@ -323,7 +333,15 @@ describe('fetchPrMeta', () => {
 
   it('fails closed when head.repo is null (deleted fork)', async () => {
     stubFetch([
-      ['/pulls/1', { head: { sha: 'h1', repo: null }, base: { sha: 'b' }, author_association: 'NONE', labels: [] }],
+      [
+        '/pulls/1',
+        {
+          head: { sha: 'h1', repo: null },
+          base: { sha: 'b' },
+          author_association: 'NONE',
+          labels: [],
+        },
+      ],
     ])
     const meta = await fetchPrMeta('o/r', '1', 'tok', ctx)
     expect(meta?.isFork).toBe(true)
