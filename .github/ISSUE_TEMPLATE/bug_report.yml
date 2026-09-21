@@ -1,0 +1,32 @@
+name: Bug report
+description: Something isn't working
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Expected vs. actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Steps, config (redact secrets), or a link to a failing run/PR.
+      placeholder: |
+        argus-reviewer run …
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: argus-reviewer version, Node version, runner (GitHub-hosted / self-hosted), OS.
+      placeholder: "argus-reviewer-e2e 0.1.3 · node 22 · self-hosted · linux"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Error text or report excerpt. Redact API keys and secrets.
+      render: text

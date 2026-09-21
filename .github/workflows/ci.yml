@@ -10,14 +10,22 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # npm ci installs devDeps — electron@44 needs node >=22.12, so the dev
+      # toolchain floor is 22 (the published package's own >=20.19 floor is
+      # unaffected: consumers never install devDependencies).
+      matrix:
+        node-version: ['22', '24']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
       - run: npx playwright install chromium
       - run: npm run typecheck
+      - run: npm run lint
       - run: npm run build
       - run: npm test
