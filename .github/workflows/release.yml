@@ -21,6 +21,9 @@ jobs:
     env:
       # Token path when set; falls back to OIDC trusted publishing when absent.
       NPM_PUBLISH_KEY: ${{ secrets.NPM_PUBLISH_KEY }}
+      # Tag pushes are 'push' events → untrusted without this; the job checks
+      # out our own tag, so trusted is honest and tests need the trusted path.
+      ARGUS_TRUSTED: '1'
     steps:
       - uses: actions/checkout@v4
 
