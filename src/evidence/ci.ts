@@ -11,9 +11,7 @@ export const PROBE_LABEL = 'argus-probe'
  * FIRST_TIMER, MANNEQUIN, and NONE are not.
  */
 export function isTrustedAssociation(association: string | undefined): boolean {
-  return (
-    association === 'MEMBER' || association === 'OWNER' || association === 'COLLABORATOR'
-  )
+  return association === 'MEMBER' || association === 'OWNER' || association === 'COLLABORATOR'
 }
 
 export interface CheckRun {
@@ -50,6 +48,9 @@ export interface PrMeta {
    * timeline fetch failed (the gate fails closed either way).
    */
   labelApprovedAt: string | undefined
+  /** PR title/body — triage state only (untrusted text; feeds Jev, never gates). */
+  title: string | undefined
+  body: string | undefined
 }
 
 const GH_API = 'https://api.github.com'
@@ -60,11 +61,7 @@ const MAX_CHECK_RUN_PAGES = 5
  * `ctx.err` on non-ok/timeout, undefined on failure. Reuse for any
  * api.github.com read (fetchPrFiles in cli.ts paginates over it).
  */
-export async function ghGet(
-  url: string,
-  token: string,
-  ctx: Ctx,
-): Promise<unknown | undefined> {
+export async function ghGet(url: string, token: string, ctx: Ctx): Promise<unknown | undefined> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 30_000)
   try {
@@ -111,6 +108,8 @@ export async function fetchPrMeta(
         base?: { sha?: string }
         author_association?: string
         labels?: ({ name?: string } | null)[] | null
+        title?: string
+        body?: string | null
       }
     | undefined
   if (data === undefined) return undefined
@@ -146,6 +145,8 @@ export async function fetchPrMeta(
     labels,
     pushedAt: data.head?.repo?.pushed_at,
     labelApprovedAt,
+    title: typeof data.title === 'string' ? data.title : undefined,
+    body: typeof data.body === 'string' ? data.body : undefined,
   }
 }
 
@@ -161,8 +162,7 @@ async function fetchMergeBase(
   ctx: Ctx,
 ): Promise<string | undefined> {
   const data = (await ghGet(`${GH_API}/repos/${repo}/compare/${base}...${head}`, token, ctx)) as
-    | { merge_base_commit?: { sha?: string } }
-    | undefined
+    { merge_base_commit?: { sha?: string } } | undefined
   return data?.merge_base_commit?.sha
 }
 
@@ -188,7 +188,7 @@ async function fetchLabelApprovedAt(
       `${GH_API}/repos/${repo}/issues/${pr}/events?per_page=100&page=${page}`,
       token,
       ctx,
-    )) as ({ event?: string; created_at?: string; label?: { name?: string } | null }[] | undefined)
+    )) as { event?: string; created_at?: string; label?: { name?: string } | null }[] | undefined
     if (!Array.isArray(events)) return undefined
     for (const e of events) {
       if (
@@ -221,7 +221,12 @@ export async function fetchCheckRuns(
     )) as { check_runs?: unknown[] } | undefined
     if (data === undefined || !Array.isArray(data.check_runs)) return undefined
     for (const r of data.check_runs) {
-      const cr = r as { name?: string; conclusion?: string | null; status?: string; html_url?: string }
+      const cr = r as {
+        name?: string
+        conclusion?: string | null
+        status?: string
+        html_url?: string
+      }
       if (typeof cr.name !== 'string') continue
       runs.push({
         name: cr.name,

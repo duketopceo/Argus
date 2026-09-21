@@ -198,14 +198,70 @@ framed as unverified; no extra config or model calls are needed.
 Findings are also **evidence-linked**: Argus reads the PR's check-runs and tags
 each finding with whether the repo's own CI exercised the implicated path —
 `exercised` (test-reachable + test checks passed), `corroborated` (test-reachable
-+ a test check failed on this head), `not exercised` (no test file reaches the
-path — severity is never downgraded), or `inconclusive` (no CI/index data).
+
+- a test check failed on this head), `not exercised` (no test file reaches the
+  path — severity is never downgraded), or `inconclusive` (no CI/index data).
+
+### Review policy
+
+The `review` config block tunes the GitHub-facing posture:
+
+```ts
+export default defineConfig({
+  review: {
+    // Cap on inline comments posted per run. Overflow stays in
+    // code-review.json and is summarized count-only in the sticky.
+    // The action's `max-comments` input overrides this.
+    maxComments: 20,
+    // Check-failure threshold: 'bug' fails on bugs only, 'risk' fails
+    // on bug|risk findings. Unset → the top-level `severity` list is
+    // authoritative (defaults to ['bug']).
+    severityGate: 'risk',
+    // Jev adjudication cutoff for the secrets lane: candidates scored
+    // below this probability are suppressed (still audited, masked).
+    secretsThreshold: 0.3,
+    // Pre-review triage: 'annotate' (default) records Jev risk/area
+    // signals only; 'route' may also swap in `lowRiskModel` on a clear
+    // low-risk signal; 'off' skips the lane. Coverage never shrinks —
+    // triage picks effort shape, not whether review happens.
+    triage: 'annotate',
+    // Cheap code model used only when triage is 'route' AND Jev reads
+    // the diff as low risk (risk<=2 + deep-review<0.5, backed by real
+    // diff evidence). Unset → the configured model always reviews.
+    lowRiskModel: 'deepseek/deepseek-v4.1-flash',
+    // Required P(false positive) before a nit/q may be suppressed by
+    // Jev adjudication: suppress when p < 1 - findingThreshold.
+    // Default 1.0 = annotate-only (every finding keeps its `p`, none
+    // are dropped). NOTE: polarity is the inverse of secretsThreshold —
+    // lower values here suppress MORE, not fewer.
+    findingThreshold: 1.0,
+  },
+  // Jev decision model for all decision lanes (triage, finding
+  // adjudication, secrets). '' disables every Jev call — lanes degrade
+  // open: no triage record, no p scores, regex-only secrets findings.
+  decisionModel: 'typesafe/jev-1.13-20260917',
+})
+```
+
+Each finding carries a `category` (`correctness`, `security`,
+`performance`, `usability`, `convention`, `other`) shown in the sticky
+table and inline comments. All findings land in `code-review.json`
+regardless of the comment cap.
+
+### Local demo (`npm run demo`)
+
+To see the whole pipeline without a PR: `npm run demo` materializes
+`fixtures/demo-pr` (a real seeded bug + a doc-shaped key + a live-format
+key) into a temp repo and runs `code-review --fixture` against it — the
+real chunking, model review, secrets scan, and Jev adjudication, zero
+GitHub API calls. Run `npm run watch` in a second terminal to stream the
+stage lines live. Requires `OPENROUTER_API_KEY` (BYOK, real model calls).
 
 ### Sandbox probes (opt-in, requires Docker)
 
 With `sandbox: { enabled: true }` in config (or the action's `sandbox: 'true'`
 input), Argus goes one step further for `not_exercised` findings at blocking
-severities: it authors a test that asserts the *correct* behavior and runs it
+severities: it authors a test that asserts the _correct_ behavior and runs it
 in a hardened Docker container against the PR head **and** the merge base. Only
 a probe that fails on head and passes on base upgrades the finding to
 `reproduced` 🧪 — a probe that fails on both is a probe bug, not proof.
@@ -213,7 +269,7 @@ a probe that fails on head and passes on base upgrades the finding to
 The container runs with no network, a read-only filesystem, `nobody` UID, all
 capabilities dropped, no ambient env or secrets, `.git` masked, and a hard
 timeout. Fork PRs are gated: probes run only for MEMBER/OWNER/COLLABORATOR
-authors or when a maintainer applies the `argus-probe` label *after* the head
+authors or when a maintainer applies the `argus-probe` label _after_ the head
 was pushed (label approvals don't carry across `synchronize` pushes — add
 `labeled` to your workflow's `pull_request.types`). `pull_request_target` is
 not supported. Without Docker or a vitest/jest/`node --test` harness the lane

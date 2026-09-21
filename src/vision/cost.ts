@@ -1,4 +1,4 @@
-export type CallKind = 'ground' | 'heal' | 'assert' | 'code'
+export type CallKind = 'ground' | 'heal' | 'assert' | 'code' | 'decide'
 
 export interface CallCost {
   model: string
@@ -42,6 +42,34 @@ export function makeCallCost(response: OpenRouterResponse, kind: CallKind): Call
     provider: providerName,
     tokens: response.usage.total_tokens,
     costUsd: response.usage.cost,
+    kind,
+  }
+}
+
+/** Decisions API (`/api/alpha/decisions`) usage shape — no `cost_details`. */
+export interface DecisionsResponse {
+  id?: string
+  model?: string
+  provider?: ProviderValue
+  answers?: Record<string, unknown>
+  usage?: {
+    input_tokens?: number
+    output_tokens?: number
+    cost?: number
+  }
+}
+
+export function makeDecisionsCallCost(response: DecisionsResponse, kind: CallKind): CallCost {
+  const providerName =
+    typeof response.provider === 'string' ? response.provider : response.provider?.name ?? 'unknown'
+  const usage = response.usage ?? {}
+  // Coerce — a string cost would throw downstream at toFixed and discard
+  // a valid decision; a string token count would concatenate.
+  return {
+    model: response.model ?? 'unknown',
+    provider: providerName,
+    tokens: (Number(usage.input_tokens) || 0) + (Number(usage.output_tokens) || 0),
+    costUsd: Number(usage.cost) || 0,
     kind,
   }
 }

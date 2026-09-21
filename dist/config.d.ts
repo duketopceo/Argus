@@ -1,3 +1,4 @@
+import type { Trust } from './trust.js';
 export interface ProviderRules {
     only?: string[];
     ignore?: string[];
@@ -59,6 +60,13 @@ export interface Config {
      * PR diffs and post findings. Defaults to the primary `model` if not set.
      */
     code_model: string | undefined;
+    /**
+     * OpenRouter Decisions API model for typed adjudication (Jev). Defaults
+     * to the pinned `typesafe/jev-1.13-20260917` — alias slugs like
+     * `~typesafe/jev-latest` drift silently and thresholds are calibrated
+     * to a version. Set to `''` to disable adjudication (regex-only mode).
+     */
+    decisionModel: string | undefined;
     /**
      * Hard budget for the `argus-reviewer code-review` lane. When set, the
      * review stops early if the cumulative OpenRouter cost exceeds this cap.
@@ -152,16 +160,69 @@ export interface Config {
      * `resolveConfig` — `enabled: false` by default so the lane is opt-in.
      */
     sandbox: Sandbox;
+    /**
+     * Code-review policy knobs. Always populated after `resolveConfig`.
+     * `secretsThreshold`: Jev `noul` probability at/above which a
+     * secret-shaped diff literal is reported as a finding (below →
+     * suppressed but audit-recorded). Default 0.3 — tune after dogfooding.
+     * `maxComments`: cap on inline review comments posted per run
+     * (default 20) — overflow is summarized count-only in the sticky.
+     * `severityGate`: consumer-facing alias over `severity` — 'bug'
+     * fails on bugs only, 'risk' fails on bug|risk. Unset → `severity`
+     * list is authoritative.
+     * `triage`: Jev pre-review lane — 'off' no call, 'annotate' (default)
+     * records risk/deep-review/area into the report + sticky, 'route'
+     * additionally swaps the code model to `lowRiskModel` on low-risk
+     * diffs. Jev routes/annotates, never gates — coverage is constant.
+     * `lowRiskModel`: the cheap code-model slug 'route' falls to; unset →
+     * route keeps `code_model` (annotate-equivalent).
+     * `findingThreshold`: P(false-positive) required to suppress a nit/q
+     * finding after Jev adjudication — 1.0 (default) is annotate-only,
+     * lowering it suppresses progressively more low-confidence nits.
+     * bug/risk are never suppressed.
+     */
+    review: {
+        secretsThreshold: number;
+        maxComments: number;
+        severityGate: 'bug' | 'risk' | undefined;
+        triage: 'off' | 'annotate' | 'route';
+        lowRiskModel: string | undefined;
+        findingThreshold: number;
+    };
 }
-export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox'>> & {
+export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review'>> & {
     provider?: Partial<ProviderRules>;
     sandbox?: Partial<Sandbox>;
+    review?: Partial<Config['review']>;
 };
 export declare const DEFAULT_RECORD_STEP_CAP = 40;
 export declare const DEFAULT_SANDBOX: Sandbox;
 export declare function defineConfig(input: ConfigInput): ConfigInput;
+/**
+ * Which severities fail the review status. `review.severityGate` is the
+ * consumer-facing alias over `severity` — 'risk' fails on bug|risk,
+ * 'bug' on bugs only; unset → the `severity` list is authoritative.
+ */
+export declare function resolveBlockSeverities(config: Config): string[];
+/**
+ * Inline-comment cap: `ARGUS_MAX_COMMENTS` (the action's `max-comments`
+ * input) wins when it parses as a non-negative integer — it's set by the
+ * workflow author, so an untrusted PR config can't reach it (`review`
+ * isn't on the untrusted allowlist). Anything else → `review.maxComments`.
+ */
+export declare function resolveMaxComments(env: Record<string, string | undefined>, config: Config): number;
 export declare function resolveConfig(input?: ConfigInput): Config;
-export declare function loadConfig(cwd: string): Promise<Config>;
+export interface LoadConfigOpts {
+    /**
+     * Required — there is no default. Every call site must state the
+     * checkout's trust so a missed or future caller can't silently execute
+     * config code on a hostile tree (see src/trust.ts).
+     */
+    trust: Trust;
+    /** Human-readable note on security-relevant load decisions (e.g. ctx.err). */
+    note?: (line: string) => void;
+}
+export declare function loadConfig(cwd: string, opts: LoadConfigOpts): Promise<Config>;
 /**
  * Provider slugs the harness recognizes for `provider.only/ignore/order`
  * (KTD4). Unknown slugs warn but do not fail — OpenRouter's catalog changes

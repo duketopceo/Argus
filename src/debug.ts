@@ -3,8 +3,15 @@ import { liveLog } from './live.js'
 
 const DEBUG = process.env.ARGUS_DEBUG === '1' || process.env.ARGUS_DEBUG === 'true'
 
-// debug() has no config access — it lives under the default cache dir.
-const LIVE_DIR = join(process.cwd(), '.argus-reviewer-cache')
+// debug() has no config access — it defaults to the conventional cache dir,
+// and callers that resolve a config set the real live dir once it's known
+// (otherwise debug lines and stage lines would split across two dirs).
+const DEFAULT_LIVE_DIR = join(process.cwd(), '.argus-reviewer-cache')
+let liveDir = DEFAULT_LIVE_DIR
+
+export function setLiveDir(dir: string | undefined): void {
+  liveDir = dir ?? DEFAULT_LIVE_DIR
+}
 
 function toMsg(arg: unknown): string {
   if (typeof arg === 'string') return arg
@@ -19,7 +26,7 @@ function toMsg(arg: unknown): string {
 export function debug(kind: string, ...args: unknown[]): void {
   if (!DEBUG) return // keep debug() free of fs work on the hot path
   for (const arg of args) {
-    liveLog(LIVE_DIR, kind, 'debug', toMsg(arg))
+    liveLog(liveDir, kind, 'debug', toMsg(arg))
     const prefix = `[argus-reviewer:${kind}]`
     if (typeof arg === 'string') {
       console.error(`${prefix} ${arg}`)

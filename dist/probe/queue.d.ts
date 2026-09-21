@@ -69,13 +69,23 @@ export interface ProbeLaneOptions {
     /** Configured blocking severities — the queue only admits those. */
     severityGates: string[];
     index: RepoIndex | undefined;
+    /** U9 — triage top_risk_area; advisory reorder of probe candidates. */
+    triageArea?: {
+        area: string;
+        confidence: number;
+    } | undefined;
     /** Report sink — authored probe CallCosts are pushed here for the report. */
     calls?: CallCost[] | undefined;
     exec?: ExecFn | undefined;
     log?: ((line: string) => void) | undefined;
 }
+/** U9 — below this confidence the triage area signal is ignored. */
+export declare const MIN_AREA_CONFIDENCE = 0.5;
 /** Pure selection: not_exercised findings at blocking severities, capped. */
-export declare function selectProbeTargets(findings: LinkedFinding[], severityGates: string[], maxProbes: number): LinkedFinding[];
+export declare function selectProbeTargets(findings: LinkedFinding[], severityGates: string[], maxProbes: number, triageArea?: {
+    area: string;
+    confidence: number;
+}): LinkedFinding[];
 /**
  * Repo-relative path gate for anything model- or index-derived that is read
  * or written on the HOST: no absolute paths, no `..` escapes, no backslashes.

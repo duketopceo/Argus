@@ -4,6 +4,7 @@ import { loadFlow, saveFlow } from './cache/store.js';
 import { Ledger } from './vision/ledger.js';
 import { defineConfig } from './config.js';
 export { defineConfig };
+export { DecisionClient, DecisionError, JEV_DEFAULT_MODEL, } from './vision/decisions.js';
 const KEY_ALIASES = {
     tab: 'Tab',
     enter: 'Enter',

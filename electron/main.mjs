@@ -14,7 +14,7 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 let LIVE_LOG = join(ROOT, '.argus-reviewer-cache/live.ndjson')
 try {
   const { loadConfig } = await import('../dist/config.js')
-  const cfg = await loadConfig(ROOT)
+  const cfg = await loadConfig(ROOT, { trust: 'trusted' })
   if (cfg.cacheDir) LIVE_LOG = join(ROOT, cfg.cacheDir, 'live.ndjson')
 } catch { /* fall back to the default cache dir */ }
 app.disableHardwareAcceleration()

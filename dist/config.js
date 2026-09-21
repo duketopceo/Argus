@@ -1,4 +1,5 @@
 import { pathToFileURL } from 'node:url';
+import { JEV_DEFAULT_MODEL } from './vision/decisions.js';
 export const DEFAULT_RECORD_STEP_CAP = 40;
 export const DEFAULT_SANDBOX = {
     enabled: false,
@@ -15,6 +16,7 @@ const defaults = {
     escalation_model: 'moonshotai/kimi-k2.5',
     grounding_model: undefined,
     code_model: 'deepseek/deepseek-v4.1-flash',
+    decisionModel: JEV_DEFAULT_MODEL,
     codeReviewBudgetUsd: undefined,
     provider: {
         ignore: ['siliconflow', 'novitaai', 'atlascloud', 'streamlake', 'chutes'],
@@ -38,6 +40,14 @@ const defaults = {
     a0: undefined,
     heal: 'local',
     sandbox: { ...DEFAULT_SANDBOX },
+    review: {
+        secretsThreshold: 0.3,
+        maxComments: 20,
+        severityGate: undefined,
+        triage: 'annotate',
+        lowRiskModel: undefined,
+        findingThreshold: 1.0,
+    },
 };
 export function defineConfig(input) {
     return input;
@@ -45,6 +55,32 @@ export function defineConfig(input) {
 /** Positive-integer config values fall back to their default, floored. */
 function posInt(v, dflt) {
     return v !== undefined && Number.isFinite(v) && v >= 1 ? Math.floor(v) : dflt;
+}
+/**
+ * Which severities fail the review status. `review.severityGate` is the
+ * consumer-facing alias over `severity` — 'risk' fails on bug|risk,
+ * 'bug' on bugs only; unset → the `severity` list is authoritative.
+ */
+export function resolveBlockSeverities(config) {
+    if (config.review.severityGate === 'risk')
+        return ['bug', 'risk'];
+    if (config.review.severityGate === 'bug')
+        return ['bug'];
+    return config.severity ?? ['bug'];
+}
+/**
+ * Inline-comment cap: `ARGUS_MAX_COMMENTS` (the action's `max-comments`
+ * input) wins when it parses as a non-negative integer — it's set by the
+ * workflow author, so an untrusted PR config can't reach it (`review`
+ * isn't on the untrusted allowlist). Anything else → `review.maxComments`.
+ */
+export function resolveMaxComments(env, config) {
+    const raw = env.ARGUS_MAX_COMMENTS?.trim();
+    // ^\d+$ — Number() would also accept '0x10', '1e2', ' 4 ', 'Infinity'.
+    if (raw !== undefined && /^\d+$/.test(raw)) {
+        return Number(raw);
+    }
+    return config.review.maxComments;
 }
 export function resolveConfig(input = {}) {
     const provider = { ...defaults.provider, ...(input.provider ?? {}) };
@@ -56,23 +92,93 @@ export function resolveConfig(input = {}) {
     sandbox.enabled = raw.enabled === true;
     sandbox.allowForks = raw.allowForks === true;
     sandbox.image = typeof raw.image === 'string' && raw.image !== '' ? raw.image : undefined;
-    sandbox.memory = typeof raw.memory === 'string' && raw.memory !== '' ? raw.memory : DEFAULT_SANDBOX.memory;
+    sandbox.memory =
+        typeof raw.memory === 'string' && raw.memory !== '' ? raw.memory : DEFAULT_SANDBOX.memory;
     sandbox.cpus = typeof raw.cpus === 'string' && raw.cpus !== '' ? raw.cpus : DEFAULT_SANDBOX.cpus;
     sandbox.maxProbes = posInt(sandbox.maxProbes, DEFAULT_SANDBOX.maxProbes);
     sandbox.timeoutMs = posInt(sandbox.timeoutMs, DEFAULT_SANDBOX.timeoutMs);
     sandbox.pidsLimit = posInt(sandbox.pidsLimit, DEFAULT_SANDBOX.pidsLimit);
-    const resolved = { ...defaults, ...input, provider, sandbox };
+    const rawReview = typeof input.review === 'object' && input.review !== null ? input.review : {};
+    const review = { ...defaults.review, ...rawReview };
+    // Threshold must be a probability — anything else (NaN, >1, negative)
+    // would silently suppress or flood the secrets lane.
+    if (typeof review.secretsThreshold !== 'number' ||
+        !Number.isFinite(review.secretsThreshold) ||
+        review.secretsThreshold < 0 ||
+        review.secretsThreshold > 1) {
+        review.secretsThreshold = defaults.review.secretsThreshold;
+    }
+    review.maxComments =
+        typeof review.maxComments === 'number' &&
+            Number.isInteger(review.maxComments) &&
+            review.maxComments >= 0
+            ? review.maxComments
+            : defaults.review.maxComments;
+    if (review.severityGate !== 'bug' && review.severityGate !== 'risk') {
+        review.severityGate = undefined;
+    }
+    if (review.triage !== 'off' && review.triage !== 'annotate' && review.triage !== 'route') {
+        review.triage = defaults.review.triage;
+    }
+    if (typeof review.lowRiskModel !== 'string' || review.lowRiskModel === '') {
+        review.lowRiskModel = undefined;
+    }
+    // Same probability contract as secretsThreshold — a non-[0,1] value
+    // would suppress unpredictably, so it falls back to annotate-only.
+    if (typeof review.findingThreshold !== 'number' ||
+        !Number.isFinite(review.findingThreshold) ||
+        review.findingThreshold < 0 ||
+        review.findingThreshold > 1) {
+        review.findingThreshold = defaults.review.findingThreshold;
+    }
+    const resolved = { ...defaults, ...input, provider, sandbox, review };
     resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP);
     if (resolved.heal !== 'a0')
         resolved.heal = 'local';
+    // '' is the documented opt-out — an empty slug would send a broken
+    // model id to the decisions endpoint on every adjudication call.
+    if (resolved.decisionModel === '')
+        resolved.decisionModel = undefined;
     return resolved;
 }
-export async function loadConfig(cwd) {
+/**
+ * Config keys honored on untrusted checkouts — policy-free fields only.
+ * Everything else (exec-bearing fields, model/budget/provider selection,
+ * severity/verdict policy, credentials maps, network endpoints, write
+ * locations) is ignored: the review policy over hostile code must not be
+ * authored by that code.
+ */
+const UNTRUSTED_CONFIG_KEYS = new Set(['logLevel', 'sourceGlobs']);
+function filterUntrustedConfig(input) {
+    const out = {};
+    for (const [key, value] of Object.entries(input)) {
+        if (UNTRUSTED_CONFIG_KEYS.has(key))
+            out[key] = value;
+    }
+    return out;
+}
+export async function loadConfig(cwd, opts) {
     const fs = await import('node:fs/promises');
     const path = await import('node:path');
+    const untrusted = opts.trust === 'untrusted';
     const names = ['argus-reviewer.config', 'vision-e2e.config'];
     for (const name of names) {
-        for (const ext of ['.ts', '.json']) {
+        if (untrusted) {
+            // Surface skipped .ts candidates — otherwise a hostile config (or a
+            // legit consumer debugging "why is my config ignored") is invisible.
+            try {
+                if ((await fs.stat(path.join(cwd, `${name}.ts`))).isFile()) {
+                    opts.note?.(`config: ${name}.ts ignored — untrusted checkouts load JSON config only`);
+                }
+            }
+            catch {
+                // no .ts candidate — nothing to note
+            }
+        }
+        // .ts is tried before .json, so an untrusted checkout must skip the .ts
+        // candidate *before* it can shadow a committed .json — importing it
+        // executes arbitrary code beside the runner's secrets (#58).
+        for (const ext of untrusted ? ['.json'] : ['.ts', '.json']) {
             const file = path.join(cwd, `${name}${ext}`);
             try {
                 const stat = await fs.stat(file);
@@ -80,7 +186,12 @@ export async function loadConfig(cwd) {
                     continue;
                 if (ext === '.json') {
                     const raw = await fs.readFile(file, 'utf8');
-                    return resolveConfig(JSON.parse(raw));
+                    const parsed = JSON.parse(raw);
+                    if (untrusted) {
+                        opts.note?.(`config: ${name}.json loaded untrusted — honoring ${[...UNTRUSTED_CONFIG_KEYS].join(', ')} only`);
+                        return resolveConfig(filterUntrustedConfig(parsed));
+                    }
+                    return resolveConfig(parsed);
                 }
                 // Always transpile .ts to a temp .mjs rather than importing natively:
                 // Node's built-in type stripping resolves the module type from the
