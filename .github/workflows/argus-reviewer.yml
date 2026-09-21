@@ -23,7 +23,7 @@ jobs:
     steps:
       # The probe sandbox masks .git anyway — but don't persist the token
       # into .git/config in the first place.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
