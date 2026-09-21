@@ -10,6 +10,11 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      # This repo's own CI checks out our own code — trusted by definition.
+      # Without this, push/workflow_dispatch events resolve untrusted
+      # (fail-closed) and tests exercising trusted-path lanes skip/fail.
+      ARGUS_TRUSTED: '1'
     strategy:
       fail-fast: false
       # npm ci installs devDeps — electron@44 needs node >=22.12, so the dev
