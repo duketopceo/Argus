@@ -1,3 +1,4 @@
+import type { Trust } from './trust.js';
 export interface ProviderRules {
     only?: string[];
     ignore?: string[];
@@ -161,7 +162,17 @@ export declare const DEFAULT_RECORD_STEP_CAP = 40;
 export declare const DEFAULT_SANDBOX: Sandbox;
 export declare function defineConfig(input: ConfigInput): ConfigInput;
 export declare function resolveConfig(input?: ConfigInput): Config;
-export declare function loadConfig(cwd: string): Promise<Config>;
+export interface LoadConfigOpts {
+    /**
+     * Required — there is no default. Every call site must state the
+     * checkout's trust so a missed or future caller can't silently execute
+     * config code on a hostile tree (see src/trust.ts).
+     */
+    trust: Trust;
+    /** Human-readable note on security-relevant load decisions (e.g. ctx.err). */
+    note?: (line: string) => void;
+}
+export declare function loadConfig(cwd: string, opts: LoadConfigOpts): Promise<Config>;
 /**
  * Provider slugs the harness recognizes for `provider.only/ignore/order`
  * (KTD4). Unknown slugs warn but do not fail — OpenRouter's catalog changes

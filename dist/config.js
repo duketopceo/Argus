@@ -67,12 +67,44 @@ export function resolveConfig(input = {}) {
         resolved.heal = 'local';
     return resolved;
 }
-export async function loadConfig(cwd) {
+/**
+ * Config keys honored on untrusted checkouts — policy-free fields only.
+ * Everything else (exec-bearing fields, model/budget/provider selection,
+ * severity/verdict policy, credentials maps, network endpoints, write
+ * locations) is ignored: the review policy over hostile code must not be
+ * authored by that code.
+ */
+const UNTRUSTED_CONFIG_KEYS = new Set(['logLevel', 'sourceGlobs']);
+function filterUntrustedConfig(input) {
+    const out = {};
+    for (const [key, value] of Object.entries(input)) {
+        if (UNTRUSTED_CONFIG_KEYS.has(key))
+            out[key] = value;
+    }
+    return out;
+}
+export async function loadConfig(cwd, opts) {
     const fs = await import('node:fs/promises');
     const path = await import('node:path');
+    const untrusted = opts.trust === 'untrusted';
     const names = ['argus-reviewer.config', 'vision-e2e.config'];
     for (const name of names) {
-        for (const ext of ['.ts', '.json']) {
+        if (untrusted) {
+            // Surface skipped .ts candidates — otherwise a hostile config (or a
+            // legit consumer debugging "why is my config ignored") is invisible.
+            try {
+                if ((await fs.stat(path.join(cwd, `${name}.ts`))).isFile()) {
+                    opts.note?.(`config: ${name}.ts ignored — untrusted checkouts load JSON config only`);
+                }
+            }
+            catch {
+                // no .ts candidate — nothing to note
+            }
+        }
+        // .ts is tried before .json, so an untrusted checkout must skip the .ts
+        // candidate *before* it can shadow a committed .json — importing it
+        // executes arbitrary code beside the runner's secrets (#58).
+        for (const ext of untrusted ? ['.json'] : ['.ts', '.json']) {
             const file = path.join(cwd, `${name}${ext}`);
             try {
                 const stat = await fs.stat(file);
@@ -80,7 +112,12 @@ export async function loadConfig(cwd) {
                     continue;
                 if (ext === '.json') {
                     const raw = await fs.readFile(file, 'utf8');
-                    return resolveConfig(JSON.parse(raw));
+                    const parsed = JSON.parse(raw);
+                    if (untrusted) {
+                        opts.note?.(`config: ${name}.json loaded untrusted — honoring ${[...UNTRUSTED_CONFIG_KEYS].join(', ')} only`);
+                        return resolveConfig(filterUntrustedConfig(parsed));
+                    }
+                    return resolveConfig(parsed);
                 }
                 // Always transpile .ts to a temp .mjs rather than importing natively:
                 // Node's built-in type stripping resolves the module type from the

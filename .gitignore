@@ -6,6 +6,7 @@ node_modules/
 test-results/
 .argus-reviewer-cache/
 .vision-e2e-cache/
+.codebase-memory/
 argus-reviewer-report/
 vision-e2e-report/
 *.webm
