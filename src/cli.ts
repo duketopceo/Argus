@@ -485,7 +485,9 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
   const { trust } = await resolveCheckoutTrust(ctx)
   const config = await loadConfig(ctx.cwd, { trust, note: ctx.err })
   warnUnknownProviders(config, ctx)
-  if (values['cache-dir'] !== undefined) config.cacheDir = values['cache-dir']
+  if (values['cache-dir'] !== undefined) {
+    config.cacheDir = resolve(ctx.cwd, values['cache-dir'])
+  }
   const envBudget = ctx.env.ARGUS_BUDGET_USD
   if (envBudget !== undefined && envBudget !== '') {
     const parsed = Number(envBudget)

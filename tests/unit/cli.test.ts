@@ -405,6 +405,23 @@ export default { model: 'hostile/model' }
     await expect(readFile(join(cwd, 'pwned'))).rejects.toThrow()
   })
 
+  it('defaults cacheDir to <cwd>/.argus-reviewer-cache so record persists flows', async () => {
+    const { loadConfig } = await import('../../src/config.js')
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-cfg-'))
+    // Regression: cacheDir defaulted to undefined, and record/replay gate
+    // saveFlow on config.cacheDir — recorded flows were never persisted and
+    // `record` wrote empty test files.
+    const config = await loadConfig(cwd, { trust: 'trusted' })
+    expect(config.cacheDir).toBe(join(cwd, '.argus-reviewer-cache'))
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({ cacheDir: 'custom-cache' }),
+    )
+    expect((await loadConfig(cwd, { trust: 'trusted' })).cacheDir).toBe(
+      join(cwd, 'custom-cache'),
+    )
+  })
+
   it('untrusted: a hostile .ts cannot shadow a committed .json config', async () => {
     const { loadConfig } = await import('../../src/config.js')
     const cwd = await mkdtemp(join(tmpdir(), 'argus-cfg-'))
@@ -469,7 +486,9 @@ export default { model: 'hostile/model' }
     expect(config.sandbox.enabled).toBe(false)
     expect(config.sandbox.image).toBeUndefined()
     expect(config.secrets).toBeUndefined()
-    expect(config.cacheDir).toBeUndefined()
+    // The PR-controlled value is dropped; the checkout-relative default is
+    // safe — it lands inside the scratch copy, not at a PR-chosen path.
+    expect(config.cacheDir).toBe(join(cwd, '.argus-reviewer-cache'))
     expect(config.indexPath).toBeUndefined()
     expect(config.reportDir).toBeUndefined()
     expect(config.a0).toBeUndefined()

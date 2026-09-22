@@ -373,6 +373,15 @@ export async function loadConfig(cwd: string, opts: LoadConfigOpts): Promise<Con
   const path = await import('node:path')
   const untrusted = opts.trust === 'untrusted'
 
+  // cacheDir is the documented CLI default '.argus-reviewer-cache' — normalize
+  // it to an absolute path here so engine record/replay persistence (gated on
+  // config.cacheDir) writes where every other consumer already falls back to.
+  const finish = (input: ConfigInput = {}): Config => {
+    const config = resolveConfig(input)
+    config.cacheDir = path.resolve(cwd, config.cacheDir ?? '.argus-reviewer-cache')
+    return config
+  }
+
   const names = ['argus-reviewer.config', 'vision-e2e.config']
   for (const name of names) {
     if (untrusted) {
@@ -402,9 +411,9 @@ export async function loadConfig(cwd: string, opts: LoadConfigOpts): Promise<Con
             opts.note?.(
               `config: ${name}.json loaded untrusted — honoring ${[...UNTRUSTED_CONFIG_KEYS].join(', ')} only`,
             )
-            return resolveConfig(filterUntrustedConfig(parsed))
+            return finish(filterUntrustedConfig(parsed))
           }
-          return resolveConfig(parsed)
+          return finish(parsed)
         }
 
         // Always transpile .ts to a temp .mjs rather than importing natively:
@@ -437,7 +446,7 @@ export async function loadConfig(cwd: string, opts: LoadConfigOpts): Promise<Con
           await rm(out, { force: true }).catch(() => undefined)
         }
         const exported = mod.default ?? mod
-        return resolveConfig(exported as ConfigInput)
+        return finish(exported as ConfigInput)
       } catch (e: unknown) {
         const code = (e as { code?: string }).code
         if (code === 'ENOENT') continue
@@ -446,7 +455,7 @@ export async function loadConfig(cwd: string, opts: LoadConfigOpts): Promise<Con
     }
   }
 
-  return resolveConfig()
+  return finish()
 }
 
 /**
