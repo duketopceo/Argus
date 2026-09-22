@@ -12,7 +12,11 @@ npm ci
 npx playwright install chromium   # required for driver tests
 ```
 
-Node `>=20.19.0`. Docker is optional — only needed to exercise the sandbox
+Node `>=22` for development (CI tests on 22 and 24; the dev toolchain —
+electron@44 — needs >=22.12). The published package itself supports
+Node `>=20.19.0` per `package.json` engines.
+
+Docker is optional — only needed to exercise the sandbox
 probe lane locally (`sandbox.enabled` in `argus-reviewer.config.ts`).
 
 ## Verify before pushing

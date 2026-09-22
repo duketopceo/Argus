@@ -1,4 +1,4 @@
-# argus-reviewer quickstart
+# argus-reviewer-e2e quickstart
 
 > Self-hosted, BYOK OpenRouter UI regression and code review for GitHub PRs.
 
@@ -6,12 +6,6 @@
 
 ```bash
 npm i -D argus-reviewer-e2e
-```
-
-Until the package is on npm, install from the GitHub repo:
-
-```bash
-npm i -D duketopceo/Argus
 ```
 
 ## 2. Configure
@@ -78,7 +72,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
       - run: npm ci
       - run: npx playwright install chromium
