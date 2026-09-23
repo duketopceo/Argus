@@ -376,9 +376,23 @@ export async function loadConfig(cwd: string, opts: LoadConfigOpts): Promise<Con
   // cacheDir is the documented CLI default '.argus-reviewer-cache' — normalize
   // it to an absolute path here so engine record/replay persistence (gated on
   // config.cacheDir) writes where every other consumer already falls back to.
-  const finish = (input: ConfigInput = {}): Config => {
+  const finish = async (input: ConfigInput = {}): Promise<Config> => {
     const config = resolveConfig(input)
-    config.cacheDir = path.resolve(cwd, config.cacheDir ?? '.argus-reviewer-cache')
+    const cacheDir = path.resolve(cwd, config.cacheDir ?? '.argus-reviewer-cache')
+    if (untrusted) {
+      // A hostile PR can commit the default path as a symlink and redirect
+      // cache writes outside the checkout — fail closed before writers run.
+      let isSymlink = false
+      try {
+        isSymlink = (await fs.lstat(cacheDir)).isSymbolicLink()
+      } catch (e) {
+        if ((e as { code?: string }).code !== 'ENOENT') throw e
+      }
+      if (isSymlink) {
+        throw new Error(`untrusted cache directory must not be a symlink: ${cacheDir}`)
+      }
+    }
+    config.cacheDir = cacheDir
     return config
   }
 

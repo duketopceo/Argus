@@ -422,6 +422,19 @@ export default { model: 'hostile/model' }
     )
   })
 
+  it('untrusted: rejects a symlinked default cache dir', async () => {
+    const { loadConfig } = await import('../../src/config.js')
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-cfg-'))
+    const outside = await mkdtemp(join(tmpdir(), 'argus-evil-'))
+    const { symlink } = await import('node:fs/promises')
+    await symlink(outside, join(cwd, '.argus-reviewer-cache'))
+    await expect(loadConfig(cwd, { trust: 'untrusted' })).rejects.toThrow('symlink')
+    // Trusted loads keep using the path — the symlink guard is untrusted-only.
+    expect((await loadConfig(cwd, { trust: 'trusted' })).cacheDir).toBe(
+      join(cwd, '.argus-reviewer-cache'),
+    )
+  })
+
   it('untrusted: a hostile .ts cannot shadow a committed .json config', async () => {
     const { loadConfig } = await import('../../src/config.js')
     const cwd = await mkdtemp(join(tmpdir(), 'argus-cfg-'))
