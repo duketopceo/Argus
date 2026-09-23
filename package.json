@@ -46,7 +46,7 @@
     "demo": "node scripts/demo.mjs"
   },
   "devDependencies": {
-    "@eslint/js": "^9.0.0",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^20.0.0",
     "electron": "^44.2.0",
     "eslint": "^9.0.0",
