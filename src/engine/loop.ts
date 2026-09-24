@@ -213,7 +213,7 @@ export class Engine {
     for (let i = 0; i < flow.steps.length; i++) {
       const step = flow.steps[i]
       if (!step) continue
-      let observation = await this._opts.driver.observe({ grid: true })
+      const observation = await this._opts.driver.observe({ grid: true })
       // Diff-invalidated entries skip hash verification entirely and go
       // straight to the heal path — the diff already told us they're stale.
       let resolve: ResolveResult
@@ -280,7 +280,7 @@ export class Engine {
       }
 
       const resolved = await this._resolveAction(action)
-      const nextObservation = await this._executeAction(this._opts.actions, action)
+      await this._executeAction(this._opts.actions, action)
       const newFingerprint = await this._buildFingerprint(
         step.instruction,
         action,
@@ -297,7 +297,6 @@ export class Engine {
         healed: true,
         model: response.model,
       })
-      observation = nextObservation
     }
 
     if (options.flowName && this._opts.config.cacheDir) {

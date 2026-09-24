@@ -1654,7 +1654,7 @@ async function cmdCache(args: string[], ctx: Ctx): Promise<number> {
     try {
       names = (await readdir(cacheDir)).filter((f) => f.endsWith('.json')).sort()
     } catch {
-      names = []
+      // missing cache dir reads as empty
     }
     if (names.length === 0) {
       ctx.out(`cache empty (${cacheDir})`)
@@ -1677,7 +1677,7 @@ async function cmdCache(args: string[], ctx: Ctx): Promise<number> {
   try {
     names = (await readdir(cacheDir)).filter((f) => f.endsWith('.json'))
   } catch {
-    names = []
+    // missing cache dir reads as empty
   }
   const targets = values.all ? names : restPositionals.map((n) => `${n}.json`)
   let removed = 0
