@@ -56,6 +56,10 @@ export function defineConfig(input) {
 function posInt(v, dflt) {
     return v !== undefined && Number.isFinite(v) && v >= 1 ? Math.floor(v) : dflt;
 }
+/** Probability config values (must be in [0,1]) fall back to their default. */
+function prob01(v, dflt) {
+    return v !== undefined && Number.isFinite(v) && v >= 0 && v <= 1 ? v : dflt;
+}
 /**
  * Which severities fail the review status. `review.severityGate` is the
  * consumer-facing alias over `severity` — 'risk' fails on bug|risk,
@@ -100,14 +104,9 @@ export function resolveConfig(input = {}) {
     sandbox.pidsLimit = posInt(sandbox.pidsLimit, DEFAULT_SANDBOX.pidsLimit);
     const rawReview = typeof input.review === 'object' && input.review !== null ? input.review : {};
     const review = { ...defaults.review, ...rawReview };
-    // Threshold must be a probability — anything else (NaN, >1, negative)
-    // would silently suppress or flood the secrets lane.
-    if (typeof review.secretsThreshold !== 'number' ||
-        !Number.isFinite(review.secretsThreshold) ||
-        review.secretsThreshold < 0 ||
-        review.secretsThreshold > 1) {
-        review.secretsThreshold = defaults.review.secretsThreshold;
-    }
+    // Thresholds must be probabilities — anything else (NaN, >1,
+    // negative) would silently suppress or flood the Jev lanes.
+    review.secretsThreshold = prob01(review.secretsThreshold, defaults.review.secretsThreshold);
     review.maxComments =
         typeof review.maxComments === 'number' &&
             Number.isInteger(review.maxComments) &&
@@ -123,14 +122,7 @@ export function resolveConfig(input = {}) {
     if (typeof review.lowRiskModel !== 'string' || review.lowRiskModel === '') {
         review.lowRiskModel = undefined;
     }
-    // Same probability contract as secretsThreshold — a non-[0,1] value
-    // would suppress unpredictably, so it falls back to annotate-only.
-    if (typeof review.findingThreshold !== 'number' ||
-        !Number.isFinite(review.findingThreshold) ||
-        review.findingThreshold < 0 ||
-        review.findingThreshold > 1) {
-        review.findingThreshold = defaults.review.findingThreshold;
-    }
+    review.findingThreshold = prob01(review.findingThreshold, defaults.review.findingThreshold);
     const resolved = { ...defaults, ...input, provider, sandbox, review };
     resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP);
     if (resolved.heal !== 'a0')
@@ -161,6 +153,30 @@ export async function loadConfig(cwd, opts) {
     const fs = await import('node:fs/promises');
     const path = await import('node:path');
     const untrusted = opts.trust === 'untrusted';
+    // cacheDir is the documented CLI default '.argus-reviewer-cache' — normalize
+    // it to an absolute path here so engine record/replay persistence (gated on
+    // config.cacheDir) writes where every other consumer already falls back to.
+    const finish = async (input = {}) => {
+        const config = resolveConfig(input);
+        const cacheDir = path.resolve(cwd, config.cacheDir ?? '.argus-reviewer-cache');
+        if (untrusted) {
+            // A hostile PR can commit the default path as a symlink and redirect
+            // cache writes outside the checkout — fail closed before writers run.
+            let isSymlink = false;
+            try {
+                isSymlink = (await fs.lstat(cacheDir)).isSymbolicLink();
+            }
+            catch (e) {
+                if (e.code !== 'ENOENT')
+                    throw e;
+            }
+            if (isSymlink) {
+                throw new Error(`untrusted cache directory must not be a symlink: ${cacheDir}`);
+            }
+        }
+        config.cacheDir = cacheDir;
+        return config;
+    };
     const names = ['argus-reviewer.config', 'vision-e2e.config'];
     for (const name of names) {
         if (untrusted) {
@@ -189,9 +205,9 @@ export async function loadConfig(cwd, opts) {
                     const parsed = JSON.parse(raw);
                     if (untrusted) {
                         opts.note?.(`config: ${name}.json loaded untrusted — honoring ${[...UNTRUSTED_CONFIG_KEYS].join(', ')} only`);
-                        return resolveConfig(filterUntrustedConfig(parsed));
+                        return finish(filterUntrustedConfig(parsed));
                     }
-                    return resolveConfig(parsed);
+                    return finish(parsed);
                 }
                 // Always transpile .ts to a temp .mjs rather than importing natively:
                 // Node's built-in type stripping resolves the module type from the
@@ -222,7 +238,7 @@ export async function loadConfig(cwd, opts) {
                     await rm(out, { force: true }).catch(() => undefined);
                 }
                 const exported = mod.default ?? mod;
-                return resolveConfig(exported);
+                return finish(exported);
             }
             catch (e) {
                 const code = e.code;
@@ -232,7 +248,7 @@ export async function loadConfig(cwd, opts) {
             }
         }
     }
-    return resolveConfig();
+    return finish();
 }
 /**
  * Provider slugs the harness recognizes for `provider.only/ignore/order`

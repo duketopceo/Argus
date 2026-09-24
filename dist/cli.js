@@ -22,7 +22,7 @@ import { resolveTrust } from './trust.js';
 import { linkFindings } from './evidence/link.js';
 import { DecisionClient } from './vision/decisions.js';
 import { materializeMergeBaseDiff, scanSecrets } from './review/secrets.js';
-import { buildTriageState, routeModel, triagePr } from './review/triage.js';
+import { buildTriageState, routeModel, triageAreaSignal, triagePr, } from './review/triage.js';
 import { adjudicateFindings } from './review/adjudicate.js';
 import { runProbeLane } from './probe/queue.js';
 import { A0_DEFAULT_TIMEOUT_MS, a0TaskPrompt, runA0Task } from './executor/a0.js';
@@ -33,14 +33,18 @@ import { liveLog } from './live.js';
 import { writeJunitXml } from './report/junit.js';
 import { buildRunReport, writeRunReport } from './report/run.js';
 import { flowPath, loadFlow } from './cache/store.js';
+import { classifyHeadBinding, isHeadBindingConclusive, readCheckoutSha, } from './report/manifest.js';
 import { writeAtomicJson } from './fsutil.js';
 import { OpenRouterClient } from './vision/openrouter.js';
 import { Ledger } from './vision/ledger.js';
+import { defaultLaneSelection, selectionFromFlags } from './pipeline/contracts.js';
+import { runVerify } from './pipeline/verify.js';
 const USAGE = `argus-reviewer — vision-model E2E testing harness (BYOK via OPENROUTER_API_KEY)
 
 Usage:
   argus-reviewer record "<flow description>" --url <target> [--name <flow>] [--tests-dir <dir>] [--max-steps <n>]
   argus-reviewer run [pattern] [--url <target>] [--dir <testsDir>] [--report-dir <dir>]
+  argus-reviewer verify [--flow] [--app] [--a0] [--report-dir <dir>]
   argus-reviewer code-review [--report-dir <dir>]
   argus-reviewer delegate "<task>" [--url <target>] [--host <a0-url>]
   argus-reviewer cache list [--dir <cacheDir>]
@@ -111,6 +115,8 @@ export async function main(argv, deps = {}) {
             return cmdRecord(rest, ctx, deps);
         case 'run':
             return cmdRun(rest, ctx, deps);
+        case 'verify':
+            return cmdVerify(rest, ctx, deps);
         case 'code-review':
             return cmdCodeReview(rest, ctx, deps);
         case 'delegate':
@@ -401,8 +407,9 @@ async function cmdRun(args, ctx, deps) {
     const { trust } = await resolveCheckoutTrust(ctx);
     const config = await loadConfig(ctx.cwd, { trust, note: ctx.err });
     warnUnknownProviders(config, ctx);
-    if (values['cache-dir'] !== undefined)
-        config.cacheDir = values['cache-dir'];
+    if (values['cache-dir'] !== undefined) {
+        config.cacheDir = resolve(ctx.cwd, values['cache-dir']);
+    }
     const envBudget = ctx.env.ARGUS_BUDGET_USD;
     if (envBudget !== undefined && envBudget !== '') {
         const parsed = Number(envBudget);
@@ -542,6 +549,7 @@ async function cmdRun(args, ctx, deps) {
                         budgetExceeded: state.budgetExceeded,
                         calls: state.calls,
                         videoPath: undefined,
+                        cache: fileSession.cacheStats,
                     });
                     await fileSession.save();
                     runErrors.push(...tagErrors(fileSession.errorRecords, fileSlug));
@@ -584,6 +592,7 @@ async function cmdRun(args, ctx, deps) {
                             budgetExceeded: state.budgetExceeded,
                             calls: state.calls,
                             videoPath: undefined,
+                            cache: session.cacheStats,
                         });
                         await session.save();
                         runErrors.push(...tagErrors(session.errorRecords, registeredTest.name));
@@ -974,8 +983,7 @@ async function cmdCodeReview(args, ctx, deps) {
     const pr = fixtureDir !== undefined ? '0' : trace?.pr || trustResult.pr;
     const token = ctx.env.GITHUB_TOKEN ?? ctx.env.GH_TOKEN;
     const model = config.code_model ?? config.model;
-    const budget = config.codeReviewBudgetUsd;
-    debug('code-review', `repo=${repo ?? 'none'} pr=${pr ?? 'none'} model=${model} budget=${budget ?? 'unlimited'}`);
+    debug('code-review', `repo=${repo ?? 'none'} pr=${pr ?? 'none'} model=${model} budget=${config.codeReviewBudgetUsd ?? 'unlimited'}`);
     const skip = async (reason) => {
         ctx.out(`code-review: skipping — ${reason}`);
         stage(`skipped — ${reason}`);
@@ -990,6 +998,7 @@ async function cmdCodeReview(args, ctx, deps) {
             tokens: 0,
             model,
             budgetExceeded: false,
+            headBinding: classifyHeadBinding(undefined, undefined, fixtureDir !== undefined ? 'fixture' : 'github'),
         };
         await writeAtomicJson(codeReviewPath, skipped);
         return 0;
@@ -1010,6 +1019,15 @@ async function cmdCodeReview(args, ctx, deps) {
     const repoName = repo;
     const prNum = pr;
     const ghToken = token;
+    const envBudget = ctx.env.ARGUS_BUDGET_USD;
+    if (envBudget !== undefined && envBudget !== '') {
+        const parsed = Number(envBudget);
+        if (Number.isFinite(parsed) && parsed > 0)
+            config.codeReviewBudgetUsd = parsed;
+        else
+            ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`);
+    }
+    const budget = config.codeReviewBudgetUsd;
     const [files, index] = await Promise.all([
         fixture !== undefined
             ? Promise.resolve(fixture.files)
@@ -1034,6 +1052,9 @@ async function cmdCodeReview(args, ctx, deps) {
         // Kick off PR metadata now — it only needs repo/pr/token and its
         // round-trip hides behind the model calls. Degrades to undefined.
         // Fixture mode supplies it locally — same shape, no API call.
+        const checkoutShaPromise = fixture !== undefined
+            ? Promise.resolve(undefined)
+            : readCheckoutSha(ctx.cwd, deps.exec ?? defaultExec);
         const prMetaPromise = fixture !== undefined
             ? Promise.resolve(fixture.meta)
             : fetchPrMeta(repoName, prNum, ghToken, ctx).catch(() => undefined);
@@ -1042,50 +1063,75 @@ async function cmdCodeReview(args, ctx, deps) {
         let totalTokens = 0;
         let totalCost = 0;
         let lastModel = model;
-        // U7 triage lane — one batched Jev decide() before chunk review.
-        // Jev routes/annotates, never gates: the loop reviews every chunk
-        // regardless; 'route' only picks the model tier. Needs PR title/body
-        // for state, so when the lane is enabled prMeta resolves here rather
-        // than hiding its round-trip behind the model calls.
+        // Shared spend sink — chunk, synthesis, probe, and every decide()
+        // call funnel through here so the ledger/report never drift. The
+        // over-budget flag lives here too: a decide() that crosses the cap
+        // must trip it just like a chunk does, or later lanes keep spending.
+        const recordSpend = (c) => {
+            ledger.recordCall(c);
+            allCalls.push(c);
+            totalTokens += c.tokens;
+            totalCost += c.costUsd;
+            if (budget !== undefined && ledger.visionCostUsd > budget) {
+                ledger.flagBudgetExceeded();
+            }
+        };
         const apiKey = ctx.env.OPENROUTER_API_KEY;
         const decisionClient = config.decisionModel !== undefined && apiKey !== undefined && apiKey !== ''
             ? new DecisionClient({
                 apiKey,
                 ...(trace !== undefined ? { trace } : {}),
-                onCall: (c) => {
-                    const cost = {
-                        model: c.model,
-                        provider: c.provider,
-                        tokens: c.tokens,
-                        costUsd: c.costUsd,
-                        kind: 'decide',
-                    };
-                    ledger.recordCall(cost);
-                    allCalls.push(cost);
-                    totalTokens += c.tokens;
-                    totalCost += c.costUsd;
-                },
+                onCall: (c) => recordSpend({
+                    model: c.model,
+                    provider: c.provider,
+                    tokens: c.tokens,
+                    costUsd: c.costUsd,
+                    kind: 'decide',
+                }),
             })
             : undefined;
+        // U7 triage lane — one batched Jev decide(). 'route' needs the
+        // signal before chunk review to pick the model tier, so it awaits
+        // here; 'annotate' (default) overlaps the decide() round-trip with
+        // the chunk loop and resolves before the probe lane below. Jev
+        // routes/annotates, never gates: every chunk is still reviewed.
         let reviewModel = model;
         let triage;
-        if (config.review.triage !== 'off' && decisionClient !== undefined) {
-            const metaEarly = await prMetaPromise;
-            triage = await triagePr({
+        // Hoisted so the !== 'off' narrowing reaches the closure below.
+        const triageMode = config.review.triage;
+        const triagePromise = decisionClient !== undefined && triageMode !== 'off'
+            ? prMetaPromise
+                .then((metaEarly) => triagePr({
                 client: decisionClient,
                 ...(config.decisionModel !== undefined ? { model: config.decisionModel } : {}),
-                state: buildTriageState({ title: metaEarly?.title, body: metaEarly?.body, files }),
-                mode: config.review.triage,
-            });
+                state: buildTriageState({
+                    title: metaEarly?.title,
+                    body: metaEarly?.body,
+                    files,
+                }),
+                mode: triageMode,
+            }))
+                .catch((e) => {
+                // triagePr already degrades DecisionError internally —
+                // reaching here means a chain bug (e.g. buildTriageState
+                // threw); keep the breadcrumb so it isn't invisible.
+                debug('triage', `triage chain failed: ${e.message}`);
+                return undefined;
+            })
+            : undefined;
+        const triageLine = (t) => `triage — risk ${t.risk ?? '?'}, deep-review ${t.needsDeepReview?.toFixed(2) ?? '?'}, ` +
+            `area ${t.topRiskArea ?? '?'}` +
+            (t.unadjudicated === true ? ' (unadjudicated)' : '');
+        if (config.review.triage === 'route' && triagePromise !== undefined) {
+            triage = await triagePromise;
             const routed = routeModel({
                 record: triage,
                 configured: model,
                 lowRiskModel: config.review.lowRiskModel,
             });
             reviewModel = routed.model;
-            stage(`triage — risk ${triage.risk ?? '?'}, deep-review ${triage.needsDeepReview?.toFixed(2) ?? '?'}, area ${triage.topRiskArea ?? '?'}` +
-                (triage.unadjudicated === true ? ' (unadjudicated)' : '') +
-                (reviewModel !== model ? ` — routed to ${reviewModel}` : ''));
+            if (triage !== undefined)
+                stage(`${triageLine(triage)} — ${routed.reason}`);
         }
         stage(`reviewing ${chunks.length} chunk(s) — model ${reviewModel}`);
         for (let i = 0; i < chunks.length; i++) {
@@ -1102,16 +1148,12 @@ async function cmdCodeReview(args, ctx, deps) {
                 kind: 'code',
                 provider: config.provider,
             });
-            ledger.recordCall(response.cost);
-            allCalls.push(response.cost);
-            totalTokens += response.cost.tokens;
-            totalCost += response.cost.costUsd;
+            recordSpend(response.cost);
             lastModel = response.model;
             const parsed = parseCodeReview(response.content);
             allFindings.push(...parsed.findings);
             stage(`chunk ${i + 1}/${chunks.length} — ${parsed.findings.length} finding(s)`);
-            if (budget !== undefined && ledger.visionCostUsd > budget) {
-                ledger.flagBudgetExceeded();
+            if (ledger.budgetExceeded) {
                 ctx.err(`code-review: budget exceeded after chunk ${i + 1}; stopping early`);
                 break;
             }
@@ -1130,17 +1172,13 @@ async function cmdCodeReview(args, ctx, deps) {
                     kind: 'code',
                     provider: config.provider,
                 });
-                ledger.recordCall(synthResponse.cost);
-                allCalls.push(synthResponse.cost);
-                totalTokens += synthResponse.cost.tokens;
-                totalCost += synthResponse.cost.costUsd;
+                recordSpend(synthResponse.cost);
                 lastModel = synthResponse.model;
                 const parsed = parseCodeReview(synthResponse.content);
                 summary = parsed.summary;
                 verdict = parsed.verdict;
                 finalFindings = parsed.findings.length > 0 ? parsed.findings : allFindings;
-                if (budget !== undefined && ledger.visionCostUsd > budget) {
-                    ledger.flagBudgetExceeded();
+                if (ledger.budgetExceeded) {
                     ctx.err('code-review: budget exceeded after synthesis; stopping early');
                 }
             }
@@ -1168,28 +1206,37 @@ async function cmdCodeReview(args, ctx, deps) {
             if (verdict !== 'needs_changes')
                 verdict = 'needs_changes';
         }
+        // Annotate-mode triage overlapped the chunk loop — resolve it here,
+        // before the probe lane and report read the record.
+        if (triage === undefined && triagePromise !== undefined) {
+            triage = await triagePromise;
+            if (triage !== undefined)
+                stage(triageLine(triage));
+        }
         // U8 finding adjudication — one batched Jev noul per synthesized
         // finding. Runs on the model findings only (secrets findings carry
         // their own adjudication) and BEFORE the secrets union below so a
         // suppressed nit can never reach a secret record. bug/risk are
         // never suppressed, so the verdict computed above is unaffected.
+        // Kicked off as a promise — its decide() round-trip overlaps the
+        // secrets lane's materialize+scan below (the two lanes are
+        // independent; results apply in order: adjudication, then union).
+        // Skipped when the budget is already blown — no trailing spend.
+        // blockSeverities flows in so a user-blocking severity (e.g. a
+        // config severity list containing 'nit') can never be suppressed —
+        // Jev must not be able to flip the commit-status gate.
+        const blockSeverities = resolveBlockSeverities(config);
         let findingAdjudication;
-        if (decisionClient !== undefined && finalFindings.length > 0) {
-            const adj = await adjudicateFindings({
+        const adjudicationPromise = decisionClient !== undefined && !ledger.budgetExceeded && finalFindings.length > 0
+            ? adjudicateFindings({
                 findings: finalFindings,
                 patchByFile: new Map(files.map((f) => [f.filename, f.patch ?? ''])),
                 threshold: config.review.findingThreshold,
+                blockSeverities,
                 client: decisionClient,
                 ...(config.decisionModel !== undefined ? { model: config.decisionModel } : {}),
-            });
-            finalFindings = adj.findings;
-            const { findings: _dropped, ...audit } = adj;
-            findingAdjudication = audit;
-            const suppressed = adj.records.filter((r) => r.suppressed === true).length;
-            stage(`finding adjudication — ${adj.records.length} scored, ${suppressed} suppressed` +
-                (adj.unadjudicated === true ? ' (Jev unavailable — none suppressed)' : '') +
-                (adj.overflow > 0 ? `, +${adj.overflow} over cap` : ''));
-        }
+            })
+            : undefined;
         // B.1 evidence linkage: tag each finding with whether the PR's own CI
         // exercised the implicated path. Post-pass annotation only — evidence
         // never downgrades a finding, and check-run names are sanitized before
@@ -1198,6 +1245,12 @@ async function cmdCodeReview(args, ctx, deps) {
         // lane's fork gate (evidence/gate.ts) consumes them; only headSha feeds
         // evidence linkage here.
         const prMeta = await prMetaPromise;
+        const checkoutSha = await checkoutShaPromise;
+        const headBinding = classifyHeadBinding(prMeta?.headSha, checkoutSha, fixture !== undefined ? 'fixture' : 'github');
+        stage(`head binding — ${headBinding.status}: ${headBinding.detail}`);
+        if (!isHeadBindingConclusive(headBinding)) {
+            summary = `Head binding inconclusive — ${summary}`;
+        }
         // Secrets lane: deterministic regex scan over the local merge-base
         // diff — the PR-files API `patch` omits large/binary files, so the
         // local diff is the complete scan surface. Findings union into
@@ -1205,6 +1258,7 @@ async function cmdCodeReview(args, ctx, deps) {
         // prompt-injected synthesis can never erase them. Literals are
         // masked in every output (Jev `state` is the documented exception).
         let secretsScan;
+        const secretsFindings = [];
         if (prMeta?.baseSha !== undefined) {
             // Fixture mode already produced the same `git diff base..HEAD`
             // output inside the fixture repo — reuse it rather than shelling
@@ -1235,13 +1289,28 @@ async function cmdCodeReview(args, ctx, deps) {
                 stage(`secrets scan — ${secretsScan.records.length} candidate(s), ` +
                     `${secretsScan.findings.length} finding(s)` +
                     (secretsScan.overflow > 0 ? `, +${secretsScan.overflow} over cap` : ''));
-                finalFindings = [...finalFindings, ...secretsScan.findings];
+                // Union is deferred until adjudication resolves below —
+                // suppressed nits leave before secrets findings join.
+                secretsFindings.push(...secretsScan.findings);
             }
         }
         else {
             // Distinguish "ran, clean" from "never ran" in the report.
             secretsScan = { skipped: 'no merge-base SHA — lane did not run' };
         }
+        // Resolve the deferred adjudication kicked off above, then union —
+        // order preserved: adjudicated model findings first, secrets after.
+        if (adjudicationPromise !== undefined) {
+            const adj = await adjudicationPromise;
+            finalFindings = adj.findings;
+            const { findings: _dropped, ...audit } = adj;
+            findingAdjudication = audit;
+            const suppressed = adj.records.filter((r) => r.suppressed === true).length;
+            stage(`finding adjudication — ${adj.records.length} scored, ${suppressed} suppressed` +
+                (adj.unadjudicated === true ? ' (Jev unavailable — none suppressed)' : '') +
+                (adj.overflow > 0 ? `, +${adj.overflow} over cap` : ''));
+        }
+        finalFindings = [...finalFindings, ...secretsFindings];
         const headSha = prMeta?.headSha;
         const checkRuns = headSha === undefined || fixture !== undefined
             ? undefined
@@ -1249,9 +1318,6 @@ async function cmdCodeReview(args, ctx, deps) {
         const linkedFindings = linkFindings(finalFindings, index, checkRuns);
         debug('code-review', `evidence: ${linkedFindings.map((f) => f.evidence.status).join(',')}`);
         stage(`evidence linked — ${linkedFindings.length} finding(s), verdict ${verdict}`);
-        // severityGate is the consumer-facing alias over `severity` — see
-        // resolveBlockSeverities for the mapping.
-        const blockSeverities = resolveBlockSeverities(config);
         // ARGUS_MAX_COMMENTS (action input) overrides the config cap — the
         // workflow author controls it; an untrusted PR config can't reach it
         // anyway since `review` isn't on the untrusted allowlist.
@@ -1274,6 +1340,10 @@ async function cmdCodeReview(args, ctx, deps) {
         // PR code beside real credentials.
         if (ctx.env.GITHUB_EVENT_NAME === 'pull_request_target')
             sandbox.enabled = false;
+        if (!isHeadBindingConclusive(headBinding)) {
+            sandbox.enabled = false;
+            probeLaneSkipped = `head binding ${headBinding.status} — ${headBinding.detail}`;
+        }
         // Fixture mode reviews a local repo, not the cwd checkout — probes
         // would execute against the wrong tree.
         if (fixtureDir !== undefined && sandbox.enabled) {
@@ -1290,24 +1360,16 @@ async function cmdCodeReview(args, ctx, deps) {
                     meta: prMeta,
                     token: ghToken,
                     client,
+                    // Probe authoring deliberately stays on the configured model —
+                    // triage routing is a review-depth decision, not an authoring one.
                     model,
                     provider: config.provider,
                     ledger,
                     budgetUsd: budget,
                     severityGates: blockSeverities,
-                    // U9 — advisory only: a confident triage area reorders probe
-                    // candidates toward the flagged subsystem; absent/unadjudicated
-                    // triage leaves the original order.
-                    ...(triage?.topRiskArea !== undefined &&
-                        triage.topRiskAreaConfidence !== undefined &&
-                        triage.unadjudicated !== true
-                        ? {
-                            triageArea: {
-                                area: triage.topRiskArea,
-                                confidence: triage.topRiskAreaConfidence,
-                            },
-                        }
-                        : {}),
+                    // U9 — advisory only: a confident adjudicated triage area
+                    // reorders probe candidates toward the flagged subsystem.
+                    triageArea: triageAreaSignal(triage),
                     index,
                     calls: allCalls,
                     exec: deps.exec,
@@ -1334,7 +1396,7 @@ async function cmdCodeReview(args, ctx, deps) {
         }
         const hasBlocker = finalFindings.some((f) => blockSeverities.includes(f.severity));
         const report = {
-            ok: !hasBlocker && !ledger.budgetExceeded,
+            ok: !hasBlocker && !ledger.budgetExceeded && isHeadBindingConclusive(headBinding),
             skipped: false,
             summary,
             verdict,
@@ -1350,6 +1412,7 @@ async function cmdCodeReview(args, ctx, deps) {
             tokens: totalTokens,
             model: lastModel,
             budgetExceeded: ledger.budgetExceeded,
+            headBinding,
         };
         await writeAtomicJson(codeReviewPath, report);
         stage(`report written — verdict ${verdict}, ${linkedFindings.length} finding(s), ` +
@@ -1364,6 +1427,85 @@ async function cmdCodeReview(args, ctx, deps) {
         ctx.err(`code review failed: ${e.message}`);
         return 1;
     }
+}
+async function cmdVerify(args, ctx, deps) {
+    const { values } = parseArgs({
+        args,
+        allowPositionals: false,
+        options: {
+            help: { type: 'boolean', short: 'h', default: false },
+            review: { type: 'boolean', default: true },
+            flow: { type: 'boolean', default: false },
+            app: { type: 'boolean', default: false },
+            a0: { type: 'boolean', default: false },
+            url: { type: 'string' },
+            'report-dir': { type: 'string' },
+        },
+    });
+    if (values.help) {
+        ctx.out('Usage: argus-reviewer verify [--flow] [--app] [--a0] [--url <target>] [--report-dir <dir>]\n\n' +
+            'Runs the selected product lanes and writes run-manifest.json. Code review is selected by default; deeper lanes are explicit.');
+        return 0;
+    }
+    const selection = selectionFromFlags({
+        review: values.review,
+        flow: values.flow || ctx.env.ARGUS_VERIFY_FLOW === '1',
+        app: values.app || ctx.env.ARGUS_VERIFY_APP === '1',
+        a0: values.a0 || ctx.env.ARGUS_VERIFY_A0 === '1',
+    });
+    if (!selection.review && !selection.flow && !selection.app && !selection.a0) {
+        selection.review = defaultLaneSelection().review;
+    }
+    const { trust } = await resolveCheckoutTrust(ctx);
+    const config = await loadConfig(ctx.cwd, { trust, note: ctx.err });
+    const reportDir = resolve(ctx.cwd, values['report-dir'] ?? config.reportDir ?? 'argus-reviewer-report');
+    await mkdir(reportDir, { recursive: true });
+    const flowUrl = values.url ?? config.target?.url;
+    const trace = parseOpenRouterTrace(ctx.env);
+    const git = await gitInfo(ctx.cwd);
+    const envBudget = Number(ctx.env.ARGUS_BUDGET_USD);
+    const actionBudget = Number.isFinite(envBudget) && envBudget > 0 ? envBudget : undefined;
+    const budgets = {};
+    const reviewBudget = actionBudget ?? config.codeReviewBudgetUsd;
+    const flowBudget = actionBudget ?? config.budgetUsd;
+    if (reviewBudget !== undefined)
+        budgets.review = { limitUsd: reviewBudget };
+    if (flowBudget !== undefined)
+        budgets.flow = { limitUsd: flowBudget };
+    const result = await runVerify({
+        cwd: ctx.cwd,
+        runId: newRunId(),
+        reportDir,
+        identity: {
+            repo: trace?.repo ?? git.repo,
+            pr: trace?.pr,
+            intendedHeadSha: trace?.commit,
+            checkoutSha: git.commitSha,
+            baseSha: undefined,
+        },
+        selection,
+        ...(flowUrl !== undefined ? { flowUrl } : {}),
+        flowUnavailableReason: 'no application target configured; set target.url or pass --url',
+        budgets,
+        runners: {
+            review: async () => cmdCodeReview(['--report-dir', reportDir], ctx, deps),
+            flow: async (url) => cmdRun(['--url', url, '--report-dir', reportDir], ctx, deps),
+        },
+    });
+    const reviewBinding = result.manifest.lanes.review.headBinding;
+    if (reviewBinding?.intendedSha !== undefined) {
+        result.manifest.identity.intendedHeadSha = reviewBinding.intendedSha;
+    }
+    const manifestPath = join(reportDir, 'run-manifest.json');
+    await writeAtomicJson(manifestPath, result.manifest);
+    ctx.out(`verify ${result.manifest.aggregate.status}: ${result.manifest.aggregate.calls} provider call(s), ` +
+        `$${result.manifest.aggregate.costUsd.toFixed(6)} — manifest ${manifestPath}`);
+    for (const lane of ['review', 'flow', 'app', 'a0']) {
+        const record = result.manifest.lanes[lane];
+        if (record.selected)
+            ctx.out(`  ${lane}: ${record.status}${record.reason ? ` — ${record.reason}` : ''}`);
+    }
+    return result.exitCode;
 }
 async function cmdCache(args, ctx) {
     const { values, positionals } = parseArgs({
@@ -1389,7 +1531,7 @@ async function cmdCache(args, ctx) {
             names = (await readdir(cacheDir)).filter((f) => f.endsWith('.json')).sort();
         }
         catch {
-            names = [];
+            // missing cache dir reads as empty
         }
         if (names.length === 0) {
             ctx.out(`cache empty (${cacheDir})`);
@@ -1412,7 +1554,7 @@ async function cmdCache(args, ctx) {
         names = (await readdir(cacheDir)).filter((f) => f.endsWith('.json'));
     }
     catch {
-        names = [];
+        // missing cache dir reads as empty
     }
     const targets = values.all ? names : restPositionals.map((n) => `${n}.json`);
     let removed = 0;
@@ -1553,11 +1695,11 @@ jobs:
     steps:
       # persist-credentials: false keeps the GITHUB_TOKEN out of .git/config —
       # the probe sandbox masks .git regardless, but don't store it at all.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      # Pin a tag or commit for supply-chain safety once releases are cut.
-      - uses: duketopceo/Argus/action@main
+          ref: \${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: duketopceo/Argus/action@75492b8a6b10338d1f141ac9f8544135edc34409 # v0.2.0
         with:
           openrouter-api-key: \${{ secrets.OPENROUTER_API_KEY }}
 `;

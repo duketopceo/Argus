@@ -46,6 +46,14 @@ export interface ScoreAnswer {
     confidence?: number;
 }
 export type DecisionAnswer = NoulAnswer | ChoiceAnswer | ScoreAnswer;
+/** Type guards over the answer union — one `in` check per lane otherwise. */
+export declare const isNoulAnswer: (a: DecisionAnswer) => a is NoulAnswer;
+export declare const isChoiceAnswer: (a: DecisionAnswer) => a is ChoiceAnswer;
+export declare const isScoreAnswer: (a: DecisionAnswer) => a is ScoreAnswer;
+/** Short error label for lane debug lines: DecisionError kind, else message. */
+export declare function describeDecisionError(e: unknown): string;
+/** Shared per-call batch cap for the Jev lanes (secrets, findings, triage). */
+export declare const MAX_CANDIDATES = 50;
 export interface DecisionClientOptions {
     apiKey: string;
     fetch?: typeof fetch;

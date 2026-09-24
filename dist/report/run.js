@@ -24,6 +24,12 @@ export function buildRunReport(tests, startedAt, durationMs) {
             budgetExceeded: tests.some((t) => t.budgetExceeded),
             callsByModel,
             costByModel,
+            cacheHits: tests.reduce((sum, t) => sum + (t.cache?.hits ?? 0), 0),
+            cacheMisses: tests.reduce((sum, t) => sum + (t.cache?.misses ?? 0), 0),
+            cacheHeals: tests.reduce((sum, t) => sum + (t.cache?.heals ?? 0), 0),
+            staleEntries: tests.reduce((sum, t) => sum + (t.cache?.staleEntries ?? 0), 0),
+            assertionHits: tests.reduce((sum, t) => sum + (t.cache?.assertionHits ?? 0), 0),
+            assertionMisses: tests.reduce((sum, t) => sum + (t.cache?.assertionMisses ?? 0), 0),
         },
         tests,
         artifacts: {

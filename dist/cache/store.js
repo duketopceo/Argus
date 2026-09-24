@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { writeAtomicJson } from '../fsutil.js';
+export const FLOW_CACHE_SCHEMA_VERSION = 1;
 function sortKeys(_, value) {
     if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
         const entries = Object.entries(value).sort(([a], [b]) => a.localeCompare(b));
@@ -19,11 +20,17 @@ export async function loadFlow(cacheDir, flowName) {
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
             return undefined;
         }
-        const { steps, asserts } = parsed;
+        const { schemaVersion, steps, asserts } = parsed;
         if (!Array.isArray(steps)) {
             return undefined;
         }
-        const out = { steps: steps };
+        if (schemaVersion !== undefined && schemaVersion !== FLOW_CACHE_SCHEMA_VERSION) {
+            return undefined;
+        }
+        const out = {
+            ...(schemaVersion === FLOW_CACHE_SCHEMA_VERSION ? { schemaVersion } : {}),
+            steps: steps,
+        };
         if (Array.isArray(asserts))
             out.asserts = asserts;
         return out;
@@ -37,5 +44,5 @@ export async function loadFlow(cacheDir, flowName) {
     }
 }
 export async function saveFlow(cacheDir, flowName, steps, asserts) {
-    await writeAtomicJson(flowPath(cacheDir, flowName), { steps, asserts: asserts ?? [] }, sortKeys);
+    await writeAtomicJson(flowPath(cacheDir, flowName), { schemaVersion: FLOW_CACHE_SCHEMA_VERSION, steps, asserts: asserts ?? [] }, sortKeys);
 }

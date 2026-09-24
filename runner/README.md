@@ -11,7 +11,7 @@ Each repo gets its own runner dir (`~/actions-runner-<name>`) and unit (`actions
 
 ## Topology
 
-- **Primary node: cluster2** (Ubuntu 24.04, x86_64, Docker 29, ~14 GiB free). cluster1 hosts the stateful AppFlowy stack; cluster3 is RAM-constrained.
+- **Primary node: cluster2** (Ubuntu 24.04, x86_64, Docker 29, ~14 GiB free). cluster1 hosts the stateful services stack; cluster3 is RAM-constrained.
 - Labels: `self-hosted, linux, x64, argus-reviewer`. Target jobs with `runs-on: [self-hosted, linux, x64, argus-reviewer]`.
 
 ## Cost model

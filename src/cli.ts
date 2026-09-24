@@ -55,10 +55,19 @@ import { liveLog } from './live.js'
 import { JunitCase, writeJunitXml } from './report/junit.js'
 import { buildRunReport, TestReport, writeRunReport } from './report/run.js'
 import { flowPath, loadFlow } from './cache/store.js'
+import {
+  classifyHeadBinding,
+  isHeadBindingConclusive,
+  readCheckoutSha,
+  type HeadBinding,
+} from './report/manifest.js'
 import { writeAtomicJson } from './fsutil.js'
 import { CallCost } from './vision/cost.js'
 import { JsonSchema, Message, OpenRouterClient } from './vision/openrouter.js'
 import { Ledger } from './vision/ledger.js'
+import { defaultLaneSelection, selectionFromFlags } from './pipeline/contracts.js'
+import type { BudgetOptions } from './pipeline/budget.js'
+import { runVerify } from './pipeline/verify.js'
 
 export interface CliDeps {
   cwd?: string
@@ -85,6 +94,7 @@ const USAGE = `argus-reviewer — vision-model E2E testing harness (BYOK via OPE
 Usage:
   argus-reviewer record "<flow description>" --url <target> [--name <flow>] [--tests-dir <dir>] [--max-steps <n>]
   argus-reviewer run [pattern] [--url <target>] [--dir <testsDir>] [--report-dir <dir>]
+  argus-reviewer verify [--flow] [--app] [--a0] [--report-dir <dir>]
   argus-reviewer code-review [--report-dir <dir>]
   argus-reviewer delegate "<task>" [--url <target>] [--host <a0-url>]
   argus-reviewer cache list [--dir <cacheDir>]
@@ -164,6 +174,8 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
       return cmdRecord(rest, ctx, deps)
     case 'run':
       return cmdRun(rest, ctx, deps)
+    case 'verify':
+      return cmdVerify(rest, ctx, deps)
     case 'code-review':
       return cmdCodeReview(rest, ctx, deps)
     case 'delegate':
@@ -640,6 +652,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
             budgetExceeded: state.budgetExceeded,
             calls: state.calls,
             videoPath: undefined,
+            cache: fileSession.cacheStats,
           })
           await fileSession.save()
           runErrors.push(...tagErrors(fileSession.errorRecords, fileSlug))
@@ -683,6 +696,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
               budgetExceeded: state.budgetExceeded,
               calls: state.calls,
               videoPath: undefined,
+              cache: session.cacheStats,
             })
             await session.save()
             runErrors.push(...tagErrors(session.errorRecords, registeredTest.name))
@@ -876,6 +890,8 @@ interface CodeReviewReport {
   tokens: number
   model: string
   budgetExceeded: boolean
+  /** Identity relationship between the report source and checkout. */
+  headBinding?: HeadBinding
 }
 
 const CHUNK_TOKEN_TARGET = 6000
@@ -1163,10 +1179,9 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
   const pr = fixtureDir !== undefined ? '0' : trace?.pr || trustResult.pr
   const token = ctx.env.GITHUB_TOKEN ?? ctx.env.GH_TOKEN
   const model = config.code_model ?? config.model
-  const budget = config.codeReviewBudgetUsd
   debug(
     'code-review',
-    `repo=${repo ?? 'none'} pr=${pr ?? 'none'} model=${model} budget=${budget ?? 'unlimited'}`,
+    `repo=${repo ?? 'none'} pr=${pr ?? 'none'} model=${model} budget=${config.codeReviewBudgetUsd ?? 'unlimited'}`,
   )
 
   const skip = async (reason: string): Promise<number> => {
@@ -1183,6 +1198,11 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       tokens: 0,
       model,
       budgetExceeded: false,
+      headBinding: classifyHeadBinding(
+        undefined,
+        undefined,
+        fixtureDir !== undefined ? 'fixture' : 'github',
+      ),
     }
     await writeAtomicJson(codeReviewPath, skipped)
     return 0
@@ -1203,6 +1223,13 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
   const repoName = repo as string
   const prNum = pr as string
   const ghToken = token as string
+  const envBudget = ctx.env.ARGUS_BUDGET_USD
+  if (envBudget !== undefined && envBudget !== '') {
+    const parsed = Number(envBudget)
+    if (Number.isFinite(parsed) && parsed > 0) config.codeReviewBudgetUsd = parsed
+    else ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`)
+  }
+  const budget = config.codeReviewBudgetUsd
   const [files, index] = await Promise.all([
     fixture !== undefined
       ? Promise.resolve(fixture.files)
@@ -1234,6 +1261,10 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     // Kick off PR metadata now — it only needs repo/pr/token and its
     // round-trip hides behind the model calls. Degrades to undefined.
     // Fixture mode supplies it locally — same shape, no API call.
+    const checkoutShaPromise =
+      fixture !== undefined
+        ? Promise.resolve(undefined)
+        : readCheckoutSha(ctx.cwd, deps.exec ?? defaultExec)
     const prMetaPromise =
       fixture !== undefined
         ? Promise.resolve(fixture.meta)
@@ -1398,7 +1429,6 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       summary = `Budget exceeded — review stopped early. ${summary}`
       if (verdict !== 'needs_changes') verdict = 'needs_changes'
     }
-
     // Annotate-mode triage overlapped the chunk loop — resolve it here,
     // before the probe lane and report read the record.
     if (triage === undefined && triagePromise !== undefined) {
@@ -1440,6 +1470,16 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     // lane's fork gate (evidence/gate.ts) consumes them; only headSha feeds
     // evidence linkage here.
     const prMeta = await prMetaPromise
+    const checkoutSha = await checkoutShaPromise
+    const headBinding = classifyHeadBinding(
+      prMeta?.headSha,
+      checkoutSha,
+      fixture !== undefined ? 'fixture' : 'github',
+    )
+    stage(`head binding — ${headBinding.status}: ${headBinding.detail}`)
+    if (!isHeadBindingConclusive(headBinding)) {
+      summary = `Head binding inconclusive — ${summary}`
+    }
 
     // Secrets lane: deterministic regex scan over the local merge-base
     // diff — the PR-files API `patch` omits large/binary files, so the
@@ -1537,6 +1577,10 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     // code too so a miswired workflow fails closed instead of executing
     // PR code beside real credentials.
     if (ctx.env.GITHUB_EVENT_NAME === 'pull_request_target') sandbox.enabled = false
+    if (!isHeadBindingConclusive(headBinding)) {
+      sandbox.enabled = false
+      probeLaneSkipped = `head binding ${headBinding.status} — ${headBinding.detail}`
+    }
     // Fixture mode reviews a local repo, not the cwd checkout — probes
     // would execute against the wrong tree.
     if (fixtureDir !== undefined && sandbox.enabled) {
@@ -1591,7 +1635,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
 
     const hasBlocker = finalFindings.some((f) => blockSeverities.includes(f.severity))
     const report: CodeReviewReport = {
-      ok: !hasBlocker && !ledger.budgetExceeded,
+      ok: !hasBlocker && !ledger.budgetExceeded && isHeadBindingConclusive(headBinding),
       skipped: false,
       summary,
       verdict,
@@ -1607,6 +1651,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       tokens: totalTokens,
       model: lastModel,
       budgetExceeded: ledger.budgetExceeded,
+      headBinding,
     }
     await writeAtomicJson(codeReviewPath, report)
     stage(
@@ -1624,6 +1669,94 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     ctx.err(`code review failed: ${(e as Error).message}`)
     return 1
   }
+}
+
+async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> {
+  const { values } = parseArgs({
+    args,
+    allowPositionals: false,
+    options: {
+      help: { type: 'boolean', short: 'h', default: false },
+      review: { type: 'boolean', default: true },
+      flow: { type: 'boolean', default: false },
+      app: { type: 'boolean', default: false },
+      a0: { type: 'boolean', default: false },
+      url: { type: 'string' },
+      'report-dir': { type: 'string' },
+    },
+  })
+  if (values.help) {
+    ctx.out(
+      'Usage: argus-reviewer verify [--flow] [--app] [--a0] [--url <target>] [--report-dir <dir>]\n\n' +
+        'Runs the selected product lanes and writes run-manifest.json. Code review is selected by default; deeper lanes are explicit.',
+    )
+    return 0
+  }
+
+  const selection = selectionFromFlags({
+    review: values.review,
+    flow: values.flow || ctx.env.ARGUS_VERIFY_FLOW === '1',
+    app: values.app || ctx.env.ARGUS_VERIFY_APP === '1',
+    a0: values.a0 || ctx.env.ARGUS_VERIFY_A0 === '1',
+  })
+  if (!selection.review && !selection.flow && !selection.app && !selection.a0) {
+    selection.review = defaultLaneSelection().review
+  }
+
+  const { trust } = await resolveCheckoutTrust(ctx)
+  const config = await loadConfig(ctx.cwd, { trust, note: ctx.err })
+  const reportDir = resolve(
+    ctx.cwd,
+    values['report-dir'] ?? config.reportDir ?? 'argus-reviewer-report',
+  )
+  await mkdir(reportDir, { recursive: true })
+  const flowUrl = values.url ?? config.target?.url
+  const trace = parseOpenRouterTrace(ctx.env)
+  const git = await gitInfo(ctx.cwd)
+  const envBudget = Number(ctx.env.ARGUS_BUDGET_USD)
+  const actionBudget =
+    Number.isFinite(envBudget) && envBudget > 0 ? envBudget : undefined
+  const budgets: Partial<Record<'review' | 'flow', BudgetOptions>> = {}
+  const reviewBudget = actionBudget ?? config.codeReviewBudgetUsd
+  const flowBudget = actionBudget ?? config.budgetUsd
+  if (reviewBudget !== undefined) budgets.review = { limitUsd: reviewBudget }
+  if (flowBudget !== undefined) budgets.flow = { limitUsd: flowBudget }
+  const result = await runVerify({
+    cwd: ctx.cwd,
+    runId: newRunId(),
+    reportDir,
+    identity: {
+      repo: trace?.repo ?? git.repo,
+      pr: trace?.pr,
+      intendedHeadSha: trace?.commit,
+      checkoutSha: git.commitSha,
+      baseSha: undefined,
+    },
+    selection,
+    ...(flowUrl !== undefined ? { flowUrl } : {}),
+    flowUnavailableReason: 'no application target configured; set target.url or pass --url',
+    budgets,
+    runners: {
+      review: async () => cmdCodeReview(['--report-dir', reportDir], ctx, deps),
+      flow: async (url) => cmdRun(['--url', url, '--report-dir', reportDir], ctx, deps),
+    },
+  })
+
+  const reviewBinding = result.manifest.lanes.review.headBinding
+  if (reviewBinding?.intendedSha !== undefined) {
+    result.manifest.identity.intendedHeadSha = reviewBinding.intendedSha
+  }
+  const manifestPath = join(reportDir, 'run-manifest.json')
+  await writeAtomicJson(manifestPath, result.manifest)
+  ctx.out(
+    `verify ${result.manifest.aggregate.status}: ${result.manifest.aggregate.calls} provider call(s), ` +
+      `$${result.manifest.aggregate.costUsd.toFixed(6)} — manifest ${manifestPath}`,
+  )
+  for (const lane of ['review', 'flow', 'app', 'a0'] as const) {
+    const record = result.manifest.lanes[lane]
+    if (record.selected) ctx.out(`  ${lane}: ${record.status}${record.reason ? ` — ${record.reason}` : ''}`)
+  }
+  return result.exitCode
 }
 
 async function cmdCache(args: string[], ctx: Ctx): Promise<number> {
@@ -1825,11 +1958,11 @@ jobs:
     steps:
       # persist-credentials: false keeps the GITHUB_TOKEN out of .git/config —
       # the probe sandbox masks .git regardless, but don't store it at all.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      # Pin a tag or commit for supply-chain safety once releases are cut.
-      - uses: duketopceo/Argus/action@main
+          ref: \${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: duketopceo/Argus/action@75492b8a6b10338d1f141ac9f8544135edc34409 # v0.2.0
         with:
           openrouter-api-key: \${{ secrets.OPENROUTER_API_KEY }}
 `

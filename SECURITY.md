@@ -22,6 +22,25 @@ You should receive an acknowledgement within a few days.
 - `delegate` and `heal: 'a0'` hand control to your own Agent Zero instance;
   review that instance's trust settings separately.
 
+## GitHub Action boundary
+
+- The action's default path installs the CLI package from the pinned action ref
+  with lifecycle scripts disabled. It does not run consumer lifecycle scripts
+  or start an application target.
+- Browser, application, and consumer dependency installation are explicit
+  opt-ins. The action rejects those lanes for fork pull requests and
+  `pull_request_target`; do not work around that check by granting write
+  credentials to an untrusted workflow.
+- The repository's review workflow uses the published action reference and a
+  separately pinned CLI package. Local action changes are checked by a
+  no-secret action-contract job rather than being executed with provider or
+  GitHub write credentials.
+- Action inputs are parsed into an argv array. Working-directory and config
+  paths are constrained to the configured workspace after resolving symlinks.
+  The trusted report-dir output path rejects control characters but may be
+  absolute. The PR comment step loads a checked-in CommonJS module directly;
+  it does not dynamically evaluate action source.
+
 ## Sandbox probe lane (`sandbox.enabled` / action `sandbox` input)
 
 When enabled, `code-review` executes **PR-contributed code** — model-authored
@@ -88,13 +107,12 @@ a trust value at every call site.
 **Residual surface (documented, not yet closed):**
 
 - `run`/`record`/`delegate` on untrusted trees still execute
-  PR-controlled *test files* (the run lane scans `tests/` by default) —
+  PR-controlled _test files_ (the run lane scans `tests/` by default) —
   and `td.type(name, {secret:true})` falls back to `env[name]`, so env
   secrets can be typed into PR-chosen origins. Fork-PR workflows must
   not expose env secrets to those lanes; config stripping alone does
   not sandbox test execution.
-- The action's `npm ci` runs the PR's dependency lifecycle scripts
-  (postinstall etc.) on the host *before* any sandboxing — a
-  pre-existing property of running a project's own suite in CI. Do not
-  run this action with secrets on workflows that check out untrusted PR
-  code.
+- The action's optional `install-consumer-dependencies` path still runs the
+  consumer's dependency lifecycle scripts on the host. It is disabled by
+  default and must remain limited to trusted, non-fork runtime workflows;
+  config stripping alone does not sandbox dependency installation.

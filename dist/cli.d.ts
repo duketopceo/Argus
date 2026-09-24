@@ -7,8 +7,9 @@ import { type PrMeta } from './evidence/ci.js';
 import { type Evidence } from './evidence/link.js';
 import { type SecretsScanResult } from './review/secrets.js';
 import { type TriageRecord } from './review/triage.js';
-import { type FindingAdjudicationResult } from './review/adjudicate.js';
+import { type FindingAdjudicationAudit } from './review/adjudicate.js';
 import { type ProbeRecord } from './probe/queue.js';
+import { type HeadBinding } from './report/manifest.js';
 import { CallCost } from './vision/cost.js';
 export interface CliDeps {
     cwd?: string;
@@ -56,12 +57,14 @@ interface CodeReviewReport {
     /** U7 triage record — Jev pre-review signals (annotate/route, never gates). */
     triage?: TriageRecord;
     /** U8 adjudication audit — per-finding p + suppressed records. */
-    findingAdjudication?: Omit<FindingAdjudicationResult<never>, 'findings'>;
+    findingAdjudication?: FindingAdjudicationAudit;
     calls: CallCost[];
     visionCostUsd: number;
     tokens: number;
     model: string;
     budgetExceeded: boolean;
+    /** Identity relationship between the report source and checkout. */
+    headBinding?: HeadBinding;
 }
 /**
  * Split `git diff` text into per-file PrFile entries — the local-diff

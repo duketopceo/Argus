@@ -1,7 +1,14 @@
-/* global github, context, core, require, process */
+/* eslint-disable @typescript-eslint/no-require-imports */
 
 const fs = require('fs')
 const path = require('path')
+
+// The composite action injects these objects at runtime. Keeping them in a
+// module-level runtime binding lets the GitHub script load this file with a
+// normal require() instead of evaluating its source dynamically.
+let github
+let context
+let core
 
 const SENTINEL = '<!-- argus-reviewer -->'
 
@@ -69,6 +76,10 @@ function renderBody(report, codeReview, runUrl, ok, inlinePlan) {
       `${report.totals.visionCalls} vision calls · ` +
       `${formatUsd(report.totals.visionCostUsd)} spend · ` +
       `${report.totals.sandboxSeconds.toFixed(1)}s sandbox`,
+  )
+  lines.push(
+    `**Fingerprint cache:** ${report.totals.cacheHits ?? 0} hit(s) · ` +
+      `${report.totals.cacheMisses ?? 0} miss(es) · ${report.totals.cacheHeals ?? 0} heal(s)`,
   )
   lines.push('')
 
@@ -242,6 +253,11 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
   lines.push(
     `**Verdict:** ${codeReview.verdict} · ${codeReview.model} · ${codeReview.tokens}tok ${formatUsd(codeReview.visionCostUsd)}`,
   )
+  if (codeReview.headBinding) {
+    lines.push(
+      `**Head binding:** ${cell(codeReview.headBinding.status)} · ${cell(codeReview.headBinding.detail)}`,
+    )
+  }
   // U7 triage record — Jev annotate/route signals, never the gate.
   if (codeReview.triage) {
     const t = codeReview.triage
@@ -581,4 +597,19 @@ async function main() {
   core.setOutput('conclusion', conclusion)
 }
 
-return await main()
+async function run(runtime) {
+  github = runtime.github
+  context = runtime.context
+  core = runtime.core
+  return main()
+}
+
+module.exports = {
+  run,
+  renderBody,
+  renderReviewOnlyBody,
+  renderMissingKeyBody,
+  renderNoReportBody,
+  planInlineComments,
+  postInlineComments,
+}

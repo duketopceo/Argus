@@ -1,6 +1,7 @@
 import { writeAtomicJson } from '../fsutil.js'
 
 import type { HealEvent, TdAssertRecord, TdStepRecord } from '../api.js'
+import type { CacheStats } from '../engine/loop.js'
 import type { CallCost } from '../vision/cost.js'
 
 /**
@@ -24,6 +25,8 @@ export interface TestReport {
   /** Per-call cost rows for model-level attribution. */
   calls: CallCost[]
   videoPath: string | undefined
+  /** Fingerprint replay/grounding counters for this test. */
+  cache?: CacheStats
   /** Agent Zero's autonomous second opinion on a failure (heal: 'a0'). */
   a0Diagnosis?: string
 }
@@ -40,6 +43,12 @@ export interface RunTotals {
   costByModel: Record<string, number>
   /** OpenRouter call count grouped by model id. */
   callsByModel: Record<string, number>
+  cacheHits: number
+  cacheMisses: number
+  cacheHeals: number
+  staleEntries: number
+  assertionHits: number
+  assertionMisses: number
 }
 
 export interface RunReport {
@@ -81,6 +90,12 @@ export function buildRunReport(
       budgetExceeded: tests.some((t) => t.budgetExceeded),
       callsByModel,
       costByModel,
+      cacheHits: tests.reduce((sum, t) => sum + (t.cache?.hits ?? 0), 0),
+      cacheMisses: tests.reduce((sum, t) => sum + (t.cache?.misses ?? 0), 0),
+      cacheHeals: tests.reduce((sum, t) => sum + (t.cache?.heals ?? 0), 0),
+      staleEntries: tests.reduce((sum, t) => sum + (t.cache?.staleEntries ?? 0), 0),
+      assertionHits: tests.reduce((sum, t) => sum + (t.cache?.assertionHits ?? 0), 0),
+      assertionMisses: tests.reduce((sum, t) => sum + (t.cache?.assertionMisses ?? 0), 0),
     },
     tests,
     artifacts: {

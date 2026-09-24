@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { computeRegionHash, Fingerprint, FingerprintRecord } from '../../src/cache/fingerprint.js'
-import { loadFlow, saveFlow } from '../../src/cache/store.js'
+import { FLOW_CACHE_SCHEMA_VERSION, loadFlow, saveFlow } from '../../src/cache/store.js'
 
 describe('computeRegionHash', () => {
   it('returns the same hash for the same buffer', () => {
@@ -79,6 +79,27 @@ describe('Cache store round-trip', () => {
     await saveFlow(dir, 'demo', [record])
     const loaded = await loadFlow(dir, 'demo')
     expect(loaded).toBeDefined()
+    expect(loaded!.schemaVersion).toBe(FLOW_CACHE_SCHEMA_VERSION)
     expect(loaded!.steps).toEqual([record])
+  })
+
+  it('rejects a cache written by an unknown schema version', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'argus-fp-version-'))
+    await saveFlow(dir, 'future', [])
+    const path = join(dir, 'future.json')
+    const raw = JSON.parse(await readFile(path, 'utf8')) as {
+      schemaVersion: number
+    }
+    raw.schemaVersion = 99
+    await writeFile(path, JSON.stringify(raw))
+    expect(await loadFlow(dir, 'future')).toBeUndefined()
+  })
+
+  it('loads an unversioned legacy cache', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'argus-fp-legacy-'))
+    await writeFile(join(dir, 'legacy.json'), JSON.stringify({ steps: [] }))
+
+    const loaded = await loadFlow(dir, 'legacy')
+    expect(loaded).toEqual({ steps: [] })
   })
 })

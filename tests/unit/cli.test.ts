@@ -132,7 +132,14 @@ describe('argus-reviewer CLI', () => {
 
     const report = JSON.parse(await readFile(join(reportDir, 'run.json'), 'utf8')) as {
       ok: boolean
-      totals: { passed: number; failed: number; visionCalls: number; visionCostUsd: number }
+      totals: {
+        passed: number
+        failed: number
+        visionCalls: number
+        visionCostUsd: number
+        cacheHits: number
+        cacheMisses: number
+      }
       tests: { name: string; ok: boolean; asserts: { verdict: string }[] }[]
     }
     expect(report.ok).toBe(true)
@@ -140,6 +147,8 @@ describe('argus-reviewer CLI', () => {
     expect(report.totals.failed).toBe(0)
     expect(report.totals.visionCalls).toBe(2)
     expect(report.totals.visionCostUsd).toBeCloseTo(0.002)
+    expect(report.totals.cacheHits).toBe(0)
+    expect(report.totals.cacheMisses).toBe(1)
     expect(report.tests[0]!.asserts[0]!.verdict).toBe('pass')
 
     // The locate call wrote a fingerprint cache entry for the test flow.
@@ -346,6 +355,12 @@ describe('argus-reviewer CLI', () => {
     expect(existsSync(join(cwd, 'argus-reviewer.config.ts'))).toBe(true)
     expect(existsSync(join(cwd, 'tests/argus/smoke.test.ts'))).toBe(true)
     expect(existsSync(join(cwd, '.github/workflows/argus-reviewer.yml'))).toBe(true)
+    const workflow = await readFile(join(cwd, '.github/workflows/argus-reviewer.yml'), 'utf8')
+    expect(workflow).toContain('ref: ${{ github.event.pull_request.head.sha || github.sha }}')
+    expect(workflow).toMatch(/actions\/checkout@[0-9a-f]{40} # v7/)
+    expect(workflow).toMatch(
+      /duketopceo\/Argus\/action@[0-9a-f]{40} # v0\.2\.0/,
+    )
     // Second run without --force skips rather than overwriting
     const out2 = capture()
     expect(await main(['init'], { cwd, out: out2.fn })).toBe(0)
