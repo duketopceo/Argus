@@ -3,26 +3,27 @@ name: argus-reviewer PR review
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
   review:
+    # The published action is trusted code. Do not execute the PR's local
+    # action implementation with provider/write credentials on fork PRs.
+    if: >-
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) &&
+      (github.event.action != 'labeled' || github.event.label.name == 'argus-probe')
     runs-on: self-hosted
-    # 'labeled' fires on EVERY label — only argus-probe is the fork-gate
-    # signal worth a full review run.
-    if: github.event.action != 'labeled' || github.event.label.name == 'argus-probe'
     permissions:
       contents: read
       issues: write
       pull-requests: write
       checks: write
       statuses: write
-      actions: write
     env:
       ARGUS_DEBUG: '1'
     steps:
-      # The probe sandbox masks .git anyway — but don't persist the token
-      # into .git/config in the first place.
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
@@ -32,21 +33,39 @@ jobs:
           node-version: '22'
           cache: npm
 
-      - name: Build argus-reviewer
+      - name: Build consumer package
         run: npm ci && npm run build
 
-      - name: Run argus-reviewer action
+      - name: Run published Argus action
         id: review
-        uses: ./action
+        uses: duketopceo/Argus/action@v0.2.0
         with:
           openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           cli: node dist/cli.js
+          index: 'false'
+          run: 'false'
           working-directory: .
 
-      - name: Upload argus-reviewer report artifact
+      - name: Upload Argus review report artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: argus-reviewer-report-${{ github.run_id }}-${{ github.run_attempt }}
           path: argus-reviewer-report/
           if-no-files-found: ignore
+
+  action-contract:
+    # PR-controlled action code is checked without provider or write secrets.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx vitest run tests/unit/action-contract.test.ts --reporter=dot

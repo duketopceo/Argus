@@ -1,7 +1,14 @@
-/* global github, context, core, require, process */
+/* eslint-disable @typescript-eslint/no-require-imports */
 
 const fs = require('fs')
 const path = require('path')
+
+// The composite action injects these objects at runtime. Keeping them in a
+// module-level runtime binding lets the GitHub script load this file with a
+// normal require() instead of evaluating its source dynamically.
+let github
+let context
+let core
 
 const SENTINEL = '<!-- argus-reviewer -->'
 
@@ -581,4 +588,19 @@ async function main() {
   core.setOutput('conclusion', conclusion)
 }
 
-return await main()
+async function run(runtime) {
+  github = runtime.github
+  context = runtime.context
+  core = runtime.core
+  return main()
+}
+
+module.exports = {
+  run,
+  renderBody,
+  renderReviewOnlyBody,
+  renderMissingKeyBody,
+  renderNoReportBody,
+  planInlineComments,
+  postInlineComments,
+}

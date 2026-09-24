@@ -6,6 +6,7 @@ import type { RepoIndex } from '../index/scan.js';
 import type { VisionClient } from '../engine/loop.js';
 import type { CallCost } from '../vision/cost.js';
 import type { Ledger } from '../vision/ledger.js';
+import type { TriageAreaSignal } from '../review/triage.js';
 import { type ProbeOutcome } from './harness.js';
 /**
  * The B.2 probe lane (U4). Called after `linkFindings` inside `code-review`.
@@ -70,22 +71,14 @@ export interface ProbeLaneOptions {
     severityGates: string[];
     index: RepoIndex | undefined;
     /** U9 — triage top_risk_area; advisory reorder of probe candidates. */
-    triageArea?: {
-        area: string;
-        confidence: number;
-    } | undefined;
+    triageArea?: TriageAreaSignal | undefined;
     /** Report sink — authored probe CallCosts are pushed here for the report. */
     calls?: CallCost[] | undefined;
     exec?: ExecFn | undefined;
     log?: ((line: string) => void) | undefined;
 }
-/** U9 — below this confidence the triage area signal is ignored. */
-export declare const MIN_AREA_CONFIDENCE = 0.5;
 /** Pure selection: not_exercised findings at blocking severities, capped. */
-export declare function selectProbeTargets(findings: LinkedFinding[], severityGates: string[], maxProbes: number, triageArea?: {
-    area: string;
-    confidence: number;
-}): LinkedFinding[];
+export declare function selectProbeTargets(findings: LinkedFinding[], severityGates: string[], maxProbes: number, triageArea?: TriageAreaSignal): LinkedFinding[];
 /**
  * Repo-relative path gate for anything model- or index-derived that is read
  * or written on the HOST: no absolute paths, no `..` escapes, no backslashes.

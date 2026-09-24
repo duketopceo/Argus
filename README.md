@@ -59,7 +59,7 @@ on it.
 argus-reviewer/
 ├── action/                  # GitHub Actions composite action + sticky PR comment
 │   ├── action.yml
-│   └── sticky-comment.mjs
+│   └── sticky-comment.cjs
 ├── runner/                  # Self-hosted runner registration docs + script
 │   ├── README.md
 │   └── register-runner.sh

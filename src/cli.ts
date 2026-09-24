@@ -1163,10 +1163,9 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
   const pr = fixtureDir !== undefined ? '0' : trace?.pr || trustResult.pr
   const token = ctx.env.GITHUB_TOKEN ?? ctx.env.GH_TOKEN
   const model = config.code_model ?? config.model
-  const budget = config.codeReviewBudgetUsd
   debug(
     'code-review',
-    `repo=${repo ?? 'none'} pr=${pr ?? 'none'} model=${model} budget=${budget ?? 'unlimited'}`,
+    `repo=${repo ?? 'none'} pr=${pr ?? 'none'} model=${model} budget=${config.codeReviewBudgetUsd ?? 'unlimited'}`,
   )
 
   const skip = async (reason: string): Promise<number> => {
@@ -1203,6 +1202,13 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
   const repoName = repo as string
   const prNum = pr as string
   const ghToken = token as string
+  const envBudget = ctx.env.ARGUS_BUDGET_USD
+  if (envBudget !== undefined && envBudget !== '') {
+    const parsed = Number(envBudget)
+    if (Number.isFinite(parsed) && parsed > 0) config.codeReviewBudgetUsd = parsed
+    else ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`)
+  }
+  const budget = config.codeReviewBudgetUsd
   const [files, index] = await Promise.all([
     fixture !== undefined
       ? Promise.resolve(fixture.files)

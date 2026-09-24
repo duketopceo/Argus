@@ -5,9 +5,13 @@ inputs:
   openrouter-api-key:
     description: OpenRouter API key (BYOK). All vision calls are billed through this key.
     required: true
+  argus-version:
+    description: Pinned argus-reviewer-e2e version used by the default action-owned CLI.
+    default: '0.2.0'
+    required: false
   cli:
-    description: Command used to run argus-reviewer (defaults to `npx --no-install argus-reviewer`). For dogfooding this repo, use `node dist/cli.js` after `npm run build`.
-    default: npx --no-install argus-reviewer
+    description: Optional executable plus arguments for a trusted local CLI override. Shell operators are rejected; empty uses the pinned package bootstrap.
+    default: ''
     required: false
   config:
     description: Path to the argus-reviewer config file
@@ -35,11 +39,8 @@ inputs:
     description: Playwright browser engine to install and run (chromium, firefox, or webkit). Should match config.browser.
     default: 'chromium'
     required: false
-  cache-dependency-path:
-    description: npm lockfile path for setup-node cache (defaults to <working-directory>/package-lock.json)
-    required: false
   report-dir:
-    description: Report output dir, passed to both run and code-review so the post step can find run.json/code-review.json regardless of config reportDir
+    description: Report output dir, passed to both run and code-review so the post step can find artifacts
     default: argus-reviewer-report
     required: false
   sandbox:
@@ -50,9 +51,13 @@ inputs:
     description: Cap on inline review comments posted per run; overflow is summarized in the sticky. Overrides review.maxComments when set.
     default: ''
     required: false
+  install-consumer-dependencies:
+    description: Explicitly install the consumer project's dependencies for a trusted runtime lane. Disabled by default so code review never runs PR-controlled lifecycle scripts beside secrets.
+    default: 'false'
+    required: false
   run:
-    description: Run the browser-flow lane (`argus-reviewer run`). Set 'false' for code-review-only consumers — repos without a per-PR web target (CLIs, libraries, infra repos). Skips the Playwright install and run steps; the sticky comment and commit status then reflect code-review alone.
-    default: 'true'
+    description: Run the browser-flow lane (`argus-reviewer run`). Disabled by default for public code-review-only repositories. Requires an explicit target and a trusted runtime path.
+    default: 'false'
     required: false
 outputs:
   conclusion:
@@ -64,59 +69,82 @@ runs:
     - uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node-version }}
-        cache: npm
-        cache-dependency-path: ${{ inputs.cache-dependency-path || format('{0}/package-lock.json', inputs.working-directory || '.') }}
 
-    - name: Install consumer dependencies
+    - name: Prepare pinned Argus runtime
+      id: bootstrap
       shell: bash
-      working-directory: ${{ inputs.working-directory }}
+      env:
+        ARGUS_ACTION_PATH: ${{ github.action_path }}
+        ARGUS_CLI: ${{ inputs.cli }}
+        ARGUS_ARGUS_VERSION: ${{ inputs.argus-version }}
+        ARGUS_CONFIG_PATH: ${{ inputs.config }}
+        ARGUS_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        ARGUS_REPORT_DIR: ${{ inputs.report-dir }}
+        ARGUS_BROWSER: ${{ inputs.browser }}
+        ARGUS_BUDGET_USD: ${{ inputs.budget-usd }}
+        ARGUS_MAX_COMMENTS: ${{ inputs.max-comments }}
+      run: node "$ARGUS_ACTION_PATH/bootstrap.mjs"
+
+    - name: Reject executable lanes on untrusted pull requests
+      if: inputs.run != 'false' || inputs.install-consumer-dependencies == 'true'
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        HEAD_FORK: ${{ github.event.pull_request.head.repo.fork }}
+      run: |
+        if [ "$EVENT_NAME" = "pull_request_target" ]; then
+          echo "Argus runtime lanes are disabled for pull_request_target." >&2
+          exit 1
+        fi
+        if [ "$EVENT_NAME" = "pull_request" ] && [ "$HEAD_FORK" != "false" ]; then
+          echo "Argus runtime lanes require a same-repository PR or an explicitly trusted workflow." >&2
+          exit 1
+        fi
+        if [ "$EVENT_NAME" != "pull_request" ] && [ "$EVENT_NAME" != "" ]; then
+          echo "Argus runtime lanes are disabled for unlisted CI events: $EVENT_NAME" >&2
+          exit 1
+        fi
+
+    - name: Install consumer dependencies for explicit runtime lanes
+      if: inputs.install-consumer-dependencies == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory || '.' }}
       run: npm ci
 
-    - name: Install Playwright browser
+    - name: Install Playwright browser for explicit runtime lanes
       if: inputs.run != 'false'
       shell: bash
-      working-directory: ${{ inputs.working-directory }}
+      working-directory: ${{ inputs.working-directory || '.' }}
       env:
         ARGUS_BROWSER: ${{ inputs.browser }}
       run: |
-        case "$ARGUS_BROWSER" in
-          chromium|firefox|webkit) ;;
-          *) echo "invalid browser input: '$ARGUS_BROWSER' (expected chromium, firefox, or webkit)"; exit 1 ;;
-        esac
         npx playwright install --with-deps "$ARGUS_BROWSER" || npx playwright install "$ARGUS_BROWSER"
-
-    - name: Stage config
-      shell: bash
-      working-directory: ${{ inputs.working-directory }}
-      run: |
-        if [ "${{ inputs.config }}" != "argus-reviewer.config.ts" ]; then
-          ext="${{ inputs.config }}"
-          ext="${ext##*.}"
-          case "$ext" in
-            ts|json) cp "${{ inputs.config }}" "argus-reviewer.config.$ext" ;;
-            *) echo "unsupported config extension: $ext" >&2; exit 1 ;;
-          esac
-        fi
 
     - name: Build repo index
       if: inputs.index == 'true'
       shell: bash
-      working-directory: ${{ inputs.working-directory }}
+      working-directory: ${{ inputs.working-directory || '.' }}
       env:
-        # Token only feeds trust resolution on issue_comment events —
-        # pull_request* events read fork status from the event payload.
+        ARGUS_ACTION_PATH: ${{ github.action_path }}
         GITHUB_TOKEN: ${{ github.token }}
-      run: ${{ inputs.cli }} index
+        ARGUS_CLI_JSON: ${{ steps.bootstrap.outputs.cli-json }}
+        ARGUS_WORKING_DIRECTORY: ${{ steps.bootstrap.outputs.working-directory }}
+      run: node "$ARGUS_ACTION_PATH/cli.mjs" index
 
     - name: Run argus-reviewer code review
       id: code-review
       shell: bash
-      working-directory: ${{ inputs.working-directory }}
+      working-directory: ${{ inputs.working-directory || '.' }}
       continue-on-error: true
       env:
+        ARGUS_ACTION_PATH: ${{ github.action_path }}
         OPENROUTER_API_KEY: ${{ inputs.openrouter-api-key }}
         GITHUB_TOKEN: ${{ github.token }}
+        ARGUS_CLI_JSON: ${{ steps.bootstrap.outputs.cli-json }}
+        ARGUS_WORKING_DIRECTORY: ${{ steps.bootstrap.outputs.working-directory }}
+        ARGUS_REPORT_DIR: ${{ inputs.report-dir }}
         ARGUS_SANDBOX: ${{ inputs.sandbox == 'true' && '1' || '' }}
+        ARGUS_BUDGET_USD: ${{ inputs.budget-usd }}
         ARGUS_MAX_COMMENTS: ${{ inputs.max-comments }}
         ARGUS_DEBUG: '1'
         ARGUS_REVIEWER_TRACE: >-
@@ -126,17 +154,21 @@ runs:
           "run_id":"${{ github.run_id }}",
           "run_attempt":"${{ github.run_attempt }}",
           "workflow":"${{ github.workflow }}"}
-      run: ${{ inputs.cli }} code-review --report-dir "${{ inputs.report-dir }}"
+      run: node "$ARGUS_ACTION_PATH/cli.mjs" code-review --report-dir "$ARGUS_REPORT_DIR"
 
-    - name: Run argus-reviewer
+    - name: Run argus-reviewer browser flow
       id: run
       if: inputs.run != 'false'
       shell: bash
-      working-directory: ${{ inputs.working-directory }}
+      working-directory: ${{ inputs.working-directory || '.' }}
       continue-on-error: true
       env:
+        ARGUS_ACTION_PATH: ${{ github.action_path }}
         OPENROUTER_API_KEY: ${{ inputs.openrouter-api-key }}
         GITHUB_TOKEN: ${{ github.token }}
+        ARGUS_CLI_JSON: ${{ steps.bootstrap.outputs.cli-json }}
+        ARGUS_WORKING_DIRECTORY: ${{ steps.bootstrap.outputs.working-directory }}
+        ARGUS_REPORT_DIR: ${{ inputs.report-dir }}
         ARGUS_DEBUG: '1'
         ARGUS_DIFF_BASE: ${{ inputs.diff-base }}
         ARGUS_BUDGET_USD: ${{ inputs.budget-usd }}
@@ -147,12 +179,14 @@ runs:
           "run_id":"${{ github.run_id }}",
           "run_attempt":"${{ github.run_attempt }}",
           "workflow":"${{ github.workflow }}"}
-      run: ${{ inputs.cli }} run --report-dir "${{ inputs.report-dir }}"
+      run: node "$ARGUS_ACTION_PATH/cli.mjs" run --report-dir "$ARGUS_REPORT_DIR"
 
     - name: Post or update sticky PR comment
       id: post
+      if: always()
       uses: actions/github-script@v7
       env:
+        ARGUS_ACTION_PATH: ${{ github.action_path }}
         OPENROUTER_API_KEY: ${{ inputs.openrouter-api-key }}
         VISION_E2E_WORKING_DIR: ${{ inputs.working-directory }}
         ARGUS_REPORT_DIR: ${{ inputs.report-dir }}
@@ -160,10 +194,7 @@ runs:
       with:
         github-token: ${{ github.token }}
         script: |
-          const fs = require('fs');
           const path = require('path');
-          const actionPath = process.env.GITHUB_ACTION_PATH;
-          const file = path.join(actionPath, 'sticky-comment.mjs');
-          const code = fs.readFileSync(file, 'utf8');
-          const runFn = new Function('github', 'context', 'core', 'require', `return (async () => {\n${code}\n})()`);
-          return await runFn(github, context, core, require);
+          const actionPath = process.env.ARGUS_ACTION_PATH;
+          const { run } = require(path.join(actionPath, 'sticky-comment.cjs'));
+          return await run({ github, context, core });

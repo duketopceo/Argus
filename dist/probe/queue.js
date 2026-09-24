@@ -8,19 +8,24 @@ import { buildProbeMessages, parseProbe, probeImportsSafe, PROBE_SCHEMA, } from 
 import { detectHarness } from './harness.js';
 import { checkSandboxPaths, dockerAvailable, resolveSandboxImage, runProbeInSandbox, SANDBOX_OUTPUT_CAP, SCRATCH_DIR_NAME, stripControlChars, sandboxLimits, } from '../executor/sandbox.js';
 /** U9 — below this confidence the triage area signal is ignored. */
-export const MIN_AREA_CONFIDENCE = 0.5;
+const MIN_AREA_CONFIDENCE = 0.5;
 /**
  * U9 triage-informed ordering: a finding's file path "hits" the flagged
- * risk area when a path segment starts with the area token —
- * `src/auth/session.ts` and `billingAddress.ts` hit auth/billing, while
- * `metadata.ts` does not hit data. Advisory only.
+ * risk area when a path segment equals the area token or starts with
+ * it at a camelCase/digit boundary — `src/auth/session.ts` and
+ * `dataStore.ts` hit auth/data, while `author.ts` and `database.ts`
+ * do not. Advisory only.
  */
 function fileHitsArea(file, area) {
     const token = area.toLowerCase();
-    return file
-        .toLowerCase()
-        .split(/[/._-]+/)
-        .some((segment) => segment === token || segment.startsWith(token));
+    return file.split(/[/._-]+/).some((segment) => {
+        const lower = segment.toLowerCase();
+        if (lower === token)
+            return true;
+        if (!lower.startsWith(token))
+            return false;
+        return /[A-Z0-9]/.test(segment.charAt(token.length));
+    });
 }
 /** Pure selection: not_exercised findings at blocking severities, capped. */
 export function selectProbeTargets(findings, severityGates, maxProbes, triageArea) {
@@ -31,14 +36,11 @@ export function selectProbeTargets(findings, severityGates, maxProbes, triageAre
     // U9 — a confident triage top_risk_area reorders candidates so probes
     // prefer the flagged subsystem. Stable sort keeps the original order
     // within each group; probe count/gates/verdict are unchanged.
-    if (triageArea !== undefined &&
-        triageArea.confidence >= MIN_AREA_CONFIDENCE &&
-        triageArea.area !== '') {
-        eligible.sort((a, b) => {
-            const ah = fileHitsArea(a.file ?? '', triageArea.area) ? 0 : 1;
-            const bh = fileHitsArea(b.file ?? '', triageArea.area) ? 0 : 1;
-            return ah - bh;
-        });
+    if (triageArea !== undefined && triageArea.confidence >= MIN_AREA_CONFIDENCE) {
+        // Hit flags precomputed once — the comparator would re-derive them
+        // O(n log n) times otherwise.
+        const hit = new Map(eligible.map((f) => [f, fileHitsArea(f.file ?? '', triageArea.area)]));
+        eligible.sort((a, b) => Number(hit.get(b)) - Number(hit.get(a)));
     }
     return eligible.slice(0, Math.max(0, maxProbes));
 }
