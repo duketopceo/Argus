@@ -33,6 +33,7 @@ import { liveLog } from './live.js';
 import { writeJunitXml } from './report/junit.js';
 import { buildRunReport, writeRunReport } from './report/run.js';
 import { flowPath, loadFlow } from './cache/store.js';
+import { classifyHeadBinding, readCheckoutSha } from './report/manifest.js';
 import { writeAtomicJson } from './fsutil.js';
 import { OpenRouterClient } from './vision/openrouter.js';
 import { Ledger } from './vision/ledger.js';
@@ -990,6 +991,7 @@ async function cmdCodeReview(args, ctx, deps) {
             tokens: 0,
             model,
             budgetExceeded: false,
+            headBinding: classifyHeadBinding(undefined, undefined, fixtureDir !== undefined ? 'fixture' : 'github'),
         };
         await writeAtomicJson(codeReviewPath, skipped);
         return 0;
@@ -1043,6 +1045,9 @@ async function cmdCodeReview(args, ctx, deps) {
         // Kick off PR metadata now — it only needs repo/pr/token and its
         // round-trip hides behind the model calls. Degrades to undefined.
         // Fixture mode supplies it locally — same shape, no API call.
+        const checkoutShaPromise = fixture !== undefined
+            ? Promise.resolve(undefined)
+            : readCheckoutSha(ctx.cwd, deps.exec ?? defaultExec);
         const prMetaPromise = fixture !== undefined
             ? Promise.resolve(fixture.meta)
             : fetchPrMeta(repoName, prNum, ghToken, ctx).catch(() => undefined);
@@ -1233,6 +1238,12 @@ async function cmdCodeReview(args, ctx, deps) {
         // lane's fork gate (evidence/gate.ts) consumes them; only headSha feeds
         // evidence linkage here.
         const prMeta = await prMetaPromise;
+        const checkoutSha = await checkoutShaPromise;
+        const headBinding = classifyHeadBinding(prMeta?.headSha, checkoutSha, fixture !== undefined ? 'fixture' : 'github');
+        stage(`head binding — ${headBinding.status}: ${headBinding.detail}`);
+        if (headBinding.status === 'mismatch') {
+            summary = `Head binding inconclusive — ${summary}`;
+        }
         // Secrets lane: deterministic regex scan over the local merge-base
         // diff — the PR-files API `patch` omits large/binary files, so the
         // local diff is the complete scan surface. Findings union into
@@ -1322,6 +1333,10 @@ async function cmdCodeReview(args, ctx, deps) {
         // PR code beside real credentials.
         if (ctx.env.GITHUB_EVENT_NAME === 'pull_request_target')
             sandbox.enabled = false;
+        if (headBinding.status === 'mismatch') {
+            sandbox.enabled = false;
+            probeLaneSkipped = 'checkout does not match the intended PR head';
+        }
         // Fixture mode reviews a local repo, not the cwd checkout — probes
         // would execute against the wrong tree.
         if (fixtureDir !== undefined && sandbox.enabled) {
@@ -1374,7 +1389,7 @@ async function cmdCodeReview(args, ctx, deps) {
         }
         const hasBlocker = finalFindings.some((f) => blockSeverities.includes(f.severity));
         const report = {
-            ok: !hasBlocker && !ledger.budgetExceeded,
+            ok: !hasBlocker && !ledger.budgetExceeded && headBinding.status !== 'mismatch',
             skipped: false,
             summary,
             verdict,
@@ -1390,6 +1405,7 @@ async function cmdCodeReview(args, ctx, deps) {
             tokens: totalTokens,
             model: lastModel,
             budgetExceeded: ledger.budgetExceeded,
+            headBinding,
         };
         await writeAtomicJson(codeReviewPath, report);
         stage(`report written — verdict ${verdict}, ${linkedFindings.length} finding(s), ` +

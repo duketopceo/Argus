@@ -55,6 +55,7 @@ import { liveLog } from './live.js'
 import { JunitCase, writeJunitXml } from './report/junit.js'
 import { buildRunReport, TestReport, writeRunReport } from './report/run.js'
 import { flowPath, loadFlow } from './cache/store.js'
+import { classifyHeadBinding, readCheckoutSha, type HeadBinding } from './report/manifest.js'
 import { writeAtomicJson } from './fsutil.js'
 import { CallCost } from './vision/cost.js'
 import { JsonSchema, Message, OpenRouterClient } from './vision/openrouter.js'
@@ -876,6 +877,8 @@ interface CodeReviewReport {
   tokens: number
   model: string
   budgetExceeded: boolean
+  /** Identity relationship between the report source and checkout. */
+  headBinding?: HeadBinding
 }
 
 const CHUNK_TOKEN_TARGET = 6000
@@ -1182,6 +1185,11 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       tokens: 0,
       model,
       budgetExceeded: false,
+      headBinding: classifyHeadBinding(
+        undefined,
+        undefined,
+        fixtureDir !== undefined ? 'fixture' : 'github',
+      ),
     }
     await writeAtomicJson(codeReviewPath, skipped)
     return 0
@@ -1240,6 +1248,10 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     // Kick off PR metadata now — it only needs repo/pr/token and its
     // round-trip hides behind the model calls. Degrades to undefined.
     // Fixture mode supplies it locally — same shape, no API call.
+    const checkoutShaPromise =
+      fixture !== undefined
+        ? Promise.resolve(undefined)
+        : readCheckoutSha(ctx.cwd, deps.exec ?? defaultExec)
     const prMetaPromise =
       fixture !== undefined
         ? Promise.resolve(fixture.meta)
@@ -1404,7 +1416,6 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       summary = `Budget exceeded — review stopped early. ${summary}`
       if (verdict !== 'needs_changes') verdict = 'needs_changes'
     }
-
     // Annotate-mode triage overlapped the chunk loop — resolve it here,
     // before the probe lane and report read the record.
     if (triage === undefined && triagePromise !== undefined) {
@@ -1446,6 +1457,16 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     // lane's fork gate (evidence/gate.ts) consumes them; only headSha feeds
     // evidence linkage here.
     const prMeta = await prMetaPromise
+    const checkoutSha = await checkoutShaPromise
+    const headBinding = classifyHeadBinding(
+      prMeta?.headSha,
+      checkoutSha,
+      fixture !== undefined ? 'fixture' : 'github',
+    )
+    stage(`head binding — ${headBinding.status}: ${headBinding.detail}`)
+    if (headBinding.status === 'mismatch') {
+      summary = `Head binding inconclusive — ${summary}`
+    }
 
     // Secrets lane: deterministic regex scan over the local merge-base
     // diff — the PR-files API `patch` omits large/binary files, so the
@@ -1543,6 +1564,10 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     // code too so a miswired workflow fails closed instead of executing
     // PR code beside real credentials.
     if (ctx.env.GITHUB_EVENT_NAME === 'pull_request_target') sandbox.enabled = false
+    if (headBinding.status === 'mismatch') {
+      sandbox.enabled = false
+      probeLaneSkipped = 'checkout does not match the intended PR head'
+    }
     // Fixture mode reviews a local repo, not the cwd checkout — probes
     // would execute against the wrong tree.
     if (fixtureDir !== undefined && sandbox.enabled) {
@@ -1597,7 +1622,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
 
     const hasBlocker = finalFindings.some((f) => blockSeverities.includes(f.severity))
     const report: CodeReviewReport = {
-      ok: !hasBlocker && !ledger.budgetExceeded,
+      ok: !hasBlocker && !ledger.budgetExceeded && headBinding.status !== 'mismatch',
       skipped: false,
       summary,
       verdict,
@@ -1613,6 +1638,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       tokens: totalTokens,
       model: lastModel,
       budgetExceeded: ledger.budgetExceeded,
+      headBinding,
     }
     await writeAtomicJson(codeReviewPath, report)
     stage(

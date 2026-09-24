@@ -9,6 +9,7 @@ import { type SecretsScanResult } from './review/secrets.js';
 import { type TriageRecord } from './review/triage.js';
 import { type FindingAdjudicationAudit } from './review/adjudicate.js';
 import { type ProbeRecord } from './probe/queue.js';
+import { type HeadBinding } from './report/manifest.js';
 import { CallCost } from './vision/cost.js';
 export interface CliDeps {
     cwd?: string;
@@ -62,6 +63,8 @@ interface CodeReviewReport {
     tokens: number;
     model: string;
     budgetExceeded: boolean;
+    /** Identity relationship between the report source and checkout. */
+    headBinding?: HeadBinding;
 }
 /**
  * Split `git diff` text into per-file PrFile entries — the local-diff

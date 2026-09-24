@@ -249,6 +249,11 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
   lines.push(
     `**Verdict:** ${codeReview.verdict} · ${codeReview.model} · ${codeReview.tokens}tok ${formatUsd(codeReview.visionCostUsd)}`,
   )
+  if (codeReview.headBinding) {
+    lines.push(
+      `**Head binding:** ${cell(codeReview.headBinding.status)} · ${cell(codeReview.headBinding.detail)}`,
+    )
+  }
   // U7 triage record — Jev annotate/route signals, never the gate.
   if (codeReview.triage) {
     const t = codeReview.triage
