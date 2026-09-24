@@ -5,6 +5,8 @@ import { writeAtomicJson } from '../fsutil.js'
 
 import { FingerprintRecord } from './fingerprint.js'
 
+export const FLOW_CACHE_SCHEMA_VERSION = 1 as const
+
 /** A cached assertion verdict, keyed on (question, page-state hash). */
 export interface CachedAssert {
   question: string
@@ -16,6 +18,7 @@ export interface CachedAssert {
 }
 
 export interface FlowCache {
+  schemaVersion?: typeof FLOW_CACHE_SCHEMA_VERSION
   steps: FingerprintRecord[]
   asserts?: CachedAssert[]
 }
@@ -42,11 +45,21 @@ export async function loadFlow(cacheDir: string, flowName: string): Promise<Flow
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return undefined
     }
-    const { steps, asserts } = parsed as { steps?: unknown; asserts?: unknown }
+    const { schemaVersion, steps, asserts } = parsed as {
+      schemaVersion?: unknown
+      steps?: unknown
+      asserts?: unknown
+    }
     if (!Array.isArray(steps)) {
       return undefined
     }
-    const out: FlowCache = { steps: steps as FingerprintRecord[] }
+    if (schemaVersion !== undefined && schemaVersion !== FLOW_CACHE_SCHEMA_VERSION) {
+      return undefined
+    }
+    const out: FlowCache = {
+      ...(schemaVersion === FLOW_CACHE_SCHEMA_VERSION ? { schemaVersion } : {}),
+      steps: steps as FingerprintRecord[],
+    }
     if (Array.isArray(asserts)) out.asserts = asserts as CachedAssert[]
     return out
   } catch (e) {
@@ -64,5 +77,9 @@ export async function saveFlow(
   steps: FingerprintRecord[],
   asserts?: CachedAssert[],
 ): Promise<void> {
-  await writeAtomicJson(flowPath(cacheDir, flowName), { steps, asserts: asserts ?? [] }, sortKeys)
+  await writeAtomicJson(
+    flowPath(cacheDir, flowName),
+    { schemaVersion: FLOW_CACHE_SCHEMA_VERSION, steps, asserts: asserts ?? [] },
+    sortKeys,
+  )
 }

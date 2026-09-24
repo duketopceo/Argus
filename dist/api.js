@@ -90,6 +90,9 @@ export class TdSession {
     get visionCalls() {
         return this.engine.visionCalls;
     }
+    get cacheStats() {
+        return this.engine.cacheStats;
+    }
     /** Non-fatal anomalies observed by the engine — journaled as evidence. */
     get errorRecords() {
         return this.engine.errorRecords;

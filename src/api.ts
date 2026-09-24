@@ -182,6 +182,10 @@ export class TdSession {
     return this.engine.visionCalls
   }
 
+  get cacheStats() {
+    return this.engine.cacheStats
+  }
+
   /** Non-fatal anomalies observed by the engine — journaled as evidence. */
   get errorRecords(): ErrorRecord[] {
     return this.engine.errorRecords

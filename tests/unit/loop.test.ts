@@ -102,6 +102,7 @@ describe('Engine record/replay', () => {
     const replay = await engine.replay(flow!, { flowName: 'ae1' })
     expect(replay.ok).toBe(true)
     expect(client.calls.length).toBe(0)
+    expect(replay.cache).toMatchObject({ hits: 1, misses: 0, heals: 0 })
     expect(await driver.rawPage.locator('#marker').getAttribute('data-marker')).toBe('clicked')
   })
 
@@ -146,6 +147,7 @@ describe('Engine record/replay', () => {
     expect(replay.ok).toBe(true)
     expect(replay.steps[0].healed).toBe(true)
     expect(healClient.calls.length).toBe(1)
+    expect(replay.cache).toMatchObject({ hits: 0, misses: 1, heals: 1 })
 
     const updated = await loadFlow(cacheDir, 'ae2')
     expect(updated!.steps[0].bbox.x).toBe(500)

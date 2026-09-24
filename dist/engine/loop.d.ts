@@ -62,6 +62,15 @@ export interface RunResult {
     reason?: string;
     steps: StepResult[];
     visionCalls: number;
+    cache: CacheStats;
+}
+export interface CacheStats {
+    hits: number;
+    misses: number;
+    heals: number;
+    staleEntries: number;
+    assertionHits: number;
+    assertionMisses: number;
 }
 export interface AssertResult extends AssertionResult {
     cached: boolean;
@@ -81,6 +90,7 @@ export declare class Engine {
     private _fingerprints;
     private _assertCache;
     private _errors;
+    private _cacheStats;
     /** Structured, non-fatal anomalies — journaled as evidence, never thrown. */
     get errorRecords(): ErrorRecord[];
     private _note;
@@ -88,6 +98,7 @@ export declare class Engine {
     /** Assertion verdicts collected/known this run — persist into the flow cache. */
     get assertEntries(): CachedAssert[];
     get visionCalls(): number;
+    get cacheStats(): CacheStats;
     record(instruction: string, tdApi?: TestDriverApi, options?: RecordOptions): Promise<RunResult>;
     replay(flow: FlowCache, options?: ReplayOptions): Promise<RunResult>;
     /**
@@ -114,5 +125,6 @@ export declare class Engine {
     private _buildFingerprint;
     private _regionScreenshot;
     private _result;
+    private _resetCacheStats;
 }
 export declare function instructionMatchesNode(instruction: string, nodeSnippet: string): boolean;

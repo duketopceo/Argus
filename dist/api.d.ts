@@ -92,6 +92,7 @@ export declare class TdSession {
     private constructor();
     static create(opts: TdSessionOptions): Promise<TdSession>;
     get visionCalls(): number;
+    get cacheStats(): import("./engine/loop.js").CacheStats;
     /** Non-fatal anomalies observed by the engine — journaled as evidence. */
     get errorRecords(): ErrorRecord[];
     get failed(): boolean;

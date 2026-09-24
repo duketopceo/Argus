@@ -15,10 +15,40 @@ import {
   validateVersion,
 } from '../../action/runtime.mjs'
 
+// @ts-expect-error plain-node action helper — no type declarations
+import { renderBody as renderStickyBody } from '../../action/sticky-comment.cjs'
+
 const execFileAsync = promisify(execFile)
 const ACTION = join(process.cwd(), 'action')
 
 describe('action input contract', () => {
+  it('renders fingerprint cache economics in the sticky summary', () => {
+    const body = renderStickyBody(
+      {
+        totals: {
+          passed: 1,
+          tests: 1,
+          visionCalls: 0,
+          visionCostUsd: 0,
+          sandboxSeconds: 1,
+          cacheHits: 3,
+          cacheMisses: 2,
+          cacheHeals: 1,
+          callsByModel: {},
+          costByModel: {},
+          budgetExceeded: false,
+        },
+        tests: [],
+      },
+      undefined,
+      'https://github.com/run/1',
+      true,
+      { capped: [], dropped: 0, cap: 20 },
+    )
+
+    expect(body).toContain('**Fingerprint cache:** 3 hit(s) · 2 miss(es) · 1 heal(s)')
+  })
+
   it('parses trusted CLI argv without a shell and rejects shell operators', () => {
     expect(parseCommand('node dist/cli.js')).toEqual(['node', 'dist/cli.js'])
     expect(parseCommand('npx --no-install argus-reviewer')).toEqual([

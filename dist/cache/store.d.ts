@@ -1,4 +1,5 @@
 import { FingerprintRecord } from './fingerprint.js';
+export declare const FLOW_CACHE_SCHEMA_VERSION: 1;
 /** A cached assertion verdict, keyed on (question, page-state hash). */
 export interface CachedAssert {
     question: string;
@@ -9,6 +10,7 @@ export interface CachedAssert {
     model: string | undefined;
 }
 export interface FlowCache {
+    schemaVersion?: typeof FLOW_CACHE_SCHEMA_VERSION;
     steps: FingerprintRecord[];
     asserts?: CachedAssert[];
 }

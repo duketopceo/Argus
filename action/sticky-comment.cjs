@@ -77,6 +77,10 @@ function renderBody(report, codeReview, runUrl, ok, inlinePlan) {
       `${formatUsd(report.totals.visionCostUsd)} spend · ` +
       `${report.totals.sandboxSeconds.toFixed(1)}s sandbox`,
   )
+  lines.push(
+    `**Fingerprint cache:** ${report.totals.cacheHits ?? 0} hit(s) · ` +
+      `${report.totals.cacheMisses ?? 0} miss(es) · ${report.totals.cacheHeals ?? 0} heal(s)`,
+  )
   lines.push('')
 
   lines.push('<details>')

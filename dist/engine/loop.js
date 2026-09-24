@@ -9,6 +9,14 @@ export class Engine {
     _fingerprints = [];
     _assertCache = new Map();
     _errors = [];
+    _cacheStats = {
+        hits: 0,
+        misses: 0,
+        heals: 0,
+        staleEntries: 0,
+        assertionHits: 0,
+        assertionMisses: 0,
+    };
     /** Structured, non-fatal anomalies — journaled as evidence, never thrown. */
     get errorRecords() {
         return this._errors;
@@ -31,10 +39,14 @@ export class Engine {
     get visionCalls() {
         return this._visionCalls;
     }
+    get cacheStats() {
+        return { ...this._cacheStats };
+    }
     async record(instruction, tdApi = this._opts.actions, options = {}) {
         this._visionCalls = 0;
         this._steps = [];
         this._fingerprints = [];
+        this._resetCacheStats();
         const cap = options.stepCap ?? this._opts.config.recordStepCap ?? DEFAULT_RECORD_STEP_CAP;
         let observation = await this._opts.driver.observe({ grid: true });
         for (let i = 0; i < cap; i++) {
@@ -82,16 +94,18 @@ export class Engine {
     async replay(flow, options = {}) {
         this._visionCalls = 0;
         this._steps = [];
+        this._resetCacheStats();
         for (let i = 0; i < flow.steps.length; i++) {
             const step = flow.steps[i];
             if (!step)
                 continue;
-            let observation = await this._opts.driver.observe({ grid: true });
+            const observation = await this._opts.driver.observe({ grid: true });
             // Diff-invalidated entries skip hash verification entirely and go
             // straight to the heal path — the diff already told us they're stale.
             let resolve;
             if (step.stale !== undefined) {
                 this._note('heal', 'cache entry invalidated by diff', step.stale);
+                this._cacheStats.staleEntries++;
                 resolve = { matched: false, currentHash: '', regionMatched: false, a11yMatched: false };
             }
             else {
@@ -99,10 +113,12 @@ export class Engine {
                 resolve = new Fingerprint(step).resolve(regionBuffer, observation.a11yYaml);
             }
             if (resolve.matched) {
+                this._cacheStats.hits++;
                 await this._executeAction(this._opts.actions, step.action);
                 this._steps.push({ instruction: step.instruction, action: step.action.action, ok: true });
                 continue;
             }
+            this._cacheStats.misses++;
             if (this._opts.ledger.replayOnly || !this._opts.ledger.canSpend(0.001)) {
                 this._steps.push({
                     instruction: step.instruction,
@@ -144,9 +160,10 @@ export class Engine {
                 return this._result(false);
             }
             const resolved = await this._resolveAction(action);
-            const nextObservation = await this._executeAction(this._opts.actions, action);
+            await this._executeAction(this._opts.actions, action);
             const newFingerprint = await this._buildFingerprint(step.instruction, action, resolved, response.model);
             flow.steps[i] = newFingerprint;
+            this._cacheStats.heals++;
             this._note('heal', 'fingerprint mismatch healed by model', step.instruction);
             this._steps.push({
                 instruction: step.instruction,
@@ -155,7 +172,6 @@ export class Engine {
                 healed: true,
                 model: response.model,
             });
-            observation = nextObservation;
         }
         if (options.flowName && this._opts.config.cacheDir) {
             await saveFlow(this._opts.config.cacheDir, options.flowName, flow.steps);
@@ -177,6 +193,7 @@ export class Engine {
             const regionBuffer = await this._regionScreenshot(cached.bbox);
             const resolve = new Fingerprint(cached).resolve(regionBuffer, observation.a11yYaml);
             if (resolve.matched) {
+                this._cacheStats.hits++;
                 return {
                     ok: true,
                     reason: undefined,
@@ -186,6 +203,7 @@ export class Engine {
                     model: undefined,
                 };
             }
+            this._cacheStats.misses++;
             if (this._opts.ledger.replayOnly || !this._opts.ledger.canSpend(0.001)) {
                 return {
                     ok: false,
@@ -197,6 +215,13 @@ export class Engine {
                 };
             }
         }
+        else if (cached?.stale !== undefined) {
+            this._cacheStats.misses++;
+            this._cacheStats.staleEntries++;
+        }
+        else {
+            this._cacheStats.misses++;
+        }
         // A diff-invalidated (stale) entry is a fresh ground, not a heal — heal
         // implies the fingerprint *checked out as wrong*, stale means we never
         // verified it. Keeping the kind split honest keeps the heal-rate signal
@@ -205,8 +230,11 @@ export class Engine {
         const isStale = cached !== undefined && cached.stale !== undefined;
         const useHeal = cached !== undefined && !isStale;
         const primary = await this._locateWithModel(instruction, observation, useHeal);
-        if (primary.ok)
+        if (primary.ok) {
+            if (useHeal)
+                this._cacheStats.heals++;
             return primary;
+        }
         // Semantic escalation fallback (issue #14): the model answered but could
         // not ground — provider-level OpenRouter fallback only covers unavailable
         // models, not bad answers. Retry once with escalation_model as primary on
@@ -221,7 +249,10 @@ export class Engine {
         }
         this._note('locate', 'escalating to fallback model', `failed=${failedModel} esc=${esc} reason=${(primary.reason ?? '').slice(0, 80)}`);
         const fresh = await this._opts.driver.observe({ grid: true });
-        return this._locateWithModel(instruction, fresh, useHeal, esc);
+        const escalated = await this._locateWithModel(instruction, fresh, useHeal, esc);
+        if (escalated.ok && useHeal)
+            this._cacheStats.heals++;
+        return escalated;
     }
     /**
      * One locate attempt against a specific model: initial call plus the
@@ -388,8 +419,10 @@ export class Engine {
         const key = `${question}${a11yHash}`;
         const cached = this._assertCache.get(key);
         if (cached) {
+            this._cacheStats.assertionHits++;
             return { verdict: cached.verdict, reasoning: cached.reasoning, cached: true };
         }
+        this._cacheStats.assertionMisses++;
         if (this._opts.ledger.replayOnly || !this._opts.ledger.canSpend(0.001)) {
             return { verdict: 'fail', reasoning: 'budget exceeded or replay-only', cached: false };
         }
@@ -621,7 +654,23 @@ export class Engine {
         return Buffer.from(raw);
     }
     _result(ok, reason) {
-        return { ok, steps: this._steps, visionCalls: this._visionCalls, ...(reason ? { reason } : {}) };
+        return {
+            ok,
+            steps: this._steps,
+            visionCalls: this._visionCalls,
+            cache: this.cacheStats,
+            ...(reason ? { reason } : {}),
+        };
+    }
+    _resetCacheStats() {
+        this._cacheStats = {
+            hits: 0,
+            misses: 0,
+            heals: 0,
+            staleEntries: 0,
+            assertionHits: 0,
+            assertionMisses: 0,
+        };
     }
 }
 /**

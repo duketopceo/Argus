@@ -132,7 +132,14 @@ describe('argus-reviewer CLI', () => {
 
     const report = JSON.parse(await readFile(join(reportDir, 'run.json'), 'utf8')) as {
       ok: boolean
-      totals: { passed: number; failed: number; visionCalls: number; visionCostUsd: number }
+      totals: {
+        passed: number
+        failed: number
+        visionCalls: number
+        visionCostUsd: number
+        cacheHits: number
+        cacheMisses: number
+      }
       tests: { name: string; ok: boolean; asserts: { verdict: string }[] }[]
     }
     expect(report.ok).toBe(true)
@@ -140,6 +147,8 @@ describe('argus-reviewer CLI', () => {
     expect(report.totals.failed).toBe(0)
     expect(report.totals.visionCalls).toBe(2)
     expect(report.totals.visionCostUsd).toBeCloseTo(0.002)
+    expect(report.totals.cacheHits).toBe(0)
+    expect(report.totals.cacheMisses).toBe(1)
     expect(report.tests[0]!.asserts[0]!.verdict).toBe('pass')
 
     // The locate call wrote a fingerprint cache entry for the test flow.

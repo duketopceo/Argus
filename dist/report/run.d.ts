@@ -1,4 +1,5 @@
 import type { HealEvent, TdAssertRecord, TdStepRecord } from '../api.js';
+import type { CacheStats } from '../engine/loop.js';
 import type { CallCost } from '../vision/cost.js';
 /**
  * JSON run report consumed by the GitHub Action (R10): per-test verdicts,
@@ -20,6 +21,8 @@ export interface TestReport {
     /** Per-call cost rows for model-level attribution. */
     calls: CallCost[];
     videoPath: string | undefined;
+    /** Fingerprint replay/grounding counters for this test. */
+    cache?: CacheStats;
     /** Agent Zero's autonomous second opinion on a failure (heal: 'a0'). */
     a0Diagnosis?: string;
 }
@@ -35,6 +38,12 @@ export interface RunTotals {
     costByModel: Record<string, number>;
     /** OpenRouter call count grouped by model id. */
     callsByModel: Record<string, number>;
+    cacheHits: number;
+    cacheMisses: number;
+    cacheHeals: number;
+    staleEntries: number;
+    assertionHits: number;
+    assertionMisses: number;
 }
 export interface RunReport {
     tool: 'argus-reviewer';

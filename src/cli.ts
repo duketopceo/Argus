@@ -647,6 +647,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
             budgetExceeded: state.budgetExceeded,
             calls: state.calls,
             videoPath: undefined,
+            cache: fileSession.cacheStats,
           })
           await fileSession.save()
           runErrors.push(...tagErrors(fileSession.errorRecords, fileSlug))
@@ -690,6 +691,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
               budgetExceeded: state.budgetExceeded,
               calls: state.calls,
               videoPath: undefined,
+              cache: session.cacheStats,
             })
             await session.save()
             runErrors.push(...tagErrors(session.errorRecords, registeredTest.name))
@@ -1780,7 +1782,7 @@ async function cmdCache(args: string[], ctx: Ctx): Promise<number> {
     try {
       names = (await readdir(cacheDir)).filter((f) => f.endsWith('.json')).sort()
     } catch {
-      names = []
+      // missing cache dir reads as empty
     }
     if (names.length === 0) {
       ctx.out(`cache empty (${cacheDir})`)
@@ -1803,7 +1805,7 @@ async function cmdCache(args: string[], ctx: Ctx): Promise<number> {
   try {
     names = (await readdir(cacheDir)).filter((f) => f.endsWith('.json'))
   } catch {
-    names = []
+    // missing cache dir reads as empty
   }
   const targets = values.all ? names : restPositionals.map((n) => `${n}.json`)
   let removed = 0
