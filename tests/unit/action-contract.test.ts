@@ -81,7 +81,7 @@ describe('action input contract', () => {
   it('uses safe action wiring: pinned bootstrap, no dynamic source evaluation, opt-in runtime install', async () => {
     const action = await readFile(join(ACTION, 'action.yml'), 'utf8')
     expect(action).toContain('argus-version:')
-    expect(action).toContain("default: '0.2.0'")
+    expect(action).toContain("default: ''")
     expect(action).toContain("default: 'false'")
     expect(action).toContain('install-consumer-dependencies:')
     expect(action).toContain("if: inputs.install-consumer-dependencies == 'true'")
@@ -120,6 +120,7 @@ describe('action input contract', () => {
         GITHUB_WORKSPACE: root,
         GITHUB_OUTPUT: output,
         ARGUS_CLI: 'node dist/cli.js',
+        ARGUS_ARGUS_VERSION: '',
         ARGUS_CONFIG_PATH: 'config/review.json',
         ARGUS_WORKING_DIRECTORY: '',
         ARGUS_REPORT_DIR: 'reports',
@@ -134,6 +135,37 @@ describe('action input contract', () => {
     expect(outputs).toContain('cli-json=["node","dist/cli.js"]')
     expect(outputs).toContain(`working-directory=${root}`)
     expect(outputs).toContain('report-dir=reports')
+  })
+
+  it('defaults to the CLI bundled with the pinned action ref', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'argus-action-bundled-'))
+    const output = join(root, 'github-output')
+    await writeFile(output, '')
+
+    await execFileAsync(process.execPath, [join(ACTION, 'bootstrap.mjs')], {
+      cwd: root,
+      env: {
+        ...process.env,
+        GITHUB_WORKSPACE: root,
+        GITHUB_OUTPUT: output,
+        ARGUS_CLI: '',
+        ARGUS_ARGUS_VERSION: '',
+        ARGUS_CONFIG_PATH: '',
+        ARGUS_WORKING_DIRECTORY: '',
+        ARGUS_REPORT_DIR: 'reports',
+        ARGUS_BROWSER: 'chromium',
+        ARGUS_BUDGET_USD: '',
+        ARGUS_MAX_COMMENTS: '',
+      },
+    })
+
+    const cliLine = (await readFile(output, 'utf8'))
+      .split('\n')
+      .find((line) => line.startsWith('cli-json='))
+    expect(JSON.parse(cliLine!.slice('cli-json='.length))).toEqual([
+      process.execPath,
+      join(ACTION, '..', 'dist', 'cli.js'),
+    ])
   })
 
   it('rejects a config path that escapes the working directory', async () => {

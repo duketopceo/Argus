@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { copyFile, mkdir } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
+import { fileURLToPath } from 'node:url'
 
 import {
   assertRegularFile,
@@ -17,6 +18,7 @@ import {
   validateVersion,
 } from './runtime.mjs'
 
+const actionDir = dirname(fileURLToPath(import.meta.url))
 const workspace = resolve(process.env.GITHUB_WORKSPACE || process.cwd())
 const cwd = resolveWorkingDirectory(workspace, process.env.ARGUS_WORKING_DIRECTORY)
 const configInput = validatePathInput(process.env.ARGUS_CONFIG_PATH, 'config')
@@ -46,31 +48,39 @@ const override = process.env.ARGUS_CLI?.trim() ?? ''
 if (override !== '') {
   cli = parseCommand(override)
 } else {
-  const version = validateVersion(process.env.ARGUS_ARGUS_VERSION || '0.2.0')
-  const runtime = join(tmpdir(), `argus-reviewer-action-${version}-${process.pid}`)
-  await mkdir(runtime, { recursive: true })
-  const result = spawnSync(
-    'npm',
-    [
-      'install',
-      '--prefix',
-      runtime,
-      '--ignore-scripts',
-      '--no-audit',
-      '--no-fund',
-      '--no-package-lock',
-      '--no-save',
-      `argus-reviewer-e2e@${version}`,
-    ],
-    { stdio: 'inherit', shell: false },
-  )
-  if (result.status !== 0) {
-    throw new Error(`could not bootstrap pinned argus-reviewer-e2e@${version}`)
+  const version = process.env.ARGUS_ARGUS_VERSION?.trim() ?? ''
+  if (version === '') {
+    cli = [
+      process.execPath,
+      await assertRegularFile(resolve(actionDir, '../dist/cli.js'), 'bundled Argus CLI'),
+    ]
+  } else {
+    validateVersion(version)
+    const runtime = join(tmpdir(), `argus-reviewer-action-${version}-${process.pid}`)
+    await mkdir(runtime, { recursive: true })
+    const result = spawnSync(
+      'npm',
+      [
+        'install',
+        '--prefix',
+        runtime,
+        '--ignore-scripts',
+        '--no-audit',
+        '--no-fund',
+        '--no-package-lock',
+        '--no-save',
+        `argus-reviewer-e2e@${version}`,
+      ],
+      { stdio: 'inherit', shell: false },
+    )
+    if (result.status !== 0) {
+      throw new Error(`could not bootstrap pinned argus-reviewer-e2e@${version}`)
+    }
+    cli = [
+      process.execPath,
+      join(runtime, 'node_modules', 'argus-reviewer-e2e', 'dist', 'cli.js'),
+    ]
   }
-  cli = [
-    process.execPath,
-    join(runtime, 'node_modules', 'argus-reviewer-e2e', 'dist', 'cli.js'),
-  ]
 }
 
 setActionOutput('cli-json', JSON.stringify(cli))

@@ -6,11 +6,11 @@ inputs:
     description: OpenRouter API key (BYOK). All vision calls are billed through this key.
     required: true
   argus-version:
-    description: Pinned argus-reviewer-e2e version used by the default action-owned CLI.
-    default: '0.2.0'
+    description: Optional pinned argus-reviewer-e2e npm version. Empty uses the CLI bundled with this action ref.
+    default: ''
     required: false
   cli:
-    description: Optional executable plus arguments for a trusted local CLI override. Shell operators are rejected; empty uses the pinned package bootstrap.
+    description: Optional executable plus arguments for a trusted local CLI override. Shell operators are rejected; empty uses the CLI bundled with this action ref.
     default: ''
     required: false
   config:

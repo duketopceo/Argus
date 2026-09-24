@@ -24,9 +24,9 @@ You should receive an acknowledgement within a few days.
 
 ## GitHub Action boundary
 
-- The action's default path runs a pinned, action-owned CLI bootstrap with
-  lifecycle scripts disabled. It does not install the consumer project's
-  dependencies or start an application target.
+- The action's default path runs the CLI bundled with the pinned action ref.
+  It does not install an Argus package, run consumer lifecycle scripts, or
+  start an application target.
 - Browser, application, and consumer dependency installation are explicit
   opt-ins. The action rejects those lanes for fork pull requests and
   `pull_request_target`; do not work around that check by granting write
