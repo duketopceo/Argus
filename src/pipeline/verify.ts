@@ -6,6 +6,7 @@ import {
   addProviderUsage,
   emptyLane,
   emptyUsage,
+  isHeadBindingConclusive,
   MANIFEST_SCHEMA_VERSION,
   type BudgetSummary,
   type HeadBinding,
@@ -87,10 +88,10 @@ function laneEnd(lane: LaneManifest, at = new Date()): LaneManifest {
 function reportStatus(
   code: number,
   report: { ok?: boolean; skipped?: boolean } | undefined,
-  mismatch: boolean,
+  inconclusive: boolean,
 ): 'passed' | 'failed' | 'skipped' | 'inconclusive' {
   if (report?.skipped === true) return 'skipped'
-  if (mismatch) return 'inconclusive'
+  if (inconclusive) return 'inconclusive'
   if (report?.ok === true && code === 0) return 'passed'
   return 'failed'
 }
@@ -159,8 +160,12 @@ export async function runVerify(input: VerifyInput): Promise<VerifyResult> {
       ctxError(runnerError)
     }
     const report = await readJson<ReviewReport>(join(input.reportDir, 'code-review.json'))
-    const mismatch = report?.headBinding?.status === 'mismatch'
-    const status = runnerError !== undefined ? 'failed' : reportStatus(code, report, mismatch)
+    const inconclusive =
+      report !== undefined &&
+      report.skipped !== true &&
+      !isHeadBindingConclusive(report.headBinding)
+    const status =
+      runnerError !== undefined ? 'failed' : reportStatus(code, report, inconclusive)
     lanes.review = laneEnd({
       ...lanes.review,
       status,

@@ -7,6 +7,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   review:
     # The published action is trusted code. Do not execute the PR's local
@@ -24,31 +27,48 @@ jobs:
     env:
       ARGUS_DEBUG: '1'
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
 
-      - name: Build consumer package
-        run: npm ci && npm run build
+      - name: Clear trusted CLI path
+        shell: bash
+        run: rm -rf -- trusted-argus
+      - name: Prepare trusted Argus CLI
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: duketopceo/Argus
+          ref: 75492b8a6b10338d1f141ac9f8544135edc34409 # v0.2.0
+          path: trusted-argus
+          persist-credentials: false
+      - name: Install trusted CLI dependencies
+        id: trusted-cli
+        shell: bash
+        env:
+          TRUSTED_ARGUS_DIR: ${{ github.workspace }}/trusted-argus
+        run: |
+          npm --prefix "$TRUSTED_ARGUS_DIR" ci --ignore-scripts --no-audit --no-fund
+          printf 'cli=%s %s\n' "$(command -v node)" "$TRUSTED_ARGUS_DIR/dist/cli.js" >> "$GITHUB_OUTPUT"
 
       - name: Run published Argus action
         id: review
-        uses: duketopceo/Argus/action@v0.2.0
+        uses: duketopceo/Argus/action@75492b8a6b10338d1f141ac9f8544135edc34409 # v0.2.0
         with:
           openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
-          cli: node dist/cli.js
+          cli: ${{ steps.trusted-cli.outputs.cli }}
           index: 'false'
           run: 'false'
           working-directory: .
 
       - name: Upload Argus review report artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: argus-reviewer-report-${{ github.run_id }}-${{ github.run_attempt }}
           path: argus-reviewer-report/
@@ -61,8 +81,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm

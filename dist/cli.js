@@ -33,7 +33,7 @@ import { liveLog } from './live.js';
 import { writeJunitXml } from './report/junit.js';
 import { buildRunReport, writeRunReport } from './report/run.js';
 import { flowPath, loadFlow } from './cache/store.js';
-import { classifyHeadBinding, readCheckoutSha } from './report/manifest.js';
+import { classifyHeadBinding, isHeadBindingConclusive, readCheckoutSha, } from './report/manifest.js';
 import { writeAtomicJson } from './fsutil.js';
 import { OpenRouterClient } from './vision/openrouter.js';
 import { Ledger } from './vision/ledger.js';
@@ -1248,7 +1248,7 @@ async function cmdCodeReview(args, ctx, deps) {
         const checkoutSha = await checkoutShaPromise;
         const headBinding = classifyHeadBinding(prMeta?.headSha, checkoutSha, fixture !== undefined ? 'fixture' : 'github');
         stage(`head binding — ${headBinding.status}: ${headBinding.detail}`);
-        if (headBinding.status === 'mismatch') {
+        if (!isHeadBindingConclusive(headBinding)) {
             summary = `Head binding inconclusive — ${summary}`;
         }
         // Secrets lane: deterministic regex scan over the local merge-base
@@ -1340,9 +1340,9 @@ async function cmdCodeReview(args, ctx, deps) {
         // PR code beside real credentials.
         if (ctx.env.GITHUB_EVENT_NAME === 'pull_request_target')
             sandbox.enabled = false;
-        if (headBinding.status === 'mismatch') {
+        if (!isHeadBindingConclusive(headBinding)) {
             sandbox.enabled = false;
-            probeLaneSkipped = 'checkout does not match the intended PR head';
+            probeLaneSkipped = `head binding ${headBinding.status} — ${headBinding.detail}`;
         }
         // Fixture mode reviews a local repo, not the cwd checkout — probes
         // would execute against the wrong tree.
@@ -1396,7 +1396,7 @@ async function cmdCodeReview(args, ctx, deps) {
         }
         const hasBlocker = finalFindings.some((f) => blockSeverities.includes(f.severity));
         const report = {
-            ok: !hasBlocker && !ledger.budgetExceeded && headBinding.status !== 'mismatch',
+            ok: !hasBlocker && !ledger.budgetExceeded && isHeadBindingConclusive(headBinding),
             skipped: false,
             summary,
             verdict,
@@ -1466,8 +1466,8 @@ async function cmdVerify(args, ctx, deps) {
     const envBudget = Number(ctx.env.ARGUS_BUDGET_USD);
     const actionBudget = Number.isFinite(envBudget) && envBudget > 0 ? envBudget : undefined;
     const budgets = {};
-    const reviewBudget = config.codeReviewBudgetUsd ?? actionBudget;
-    const flowBudget = config.budgetUsd ?? actionBudget;
+    const reviewBudget = actionBudget ?? config.codeReviewBudgetUsd;
+    const flowBudget = actionBudget ?? config.budgetUsd;
     if (reviewBudget !== undefined)
         budgets.review = { limitUsd: reviewBudget };
     if (flowBudget !== undefined)
@@ -1695,11 +1695,11 @@ jobs:
     steps:
       # persist-credentials: false keeps the GITHUB_TOKEN out of .git/config —
       # the probe sandbox masks .git regardless, but don't store it at all.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      # Pin a tag or commit for supply-chain safety once releases are cut.
-      - uses: duketopceo/Argus/action@main
+          ref: \${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: duketopceo/Argus/action@75492b8a6b10338d1f141ac9f8544135edc34409 # v0.2.0
         with:
           openrouter-api-key: \${{ secrets.OPENROUTER_API_KEY }}
 `;

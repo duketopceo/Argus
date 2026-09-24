@@ -6,11 +6,11 @@ inputs:
     description: OpenRouter API key (BYOK). All vision calls are billed through this key.
     required: true
   argus-version:
-    description: Optional pinned argus-reviewer-e2e npm version. Empty uses the CLI bundled with this action ref.
+    description: Optional pinned argus-reviewer-e2e npm version. Empty installs the CLI package from this action ref with lifecycle scripts disabled.
     default: ''
     required: false
   cli:
-    description: Optional executable plus arguments for a trusted local CLI override. Shell operators are rejected; empty uses the CLI bundled with this action ref.
+    description: Optional executable plus arguments for a trusted local CLI override. Shell operators are rejected; empty installs the CLI package from this action ref.
     default: ''
     required: false
   config:
@@ -66,7 +66,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: actions/setup-node@v4
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
       with:
         node-version: ${{ inputs.node-version }}
 
@@ -152,7 +152,7 @@ runs:
         ARGUS_REVIEWER_TRACE: >-
           {"repo":"${{ github.repository }}",
           "pr":"${{ github.event.pull_request.number }}",
-          "commit":"${{ github.sha }}",
+          "commit":"${{ github.event.pull_request.head.sha || github.sha }}",
           "run_id":"${{ github.run_id }}",
           "run_attempt":"${{ github.run_attempt }}",
           "workflow":"${{ github.workflow }}"}
@@ -161,7 +161,7 @@ runs:
     - name: Post or update sticky PR comment
       id: post
       if: always()
-      uses: actions/github-script@v7
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
       env:
         ARGUS_ACTION_PATH: ${{ github.action_path }}
         OPENROUTER_API_KEY: ${{ inputs.openrouter-api-key }}

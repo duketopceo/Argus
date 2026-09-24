@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, readFile, writeFile, mkdir } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile, mkdir, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -7,6 +7,8 @@ import { describe, expect, it } from 'vitest'
 
 // @ts-expect-error plain-node action helper — no type declarations
 import {
+  assertRegularFile,
+  assertRegularFileInside,
   parseCommand,
   resolveWorkingDirectory,
   validateBrowser,
@@ -74,8 +76,21 @@ describe('action input contract', () => {
 
   it('keeps working-directory and config paths inside the workspace', async () => {
     const root = await mkdtemp(join(tmpdir(), 'argus-action-root-'))
+    await mkdir(join(root, 'apps', 'web'), { recursive: true })
     expect(resolveWorkingDirectory(root, 'apps/web')).toBe(join(root, 'apps/web'))
     expect(() => resolveWorkingDirectory(root, '../outside')).toThrow(/inside/)
+
+    const outside = await mkdtemp(join(tmpdir(), 'argus-action-outside-'))
+    await symlink(outside, join(root, 'escape'))
+    expect(() => resolveWorkingDirectory(root, 'escape')).toThrow(/inside/)
+    await writeFile(join(outside, 'review.json'), '{}\n')
+    await symlink(outside, join(root, 'config'))
+    expect(() => assertRegularFileInside(root, 'config/review.json', 'config')).toThrow(/inside/)
+
+    await symlink(join(outside, 'review.json'), join(root, 'leaf.json'))
+    await expect(assertRegularFile(join(root, 'leaf.json'), 'config')).rejects.toThrow(
+      /non-symlink/,
+    )
   })
 
   it('uses safe action wiring: pinned bootstrap, no dynamic source evaluation, opt-in runtime install', async () => {
@@ -92,6 +107,9 @@ describe('action input contract', () => {
     expect(action).not.toContain('new Function')
     expect(action).not.toContain('run: ${{ inputs.cli }}')
     expect(action).not.toContain('sticky-comment.mjs')
+    expect(action).not.toMatch(/uses:\s+[^\s]+@v\d+/)
+    expect(action).toMatch(/actions\/setup-node@[0-9a-f]{40} # v4/)
+    expect(action).toMatch(/actions\/github-script@[0-9a-f]{40} # v7/)
   })
 
   it('keeps the repository workflow on a pinned action and runs local action checks without secrets', async () => {
@@ -99,7 +117,17 @@ describe('action input contract', () => {
       join(process.cwd(), '.github/workflows/argus-reviewer.yml'),
       'utf8',
     )
-    expect(workflow).toContain('uses: duketopceo/Argus/action@v0.2.0')
+    expect(workflow).toContain(
+      'uses: duketopceo/Argus/action@75492b8a6b10338d1f141ac9f8544135edc34409 # v0.2.0',
+    )
+    expect(workflow).toContain('ref: ${{ github.event.pull_request.head.sha || github.sha }}')
+    expect(workflow).toContain('repository: duketopceo/Argus')
+    expect(workflow).toContain('run: rm -rf -- trusted-argus')
+    expect(workflow).toContain('path: trusted-argus')
+    expect(workflow).toMatch(/name: Install trusted CLI dependencies\n\s+id: trusted-cli/)
+    expect(workflow).toContain('npm --prefix "$TRUSTED_ARGUS_DIR" ci --ignore-scripts')
+    expect(workflow).not.toContain('cli: node dist/cli.js')
+    expect(workflow).not.toMatch(/uses:\s+[^\s]+@v\d+/)
     expect(workflow).toContain('action-contract:')
     expect(workflow).toContain('permissions:\n      contents: read')
     expect(workflow).not.toContain('uses: ./action')
@@ -137,7 +165,7 @@ describe('action input contract', () => {
     expect(outputs).toContain('report-dir=reports')
   })
 
-  it('defaults to the CLI bundled with the pinned action ref', async () => {
+  it('defaults to the CLI package installed from the pinned action ref', async () => {
     const root = await mkdtemp(join(tmpdir(), 'argus-action-bundled-'))
     const output = join(root, 'github-output')
     await writeFile(output, '')
@@ -162,10 +190,11 @@ describe('action input contract', () => {
     const cliLine = (await readFile(output, 'utf8'))
       .split('\n')
       .find((line) => line.startsWith('cli-json='))
-    expect(JSON.parse(cliLine!.slice('cli-json='.length))).toEqual([
-      process.execPath,
-      join(ACTION, '..', 'dist', 'cli.js'),
-    ])
+    const cli = JSON.parse(cliLine!.slice('cli-json='.length)) as string[]
+    expect(cli[0]).toBe(process.execPath)
+    expect(cli[1]).toMatch(
+      /argus-reviewer-action-pinned-[^/]+\/node_modules\/argus-reviewer-e2e\/dist\/cli\.js$/,
+    )
   })
 
   it('rejects a config path that escapes the working directory', async () => {

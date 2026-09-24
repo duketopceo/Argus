@@ -134,65 +134,103 @@ describe('runVerify', () => {
     expect(result.manifest.aggregate.status).toBe('failed')
   })
 
-  it('marks a head mismatch as inconclusive rather than a clean pass', async () => {
+  it('fails when the selected review lane produces no report', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-'))
     const reportDir = join(cwd, 'reports')
     await mkdir(reportDir, { recursive: true })
-    await writeFile(
-      join(reportDir, 'code-review.json'),
-      JSON.stringify({
-        ok: false,
-        summary: 'Head binding inconclusive',
-        model: 'test/model',
-        calls: [],
-        headBinding: {
-          intendedSha: 'head',
-          checkoutSha: 'merge',
-          status: 'mismatch',
-          source: 'github',
-          detail: 'mismatch',
-        },
-      }),
-    )
     const result = await runVerify({
       cwd,
-      runId: 'run-3',
+      runId: 'run-missing-review',
       reportDir,
       identity: {
         repo: 'o/r',
         pr: '1',
         intendedHeadSha: 'head',
-        checkoutSha: 'merge',
+        checkoutSha: 'head',
         baseSha: 'def',
       },
       selection: { review: true, flow: false, app: false, a0: false },
       runners: { review: async () => 0 },
     })
     expect(result.exitCode).toBe(1)
-    expect(result.manifest.lanes.review.status).toBe('inconclusive')
-    expect(result.manifest.aggregate.status).toBe('inconclusive')
+    expect(result.manifest.lanes.review.status).toBe('failed')
   })
+
+  it.each(['mismatch', 'unknown'] as const)(
+    'marks a %s head binding as inconclusive rather than a clean pass',
+    async (bindingStatus) => {
+      const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-'))
+      const reportDir = join(cwd, 'reports')
+      await mkdir(reportDir, { recursive: true })
+      await writeFile(
+        join(reportDir, 'code-review.json'),
+        JSON.stringify({
+          ok: true,
+          summary: 'Head binding inconclusive',
+          model: 'test/model',
+          calls: [],
+          headBinding: {
+            intendedSha: 'head',
+            checkoutSha: 'merge',
+            status: bindingStatus,
+            source: 'github',
+            detail: 'mismatch',
+          },
+        }),
+      )
+      const result = await runVerify({
+        cwd,
+        runId: 'run-3',
+        reportDir,
+        identity: {
+          repo: 'o/r',
+          pr: '1',
+          intendedHeadSha: 'head',
+          checkoutSha: 'merge',
+          baseSha: 'def',
+        },
+        selection: { review: true, flow: false, app: false, a0: false },
+        runners: { review: async () => 0 },
+      })
+      expect(result.exitCode).toBe(1)
+      expect(result.manifest.lanes.review.status).toBe('inconclusive')
+      expect(result.manifest.aggregate.status).toBe('inconclusive')
+    },
+  )
 
   it('exposes verify as the default review-first CLI surface', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-cli-'))
     const reportDir = join(cwd, 'reports')
     await writeFile(
       join(cwd, 'argus-reviewer.config.json'),
-      JSON.stringify({ decisionModel: '', reportDir }),
+      JSON.stringify({
+        decisionModel: '',
+        reportDir,
+        codeReviewBudgetUsd: 1,
+        budgetUsd: 2,
+      }),
     )
     const code = await main(['verify', '--report-dir', reportDir], {
       cwd,
-      env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' },
+      env: {
+        PATH: process.env.PATH ?? '',
+        HOME: process.env.HOME ?? '',
+        ARGUS_BUDGET_USD: '0.003',
+      },
       out: () => undefined,
       err: () => undefined,
     })
-    expect(code).toBe(0)
+    expect(code).toBe(1)
     const manifest = JSON.parse(await readFile(join(reportDir, 'run-manifest.json'), 'utf8')) as {
       aggregate: { status: string }
-      lanes: { review: { selected: boolean; status: string }; flow: { selected: boolean } }
+      lanes: {
+        review: { selected: boolean; status: string; budget: { limitUsd?: number } }
+        flow: { selected: boolean; budget: { limitUsd?: number } }
+      }
     }
-    expect(manifest.aggregate.status).toBe('passed')
+    expect(manifest.aggregate.status).toBe('skipped')
     expect(manifest.lanes.review).toMatchObject({ selected: true, status: 'skipped' })
+    expect(manifest.lanes.review.budget.limitUsd).toBe(0.003)
     expect(manifest.lanes.flow.selected).toBe(false)
   })
 })

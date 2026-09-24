@@ -148,6 +148,11 @@ export function classifyHeadBinding(
   }
 }
 
+/** True when runtime evidence is bound to the intended head (or a fixture). */
+export function isHeadBindingConclusive(binding: HeadBinding | undefined): boolean {
+  return binding?.status === 'match' || binding?.status === 'not_applicable'
+}
+
 export function emptyUsage(provider: UsageSummary['provider'] = 'unknown'): UsageSummary {
   return {
     provider,
@@ -203,7 +208,7 @@ export function aggregateLanes(lanes: Record<LaneId, LaneManifest>): {
     ? 'failed'
     : hasInconclusive || hasUnavailable
       ? 'inconclusive'
-      : selected.length === 0
+      : selected.length === 0 || selected.every((lane) => lane.status === 'skipped')
         ? 'skipped'
         : selected.every((lane) => lane.status === 'passed' || lane.status === 'skipped')
           ? 'passed'

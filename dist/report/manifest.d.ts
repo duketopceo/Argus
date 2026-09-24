@@ -72,6 +72,8 @@ export interface RunManifest {
 export declare function readCheckoutSha(cwd: string, exec?: ExecFn): Promise<string | undefined>;
 /** Classify the relationship between API/fixture head identity and the checkout. */
 export declare function classifyHeadBinding(intendedSha: string | undefined, checkoutSha: string | undefined, source: HeadSource): HeadBinding;
+/** True when runtime evidence is bound to the intended head (or a fixture). */
+export declare function isHeadBindingConclusive(binding: HeadBinding | undefined): boolean;
 export declare function emptyUsage(provider?: UsageSummary['provider']): UsageSummary;
 export declare function emptyBudget(): BudgetSummary;
 export declare function emptyLane(lane: LaneId, selected: boolean): LaneManifest;

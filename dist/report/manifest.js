@@ -63,6 +63,10 @@ export function classifyHeadBinding(intendedSha, checkoutSha, source) {
         detail: `checkout ${checkoutSha} does not match intended PR head ${intendedSha}`,
     };
 }
+/** True when runtime evidence is bound to the intended head (or a fixture). */
+export function isHeadBindingConclusive(binding) {
+    return binding?.status === 'match' || binding?.status === 'not_applicable';
+}
 export function emptyUsage(provider = 'unknown') {
     return {
         provider,
@@ -109,7 +113,7 @@ export function aggregateLanes(lanes) {
         ? 'failed'
         : hasInconclusive || hasUnavailable
             ? 'inconclusive'
-            : selected.length === 0
+            : selected.length === 0 || selected.every((lane) => lane.status === 'skipped')
                 ? 'skipped'
                 : selected.every((lane) => lane.status === 'passed' || lane.status === 'skipped')
                     ? 'passed'

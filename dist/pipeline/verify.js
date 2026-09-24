@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
-import { aggregateLanes, addProviderUsage, emptyLane, emptyUsage, MANIFEST_SCHEMA_VERSION, } from '../report/manifest.js';
+import { aggregateLanes, addProviderUsage, emptyLane, emptyUsage, isHeadBindingConclusive, MANIFEST_SCHEMA_VERSION, } from '../report/manifest.js';
 import { addProviderCalls, createBudget } from './budget.js';
 import { selectedLanes } from './contracts.js';
 async function readJson(path) {
@@ -20,10 +20,10 @@ function laneStart(lane, at = new Date()) {
 function laneEnd(lane, at = new Date()) {
     return { ...lane, finishedAt: at.toISOString() };
 }
-function reportStatus(code, report, mismatch) {
+function reportStatus(code, report, inconclusive) {
     if (report?.skipped === true)
         return 'skipped';
-    if (mismatch)
+    if (inconclusive)
         return 'inconclusive';
     if (report?.ok === true && code === 0)
         return 'passed';
@@ -83,8 +83,10 @@ export async function runVerify(input) {
             ctxError(runnerError);
         }
         const report = await readJson(join(input.reportDir, 'code-review.json'));
-        const mismatch = report?.headBinding?.status === 'mismatch';
-        const status = runnerError !== undefined ? 'failed' : reportStatus(code, report, mismatch);
+        const inconclusive = report !== undefined &&
+            report.skipped !== true &&
+            !isHeadBindingConclusive(report.headBinding);
+        const status = runnerError !== undefined ? 'failed' : reportStatus(code, report, inconclusive);
         lanes.review = laneEnd({
             ...lanes.review,
             status,

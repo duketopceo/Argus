@@ -536,7 +536,13 @@ The implementation is not ready to claim the product promise until all of the fo
 
 ## Delivery contract
 
-The implementation tranche is delivered as one PR for this repository containing source changes, tests, fixtures, dashboard changes, documentation, the requirements document, and this plan. The PR description records the four-lane contract, trust and spend boundaries, verification evidence, dashboard screenshot or local smoke result, and any unverified external dependency. The standalone Agent Zero plugin distribution remains a separate repository change and is not silently folded into this PR.
+This repository tranche delivers U1–U4: the action trust boundary, head binding,
+the shared four-lane contract, and fingerprint replay telemetry. The app and
+Agent Zero execution lanes remain explicitly `unavailable`; their runners,
+application fixtures, dashboard work, and external-host verification are not
+claimed as delivered here. The PR records the staged contract, trust and spend
+boundaries, and verification evidence. The standalone Agent Zero plugin
+distribution remains a separate repository change.
 
 ## Open questions
 

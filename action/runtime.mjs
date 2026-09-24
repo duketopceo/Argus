@@ -1,5 +1,5 @@
 import { lstat } from 'node:fs/promises'
-import { appendFileSync } from 'node:fs'
+import { appendFileSync, realpathSync } from 'node:fs'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 
 const SHELL_META = /[;&|<>`$\\()[\]{}\r\n\0]/
@@ -94,14 +94,19 @@ export function validateMaxComments(raw) {
 }
 
 export function resolveWorkingDirectory(workspace, input) {
-  const root = resolve(workspace)
+  const root = realpathSync(resolve(workspace))
   const requested = String(input ?? '').trim()
-  const cwd = requested === '' ? root : resolve(root, requested)
+  const unresolvedCwd = requested === '' ? root : resolve(root, requested)
+  const unresolvedRel = relative(root, unresolvedCwd)
+  if (unresolvedRel === '..' || unresolvedRel.startsWith(`..${sep}`) || isAbsolute(unresolvedRel)) {
+    throw new Error('working-directory must stay inside GITHUB_WORKSPACE')
+  }
+  const cwd = realpathSync(unresolvedCwd)
   const rel = relative(root, cwd)
   if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
     throw new Error('working-directory must stay inside GITHUB_WORKSPACE')
   }
-  return cwd
+  return unresolvedCwd
 }
 
 export function validatePathInput(raw, name) {
@@ -113,13 +118,19 @@ export function validatePathInput(raw, name) {
 }
 
 export function assertRegularFileInside(root, file, name) {
-  const rootPath = resolve(root)
-  const filePath = resolve(root, file)
+  const unresolvedRoot = resolve(root)
+  const unresolvedFile = resolve(unresolvedRoot, file)
+  const unresolvedRel = relative(unresolvedRoot, unresolvedFile)
+  if (unresolvedRel === '..' || unresolvedRel.startsWith(`..${sep}`) || isAbsolute(unresolvedRel)) {
+    throw new Error(`${name} must stay inside the working directory`)
+  }
+  const rootPath = realpathSync(unresolvedRoot)
+  const filePath = realpathSync(unresolvedFile)
   const rel = relative(rootPath, filePath)
   if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
     throw new Error(`${name} must stay inside the working directory`)
   }
-  return filePath
+  return unresolvedFile
 }
 
 export async function assertRegularFile(path, name) {
