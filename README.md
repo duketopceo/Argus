@@ -1,4 +1,4 @@
-# argus-reviewer
+# Argus
 
 <p align="center">
   <img src="docs/assets/social.png" alt="Argus — vision-model E2E testing" width="640" />
@@ -11,95 +11,104 @@
   <a href="https://github.com/duketopceo/Argus/security/policy"><img src="https://img.shields.io/badge/security-policy-orange" alt="security policy" /></a>
 </p>
 
-Open-source, self-hosted vision-model E2E testing — the hundred-eyed watcher for your UI. Bring your own `OPENROUTER_API_KEY`: record a flow once, fingerprint-cache every step, replay near-free, heal on UI drift, and get results as a check + comment on the GitHub PR.
+**The hundred-eyed watcher for your pull requests.** Argus reviews your diff, then goes further: it starts your real app, clicks through it like a user, and executes probes against suspected bugs — then posts a verdict on the PR with the exact dollar cost. Self-hosted, MIT-licensed, bring-your-own OpenRouter key. No SaaS middleman, no telemetry, no per-seat pricing.
 
-- **Vision-first**: a model looks at a screenshot and decides where to click — no selectors to write or maintain.
-- **Cache-first**: replay costs zero vision calls on an unchanged UI; heals re-spend only on drift and show up as reviewable cache diffs.
-- **Cost-explicit**: every call is metered from OpenRouter's per-call cost and rolled into a per-run dollar figure on the PR.
-- **Grounding specialist**: a `grounding_model` (e.g. a ui-tars-class model) can drive element location with its native coordinate output, verified against the DOM before any click executes.
-- **Execution-backed review**: `code-review` findings carry CI evidence, and with the opt-in sandbox lane (`sandbox: { enabled: true }`) Argus authors a test probe for unexercised findings and runs it in a hardened, network-less Docker container — a finding that fails on head and passes on base is stamped **reproduced**, not just suspected.
+## Get started in 60 seconds
 
 ```bash
-npm i -D argus-reviewer-e2e        # or github:duketopceo/argus-reviewer
-npx argus-reviewer record "log in and open settings" --url https://localhost:3000
-npx argus-reviewer run             # replays + asserts, zero-cost on cache hit
+npm i -D argus-reviewer-e2e
+npx argus-reviewer init          # writes config + smoke test + GitHub workflow
 ```
+
+Add `OPENROUTER_API_KEY` to your environment (and repo secrets for CI). Then:
+
+```bash
+npx argus-reviewer record "sign in and open the dashboard" --url http://localhost:3000
+npx argus-reviewer run           # replays + asserts — free on cache hit
+```
+
+That's it. `init` drops a ready-to-run GitHub workflow; every PR from then on gets a review comment with findings, flow results, video evidence, and spend.
+
+## What lands on your PR
+
+A sticky comment that updates on every push:
+
+- **Verdict** — `APPROVE` / `NEEDS_CHANGES` with findings linked to concrete source lines
+- **Flow results** — which recorded user-journeys passed, healed, or broke
+- **Reproduced, not suspected** — opt-in sandbox lane runs authored regression probes; a probe that fails on head and passes on base stamps the finding as *proven*
+- **Cost** — every model call metered from OpenRouter's per-call pricing, totaled in dollars
 
 <p align="center">
   <img src="docs/assets/demo.gif" alt="argus-reviewer run — live vision call, PASS, $0.0005 spend" width="900" />
 </p>
 
-*Real `run` output: one vision assert, `PASS`, and the exact dollar figure on the run report.*
+## Why it's different
 
-Configuration lives in `argus-reviewer.config.ts` (a legacy `vision-e2e.config.*` is still accepted) — see `src/config.ts` for the full shape: `model`, `grounding_model`, `escalation_model`, `provider` routing rules, `budgetUsd`, `target`, `pageSetup`, `secrets`.
+| | Argus |
+|---|---|
+| **Selectors** | None. A vision model looks at a screenshot and decides where to click. |
+| **Maintenance** | Fingerprint cache replays at zero model cost; when the UI drifts, self-healing re-grounds and the heal shows up as a reviewable diff. |
+| **Review depth** | Beyond the diff: full-source evidence linkage, CI evidence, executed probes, real browser runs. |
+| **Spend** | You pick the models per lane (`model`, `grounding_model`, `code_model`, `escalation_model`) and set `budgetUsd`. Cache hits cost nothing. |
+| **Data** | Yours. Keys, journals, videos, and reports stay on your infra. |
 
-### OpenRouter cost attribution
+## Configuration
 
-Add an `openrouter` block to tag every request. `trace` is sent in the request body and is the right hook for cost allocation by repo/PR/run. `headers` are sent verbatim with every OpenRouter request (useful for `HTTP-Referer` or `X-Title`).
+`argus-reviewer.config.ts`:
 
 ```ts
-export default {
-  openrouter: {
-    trace: { repo: 'duketopceo/myapp', pr: '42', run: 'argus-reviewer' },
-    headers: { 'HTTP-Referer': 'https://github.com/duketopceo/myapp' },
-  },
-}
+import { defineConfig } from 'argus-reviewer-e2e'
+
+export default defineConfig({
+  model: 'google/gemini-2.5-flash-lite',          // vision grounding + actions
+  code_model: 'deepseek/deepseek-v4.1-flash',     // diff review
+  escalation_model: 'anthropic/claude-sonnet-4',  // risky/complex findings
+  budgetUsd: 1.0,
+  target: { url: 'https://your-app.example.com' },
+  testsDir: 'e2e',
+})
 ```
 
-The GitHub Action automatically sets `ARGUS_REVIEWER_TRACE` with the repository, PR number, commit, and run id, so every PR review is attributed in OpenRouter without extra config. You can also set `ARGUS_REVIEWER_TRACE` yourself (JSON object) to add more fields.
+Point `provider.order` at fast OpenRouter backends (`cerebras`, `groq`) for sub-second review calls — speed is a routing choice, not a pricing tier. Full shape: [`src/config.ts`](src/config.ts). Setup walkthrough: [`docs/quickstart.md`](docs/quickstart.md).
 
-Status: early development. See `action/` for the composite GitHub Action,
-`runner/` for self-hosted runner registration, `docs/quickstart.md` for
-setup, `SECURITY.md` for the threat model, and `CONTRIBUTING.md` to hack
-on it.
+## The execution ladder
+
+Argus does more as you grant it more access — each rung is opt-in:
+
+1. **API review** — GitHub token only. Reviews the PR diff and posts the verdict.
+2. **Trusted checkout** — findings get verified against the full source tree.
+3. **Browser flows** — Playwright drives your real app through recorded journeys.
+4. **Sandbox probes** — suspected findings get authored regression tests, executed in a hardened container (no network, no secrets, read-only FS). Fork PRs stay behind an `argus-probe` label gate.
+5. **Agent Zero delegation** — `argus-reviewer delegate "find the checkout bug"` hands exploratory work to your own A0 instance.
+
+## Cost attribution
+
+Every OpenRouter call carries a trace tag. The action auto-sets `ARGUS_REVIEWER_TRACE` (repo, PR, commit, run id) so spend is attributable per review — or set it yourself for custom fields. See [`docs/quickstart.md`](docs/quickstart.md) for the `openrouter` config block.
+
+## Security model
+
+Reviews run against hostile input by design: untrusted checkouts never execute config code, fork PRs are label-gated, secrets are filtered from model context and comment output, and the sandbox probe lane runs network-less with a read-only filesystem. Threat model: [`SECURITY.md`](SECURITY.md).
 
 ## File structure
 
 ```text
 argus-reviewer/
 ├── action/                  # GitHub Actions composite action + sticky PR comment
-│   ├── action.yml
-│   └── sticky-comment.cjs
 ├── runner/                  # Self-hosted runner registration docs + script
-│   ├── README.md
-│   └── register-runner.sh
 ├── electron/                # Local observability dashboard (`npm run app`)
 ├── src/
-│   ├── api.ts               # Test-facing `test`/`td` API + generated test file renderer
+│   ├── api.ts               # Test-facing `test`/`td` API + generated test renderer
 │   ├── cli.ts               # record · run · code-review · delegate · cache · index · init
-│   ├── config.ts            # `argus-reviewer.config.*` loader (legacy `vision-e2e.config.*` accepted)
-│   ├── cache/
-│   │   ├── fingerprint.ts   # Per-step screenshot/a11y fingerprint + resolve
-│   │   └── store.ts         # Flow cache read/write
-│   ├── driver/
-│   │   ├── browser.ts       # Playwright browser launch (chromium/firefox/webkit) + observation capture
-│   │   └── target.ts        # Optional local dev-server target process
-│   ├── engine/
-│   │   ├── actions.ts       # Low-level page actions (click, type, scroll, …)
-│   │   ├── loop.ts          # Vision model record/replay + healing loop
-│   │   └── prompts.ts       # OpenRouter action/assertion prompts + JSON schemas
-│   ├── evidence/
-│   │   ├── ci.ts            # PR metadata + CI check-run context for findings
-│   │   ├── gate.ts          # Fork-PR trust gate (argus-probe label bound to head SHA)
-│   │   └── link.ts          # Finding → evidence linkage + comment-safe sanitization
-│   ├── executor/
-│   │   ├── a0.ts            # `a0 headless -p` delegation to a user's Agent Zero instance
-│   │   └── sandbox.ts       # Hardened Docker runner for generated probes
-│   ├── index/               # Repo index, diff context, cache invalidation
-│   ├── journal/             # Per-run structured journal entries
-│   ├── probe/
-│   │   ├── author.ts        # Model-authored regression probe generation + validation
-│   │   ├── harness.ts       # vitest/jest/node:test detection + TAP classification
-│   │   └── queue.ts         # Head-vs-merge-base probe orchestration
-│   ├── report/
-│   │   ├── comment.ts       # Markdown PR comment + commit-status rendering
-│   │   ├── junit.ts         # JUnit XML output
-│   │   └── run.ts           # JSON run report consumed by the action
-│   └── vision/
-│       ├── cost.ts          # OpenRouter cost parsing per call
-│       ├── ledger.ts        # Per-run USD budget tracking
-│       └── openrouter.ts    # OpenRouter chat-completion client + schema parsing
-└── tests/                   # Unit tests + small Playwright fixture page
+│   ├── config.ts            # `argus-reviewer.config.*` loader
+│   ├── cache/               # Per-step fingerprint + flow store
+│   ├── driver/              # Playwright browser + dev-server target
+│   ├── engine/              # Vision record/replay + healing loop
+│   ├── evidence/            # PR/CI context, fork trust gate, finding linkage
+│   ├── executor/            # Agent Zero delegation + hardened probe sandbox
+│   ├── probe/               # Model-authored regression probes
+│   ├── report/              # PR comment, JUnit XML, run.json
+│   └── vision/              # OpenRouter client, cost parsing, budget ledger
+└── tests/                   # Unit tests + Playwright fixture page
 ```
 
-License: MIT.
+License: [MIT](LICENSE).
