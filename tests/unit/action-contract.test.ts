@@ -55,14 +55,20 @@ describe('action input contract', () => {
     expect(action).toContain("default: 'false'")
     expect(action).toContain('install-consumer-dependencies:')
     expect(action).toContain("if: inputs.install-consumer-dependencies == 'true'")
-    expect(action).toContain('node "$ARGUS_ACTION_PATH/cli.mjs" code-review')
+    expect(action).toContain('node "$ARGUS_ACTION_PATH/cli.mjs" verify')
+    expect(action).toContain('ARGUS_VERIFY_FLOW:')
+    expect(action).not.toContain('code-review --report-dir')
+    expect(action).not.toContain('run --report-dir')
     expect(action).not.toContain('new Function')
     expect(action).not.toContain('run: ${{ inputs.cli }}')
     expect(action).not.toContain('sticky-comment.mjs')
   })
 
   it('keeps the repository workflow on a pinned action and runs local action checks without secrets', async () => {
-    const workflow = await readFile(join(process.cwd(), '.github/workflows/argus-reviewer.yml'), 'utf8')
+    const workflow = await readFile(
+      join(process.cwd(), '.github/workflows/argus-reviewer.yml'),
+      'utf8',
+    )
     expect(workflow).toContain('uses: duketopceo/Argus/action@v0.2.0')
     expect(workflow).toContain('action-contract:')
     expect(workflow).toContain('permissions:\n      contents: read')

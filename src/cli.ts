@@ -60,6 +60,9 @@ import { writeAtomicJson } from './fsutil.js'
 import { CallCost } from './vision/cost.js'
 import { JsonSchema, Message, OpenRouterClient } from './vision/openrouter.js'
 import { Ledger } from './vision/ledger.js'
+import { defaultLaneSelection, selectionFromFlags } from './pipeline/contracts.js'
+import type { BudgetOptions } from './pipeline/budget.js'
+import { runVerify } from './pipeline/verify.js'
 
 export interface CliDeps {
   cwd?: string
@@ -86,6 +89,7 @@ const USAGE = `argus-reviewer — vision-model E2E testing harness (BYOK via OPE
 Usage:
   argus-reviewer record "<flow description>" --url <target> [--name <flow>] [--tests-dir <dir>] [--max-steps <n>]
   argus-reviewer run [pattern] [--url <target>] [--dir <testsDir>] [--report-dir <dir>]
+  argus-reviewer verify [--flow] [--app] [--a0] [--report-dir <dir>]
   argus-reviewer code-review [--report-dir <dir>]
   argus-reviewer delegate "<task>" [--url <target>] [--host <a0-url>]
   argus-reviewer cache list [--dir <cacheDir>]
@@ -165,6 +169,8 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
       return cmdRecord(rest, ctx, deps)
     case 'run':
       return cmdRun(rest, ctx, deps)
+    case 'verify':
+      return cmdVerify(rest, ctx, deps)
     case 'code-review':
       return cmdCodeReview(rest, ctx, deps)
     case 'delegate':
@@ -1656,6 +1662,94 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     ctx.err(`code review failed: ${(e as Error).message}`)
     return 1
   }
+}
+
+async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> {
+  const { values } = parseArgs({
+    args,
+    allowPositionals: false,
+    options: {
+      help: { type: 'boolean', short: 'h', default: false },
+      review: { type: 'boolean', default: true },
+      flow: { type: 'boolean', default: false },
+      app: { type: 'boolean', default: false },
+      a0: { type: 'boolean', default: false },
+      url: { type: 'string' },
+      'report-dir': { type: 'string' },
+    },
+  })
+  if (values.help) {
+    ctx.out(
+      'Usage: argus-reviewer verify [--flow] [--app] [--a0] [--url <target>] [--report-dir <dir>]\n\n' +
+        'Runs the selected product lanes and writes run-manifest.json. Code review is selected by default; deeper lanes are explicit.',
+    )
+    return 0
+  }
+
+  const selection = selectionFromFlags({
+    review: values.review,
+    flow: values.flow || ctx.env.ARGUS_VERIFY_FLOW === '1',
+    app: values.app || ctx.env.ARGUS_VERIFY_APP === '1',
+    a0: values.a0 || ctx.env.ARGUS_VERIFY_A0 === '1',
+  })
+  if (!selection.review && !selection.flow && !selection.app && !selection.a0) {
+    selection.review = defaultLaneSelection().review
+  }
+
+  const { trust } = await resolveCheckoutTrust(ctx)
+  const config = await loadConfig(ctx.cwd, { trust, note: ctx.err })
+  const reportDir = resolve(
+    ctx.cwd,
+    values['report-dir'] ?? config.reportDir ?? 'argus-reviewer-report',
+  )
+  await mkdir(reportDir, { recursive: true })
+  const flowUrl = values.url ?? config.target?.url
+  const trace = parseOpenRouterTrace(ctx.env)
+  const git = await gitInfo(ctx.cwd)
+  const envBudget = Number(ctx.env.ARGUS_BUDGET_USD)
+  const actionBudget =
+    Number.isFinite(envBudget) && envBudget > 0 ? envBudget : undefined
+  const budgets: Partial<Record<'review' | 'flow', BudgetOptions>> = {}
+  const reviewBudget = config.codeReviewBudgetUsd ?? actionBudget
+  const flowBudget = config.budgetUsd ?? actionBudget
+  if (reviewBudget !== undefined) budgets.review = { limitUsd: reviewBudget }
+  if (flowBudget !== undefined) budgets.flow = { limitUsd: flowBudget }
+  const result = await runVerify({
+    cwd: ctx.cwd,
+    runId: newRunId(),
+    reportDir,
+    identity: {
+      repo: trace?.repo ?? git.repo,
+      pr: trace?.pr,
+      intendedHeadSha: trace?.commit,
+      checkoutSha: git.commitSha,
+      baseSha: undefined,
+    },
+    selection,
+    ...(flowUrl !== undefined ? { flowUrl } : {}),
+    flowUnavailableReason: 'no application target configured; set target.url or pass --url',
+    budgets,
+    runners: {
+      review: async () => cmdCodeReview(['--report-dir', reportDir], ctx, deps),
+      flow: async (url) => cmdRun(['--url', url, '--report-dir', reportDir], ctx, deps),
+    },
+  })
+
+  const reviewBinding = result.manifest.lanes.review.headBinding
+  if (reviewBinding?.intendedSha !== undefined) {
+    result.manifest.identity.intendedHeadSha = reviewBinding.intendedSha
+  }
+  const manifestPath = join(reportDir, 'run-manifest.json')
+  await writeAtomicJson(manifestPath, result.manifest)
+  ctx.out(
+    `verify ${result.manifest.aggregate.status}: ${result.manifest.aggregate.calls} provider call(s), ` +
+      `$${result.manifest.aggregate.costUsd.toFixed(6)} — manifest ${manifestPath}`,
+  )
+  for (const lane of ['review', 'flow', 'app', 'a0'] as const) {
+    const record = result.manifest.lanes[lane]
+    if (record.selected) ctx.out(`  ${lane}: ${record.status}${record.reason ? ` — ${record.reason}` : ''}`)
+  }
+  return result.exitCode
 }
 
 async function cmdCache(args: string[], ctx: Ctx): Promise<number> {

@@ -131,8 +131,8 @@ runs:
         ARGUS_WORKING_DIRECTORY: ${{ steps.bootstrap.outputs.working-directory }}
       run: node "$ARGUS_ACTION_PATH/cli.mjs" index
 
-    - name: Run argus-reviewer code review
-      id: code-review
+    - name: Run selected Argus lanes
+      id: verify
       shell: bash
       working-directory: ${{ inputs.working-directory || '.' }}
       continue-on-error: true
@@ -143,32 +143,9 @@ runs:
         ARGUS_CLI_JSON: ${{ steps.bootstrap.outputs.cli-json }}
         ARGUS_WORKING_DIRECTORY: ${{ steps.bootstrap.outputs.working-directory }}
         ARGUS_REPORT_DIR: ${{ inputs.report-dir }}
+        ARGUS_VERIFY_FLOW: ${{ inputs.run != 'false' && '1' || '' }}
         ARGUS_SANDBOX: ${{ inputs.sandbox == 'true' && '1' || '' }}
-        ARGUS_BUDGET_USD: ${{ inputs.budget-usd }}
         ARGUS_MAX_COMMENTS: ${{ inputs.max-comments }}
-        ARGUS_DEBUG: '1'
-        ARGUS_REVIEWER_TRACE: >-
-          {"repo":"${{ github.repository }}",
-          "pr":"${{ github.event.pull_request.number }}",
-          "commit":"${{ github.sha }}",
-          "run_id":"${{ github.run_id }}",
-          "run_attempt":"${{ github.run_attempt }}",
-          "workflow":"${{ github.workflow }}"}
-      run: node "$ARGUS_ACTION_PATH/cli.mjs" code-review --report-dir "$ARGUS_REPORT_DIR"
-
-    - name: Run argus-reviewer browser flow
-      id: run
-      if: inputs.run != 'false'
-      shell: bash
-      working-directory: ${{ inputs.working-directory || '.' }}
-      continue-on-error: true
-      env:
-        ARGUS_ACTION_PATH: ${{ github.action_path }}
-        OPENROUTER_API_KEY: ${{ inputs.openrouter-api-key }}
-        GITHUB_TOKEN: ${{ github.token }}
-        ARGUS_CLI_JSON: ${{ steps.bootstrap.outputs.cli-json }}
-        ARGUS_WORKING_DIRECTORY: ${{ steps.bootstrap.outputs.working-directory }}
-        ARGUS_REPORT_DIR: ${{ inputs.report-dir }}
         ARGUS_DEBUG: '1'
         ARGUS_DIFF_BASE: ${{ inputs.diff-base }}
         ARGUS_BUDGET_USD: ${{ inputs.budget-usd }}
@@ -179,7 +156,7 @@ runs:
           "run_id":"${{ github.run_id }}",
           "run_attempt":"${{ github.run_attempt }}",
           "workflow":"${{ github.workflow }}"}
-      run: node "$ARGUS_ACTION_PATH/cli.mjs" run --report-dir "$ARGUS_REPORT_DIR"
+      run: node "$ARGUS_ACTION_PATH/cli.mjs" verify --report-dir "$ARGUS_REPORT_DIR"
 
     - name: Post or update sticky PR comment
       id: post
