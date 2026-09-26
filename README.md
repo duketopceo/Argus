@@ -16,7 +16,7 @@
 ## Get started in 60 seconds
 
 ```bash
-npm i -D argus-reviewer-e2e
+npm i -D argus-reviewer-e2e      # the npm package; the command it installs is `argus-reviewer`
 npx argus-reviewer init          # writes config + smoke test + GitHub workflow
 ```
 
@@ -69,7 +69,7 @@ export default defineConfig({
 })
 ```
 
-Point `provider.order` at fast OpenRouter backends (`cerebras`, `groq`) for sub-second review calls — speed is a routing choice, not a pricing tier. Full shape: [`src/config.ts`](src/config.ts). Setup walkthrough: [`docs/quickstart.md`](docs/quickstart.md).
+Point `provider.order` at fast OpenRouter backends (`cerebras`, `groq`) for sub-second review calls — speed is a routing choice, not a pricing tier. Full shape: [`src/config.ts`](src/config.ts) (a legacy `vision-e2e.config.*` is still accepted). Setup walkthrough: [`docs/quickstart.md`](docs/quickstart.md).
 
 ## The execution ladder
 
