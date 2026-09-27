@@ -42,6 +42,10 @@ interface CodeReviewReport {
         message: string;
         /** U8 — Jev true-positive probability (absent = unadjudicated). */
         p?: number;
+        /** R1 — committable replacement lines for the commented range (parse-bounded). */
+        suggestion?: string;
+        /** R1 — first line of the replaced range; absent = single-line fix at `line`. */
+        startLine?: number;
         evidence?: Evidence;
     }[];
     /** Inline-comment cap consumed by the sticky poster (Tencent max_comments pull). */
@@ -92,4 +96,11 @@ export declare function parseCodeReview(content: string): {
     verdict: 'pass' | 'needs_changes' | 'approve';
     findings: CodeReviewReport['findings'];
 };
+/**
+ * KTD1 — a surviving synthesized finding's suggestion is restored verbatim
+ * from its pre-synthesis original, matched on file + line + whitespace-
+ * normalized message. With no pre-image the synthesized copy is dropped:
+ * synthesis output is ungrounded model text, never committable code.
+ */
+export declare function carryForwardSuggestions(findings: CodeReviewReport['findings'], originals: CodeReviewReport['findings']): CodeReviewReport['findings'];
 export {};
