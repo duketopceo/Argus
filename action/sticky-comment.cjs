@@ -71,6 +71,7 @@ function renderBody(report, codeReview, runUrl, ok, inlinePlan) {
   lines.push('')
   lines.push(`## argus-reviewer ${ok ? '✅ PASS' : '❌ FAIL'}`)
   lines.push('')
+  pushReviewTop(lines, codeReview)
   lines.push(
     `**Summary:** ${report.totals.passed}/${report.totals.tests} passed · ` +
       `${report.totals.visionCalls} vision calls · ` +
@@ -243,6 +244,59 @@ function renderBody(report, codeReview, runUrl, ok, inlinePlan) {
   return lines.join('\n')
 }
 
+// ---------------------------------------------------------------------------
+// R6 — scannable top block under the sentinel: verdict icon + one-line
+// summary + honest counts, so the first screen answers "verdict, what
+// kinds, what needs me" before the <details> fold. ⛔ counts
+// probe-reproduced findings only — a high p alone is never "proven" —
+// while ◎ carries the Jev-confidence count; the two overlap when a
+// finding is both (KTD2). The serialized blocker counts win when present
+// (same numbers reviewBody prints); the recount is the fallback for
+// reports predating them — P_FALLBACK_GATE must match
+// P_TRUE_POSITIVE_THRESHOLD in src/cli.ts.
+
+const REVIEW_VERDICT_ICON = { pass: '✅', approve: '👍', needs_changes: '🔴' }
+const P_FALLBACK_GATE = 0.7
+
+function pushReviewTop(lines, codeReview) {
+  if (!codeReview || codeReview.skipped) return
+  const findings = Array.isArray(codeReview.findings) ? codeReview.findings : []
+  const icon = REVIEW_VERDICT_ICON[codeReview.verdict] ?? '❔'
+  lines.push(
+    `**Code review:** ${icon} **${cell(codeReview.verdict ?? 'unknown')}** — ${cell(codeReview.summary)}`,
+  )
+  if (findings.length === 0) {
+    lines.push('no findings')
+    lines.push('')
+    return
+  }
+  const sev = { bug: 0, risk: 0, nit: 0, q: 0 }
+  for (const f of findings) if (Object.hasOwn(sev, f.severity)) sev[f.severity] += 1
+  const tail = []
+  // 🔧 counts serialized comments carrying a committable block — what
+  // actually lands on the PR — not every finding the model offered a
+  // patch for (overflowed/ineligible suggestions aren't committable).
+  const suggestions = Array.isArray(codeReview.reviewComments)
+    ? codeReview.reviewComments.filter((c) => extractSuggestion(c.body ?? '') !== '').length
+    : findings.filter((f) => typeof f.suggestion === 'string' && f.suggestion !== '').length
+  if (suggestions > 0) tail.push(`🔧 ${suggestions} suggestion${suggestions === 1 ? '' : 's'}`)
+  const reproduced =
+    typeof codeReview.provenBlockers === 'number'
+      ? codeReview.provenBlockers
+      : findings.filter((f) => f.evidence?.status === 'reproduced').length
+  if (reproduced > 0) tail.push(`⛔ ${reproduced} reproduced`)
+  const confident =
+    typeof codeReview.highConfidenceBlockers === 'number'
+      ? codeReview.highConfidenceBlockers
+      : findings.filter((f) => typeof f.p === 'number' && f.p >= P_FALLBACK_GATE).length
+  if (confident > 0) tail.push(`◎ ${confident} high-confidence`)
+  lines.push(
+    `🐛 ${sev.bug} · ⚠️ ${sev.risk} · 💡 ${sev.nit} · ❓ ${sev.q}` +
+      (tail.length > 0 ? ` — ${tail.join(' · ')}` : ''),
+  )
+  lines.push('')
+}
+
 // The 🧠 Code review details block — shared by the full body and the
 // review-only body (run lane disabled).
 function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
@@ -314,14 +368,6 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
       )
     }
     lines.push('')
-    // Inline-comment cap note — dedup'd fresh findings the
-    // review.maxComments budget didn't post (TCA max_comments).
-    if (inlinePlan !== undefined && inlinePlan.dropped > 0) {
-      lines.push(
-        `*+${inlinePlan.dropped} inline-eligible finding(s) not posted — \`review.maxComments\` cap ${inlinePlan.cap}.*`,
-      )
-      lines.push('')
-    }
     // Secrets-lane audit line — adjudicated/suppressed counts, never literals.
     if (codeReview.secretsScan) {
       if (typeof codeReview.secretsScan.skipped === 'string') {
@@ -338,6 +384,20 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
       }
       lines.push('')
     }
+  }
+  // Serialized comments that didn't post — the maxComments cap
+  // (serialized overflow) plus post-time drops (off-diff anchors,
+  // retry-ladder discards). Outside the findings guard: drops still
+  // disclose even when the findings table rendered nothing.
+  if (inlinePlan !== undefined && inlinePlan.dropped > 0) {
+    const overflow = inlinePlan.overflow ?? 0
+    const reasons = []
+    if (overflow > 0) reasons.push(`\`review.maxComments\` cap ${inlinePlan.cap}`)
+    if (inlinePlan.dropped - overflow > 0) {
+      reasons.push(`${inlinePlan.dropped - overflow} outside the PR diff`)
+    }
+    lines.push(`*+${inlinePlan.dropped} inline comment(s) not posted — ${reasons.join(', ')}.*`)
+    lines.push('')
   }
   // U8 adjudication audit — outside the findings guard so suppressed-
   // only reviews still show what Jev removed. p values live on the
@@ -370,6 +430,7 @@ function renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan) {
   lines.push('')
   lines.push(`## argus-reviewer ${ok ? '✅ PASS' : '❌ FAIL'}`)
   lines.push('')
+  pushReviewTop(lines, codeReview)
   if (!codeReview) {
     lines.push(
       '**Summary:** code-review only (run lane disabled) — no `code-review.json` found. The review step crashed or produced no report; the commit status fails closed — check the action logs before merging.',
@@ -422,80 +483,271 @@ function renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan) {
   return lines.join('\n')
 }
 
-async function planInlineComments(pr, codeReview) {
-  if (!pr || !codeReview || codeReview.skipped || !codeReview.findings) return undefined
-  // Must match the severity vocabulary emitted by the code-review schema
-  // (src/cli.ts): bug/risk are inline-worthy; nit/q stay in the sticky body.
-  const inlineSeverities = ['bug', 'risk']
-  const comments = codeReview.findings
-    .filter((f) => f.file && typeof f.line === 'number' && inlineSeverities.includes(f.severity))
-    .map((f) => ({
-      path: f.file,
-      line: f.line,
-      side: 'RIGHT',
-      body: `**argus-reviewer ${f.severity}:** ${f.message}${
-        f.category ? ` \`${f.category}\`` : ''
-      }${
-        f.evidence && f.evidence.status === 'reproduced'
-          ? '\n\n*🧪 Reproduced by an Argus probe — fails on this PR head, clean on base. See workflow artifacts.*'
-          : f.evidence && f.evidence.status !== 'exercised'
-            ? `\n\n*CI evidence: ${f.evidence.detail}*`
-            : ''
-      }`,
-    }))
-  if (comments.length === 0) return { capped: [], dropped: 0, cap: 0 }
+// ---------------------------------------------------------------------------
+// U3 — the review poster is deliberately dumb (KTD3): the CLI serializes the
+// whole surface into code-review.json (`reviewComments[]` arrives
+// eligibility-filtered, sanitized, severity-sorted, capped, keyed). This file
+// only: freshness-gates the report (R9), dedups against posted comments (R10),
+// validates anchors against the live diff (R8), dismisses stale self-reviews
+// (KTD5), and POSTs one batched review with the serialized event plus a
+// bounded retry ladder (R4/KTD4).
 
-  // Re-runs on the same SHA must not duplicate inline comments — the sticky
-  // body is upserted but review comments are not. Paginate fully (100/page)
-  // and scope dedup to the current head: comments on older commits must not
-  // suppress findings that still apply to this head. The key is the body's
-  // first line (the finding itself) — trailing evidence notes like the
-  // `reproduced` upgrade change the body but must not re-post a duplicate.
-  const dedupKey = (path, line, body) => `${path}:${line}:${body.split('\n')[0]}`
-  const posted = new Set()
+/** djb2 → 8 hex chars. Must match shortHash() in src/cli.ts — the CLI's
+ *  dedupKey suffix is this hash over the raw suggestion text. */
+function shortHash(s) {
+  let h = 5381
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
+  return (h >>> 0).toString(16).padStart(8, '0')
+}
+
+/** Pull the fenced ```` ```suggestion ```` block out of a posted comment body.
+ *  The CLI's fence is longest-backtick-run+1 (min 4), so a run of exactly the
+ *  fence's length can only appear as the closing fence — the backreference is
+ *  safe against interior ``` runs. */
+function extractSuggestion(body) {
+  const m = /\r?\n(`{4,})suggestion\r?\n([\s\S]*?)\r?\n\1/.exec(body)
+  return m === null ? '' : m[2]
+}
+
+/** Reconstruct the R10 dedupKey for an already-posted review comment:
+ *  `path:line:bodyFirstLine:hash8(suggestion|'')` — identical to the key the
+ *  CLI serialized, so a corrected suggestion re-posts instead of colliding. */
+function postedDedupKey(c) {
+  const body = c.body ?? ''
+  return `${c.path}:${c.line}:${body.split('\n')[0]}:${shortHash(extractSuggestion(body))}`
+}
+
+/** Fetch every page of a list endpoint (100/page, octokit shape). */
+async function listAll(fn, params) {
+  const out = []
   let page = 1
   for (;;) {
-    const { data: existing } = await github.rest.pulls.listReviewComments({
-      owner: context.repo.owner,
-      repo: context.repo.repo,
-      pull_number: pr.number,
-      per_page: 100,
-      page,
-    })
-    for (const c of existing) {
-      if (c.body && c.body.startsWith('**argus-reviewer') && c.commit_id === pr.head.sha) {
-        posted.add(dedupKey(c.path, c.line, c.body))
-      }
-    }
-    if (existing.length < 100) break
+    const { data } = await fn({ ...params, per_page: 100, page })
+    if (!Array.isArray(data) || data.length === 0) break
+    out.push(...data)
+    if (data.length < 100) break
     page += 1
   }
-  const fresh = comments.filter((c) => !posted.has(dedupKey(c.path, c.line, c.body)))
+  return out
+}
 
-  // review.maxComments caps inline noise (TCA max_comments) — applied
-  // after dedup so already-posted comments don't eat the budget. A cap of
-  // 0 disables inline posting entirely (no empty review).
+/** The GITHUB_TOKEN posts as `github-actions[bot]`; a custom token may post
+ *  as its own login or `<actor>[bot]`. Match that set so stale *self* reviews
+ *  are dismissed without ever touching a human reviewer's verdict. */
+function isSelfLogin(login) {
+  const actor = context.actor
+  return (
+    login === 'github-actions[bot]' ||
+    login === actor ||
+    (typeof actor === 'string' && actor !== '' && login === `${actor}[bot]`)
+  )
+}
+
+/** RIGHT-side line numbers covered by a unified-diff patch. Every line in a
+ *  hunk's `+c,d` range is a valid RIGHT-side anchor (context or added); `-`
+ *  lines aren't counted in `d`, so the range is contiguous. */
+function rightSideLines(patch) {
+  const lines = new Set()
+  for (const m of patch.matchAll(/@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/g)) {
+    const start = Number.parseInt(m[1], 10)
+    const count = m[2] === undefined ? 1 : Number.parseInt(m[2], 10)
+    for (let l = start; l < start + count; l++) lines.add(l)
+  }
+  return lines
+}
+
+/** True when a serialized comment anchors inside the live diff — path in the
+ *  file list and `line` (plus `start_line` when present) on a RIGHT-side
+ *  hunk line. Files without a `patch` (large/binary) accept no comments. */
+function isOnDiff(c, diffLines) {
+  const valid = diffLines.get(c.path)
+  return (
+    valid !== undefined &&
+    valid.has(c.line) &&
+    (c.start_line === undefined || valid.has(c.start_line))
+  )
+}
+
+async function planInlineComments(pr, codeReview) {
+  if (!pr || !codeReview || codeReview.skipped) return undefined
+  // Old-format reports carry no serialized surface — degrade to sticky +
+  // status only, exactly as before U3. No review post, no API calls.
+  if (!Array.isArray(codeReview.reviewComments)) return undefined
+
+  // R9/KTD6 freshness — a planted or stale report must never produce
+  // committable suggestions or a blocking review. The sticky still posts;
+  // it renders status text, not code.
+  if (codeReview.headBinding?.intendedSha !== pr.head.sha) {
+    core.warning(
+      `code-review.json head binding ` +
+        `(${codeReview.headBinding?.intendedSha ?? 'missing'}) does not match ` +
+        `PR head ${pr.head.sha} — skipping inline review`,
+    )
+    return undefined
+  }
+
   const cap = typeof codeReview.maxComments === 'number' ? codeReview.maxComments : 20
-  const capped = fresh.slice(0, cap)
-  return { capped, dropped: fresh.length - capped.length, cap }
+  const overflow = typeof codeReview.commentsOverflow === 'number' ? codeReview.commentsOverflow : 0
+  const prRef = {
+    owner: context.repo.owner,
+    repo: context.repo.repo,
+    pull_number: pr.number,
+  }
+
+  // List failures degrade to sticky-only (warn), never crash main() before
+  // the sticky posts.
+  try {
+    // R10 dedup — paginate fully and scope to the current head so comments on
+    // older commits can't suppress still-valid findings. Keys are
+    // reconstructed from the posted body (first line + hash of the embedded
+    // suggestion), so a re-run with a corrected suggestion posts the fix
+    // instead of colliding.
+    const posted = new Set()
+    const existing = await listAll((p) => github.rest.pulls.listReviewComments(p), prRef)
+    for (const c of existing) {
+      if (
+        c.commit_id === pr.head.sha &&
+        typeof c.body === 'string' &&
+        c.body.startsWith('**argus-reviewer')
+      ) {
+        posted.add(postedDedupKey(c))
+      }
+    }
+    const fresh = codeReview.reviewComments.filter((c) => !posted.has(c.dedupKey))
+
+    // R8 live-diff validation — the diff is authoritative only at post time;
+    // drop anchors that aren't RIGHT-side lines in the current PR diff.
+    const files = await listAll((p) => github.rest.pulls.listFiles(p), prRef)
+    const diffLines = new Map()
+    for (const f of files) {
+      if (typeof f.patch === 'string') diffLines.set(f.filename, rightSideLines(f.patch))
+    }
+    const comments = fresh.filter((c) => isOnDiff(c, diffLines))
+    const offDiff = fresh.length - comments.length
+
+    return {
+      comments,
+      diffLines,
+      dropped: overflow + offDiff,
+      cap,
+      overflow,
+      offDiff,
+      event: codeReview.reviewEvent === 'request_changes' ? 'REQUEST_CHANGES' : 'COMMENT',
+      verdict: codeReview.verdict,
+      provenBlockers: codeReview.provenBlockers ?? 0,
+      highConfidenceBlockers: codeReview.highConfidenceBlockers ?? 0,
+    }
+  } catch (e) {
+    core.warning(`review planning failed: ${e.message} — sticky still posts`)
+    return undefined
+  }
+}
+
+/** Review body: verdict line + honest blocker counts (R6 — reproduced and
+ *  p-gated are never lumped). Always present — REQUEST_CHANGES requires a
+ *  body. Carries the sentinel so KTD5 dismissal can self-identify. */
+function reviewBody(plan, note) {
+  const parts = [`verdict **${plan.verdict ?? 'unknown'}**`]
+  if (plan.provenBlockers > 0) {
+    parts.push(`⛔ ${plan.provenBlockers} reproduced blocker(s)`)
+  }
+  if (plan.highConfidenceBlockers > 0) {
+    parts.push(`◎ ${plan.highConfidenceBlockers} high-confidence blocker(s)`)
+  }
+  let body = `${SENTINEL}\n**argus-reviewer** — ${parts.join(' · ')}`
+  if (note !== undefined) body += `\n\n*${note}*`
+  return body
 }
 
 async function postInlineComments(pr, plan) {
-  if (plan === undefined || plan.capped.length === 0) return
-  // One batched review instead of N createReviewComment calls — avoids
-  // secondary rate limits on large findings sets.
+  if (plan === undefined) return
+  const owner = context.repo.owner
+  const repo = context.repo.repo
+
+  // KTD5 — dismiss stale self reviews before posting so a fixed PR is never
+  // left gated by an obsolete REQUEST_CHANGES. Prior argus reviews carry the
+  // sentinel in their body; an empty-bodied PENDING draft is ours by
+  // authorship. Dismissal failure warns but never blocks the post.
   try {
-    await github.rest.pulls.createReview({
-      owner: context.repo.owner,
-      repo: context.repo.repo,
+    const reviews = await listAll((p) => github.rest.pulls.listReviews(p), {
+      owner,
+      repo,
       pull_number: pr.number,
-      commit_id: pr.head.sha,
-      event: 'COMMENT',
-      comments: plan.capped,
     })
+    for (const r of reviews) {
+      const stale =
+        (r.state === 'CHANGES_REQUESTED' || r.state === 'PENDING') &&
+        isSelfLogin(r.user?.login) &&
+        (typeof r.body !== 'string' || r.body === '' || r.body.includes(SENTINEL))
+      if (!stale) continue
+      try {
+        await github.rest.pulls.dismissReview({
+          owner,
+          repo,
+          pull_number: pr.number,
+          review_id: r.id,
+          message: 'Superseded by a newer argus-reviewer review.',
+        })
+      } catch (e) {
+        core.warning(`failed to dismiss stale review ${r.id}: ${e.message}`)
+      }
+    }
   } catch (e) {
-    core.warning(`inline review failed: ${e.message}`)
+    core.warning(`failed to list prior reviews for dismissal: ${e.message}`)
   }
+
+  // A COMMENT review with nothing to say posts nothing — the sticky already
+  // carries the verdict. REQUEST_CHANGES posts even with zero comments: the
+  // gate intent must land.
+  if (plan.event !== 'REQUEST_CHANGES' && plan.comments.length === 0) return
+
+  // dedupKey is poster-local — the API gets path/line/side/body
+  // (+start_line/start_side) verbatim.
+  const toGh = (c) => {
+    const { dedupKey: _dedupKey, ...rest } = c
+    return rest
+  }
+
+  // KTD4 bounded retry ladder — at most three createReview calls:
+  // (1) the serialized event; (2) on 403/422 (own-PR, permissions), COMMENT
+  // with a downgrade note in the body; (3) on a comment-caused 422, drop
+  // anchors failing diff membership and retry. Then warn and stop — never a
+  // per-comment fallback loop.
+  let event = plan.event
+  let note
+  let comments = plan.comments
+  let lastErr
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await github.rest.pulls.createReview({
+        owner,
+        repo,
+        pull_number: pr.number,
+        commit_id: pr.head.sha,
+        event,
+        body: reviewBody(plan, note),
+        comments: comments.map(toGh),
+      })
+      return
+    } catch (e) {
+      lastErr = e
+      if (attempt === 0 && event === 'REQUEST_CHANGES' && (e.status === 403 || e.status === 422)) {
+        event = 'COMMENT'
+        note = `REQUEST_CHANGES downgraded to COMMENT — ${e.status} ${e.message}`
+        continue
+      }
+      if (e.status === 422 && comments.length > 0) {
+        const kept = comments.filter((c) => isOnDiff(c, plan.diffLines))
+        if (kept.length < comments.length) {
+          plan.dropped += comments.length - kept.length
+          comments = kept
+          continue
+        }
+      }
+      break
+    }
+  }
+  core.warning(`review post failed: ${lastErr?.message ?? 'unknown error'} — sticky still posts`)
 }
 
 async function main() {
@@ -537,7 +789,13 @@ async function main() {
   const runDisabled = process.env.ARGUS_RUN_DISABLED === '1'
   const ok = (runDisabled || report?.ok === true) && codeReviewOk
   const conclusion = !hasKey ? 'neutral' : ok ? 'success' : 'failure'
+  // Freshness + dedup + diff validation for the serialized review surface,
+  // computed before the sticky body renders so the "+N not posted" note is
+  // truthful. The review posts BEFORE the sticky so retry-ladder drops land
+  // in that note too; a plan of undefined (old-format or stale report) makes
+  // postInlineComments a no-op with no API calls.
   const inlinePlan = hasKey ? await planInlineComments(pr, codeReview) : undefined
+  if (pr) await postInlineComments(pr, inlinePlan)
   const body = !hasKey
     ? renderMissingKeyBody()
     : runDisabled
@@ -546,10 +804,6 @@ async function main() {
         ? renderNoReportBody(reportDir, runUrl)
         : renderBody(report, codeReview, runUrl, ok, inlinePlan)
 
-  // Eligibility + dedup for inline comments, computed before the sticky
-  // body renders so the "+N not posted" note counts the *fresh* set — the
-  // cap is applied to fresh, not to raw findings (already-posted comments
-  // must not inflate the dropped count).
   if (pr) {
     const { data: comments } = await github.rest.issues.listComments({
       owner,
@@ -573,7 +827,6 @@ async function main() {
         body,
       })
     }
-    await postInlineComments(pr, inlinePlan)
   }
 
   const sha = pr ? pr.head.sha : context.sha
@@ -612,4 +865,6 @@ module.exports = {
   renderNoReportBody,
   planInlineComments,
   postInlineComments,
+  shortHash,
+  postedDedupKey,
 }

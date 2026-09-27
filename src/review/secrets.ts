@@ -46,7 +46,15 @@ export interface SecretScanRecord {
 
 export interface SecretsScanResult {
   /** Findings to union into the review — messages are fully masked. */
-  findings: { file: string; line?: number; severity: string; category?: string; message: string }[]
+  findings: {
+    file: string
+    line?: number
+    severity: string
+    category?: string
+    message: string
+    /** Jev P(live) carried through adjudication — feeds the review gate. */
+    p?: number
+  }[]
   /** Audit records for report.secretsScan — literals never included. */
   records: SecretScanRecord[]
   /** Candidates past MAX_CANDIDATES — reported count-only, never sent to Jev. */
@@ -279,6 +287,10 @@ export async function scanSecrets(opts: {
       severity: adjudicated ? 'bug' : 'risk',
       category: 'security',
       message: maskFindingMessage(c, adjudicated),
+      // A Jev-confirmed live secret counts as proven for the review-event
+      // gate — pLive IS the true-positive probability for this finding.
+      // Unadjudicated findings carry no p (degrade-open, like U8).
+      ...(adjudicated && pLive !== undefined ? { p: pLive } : {}),
     })
     records.push({
       file: c.file,

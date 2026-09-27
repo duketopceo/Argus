@@ -34,6 +34,8 @@ That's it. `init` drops a ready-to-run GitHub workflow; every PR from then on ge
 A sticky comment that updates on every push:
 
 - **Verdict** — `APPROVE` / `NEEDS_CHANGES` with findings linked to concrete source lines
+- **Inline comments on every severity** — one batched PR review, severity-sorted; each finding can carry a committable `suggestion` block you apply in one click
+- **Blocks only on proof** — the review escalates to `REQUEST_CHANGES` only for reproduced or adjudicated blockers; everything else stays advisory. Stale request-changes reviews are dismissed automatically, and `requestChanges: false` keeps it advisory forever
 - **Flow results** — which recorded user-journeys passed, healed, or broke
 - **Reproduced, not suspected** — opt-in sandbox lane runs authored regression probes; a probe that fails on head and passes on base stamps the finding as *proven*
 - **Cost** — every model call metered from OpenRouter's per-call pricing, totaled in dollars

@@ -47,6 +47,7 @@ const defaults = {
         triage: 'annotate',
         lowRiskModel: undefined,
         findingThreshold: 1.0,
+        requestChanges: true,
     },
 };
 export function defineConfig(input) {
@@ -123,6 +124,9 @@ export function resolveConfig(input = {}) {
         review.lowRiskModel = undefined;
     }
     review.findingThreshold = prob01(review.findingThreshold, defaults.review.findingThreshold);
+    // Advisory-only escape hatch — only literal `false` opts out; anything
+    // else (mis-typed values included) keeps the default-true posture.
+    review.requestChanges = review.requestChanges !== false;
     const resolved = { ...defaults, ...input, provider, sandbox, review };
     resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP);
     if (resolved.heal !== 'a0')

@@ -160,6 +160,9 @@ describe('scanSecrets', () => {
     })
     expect(r.findings).toHaveLength(1)
     expect(r.findings[0]).toMatchObject({ file: '.env.production', severity: 'bug' })
+    // KTD2 — adjudicated pLive carries onto the finding as `p` so the
+    // review-event gate sees secrets verdicts.
+    expect(r.findings[0].p).toBe(0.85)
     expect(r.records[0]?.suppressed).toBe(true)
     expect(r.records[1]?.pLive).toBe(0.85)
     expect(JSON.stringify(r.findings)).not.toContain(SK_LIVE)
@@ -168,7 +171,7 @@ describe('scanSecrets', () => {
   it('Jev failure → every candidate unadjudicated risk finding, nothing suppressed', async () => {
     const r = await scanSecrets({ diff: DIFF, client: failingClient() })
     expect(r.findings).toHaveLength(2)
-    expect(r.findings.every((f) => f.severity === 'risk')).toBe(true)
+    expect(r.findings.every((f) => f.severity === 'risk' && f.p === undefined)).toBe(true)
     expect(r.records.every((rec) => rec.adjudicated === false && rec.suppressed === undefined)).toBe(
       true,
     )

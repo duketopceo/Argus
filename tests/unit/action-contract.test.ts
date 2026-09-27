@@ -3,7 +3,7 @@ import { mkdtemp, readFile, writeFile, mkdir, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 // @ts-expect-error plain-node action helper — no type declarations
 import {
@@ -18,7 +18,12 @@ import {
 } from '../../action/runtime.mjs'
 
 // @ts-expect-error plain-node action helper — no type declarations
-import { renderBody as renderStickyBody } from '../../action/sticky-comment.cjs'
+import {
+  renderBody as renderStickyBody,
+  renderReviewOnlyBody,
+  run,
+  shortHash,
+} from '../../action/sticky-comment.cjs'
 
 const execFileAsync = promisify(execFile)
 const ACTION = join(process.cwd(), 'action')
@@ -45,7 +50,7 @@ describe('action input contract', () => {
       undefined,
       'https://github.com/run/1',
       true,
-      { capped: [], dropped: 0, cap: 20 },
+      { comments: [], dropped: 0, cap: 20, overflow: 0, offDiff: 0 },
     )
 
     expect(body).toContain('**Fingerprint cache:** 3 hit(s) · 2 miss(es) · 1 heal(s)')
@@ -216,5 +221,498 @@ describe('action input contract', () => {
         },
       }),
     ).rejects.toThrow(/config must stay inside/)
+  })
+})
+
+// U4/R6 — the sticky's scannable top block: verdict + one-line summary +
+// honest counts under the sentinel, ahead of every <details> fold.
+describe('sticky review top block (U4)', () => {
+  const runReport = {
+    ok: true,
+    totals: {
+      passed: 1,
+      tests: 1,
+      visionCalls: 0,
+      visionCostUsd: 0,
+      sandboxSeconds: 1,
+      cacheHits: 0,
+      cacheMisses: 0,
+      cacheHeals: 0,
+      callsByModel: {},
+      costByModel: {},
+      budgetExceeded: false,
+    },
+    tests: [],
+    artifacts: { videos: [] },
+  }
+
+  function review(overrides: Record<string, unknown> = {}) {
+    return {
+      ok: true,
+      skipped: false,
+      summary: 'found real problems',
+      verdict: 'needs_changes',
+      findings: [],
+      model: 'test/model',
+      tokens: 0,
+      visionCostUsd: 0,
+      reviewEvent: 'comment',
+      provenBlockers: 0,
+      highConfidenceBlockers: 0,
+      reviewComments: [],
+      commentsOverflow: 0,
+      maxComments: 20,
+      ...overrides,
+    }
+  }
+
+  it('renders verdict + counts under the sentinel, before the first details section', () => {
+    const cr = review({
+      verdict: 'needs_changes',
+      findings: [
+        {
+          file: 'a.ts',
+          line: 3,
+          severity: 'bug',
+          message: 'boom',
+          evidence: { status: 'reproduced', detail: 'fails on head' },
+        },
+        { file: 'b.ts', line: 8, severity: 'risk', message: 'hmm' },
+        { file: 'c.ts', line: 1, severity: 'nit', message: 'meh' },
+      ],
+      provenBlockers: 1,
+      reviewEvent: 'request_changes',
+    })
+
+    const body = renderStickyBody(runReport, cr, 'https://github.com/run/1', false, undefined)
+
+    expect(body.indexOf('<!-- argus-reviewer -->')).toBeLessThan(body.indexOf('**Code review:**'))
+    expect(body.indexOf('**Code review:**')).toBeLessThan(body.indexOf('<details>'))
+    expect(body).toContain('**Code review:** 🔴 **needs_changes** — found real problems')
+    expect(body).toContain('🐛 1 · ⚠️ 1 · 💡 1 · ❓ 0')
+    expect(body).toContain('⛔ 1 reproduced')
+    expect(body).not.toContain('◎')
+  })
+
+  it('renders a clean zero-finding block with no proof counts', () => {
+    const cr = review({ verdict: 'pass', summary: 'clean diff' })
+    const body = renderStickyBody(runReport, cr, 'https://github.com/run/1', true, undefined)
+
+    expect(body).toContain('**Code review:** ✅ **pass** — clean diff')
+    expect(body).toContain('no findings')
+    expect(body).not.toContain('⛔')
+    expect(body).not.toContain('◎')
+    expect(body).not.toMatch(/🔧 \d+ suggestion/)
+  })
+
+  it('counts reproduced and p-only findings separately — p alone is never proven', () => {
+    // No serialized counts — exercises the finding-level recount fallback:
+    // the p-only blocker must land under ◎ and never leak into ⛔.
+    const cr = review({
+      findings: [
+        {
+          file: 'a.ts',
+          line: 3,
+          severity: 'bug',
+          message: 'boom',
+          evidence: { status: 'reproduced', detail: 'fails on head' },
+        },
+        { file: 'b.ts', line: 8, severity: 'bug', message: 'confident', p: 0.95 },
+        { file: 'c.ts', line: 9, severity: 'bug', message: 'plain' },
+      ],
+    })
+    delete (cr as Record<string, unknown>).provenBlockers
+    delete (cr as Record<string, unknown>).highConfidenceBlockers
+
+    const body = renderStickyBody(runReport, cr, 'https://github.com/run/1', false, undefined)
+
+    expect(body).toContain('⛔ 1 reproduced')
+    expect(body).toContain('◎ 1 high-confidence')
+    expect(body).not.toContain('⛔ 2')
+    expect(body).not.toContain('◎ 2')
+  })
+
+  it('counts only serialized comments that carry a committable suggestion', () => {
+    const cr = review({
+      findings: [
+        { file: 'a.ts', line: 3, severity: 'bug', message: 'boom', suggestion: 'const x = 1' },
+        // A second patched finding that never made reviewComments (cap/
+        // ineligible) — its suggestion is not committable on the PR.
+        { file: 'b.ts', line: 8, severity: 'nit', message: 'meh', suggestion: 'const y = 2' },
+      ],
+      reviewComments: [
+        {
+          path: 'a.ts',
+          line: 3,
+          side: 'RIGHT',
+          body:
+            '**argus-reviewer bug:** boom\n\n' +
+            '````suggestion\nconst x = 1\n````\n\n' +
+            '*Suggested change — review before committing.*',
+          dedupKey: 'k1',
+        },
+        {
+          path: 'b.ts',
+          line: 8,
+          side: 'RIGHT',
+          body: '**argus-reviewer nit:** meh',
+          dedupKey: 'k2',
+        },
+      ],
+    })
+
+    const body = renderStickyBody(runReport, cr, 'https://github.com/run/1', false, undefined)
+
+    expect(body).toContain('🔧 1 suggestion\n')
+    expect(body).not.toContain('🔧 2')
+  })
+
+  it('renders the same top block in the review-only body', () => {
+    const cr = review({
+      findings: [
+        {
+          file: 'a.ts',
+          line: 3,
+          severity: 'bug',
+          message: 'boom',
+          evidence: { status: 'reproduced', detail: 'fails on head' },
+        },
+      ],
+      provenBlockers: 1,
+      reviewEvent: 'request_changes',
+    })
+
+    const body = renderReviewOnlyBody(cr, 'https://github.com/run/1', false, undefined)
+
+    expect(body.indexOf('**Code review:**')).toBeLessThan(body.indexOf('<details>'))
+    expect(body).toContain('⛔ 1 reproduced')
+  })
+})
+
+// U3 — the poster consumes the serialized `reviewComments[]`/`reviewEvent`
+// surface end-to-end through the `run(runtime)` seam with a mocked octokit.
+describe('action review poster (U3)', () => {
+  const HEAD = 'headsha0000000000000000000000000000000000'
+  const POSTER_ENV_KEYS = [
+    'OPENROUTER_API_KEY',
+    'GITHUB_WORKSPACE',
+    'GITHUB_SERVER_URL',
+    'GITHUB_RUN_ID',
+    'VISION_E2E_WORKING_DIR',
+    'ARGUS_REPORT_DIR',
+    'ARGUS_RUN_DISABLED',
+  ]
+
+  let workspace: string
+  let savedEnv: Record<string, string | undefined>
+
+  beforeEach(async () => {
+    workspace = await mkdtemp(join(tmpdir(), 'argus-poster-'))
+    savedEnv = Object.fromEntries(POSTER_ENV_KEYS.map((k) => [k, process.env[k]]))
+    process.env.OPENROUTER_API_KEY = 'test-key'
+    process.env.GITHUB_WORKSPACE = workspace
+    process.env.GITHUB_SERVER_URL = 'https://github.com'
+    process.env.GITHUB_RUN_ID = '1'
+    process.env.ARGUS_RUN_DISABLED = '1'
+    delete process.env.VISION_E2E_WORKING_DIR
+    delete process.env.ARGUS_REPORT_DIR
+  })
+
+  afterEach(() => {
+    for (const k of POSTER_ENV_KEYS) {
+      if (savedEnv[k] === undefined) Reflect.deleteProperty(process.env, k)
+      else process.env[k] = savedEnv[k]
+    }
+  })
+
+  function comment(path: string, line: number, body: string, suggestion = '') {
+    return {
+      path,
+      line,
+      side: 'RIGHT',
+      body,
+      dedupKey: `${path}:${line}:${body.split('\n')[0]}:${shortHash(suggestion)}`,
+    }
+  }
+
+  function codeReview(overrides: Record<string, unknown> = {}) {
+    return {
+      ok: true,
+      skipped: false,
+      summary: 'summary',
+      verdict: 'needs_changes',
+      findings: [],
+      model: 'test/model',
+      tokens: 0,
+      visionCostUsd: 0,
+      reviewEvent: 'comment',
+      provenBlockers: 0,
+      highConfidenceBlockers: 0,
+      reviewComments: [],
+      commentsOverflow: 0,
+      maxComments: 20,
+      headBinding: {
+        intendedSha: HEAD,
+        checkoutSha: HEAD,
+        status: 'match',
+        source: 'github',
+        detail: 'checkout matches the intended PR head',
+      },
+      ...overrides,
+    }
+  }
+
+  async function writeReport(report: Record<string, unknown>) {
+    await mkdir(join(workspace, 'argus-reviewer-report'), { recursive: true })
+    await writeFile(
+      join(workspace, 'argus-reviewer-report', 'code-review.json'),
+      JSON.stringify(report),
+    )
+  }
+
+  function makeRuntime(overrides: Record<string, unknown> = {}) {
+    const calls: { method: string; params: Record<string, unknown> }[] = []
+    const warnings: string[] = []
+    const record =
+      (method: string, impl?: (params: Record<string, unknown>) => Promise<unknown>) =>
+      async (params: Record<string, unknown>) => {
+        calls.push({ method, params })
+        if (impl !== undefined) return impl(params)
+        return { data: {} }
+      }
+    const github = {
+      rest: {
+        pulls: {
+          listReviewComments: async () => ({ data: [] }),
+          listFiles: async () => ({ data: [] }),
+          listReviews: async () => ({ data: [] }),
+          createReview: record('createReview'),
+          dismissReview: record('dismissReview'),
+          ...(overrides.pulls as Record<string, unknown> | undefined),
+        },
+        issues: {
+          listComments: record('listComments', async () => ({ data: [] })),
+          createComment: record('createComment'),
+          updateComment: record('updateComment'),
+        },
+        repos: { createCommitStatus: record('createCommitStatus') },
+      },
+    }
+    const context = {
+      actor: 'github-actions[bot]',
+      repo: { owner: 'o', repo: 'r' },
+      sha: HEAD,
+      payload: { pull_request: { number: 7, head: { sha: HEAD } } },
+    }
+    const core = { warning: (m: string) => warnings.push(m), setOutput: () => {} }
+    return { runtime: { github, context, core }, calls, warnings }
+  }
+
+  const A_TS_PATCH = '@@ -1,2 +1,4 @@\n ctx\n+added1\n+added2\n+added3'
+
+  it('posts one batched review with the serialized comments and event', async () => {
+    const c = comment('a.ts', 3, '**argus-reviewer bug:** broken `correctness`')
+    await writeReport(codeReview({ reviewComments: [c] }))
+    const { runtime, calls } = makeRuntime({
+      pulls: { listFiles: async () => ({ data: [{ filename: 'a.ts', patch: A_TS_PATCH }] }) },
+    })
+
+    await run(runtime)
+
+    const reviews = calls.filter((x) => x.method === 'createReview')
+    expect(reviews).toHaveLength(1)
+    expect(reviews[0].params.event).toBe('COMMENT')
+    expect(reviews[0].params.commit_id).toBe(HEAD)
+    const posted = reviews[0].params.comments as Record<string, unknown>[]
+    expect(posted).toHaveLength(1)
+    expect(posted[0]).toEqual({ path: 'a.ts', line: 3, side: 'RIGHT', body: c.body })
+    expect(posted[0].dedupKey).toBeUndefined()
+  })
+
+  it('posts REQUEST_CHANGES when the report gates it', async () => {
+    await writeReport(codeReview({ reviewEvent: 'request_changes' }))
+    const { runtime, calls } = makeRuntime()
+
+    await run(runtime)
+
+    const reviews = calls.filter((x) => x.method === 'createReview')
+    expect(reviews).toHaveLength(1)
+    expect(reviews[0].params.event).toBe('REQUEST_CHANGES')
+    expect(reviews[0].params.body).toContain('<!-- argus-reviewer -->')
+  })
+
+  it('skips the review on a head-binding mismatch and still posts the sticky', async () => {
+    const c = comment('a.ts', 3, '**argus-reviewer bug:** stale')
+    await writeReport(
+      codeReview({
+        reviewComments: [c],
+        headBinding: {
+          intendedSha: 'othersha',
+          checkoutSha: 'othersha',
+          status: 'match',
+          source: 'github',
+          detail: 'stale report',
+        },
+      }),
+    )
+    const { runtime, calls, warnings } = makeRuntime()
+
+    await run(runtime)
+
+    expect(calls.filter((x) => x.method === 'createReview')).toHaveLength(0)
+    expect(warnings.some((w) => w.includes('head binding'))).toBe(true)
+    expect(calls.filter((x) => x.method === 'createComment')).toHaveLength(1)
+  })
+
+  it('retries a failed REQUEST_CHANGES as COMMENT with a downgrade note', async () => {
+    const c = comment('a.ts', 3, '**argus-reviewer bug:** broken')
+    await writeReport(codeReview({ reviewEvent: 'request_changes', reviewComments: [c] }))
+    let attempts = 0
+    const { runtime, calls } = makeRuntime({
+      pulls: {
+        listFiles: async () => ({ data: [{ filename: 'a.ts', patch: A_TS_PATCH }] }),
+        createReview: async (params: Record<string, unknown>) => {
+          calls.push({ method: 'createReview', params })
+          attempts += 1
+          if (attempts === 1) {
+            throw Object.assign(new Error('Resource not accessible by integration'), {
+              status: 403,
+            })
+          }
+          return { data: {} }
+        },
+      },
+    })
+
+    await run(runtime)
+
+    const reviews = calls.filter((x) => x.method === 'createReview')
+    expect(reviews).toHaveLength(2)
+    expect(reviews[0].params.event).toBe('REQUEST_CHANGES')
+    expect(reviews[1].params.event).toBe('COMMENT')
+    expect(reviews[1].params.body).toContain('REQUEST_CHANGES downgraded to COMMENT')
+    expect(reviews[1].params.body).toContain('Resource not accessible')
+  })
+
+  it('dismisses a prior self CHANGES_REQUESTED before posting', async () => {
+    const c = comment('a.ts', 3, '**argus-reviewer bug:** broken')
+    await writeReport(codeReview({ reviewComments: [c] }))
+    const { runtime, calls } = makeRuntime({
+      pulls: {
+        listFiles: async () => ({ data: [{ filename: 'a.ts', patch: A_TS_PATCH }] }),
+        listReviews: async () => ({
+          data: [
+            {
+              id: 9,
+              state: 'CHANGES_REQUESTED',
+              user: { login: 'github-actions[bot]' },
+              body: '<!-- argus-reviewer -->\nold run',
+            },
+            {
+              id: 10,
+              state: 'CHANGES_REQUESTED',
+              user: { login: 'alice' },
+              body: 'please fix this',
+            },
+          ],
+        }),
+      },
+    })
+
+    await run(runtime)
+
+    const dismissed = calls.filter((x) => x.method === 'dismissReview')
+    expect(dismissed).toHaveLength(1)
+    expect(dismissed[0].params.review_id).toBe(9)
+    const order = calls.map((x) => x.method)
+    expect(order.indexOf('dismissReview')).toBeLessThan(order.indexOf('createReview'))
+  })
+
+  it('drops comments whose anchor is not a RIGHT-side diff line', async () => {
+    const on = comment('a.ts', 3, '**argus-reviewer bug:** on diff')
+    const off = comment('a.ts', 99, '**argus-reviewer risk:** off diff')
+    const absent = comment('b.ts', 3, '**argus-reviewer bug:** not in files')
+    await writeReport(
+      codeReview({
+        reviewComments: [on, off, absent],
+        findings: [
+          { file: 'a.ts', line: 3, severity: 'bug', category: 'correctness', message: 'x' },
+        ],
+      }),
+    )
+    const { runtime, calls } = makeRuntime({
+      pulls: { listFiles: async () => ({ data: [{ filename: 'a.ts', patch: A_TS_PATCH }] }) },
+    })
+
+    await run(runtime)
+
+    const reviews = calls.filter((x) => x.method === 'createReview')
+    expect(reviews).toHaveLength(1)
+    const posted = reviews[0].params.comments as Record<string, unknown>[]
+    expect(posted).toHaveLength(1)
+    expect(posted[0].line).toBe(3)
+    const sticky = calls.find((x) => x.method === 'createComment')
+    expect(sticky?.params.body).toContain('outside the PR diff')
+  })
+
+  it('posts nothing for an old-format report without reviewComments', async () => {
+    const legacy = codeReview()
+    delete (legacy as Record<string, unknown>).reviewComments
+    delete (legacy as Record<string, unknown>).reviewEvent
+    legacy.findings = [
+      { file: 'a.ts', line: 3, severity: 'bug', category: 'correctness', message: 'x' },
+    ] as never
+    await writeReport(legacy)
+    const { runtime, calls } = makeRuntime()
+
+    await run(runtime)
+
+    expect(calls.filter((x) => x.method === 'createReview')).toHaveLength(0)
+    expect(calls.filter((x) => x.method === 'createComment')).toHaveLength(1)
+    expect(calls.filter((x) => x.method === 'createCommitStatus')).toHaveLength(1)
+  })
+
+  it('posts a suggestion-bearing comment body verbatim', async () => {
+    const body =
+      '**argus-reviewer bug:** fix this\n\n' +
+      '````suggestion\nconst x = 1\n````\n\n' +
+      '*Suggested change — review before committing.*'
+    const c = comment('a.ts', 3, body, 'const x = 1')
+    await writeReport(codeReview({ reviewComments: [c] }))
+    const { runtime, calls } = makeRuntime({
+      pulls: { listFiles: async () => ({ data: [{ filename: 'a.ts', patch: A_TS_PATCH }] }) },
+    })
+
+    await run(runtime)
+
+    const reviews = calls.filter((x) => x.method === 'createReview')
+    expect(reviews).toHaveLength(1)
+    const posted = reviews[0].params.comments as Record<string, unknown>[]
+    expect(posted[0].body).toBe(body)
+  })
+
+  it('dedups on the serialized dedupKey reconstructed from a posted body', async () => {
+    const body =
+      '**argus-reviewer bug:** fix this\n\n' +
+      '````suggestion\nconst x = 1\n````\n\n' +
+      '*Suggested change — review before committing.*'
+    const c = comment('a.ts', 3, body, 'const x = 1')
+    await writeReport(codeReview({ reviewComments: [c] }))
+    const { runtime, calls } = makeRuntime({
+      pulls: {
+        listReviewComments: async () => ({
+          data: [
+            { path: 'a.ts', line: 3, commit_id: HEAD, body },
+            // Same text on an older commit must NOT suppress the finding.
+            { path: 'other.ts', line: 5, commit_id: 'oldsha', body: '**argus-reviewer bug:** x' },
+          ],
+        }),
+        listFiles: async () => ({ data: [{ filename: 'a.ts', patch: A_TS_PATCH }] }),
+      },
+    })
+
+    await run(runtime)
+
+    expect(calls.filter((x) => x.method === 'createReview')).toHaveLength(0)
   })
 })

@@ -164,6 +164,143 @@ describe('code-review --fixture', () => {
     expect(client.calls).toHaveLength(1)
   })
 
+  it('round-trips suggestion + startLine into code-review.json', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'argus-fix-'))
+    materializeFixture(
+      repo,
+      { 'src/a.ts': 'export const a = 1\n' },
+      { 'src/a.ts': 'export const a = 2\nexport const b = 1\n' },
+    )
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-fix-cwd-'))
+    const reportDir = join(cwd, 'report')
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({ decisionModel: '', reportDir }),
+    )
+    const client = new StubClient([
+      {
+        content: JSON.stringify({
+          summary: 'found a bug',
+          verdict: 'needs_changes',
+          findings: [
+            {
+              file: 'src/a.ts',
+              line: 2,
+              startLine: 1,
+              severity: 'bug',
+              category: 'correctness',
+              message: 'L2: bug',
+              suggestion: 'export const a = 3\nexport const b = 2',
+            },
+          ],
+        }),
+      },
+    ])
+    const code = await main(['code-review', '--fixture', repo, '--report-dir', reportDir], {
+      cwd,
+      env: { ...MIN_ENV, OPENROUTER_API_KEY: 'test-key' },
+      out: () => {},
+      err: () => {},
+      createClient: () => client,
+    })
+    expect(code).toBe(0)
+    const report = JSON.parse(await readFile(join(reportDir, 'code-review.json'), 'utf8'))
+    const finding = report.findings.find((f: { file: string }) => f.file === 'src/a.ts')
+    expect(finding.suggestion).toBe('export const a = 3\nexport const b = 2')
+    expect(finding.startLine).toBe(1)
+  })
+
+  it('restores original suggestions after synthesis; synthesized-only fields drop', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'argus-fix-'))
+    // ~1200 added lines per file — each patch alone exceeds the 6000-token
+    // chunk target, so the run takes the multi-chunk + synthesis path.
+    const big = (v: string) =>
+      Array.from({ length: 1200 }, (_, i) => `export const ${v}${i} = ${i}`).join('\n') + '\n'
+    materializeFixture(repo, {}, { 'src/a.ts': big('a'), 'src/b.ts': big('b') })
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-fix-cwd-'))
+    const reportDir = join(cwd, 'report')
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({ decisionModel: '', reportDir }),
+    )
+    const client = new StubClient([
+      // Chunk 1 (src/a.ts): grounded finding with a suggestion.
+      {
+        content: JSON.stringify({
+          summary: 's',
+          verdict: 'needs_changes',
+          findings: [
+            {
+              file: 'src/a.ts',
+              line: 900,
+              startLine: 890,
+              severity: 'bug',
+              category: 'correctness',
+              message: 'L900: bug — overflow',
+              suggestion: 'export const a899 = 1',
+            },
+          ],
+        }),
+      },
+      // Chunk 2 (src/b.ts): a nit the synthesis drops.
+      {
+        content: JSON.stringify({
+          summary: 's',
+          verdict: 'approve',
+          findings: [
+            { file: 'src/b.ts', line: 5, severity: 'nit', category: 'convention', message: 'L5: nit' },
+          ],
+        }),
+      },
+      // Synthesis: same a.ts finding (re-emitted fields must lose to the
+      // original) plus a brand-new finding whose suggestion has no pre-image.
+      {
+        content: JSON.stringify({
+          summary: 's',
+          verdict: 'needs_changes',
+          findings: [
+            {
+              file: 'src/a.ts',
+              line: 900,
+              startLine: 800,
+              severity: 'bug',
+              category: 'correctness',
+              message: 'L900: bug — overflow',
+              suggestion: 'SYNTHESIZED',
+            },
+            {
+              file: 'src/b.ts',
+              line: 50,
+              startLine: 45,
+              severity: 'bug',
+              category: 'correctness',
+              message: 'L50: new synthesized bug',
+              suggestion: 'fix()',
+            },
+          ],
+        }),
+      },
+    ])
+    const code = await main(['code-review', '--fixture', repo, '--report-dir', reportDir], {
+      cwd,
+      env: { ...MIN_ENV, OPENROUTER_API_KEY: 'test-key' },
+      out: () => {},
+      err: () => {},
+      createClient: () => client,
+    })
+    expect(code).toBe(0)
+    expect(client.calls).toHaveLength(3) // 2 chunks + synthesis
+    const report = JSON.parse(await readFile(join(reportDir, 'code-review.json'), 'utf8'))
+    expect(report.findings).toHaveLength(2)
+    const a = report.findings.find((f: { file: string }) => f.file === 'src/a.ts')
+    expect(a.suggestion).toBe('export const a899 = 1')
+    expect(a.startLine).toBe(890)
+    const b = report.findings.find((f: { file: string }) => f.file === 'src/b.ts')
+    expect(b.message).toBe('L50: new synthesized bug')
+    expect(b.suggestion).toBeUndefined()
+    expect(b.startLine).toBeUndefined()
+  })
+
   it('fixture diff produces deterministic secret candidates', async () => {
     const repo = await mkdtemp(join(tmpdir(), 'argus-fix-'))
     materializeFixture(repo, {}, { 'cfg.env': `${SECRET_LITERAL}\n` })

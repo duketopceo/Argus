@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseCodeReview } from '../../src/cli.js'
+import {
+  carryForwardSuggestions,
+  computeReviewEvent,
+  P_TRUE_POSITIVE_THRESHOLD,
+  parseCodeReview,
+  renderReviewComments,
+  type ReviewFinding,
+} from '../../src/cli.js'
 import { resolveBlockSeverities, resolveConfig, resolveMaxComments } from '../../src/config.js'
 
 describe('review policy config', () => {
@@ -80,6 +87,17 @@ describe('review policy config', () => {
       'cheap/model',
     )
   })
+
+  it('requestChanges defaults true — only literal false opts out', () => {
+    expect(resolveConfig({}).review.requestChanges).toBe(true)
+    expect(resolveConfig({ review: { requestChanges: false } }).review.requestChanges).toBe(false)
+    for (const bad of ['no', 0, '', undefined]) {
+      expect(
+        resolveConfig({ review: { requestChanges: bad as unknown as boolean } }).review
+          .requestChanges,
+      ).toBe(true)
+    }
+  })
 })
 
 describe('resolveBlockSeverities', () => {
@@ -147,5 +165,435 @@ describe('finding category normalization', () => {
   it('missing category defaults to other', () => {
     const r = review([{ file: 'a.ts', line: 1, severity: 'nit', message: 'L1: nit' }])
     expect(r.findings[0].category).toBe('other')
+  })
+})
+
+describe('suggestion bounds', () => {
+  const review = (findings: unknown[]) =>
+    parseCodeReview(JSON.stringify({ summary: 's', verdict: 'needs_changes', findings }))
+
+  it('keeps a valid suggestion + startLine', () => {
+    const r = review([
+      {
+        file: 'a.ts',
+        line: 10,
+        severity: 'bug',
+        message: 'm',
+        suggestion: 'const u = x ?? fallback',
+        startLine: 8,
+      },
+    ])
+    expect(r.findings[0].suggestion).toBe('const u = x ?? fallback')
+    expect(r.findings[0].startLine).toBe(8)
+  })
+
+  it('drops an over-2000-char suggestion, keeps the finding', () => {
+    const r = review([
+      { file: 'a.ts', line: 10, severity: 'bug', message: 'm', suggestion: 'x'.repeat(2001) },
+    ])
+    expect(r.findings).toHaveLength(1)
+    expect(r.findings[0].suggestion).toBeUndefined()
+  })
+
+  it('drops a non-string suggestion, keeps the finding', () => {
+    const r = review([
+      { file: 'a.ts', line: 10, severity: 'bug', message: 'm', suggestion: 42 },
+    ])
+    expect(r.findings).toHaveLength(1)
+    expect(r.findings[0].suggestion).toBeUndefined()
+  })
+
+  it('drops suggestion and startLine for startLine 0 or negative', () => {
+    for (const startLine of [0, -3]) {
+      const r = review([
+        { file: 'a.ts', line: 10, severity: 'bug', message: 'm', suggestion: 's', startLine },
+      ])
+      expect(r.findings).toHaveLength(1)
+      expect(r.findings[0].suggestion).toBeUndefined()
+      expect(r.findings[0].startLine).toBeUndefined()
+    }
+  })
+
+  it('drops both fields when startLine >= line', () => {
+    for (const startLine of [10, 11]) {
+      const r = review([
+        { file: 'a.ts', line: 10, severity: 'bug', message: 'm', suggestion: 's', startLine },
+      ])
+      expect(r.findings).toHaveLength(1)
+      expect(r.findings[0].suggestion).toBeUndefined()
+      expect(r.findings[0].startLine).toBeUndefined()
+    }
+  })
+
+  it('drops both fields when the replaced span exceeds 25 lines', () => {
+    const r = review([
+      { file: 'a.ts', line: 40, severity: 'bug', message: 'm', suggestion: 's', startLine: 14 },
+    ])
+    expect(r.findings[0].suggestion).toBeUndefined()
+    expect(r.findings[0].startLine).toBeUndefined()
+    // Boundary — a span of exactly 25 is kept.
+    const ok = review([
+      { file: 'a.ts', line: 40, severity: 'bug', message: 'm', suggestion: 's', startLine: 15 },
+    ])
+    expect(ok.findings[0].suggestion).toBe('s')
+    expect(ok.findings[0].startLine).toBe(15)
+  })
+
+  it('drops both fields for a non-integer startLine', () => {
+    for (const startLine of [2.5, '5']) {
+      const r = review([
+        { file: 'a.ts', line: 10, severity: 'bug', message: 'm', suggestion: 's', startLine },
+      ])
+      expect(r.findings[0].suggestion).toBeUndefined()
+      expect(r.findings[0].startLine).toBeUndefined()
+    }
+  })
+
+  it('drops both fields when the finding has no line to anchor the range', () => {
+    const r = review([
+      { file: 'a.ts', severity: 'bug', message: 'm', suggestion: 's', startLine: 3 },
+    ])
+    expect(r.findings[0].suggestion).toBeUndefined()
+    expect(r.findings[0].startLine).toBeUndefined()
+  })
+
+  it('keeps a single-line suggestion with no startLine', () => {
+    const r = review([
+      { file: 'a.ts', line: 10, severity: 'bug', message: 'm', suggestion: 'x = 1' },
+    ])
+    expect(r.findings[0].suggestion).toBe('x = 1')
+    expect(r.findings[0].startLine).toBeUndefined()
+  })
+
+  it('leaves findings without the fields untouched', () => {
+    const r = review([{ file: 'a.ts', line: 10, severity: 'bug', message: 'm' }])
+    expect(r.findings[0]).toEqual({
+      file: 'a.ts',
+      line: 10,
+      severity: 'bug',
+      category: 'other',
+      message: 'm',
+    })
+  })
+})
+
+describe('carryForwardSuggestions', () => {
+  const originals = [
+    {
+      file: 'a.ts',
+      line: 10,
+      severity: 'bug',
+      message: 'L10: bug — null deref',
+      suggestion: 'const u = x ?? fallback',
+      startLine: 9,
+    },
+    { file: 'b.ts', line: 5, severity: 'nit', message: 'L5: nit — rename', suggestion: 'const n = 0' },
+  ]
+
+  it('restores the original suggestion verbatim on a surviving finding', () => {
+    const out = carryForwardSuggestions(
+      [
+        {
+          file: 'a.ts',
+          line: 10,
+          severity: 'bug',
+          message: 'L10: bug — null deref',
+          suggestion: 'SYNTHESIZED',
+          startLine: 1,
+        },
+      ],
+      originals,
+    )
+    expect(out[0].suggestion).toBe('const u = x ?? fallback')
+    expect(out[0].startLine).toBe(9)
+  })
+
+  it('matches on whitespace-normalized message', () => {
+    const out = carryForwardSuggestions(
+      [{ file: 'a.ts', line: 10, severity: 'bug', message: '  L10:  bug — null deref\n' }],
+      originals,
+    )
+    expect(out[0].suggestion).toBe('const u = x ?? fallback')
+    expect(out[0].startLine).toBe(9)
+  })
+
+  it('drops synthesized suggestion when no pre-image exists', () => {
+    const out = carryForwardSuggestions(
+      [
+        {
+          file: 'c.ts',
+          line: 3,
+          severity: 'bug',
+          message: 'L3: new finding',
+          suggestion: 'fix()',
+          startLine: 2,
+        },
+      ],
+      originals,
+    )
+    expect(out[0].suggestion).toBeUndefined()
+    expect(out[0].startLine).toBeUndefined()
+    expect(out[0].message).toBe('L3: new finding')
+  })
+
+  it('restores nothing when the matched original had no suggestion', () => {
+    const out = carryForwardSuggestions(
+      [
+        {
+          file: 'a.ts',
+          line: 10,
+          severity: 'bug',
+          message: 'L10: bug — null deref',
+          suggestion: 'spoofed',
+          startLine: 8,
+        },
+      ],
+      [{ file: 'a.ts', line: 10, severity: 'bug', message: 'L10: bug — null deref' }],
+    )
+    expect(out[0].suggestion).toBeUndefined()
+    expect(out[0].startLine).toBeUndefined()
+  })
+
+  it('does not match on file+message alone — line must agree', () => {
+    const out = carryForwardSuggestions(
+      [
+        {
+          file: 'a.ts',
+          line: 11,
+          severity: 'bug',
+          message: 'L10: bug — null deref',
+          suggestion: 'x',
+        },
+      ],
+      originals,
+    )
+    expect(out[0].suggestion).toBeUndefined()
+  })
+
+  it('leaves findings without the fields untouched', () => {
+    const out = carryForwardSuggestions(
+      [{ file: 'z.ts', line: 1, severity: 'q', message: 'L1: q' }],
+      originals,
+    )
+    expect(out[0]).toEqual({ file: 'z.ts', line: 1, severity: 'q', message: 'L1: q' })
+  })
+})
+
+describe('computeReviewEvent', () => {
+  const block = ['bug']
+  const finding = (over: Partial<ReviewFinding> = {}): ReviewFinding => ({
+    file: 'a.ts',
+    line: 1,
+    severity: 'bug',
+    message: 'L1: bug: boom',
+    ...over,
+  })
+
+  it('requests changes for a blocker at/above the true-positive gate', () => {
+    const r = computeReviewEvent([finding({ p: 0.9 })], block, true)
+    expect(r.reviewEvent).toBe('request_changes')
+    expect(r.highConfidenceBlockers).toBe(1)
+    expect(r.provenBlockers).toBe(0)
+  })
+
+  it('boundary: p exactly at the threshold escalates', () => {
+    const r = computeReviewEvent([finding({ p: P_TRUE_POSITIVE_THRESHOLD })], block, true)
+    expect(r.reviewEvent).toBe('request_changes')
+  })
+
+  it('comments when p is below the gate', () => {
+    const r = computeReviewEvent([finding({ p: 0.4 })], block, true)
+    expect(r.reviewEvent).toBe('comment')
+    expect(r.highConfidenceBlockers).toBe(0)
+  })
+
+  it('requests changes for a reproduced blocker with no p', () => {
+    const r = computeReviewEvent(
+      [finding({ evidence: { status: 'reproduced', detail: 'probe failed on head' } })],
+      block,
+      true,
+    )
+    expect(r.reviewEvent).toBe('request_changes')
+    expect(r.provenBlockers).toBe(1)
+    expect(r.highConfidenceBlockers).toBe(0)
+  })
+
+  it('ignores confident findings whose severity is not blocking', () => {
+    const r = computeReviewEvent([finding({ severity: 'nit', p: 1.0 })], block, true)
+    expect(r.reviewEvent).toBe('comment')
+    expect(r.highConfidenceBlockers).toBe(0)
+    const r2 = computeReviewEvent([finding({ severity: 'nit', p: 1.0 })], ['bug', 'nit'], true)
+    expect(r2.reviewEvent).toBe('request_changes')
+  })
+
+  it('allowRequestChanges=false always comments — counts stay honest', () => {
+    const r = computeReviewEvent(
+      [finding({ p: 0.99, evidence: { status: 'reproduced', detail: 'd' } })],
+      block,
+      false,
+    )
+    expect(r.reviewEvent).toBe('comment')
+    expect(r.provenBlockers).toBe(1)
+    expect(r.highConfidenceBlockers).toBe(1)
+  })
+
+  it('unadjudicated blocker (no p, not reproduced) never escalates', () => {
+    const r = computeReviewEvent([finding({})], block, true)
+    expect(r.reviewEvent).toBe('comment')
+  })
+
+  it('non-reproduced evidence statuses do not escalate', () => {
+    for (const status of ['exercised', 'corroborated', 'not_exercised', 'inconclusive'] as const) {
+      const r = computeReviewEvent(
+        [finding({ evidence: { status, detail: 'd' } })],
+        block,
+        true,
+      )
+      expect(r.reviewEvent).toBe('comment')
+      expect(r.provenBlockers).toBe(0)
+    }
+  })
+
+  it('secrets-style finding with carried p=0.9 + bug severity escalates', () => {
+    const r = computeReviewEvent([finding({ category: 'security', p: 0.9 })], block, true)
+    expect(r.reviewEvent).toBe('request_changes')
+  })
+
+  it('a reproduced AND confident blocker counts in both buckets', () => {
+    const r = computeReviewEvent(
+      [finding({ p: 0.9, evidence: { status: 'reproduced', detail: 'd' } })],
+      block,
+      true,
+    )
+    expect(r.reviewEvent).toBe('request_changes')
+    expect(r.provenBlockers).toBe(1)
+    expect(r.highConfidenceBlockers).toBe(1)
+  })
+
+  it('empty findings → comment with zero counts', () => {
+    expect(computeReviewEvent([], block, true)).toEqual({
+      reviewEvent: 'comment',
+      provenBlockers: 0,
+      highConfidenceBlockers: 0,
+    })
+  })
+})
+
+describe('renderReviewComments', () => {
+  const finding = (over: Partial<ReviewFinding> = {}): ReviewFinding => ({
+    file: 'a.ts',
+    line: 1,
+    severity: 'bug',
+    message: 'L1: bug: boom',
+    ...over,
+  })
+
+  it('sorts bug>risk>nit>q before slicing at the cap', () => {
+    const { comments, overflow } = renderReviewComments(
+      [
+        finding({ severity: 'nit', line: 3, message: 'n' }),
+        finding({ severity: 'bug', line: 1, message: 'b1' }),
+        finding({ severity: 'q', line: 5, message: 'q' }),
+        finding({ severity: 'risk', line: 2, message: 'r' }),
+        finding({ severity: 'bug', line: 4, message: 'b2' }),
+      ],
+      3,
+    )
+    expect(comments.map((c) => c.line)).toEqual([1, 4, 2])
+    expect(overflow).toBe(2)
+  })
+
+  it('excludes file:"-", empty file, and non-positive/non-integer lines', () => {
+    const { comments, overflow } = renderReviewComments(
+      [
+        finding({ file: '-', line: 0 }),
+        finding({ file: '', line: 3 }),
+        finding({ file: 'a.ts', line: 0 }),
+        finding({ file: 'a.ts', line: -2 }),
+        finding({ file: 'a.ts', line: 2.5 }),
+        { file: 'a.ts', severity: 'bug', message: 'no line' },
+        finding({ file: 'ok.ts', line: 7 }),
+      ],
+      20,
+    )
+    expect(comments).toHaveLength(1)
+    expect(comments[0].path).toBe('ok.ts')
+    expect(overflow).toBe(0)
+  })
+
+  it('cap 0 posts nothing and counts all eligible as overflow', () => {
+    const r = renderReviewComments([finding({}), finding({ line: 2 })], 0)
+    expect(r.comments).toHaveLength(0)
+    expect(r.overflow).toBe(2)
+  })
+
+  it('empty findings → no comments, no overflow', () => {
+    expect(renderReviewComments([], 20)).toEqual({ comments: [], overflow: 0 })
+  })
+
+  it('fences a suggestion past its longest backtick run', () => {
+    const { comments } = renderReviewComments(
+      [finding({ suggestion: 'x = 1\n````\ny = 2' })],
+      20,
+    )
+    const m = /(`{4,})suggestion\n/.exec(comments[0].body)
+    expect(m?.[1].length).toBeGreaterThanOrEqual(5)
+    expect(comments[0].body).toContain(`\n${m?.[1]}\n`)
+    expect(comments[0].body).toContain('review before committing')
+  })
+
+  it('no disclaimer on comments without a suggestion', () => {
+    const { comments } = renderReviewComments([finding({})], 20)
+    expect(comments[0].body).not.toContain('suggestion')
+    expect(comments[0].body).not.toContain('review before committing')
+  })
+
+  it('neutralizes fences, @mentions, and newlines in the message', () => {
+    const { comments } = renderReviewComments(
+      [finding({ message: 'first\n```suggestion\nrm -rf /\n```\nping @user now' })],
+      20,
+    )
+    const firstLine = comments[0].body.split('\n')[0]
+    expect(firstLine.startsWith('**argus-reviewer bug:** ')).toBe(true)
+    expect(firstLine).not.toMatch(/```|~~~/)
+    expect(firstLine).not.toContain('@user')
+    expect(firstLine).toContain('first')
+    expect(firstLine).toContain('rm -rf /')
+  })
+
+  it('multi-line suggestion sets start_line/start_side only when startLine < line', () => {
+    const [c] = renderReviewComments(
+      [finding({ line: 5, startLine: 3, suggestion: 'fixed()' })],
+      20,
+    ).comments
+    expect(c.start_line).toBe(3)
+    expect(c.start_side).toBe('RIGHT')
+    expect(c.side).toBe('RIGHT')
+    // startLine == line → single-line comment, no start fields.
+    const [single] = renderReviewComments(
+      [finding({ line: 5, startLine: 5, suggestion: 'fixed()' })],
+      20,
+    ).comments
+    expect(single.start_line).toBeUndefined()
+    expect(single.start_side).toBeUndefined()
+  })
+
+  it('dedupKey changes when only the suggestion changes; stable otherwise', () => {
+    const a = renderReviewComments([finding({ suggestion: 'x = 1' })], 20).comments[0]
+    const b = renderReviewComments([finding({ suggestion: 'x = 2' })], 20).comments[0]
+    const c = renderReviewComments([finding({ suggestion: 'x = 1' })], 20).comments[0]
+    const d = renderReviewComments([finding({})], 20).comments[0]
+    expect(a.dedupKey).not.toBe(b.dedupKey)
+    expect(a.dedupKey).toBe(c.dedupKey)
+    expect(a.dedupKey).not.toBe(d.dedupKey)
+    expect(a.dedupKey).toMatch(/^a\.ts:1:\*\*argus-reviewer bug:\*\*.*:[0-9a-f]{8}$/)
+  })
+
+  it('marks a reproduced finding with the probe line', () => {
+    const { comments } = renderReviewComments(
+      [finding({ evidence: { status: 'reproduced', detail: 'd' } })],
+      20,
+    )
+    expect(comments[0].body).toContain('🧪 Reproduced by an Argus probe')
   })
 })

@@ -180,6 +180,9 @@ export interface Config {
      * finding after Jev adjudication — 1.0 (default) is annotate-only,
      * lowering it suppresses progressively more low-confidence nits.
      * bug/risk are never suppressed.
+     * `requestChanges`: allow the review event to escalate to
+     * REQUEST_CHANGES for proven blockers (probe-reproduced or Jev
+     * high-confidence). Default true — set false for advisory-only posting.
      */
     review: {
         secretsThreshold: number;
@@ -188,6 +191,7 @@ export interface Config {
         triage: 'off' | 'annotate' | 'route';
         lowRiskModel: string | undefined;
         findingThreshold: number;
+        requestChanges: boolean;
     };
 }
 export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review'>> & {

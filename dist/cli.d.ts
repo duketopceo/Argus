@@ -29,23 +29,49 @@ interface PrFile {
     previous_filename?: string;
     patch?: string;
 }
+export interface ReviewFinding {
+    file: string;
+    line?: number;
+    severity: string;
+    category?: string;
+    message: string;
+    /** U8 — Jev true-positive probability (absent = unadjudicated). */
+    p?: number;
+    /** R1 — committable replacement lines for the commented range (parse-bounded). */
+    suggestion?: string;
+    /** R1 — first line of the replaced range; absent = single-line fix at `line`. */
+    startLine?: number;
+    evidence?: Evidence;
+}
+/** KTD3 — one pre-rendered inline review comment; posters POST it verbatim. */
+export interface ReviewComment {
+    path: string;
+    line: number;
+    start_line?: number;
+    start_side?: 'RIGHT';
+    side: 'RIGHT';
+    body: string;
+    /** R10 — path:line:bodyFirstLine:hash8(suggestion); a corrected suggestion re-posts. */
+    dedupKey: string;
+}
 interface CodeReviewReport {
     ok: boolean;
     skipped: boolean;
     summary: string;
     verdict: 'pass' | 'needs_changes' | 'approve';
-    findings: {
-        file: string;
-        line?: number;
-        severity: string;
-        category?: string;
-        message: string;
-        /** U8 — Jev true-positive probability (absent = unadjudicated). */
-        p?: number;
-        evidence?: Evidence;
-    }[];
+    findings: ReviewFinding[];
     /** Inline-comment cap consumed by the sticky poster (Tencent max_comments pull). */
     maxComments?: number;
+    /** R3/KTD2 — poster gate: 'request_changes' only for proven blockers. */
+    reviewEvent: 'comment' | 'request_changes';
+    /** Blocker-severity findings a sandbox probe reproduced. */
+    provenBlockers: number;
+    /** Blocker-severity findings at/above the Jev P(true-positive) gate. */
+    highConfidenceBlockers: number;
+    /** KTD3 — eligibility-filtered, severity-sorted, sanitized, capped. */
+    reviewComments: ReviewComment[];
+    /** Eligible findings dropped by the maxComments cap. */
+    commentsOverflow: number;
     /** B.2 probe audit records — present only when the sandbox lane ran. */
     probes?: ProbeRecord[];
     /** Why an enabled lane bowed out (fork gate, no docker, no harness…). */
@@ -91,5 +117,46 @@ export declare function parseCodeReview(content: string): {
     summary: string;
     verdict: 'pass' | 'needs_changes' | 'approve';
     findings: CodeReviewReport['findings'];
+};
+/**
+ * KTD1 — a surviving synthesized finding's suggestion is restored verbatim
+ * from its pre-synthesis original, matched on file + line + whitespace-
+ * normalized message. With no pre-image the synthesized copy is dropped:
+ * synthesis output is ungrounded model text, never committable code.
+ */
+export declare function carryForwardSuggestions(findings: CodeReviewReport['findings'], originals: CodeReviewReport['findings']): CodeReviewReport['findings'];
+/**
+ * R3/KTD2 — Jev P(true-positive) at/above which a blocker-severity finding
+ * counts as proven for the REQUEST_CHANGES gate. This is a different axis
+ * from `review.findingThreshold` (P(false-positive) for nit/q suppression)
+ * — never reuse that knob. 0.7: high-confidence without demanding
+ * near-certainty from a calibrated scorer.
+ */
+export declare const P_TRUE_POSITIVE_THRESHOLD = 0.7;
+/**
+ * KTD2 — the poster-facing review gate, computed once at report assembly
+ * on linkedFindings (post-adjudication `p`, post-probe `evidence`,
+ * secrets-lane `pLive` already carried as `p`) and serialized into
+ * code-review.json; posters read `reviewEvent`, never recompute.
+ * Unadjudicated blockers (no p, not reproduced) never escalate —
+ * degrade-open by design. The two counts overlap deliberately: a
+ * reproduced AND Jev-confident finding is reported under both.
+ */
+export declare function computeReviewEvent(findings: ReviewFinding[], blockSeverities: string[], allowRequestChanges: boolean): {
+    reviewEvent: 'comment' | 'request_changes';
+    provenBlockers: number;
+    highConfidenceBlockers: number;
+};
+/**
+ * KTD3 — pre-render the inline review surface: eligibility-filtered
+ * (R8's static half — real path, positive integer line), severity-sorted
+ * before the maxComments cap so nits can't crowd out bugs (R2), sanitized
+ * (R5), suggestion-fenced, each carrying a dedupKey (R10). Posters consume
+ * `comments` verbatim — dedup + live-diff validation + POST, no render
+ * policy. `overflow` is the count of eligible findings past the cap.
+ */
+export declare function renderReviewComments(findings: ReviewFinding[], maxComments?: number): {
+    comments: ReviewComment[];
+    overflow: number;
 };
 export {};
