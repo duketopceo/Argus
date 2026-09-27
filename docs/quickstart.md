@@ -229,6 +229,12 @@ export default defineConfig({
     // are dropped). NOTE: polarity is the inverse of secretsThreshold —
     // lower values here suppress MORE, not fewer.
     findingThreshold: 1.0,
+    // Let proven blockers escalate the PR review to REQUEST_CHANGES.
+    // "Proven" means sandbox-reproduced, Jev-adjudicated above the
+    // true-positive threshold, or a secrets-lane finding confirmed
+    // live. Set false for a permanently advisory (COMMENT-only)
+    // posture — e.g. while evaluating the tool.
+    requestChanges: true,
   },
   // Jev decision model for all decision lanes (triage, finding
   // adjudication, secrets). '' disables every Jev call — lanes degrade
@@ -241,6 +247,26 @@ Each finding carries a `category` (`correctness`, `security`,
 `performance`, `usability`, `convention`, `other`) shown in the sticky
 table and inline comments. All findings land in `code-review.json`
 regardless of the comment cap.
+
+What posts to the PR: one batched review containing inline comments on
+all severities (severity-sorted, capped by `maxComments`), each carrying
+a committable ```` ```suggestion ```` block when the model proposed a clean
+patch — sanitized, span-bounded, and fenced safely before rendering. The
+review event is `REQUEST_CHANGES` only when a blocker-severity finding is
+proven (reproduced by a sandbox probe, Jev-adjudicated above threshold,
+or a secrets-lane hit confirmed live); everything else posts as `COMMENT`.
+A stale request-changes review from Argus is dismissed automatically on
+the next run once the blockers clear. If GitHub rejects the event (the
+token authored the PR, or the token is read-only on a fork), the review
+retries once as `COMMENT` with a note in the review body. Comments whose
+anchors fall outside the PR diff are dropped before posting and counted
+in the sticky's overflow note.
+
+Two consequences worth knowing: without a decision model *and* without
+the probe lane, no finding can be proven, so the event is always
+`COMMENT` (degrade-open by design); and the poster verifies the report's
+head binding matches the PR head before posting, so a stale or planted
+`code-review.json` can never produce comments or a blocking review.
 
 ### Local demo (`npm run demo`)
 
