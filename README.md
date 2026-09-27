@@ -38,6 +38,8 @@ A sticky comment that updates on every push:
 - **Reproduced, not suspected** — opt-in sandbox lane runs authored regression probes; a probe that fails on head and passes on base stamps the finding as *proven*
 - **Cost** — every model call metered from OpenRouter's per-call pricing, totaled in dollars
 
+That comment is **not a review**. `require_approving_reviews` reads reviews only, so on a protected branch the verdict alone leaves the gate unsatisfied. Supply `approval-token` — a GitHub App installation token, or a PAT from an account that is not the PR author — and Argus also submits a real review whose event follows the verdict. `github.token` cannot do this; GitHub refuses it outright. Details, the measured refusals, and the review-discipline rules: [`docs/approval-token.md`](docs/approval-token.md).
+
 <p align="center">
   <img src="docs/assets/demo.gif" alt="argus-reviewer run — live vision call, PASS, $0.0005 spend" width="900" />
 </p>

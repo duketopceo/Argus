@@ -59,10 +59,34 @@ inputs:
     description: Run the browser-flow lane (`argus-reviewer run`). Disabled by default for public code-review-only repositories. Requires an explicit target and a trusted runtime path.
     default: 'false'
     required: false
+  approval-token:
+    description: >-
+      Optional token that lets Argus submit a *formal* pull request review, which
+      is what `require_approving_reviews` reads. `github.token` cannot be used:
+      GitHub refuses it with 422 "GitHub Actions is not permitted to approve
+      pull requests", and no permission scope changes that. Supply a GitHub App
+      installation token, or a PAT belonging to an account that is not the PR
+      author. Empty (the default) keeps Argus to the sticky comment only. See
+      docs/approval-token.md.
+    default: ''
+    required: false
+  emit-review:
+    description: >-
+      Submit the formal review when `approval-token` is supplied. 'false' keeps
+      the token out of the review lane entirely. A `true` value without a token
+      is a no-op, not an error.
+    default: 'true'
+    required: false
 outputs:
   conclusion:
     description: 'Run conclusion: success, failure, or neutral'
     value: ${{ steps.post.outputs.conclusion }}
+  review-event:
+    description: 'GitHub review event submitted: APPROVE, REQUEST_CHANGES, COMMENT, or none'
+    value: ${{ steps.approve.outputs.review-event }}
+  review-state:
+    description: 'State of the submitted review, or why none was submitted'
+    value: ${{ steps.approve.outputs.review-state }}
 runs:
   using: composite
   steps:
@@ -175,3 +199,14 @@ runs:
           const actionPath = process.env.ARGUS_ACTION_PATH;
           const { run } = require(path.join(actionPath, 'sticky-comment.cjs'));
           return await run({ github, context, core });
+
+    - name: Submit formal approval review
+      id: approve
+      if: always() && inputs.emit-review != 'false'
+      shell: bash
+      env:
+        ARGUS_APPROVAL_TOKEN: ${{ inputs.approval-token }}
+        ARGUS_REPORT_DIR: ${{ inputs.report-dir }}
+        VISION_E2E_WORKING_DIR: ${{ inputs.working-directory }}
+        ARGUS_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      run: node "${{ github.action_path }}/emit-review.mjs"

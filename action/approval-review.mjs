@@ -1,0 +1,173 @@
+// Formal pull request review submission.
+//
+// The sticky comment is a PR *comment*; it is not a review object. Branch
+// protection with `require_approving_reviews` reads reviews only, so an
+// Argus verdict alone never satisfies that gate. This module submits a real
+// review via POST /repos/{owner}/{repo}/pulls/{n}/reviews.
+//
+// The token used here must be approval-capable. GitHub refuses approvals from
+// two sources, and both refusals are permanent rather than a missing scope:
+//
+//   GITHUB_TOKEN (github-actions[bot])
+//     422 "GitHub Actions is not permitted to approve pull requests."
+//   a PAT belonging to the PR author
+//     422 "Review Can not approve your own pull request"
+//
+// So the token has to be a GitHub App installation token, or a PAT from an
+// account that is not the author. See docs/approval-token.md.
+
+import { execFile } from 'node:child_process'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+
+const GH_API = 'https://api.github.com'
+
+/** Verdicts that mean "ship it". Everything else blocks. */
+const APPROVING = new Set(['pass', 'approve'])
+
+/**
+ * Map a code-review verdict onto a GitHub review event.
+ *
+ * `skipped` resolves to COMMENT, not APPROVE: a run that did not review the
+ * diff must never manufacture an approval.
+ */
+export function reviewEventFor(verdict) {
+  const v = String(verdict ?? '').trim().toLowerCase()
+  if (v === 'skipped') return 'COMMENT'
+  return APPROVING.has(v) ? 'APPROVE' : 'REQUEST_CHANGES'
+}
+
+/**
+ * Turn a failed review submission into an actionable message.
+ *
+ * Both known refusals are GitHub policy, so the remedy is a different
+ * identity, never a widened scope. Returns undefined for unknown failures.
+ */
+export function classifyApprovalFailure(status, message) {
+  const text = String(message ?? '')
+  if (text.includes('GitHub Actions is not permitted to approve')) {
+    return (
+      'GITHUB_TOKEN cannot approve. Supply the approval-token input with a GitHub App ' +
+      'installation token or a PAT from an account that is not the PR author. ' +
+      'See docs/approval-token.md.'
+    )
+  }
+  if (text.includes('Can not approve your own pull request')) {
+    return (
+      'The approval token belongs to the PR author, and GitHub blocks self-approval. ' +
+      'Use an identity that did not open the pull request.'
+    )
+  }
+  if (status === 403) {
+    return 'The approval token lacks pull-request write access. Mint an installation token with pull-requests: write.'
+  }
+  if (status === 404) {
+    return 'The approval token cannot see this repository, or the pull request number is wrong.'
+  }
+  return undefined
+}
+
+/**
+ * Build the review body: the verdict in one line, then the finding count.
+ *
+ * Deliberately short. The full report, the flow results, and the cost ledger
+ * already live in the sticky comment; a formal review is a gate signal, not a
+ * second copy of the evidence.
+ */
+export function reviewBody(codeReview, runUrl) {
+  const lines = []
+  const verdict = String(codeReview?.verdict ?? 'unknown')
+  lines.push(`**Argus verdict:** \`${verdict}\``)
+  if (codeReview?.summary) lines.push('', codeReview.summary)
+  const findings = codeReview?.findings
+  if (Array.isArray(findings) && findings.length > 0) {
+    const blocking = findings.filter((f) => isBlockingSeverity(f?.severity))
+    lines.push(
+      '',
+      `${findings.length} finding(s), ${blocking.length} blocking. ` +
+        'Full evidence and the cost ledger are in the argus-reviewer comment.',
+    )
+    for (const f of blocking.slice(0, 5)) {
+      const where = f.file ? ` \`${f.file}${f.line ? `:${f.line}` : ''}\`` : ''
+      lines.push(`- **${f.severity}**${where} — ${oneLine(f.message)}`)
+    }
+  }
+  if (runUrl) lines.push('', `[argus-reviewer run](${runUrl})`)
+  lines.push(
+    '',
+    '<sub>Argus is the reviewer of record. Findings come from `code-review.json` ' +
+      'in the run workspace; this review is generated, not hand-written.</sub>',
+  )
+  return lines.join('\n')
+}
+
+const BLOCKING_SEVERITIES = new Set(['critical', 'high', 'blocker', 'major'])
+
+function isBlockingSeverity(severity) {
+  return BLOCKING_SEVERITIES.has(String(severity ?? '').trim().toLowerCase())
+}
+
+function oneLine(s) {
+  return String(s ?? '')
+    .replace(/[\r\n]+/g, ' ')
+    .trim()
+}
+
+/** POST the review. Resolves with the parsed review, throws on API failure. */
+export async function submitApprovalReview({ repo, pr, token, event, body, commitId }) {
+  const args = [
+    'api',
+    '--method',
+    'POST',
+    `${GH_API}/repos/${repo}/pulls/${pr}/reviews`,
+    '-f',
+    `event=${event}`,
+    '-f',
+    `body=${body}`,
+  ]
+  if (commitId) args.push('-f', `commit_id=${commitId}`)
+  const { stdout, stderr } = await execFileAsync('gh', args, {
+    env: { ...process.env, GH_TOKEN: token },
+    maxBuffer: 8 * 1024 * 1024,
+  })
+  return { stdout, stderr }
+}
+
+function execFileAsync(file, args, options) {
+  return new Promise((res, rej) => {
+    execFile(file, args, options, (error, stdout, stderr) => {
+      if (error) {
+        error.stdout = stdout
+        error.stderr = stderr
+        rej(error)
+        return
+      }
+      res({ stdout, stderr })
+    })
+  })
+}
+
+/** Read the code-review report the harness already wrote. */
+export async function readCodeReview(reportDir) {
+  const raw = await readFile(join(reportDir, 'code-review.json'), 'utf8')
+  return JSON.parse(raw)
+}
+
+/**
+ * Resolve the pull request number from the event payload.
+ *
+ * `pull_request` events put it at `.pull_request.number`; `pull_request_target`
+ * puts it at `.number`; `issue_comment` events carry it at `.issue.number`.
+ * Precedence matters — a `pull_request` payload also has a top-level `number`,
+ * and for a PR-triggered event they agree, but relying on that is fragile.
+ */
+export function prNumberFromEvent(eventName, payload) {
+  const candidates = []
+  if (eventName === 'issue_comment') candidates.push(payload?.issue?.number)
+  candidates.push(payload?.pull_request?.number, payload?.number)
+  for (const c of candidates) {
+    const n = Number(c)
+    if (Number.isInteger(n) && n > 0) return n
+  }
+  return undefined
+}
