@@ -24,6 +24,8 @@ import {
 } from './approval-review.mjs'
 import { setActionOutput } from './runtime.mjs'
 
+const DEFAULT_CHECK_APP = 'github-actions'
+
 function warn(message) {
   process.stdout.write(`::warning::${message}\n`)
 }
@@ -128,6 +130,10 @@ export function resolveLane(env) {
     token,
     evidence: (env.ARGUS_APPROVAL_EVIDENCE ?? '').trim(),
     check: (env.ARGUS_APPROVAL_CHECK ?? '').trim(),
+    // Defaults here as well as on the action input, so a workflow that sets the
+    // env directly still gets the pinned producer. An empty value would mean
+    // "any producer", which is exactly what the fork-forgery case exploits.
+    checkApp: (env.ARGUS_APPROVAL_CHECK_APP ?? '').trim() || DEFAULT_CHECK_APP,
     repo,
     pr,
     reportDir: workDir === '' ? reportDir : `${workDir}/${reportDir}`,
@@ -155,7 +161,7 @@ export async function emitApprovalReview(env, deps = {}) {
   const readReviews = deps.reviews ?? listReviews
   const dismiss = deps.dismiss ?? dismissReview
   const log = (line) => process.stdout.write(`${line}\n`)
-  const { token, evidence, check, repo, pr, reportDir, headSha, runUrl } = resolveLane(env)
+  const { token, evidence, check, checkApp, repo, pr, reportDir, headSha, runUrl } = resolveLane(env)
 
   if (token === '') {
     // Not an error. The sticky comment is Argus's default behaviour; approving
@@ -176,12 +182,16 @@ export async function emitApprovalReview(env, deps = {}) {
       'cite the test command it stands on. Set approval-evidence to the command(s) that verify ' +
       'this pull request, or drop approval-token to stay on the comment lane.'
     fail(message)
+    setActionOutput('review-event', 'none')
+    setActionOutput('review-state', 'no-evidence')
     return { ok: false, reviewEvent: 'none', reviewState: 'no-evidence', message }
   }
 
   if (repo === '') {
     const message = 'argus-reviewer: GITHUB_REPOSITORY is empty; cannot submit a review.'
     fail(message)
+    setActionOutput('review-event', 'none')
+    setActionOutput('review-state', 'no-repo')
     return { ok: false, reviewEvent: 'none', reviewState: 'no-repo', message }
   }
 
@@ -252,7 +262,7 @@ export async function emitApprovalReview(env, deps = {}) {
     // be bound to anything. Binding to a branch tip instead is the hole this
     // exists to close, so an unknown SHA is a refusal rather than a guess.
     if (check === '' || headSha === undefined) {
-      const message = `argus-reviewer: ${classifyEvidenceFailure(check, { ok: false, reason: 'no-check-named' })}`
+      const message = `argus-reviewer: ${classifyEvidenceFailure(check, { ok: false, reason: 'no-check-named' }, checkApp)}`
       fail(message)
       setActionOutput('review-event', 'none')
       setActionOutput('review-state', 'unverified-evidence')
@@ -260,7 +270,7 @@ export async function emitApprovalReview(env, deps = {}) {
     }
     let verdictOnCheck
     try {
-      verdictOnCheck = verifyEvidenceCheck(await list({ repo, ref: headSha, token }), check)
+      verdictOnCheck = verifyEvidenceCheck(await list({ repo, ref: headSha, token }), check, checkApp)
     } catch (err) {
       const message =
         `argus-reviewer: could not read check runs for ${headSha} — ${err?.message ?? err}. ` +
@@ -271,7 +281,7 @@ export async function emitApprovalReview(env, deps = {}) {
       return { ok: false, reviewEvent: 'none', reviewState: 'no-check-runs', message }
     }
     if (!verdictOnCheck.ok) {
-      const message = `argus-reviewer: ${classifyEvidenceFailure(check, verdictOnCheck)}`
+      const message = `argus-reviewer: ${classifyEvidenceFailure(check, verdictOnCheck, checkApp)}`
       fail(message)
       setActionOutput('review-event', 'none')
       setActionOutput('review-state', 'unverified-evidence')

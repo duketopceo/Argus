@@ -200,6 +200,12 @@ function isGreenCheck(check) {
   )
 }
 
+function norm(s) {
+  return String(s ?? '')
+    .trim()
+    .toLowerCase()
+}
+
 /**
  * Decide whether a named check run can carry an approval.
  *
@@ -208,42 +214,58 @@ function isGreenCheck(check) {
  * returns the check on success so the review body can cite the real run rather
  * than repeat the caller's string back at them.
  *
- * @param {Array<{name?: string, status?: string, conclusion?: string}>} checkRuns
+ * Two properties matter as much as the name match:
+ *
+ * - **The producer is pinned.** A check *name* is not a producer. A fork can
+ *   add a workflow that reports a green run called `test`, so a gate that
+ *   accepts any green `test` is satisfied by whoever was under review. `appSlug`
+ *   restricts the match to one App, and an empty value means "any producer",
+ *   which the action never passes by default.
+ * - **Every match must be green.** One green run does not speak for a failing
+ *   one with the same name, and picking the greenest match is exactly how a
+ *   red build gets waved through.
+ *
+ * @param {Array<{name?: string, status?: string, conclusion?: string, app?: {slug?: string}}>} checkRuns
  * @param {string} name
+ * @param {string} [appSlug] required producer; empty matches any
  * @returns {{ ok: boolean, reason?: string, check?: object }}
  */
-export function verifyEvidenceCheck(checkRuns, name) {
-  const wanted = String(name ?? '')
-    .trim()
-    .toLowerCase()
+export function verifyEvidenceCheck(checkRuns, name, appSlug) {
+  const wanted = norm(name)
   if (wanted === '') return { ok: false, reason: 'no-check-named' }
-  const matches = (Array.isArray(checkRuns) ? checkRuns : []).filter(
-    (r) =>
-      String(r?.name ?? '')
-        .trim()
-        .toLowerCase() === wanted,
-  )
-  if (matches.length === 0) return { ok: false, reason: 'no-check-named' }
-  const green = matches.find(isGreenCheck)
-  if (green) return { ok: true, check: green }
+  // '' and '*' both mean "any producer". The action and the lane never pass
+  // either by default; reaching this needs an explicit opt-out.
+  const producer = norm(appSlug)
+  const anyProducer = producer === '' || producer === '*'
+  const all = Array.isArray(checkRuns) ? checkRuns : []
+  const byName = all.filter((r) => norm(r?.name) === wanted)
+  if (byName.length === 0) return { ok: false, reason: 'no-check-named' }
+  const matches = anyProducer ? byName : byName.filter((r) => norm(r?.app?.slug) === producer)
+  if (matches.length === 0) return { ok: false, reason: 'wrong-producer' }
+  if (matches.every(isGreenCheck)) return { ok: true, check: matches[0] }
   // Report a still-running state ahead of a failed one: "pending" is transient,
   // "failed" is the outcome somebody has to act on.
-  const running = matches.find(
-    (r) =>
-      String(r?.status ?? '')
-        .toLowerCase() !== 'completed',
-  )
-  return { ok: false, reason: running ? 'not-completed' : 'not-successful', check: running ?? matches[0] }
+  const running = matches.find((r) => norm(r?.status) !== 'completed')
+  const red = matches.find((r) => !isGreenCheck(r))
+  return { ok: false, reason: running ? 'not-completed' : 'not-successful', check: running ?? red }
 }
 
 /**
  * Explain a refused approval in terms of the check, not the token. Returns the
  * whole sentence so the caller cannot accidentally emit a vaguer one.
  */
-export function classifyEvidenceFailure(name, verdict) {
+export function classifyEvidenceFailure(name, verdict, appSlug) {
   const label = `\`${name}\``
   const seen = verdict?.check
   const suffix = seen?.html_url ? ` (${seen.html_url})` : ''
+  if (verdict?.reason === 'wrong-producer') {
+    const from = appSlug ? `\`${appSlug}\`` : 'the expected App'
+    return (
+      `A check run named ${label} exists on the head commit${suffix}, but it did not come from ` +
+      `${from}. Argus only accepts that producer's result, because a check name is not a producer. ` +
+      'Set approval-check-app to the App slug that runs this check.'
+    )
+  }
   if (verdict?.reason === 'not-completed') {
     return (
       `${label} has not finished on the head commit${suffix}, so there is no evidence the cited ` +

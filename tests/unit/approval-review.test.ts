@@ -132,7 +132,8 @@ describe('pull request number resolution', () => {
 })
 
 describe('evidence check verification', () => {
-  const green = { name: 'test (22)', status: 'completed', conclusion: 'success' }
+  const actions = { slug: 'github-actions' }
+  const green = { name: 'test (22)', status: 'completed', conclusion: 'success', app: actions }
 
   it('accepts a completed successful run of the named check', () => {
     expect(verifyEvidenceCheck([green], 'test (22)')).toEqual({ ok: true, check: green })
@@ -158,9 +159,29 @@ describe('evidence check verification', () => {
     expect(failed.reason).toBe('not-successful')
   })
 
-  it('picks the green run when a check name appears more than once', () => {
-    const stale = { name: 'test (22)', status: 'completed', conclusion: 'failure' }
-    expect(verifyEvidenceCheck([stale, green], 'test (22)')).toEqual({ ok: true, check: green })
+  it('does not let one green run speak for a red one of the same name', () => {
+    // Picking the greenest match is how a red build gets waved through.
+    const red = { name: 'test (22)', status: 'completed', conclusion: 'failure', app: actions }
+    expect(verifyEvidenceCheck([red, green], 'test (22)')).toMatchObject({ ok: false, reason: 'not-successful' })
+    expect(verifyEvidenceCheck([green, red], 'test (22)')).toMatchObject({ ok: false, reason: 'not-successful' })
+  })
+
+  it('ignores a same-named run from a different producer', () => {
+    // A check name is not a producer. A fork can report a green run called
+    // `test`, so the producer is pinned.
+    const forged = { name: 'test (22)', status: 'completed', conclusion: 'success', app: { slug: 'some-fork-app' } }
+    expect(verifyEvidenceCheck([forged], 'test (22)', 'github-actions')).toMatchObject({
+      ok: false,
+      reason: 'wrong-producer',
+    })
+    expect(verifyEvidenceCheck([forged], 'test (22)')).toMatchObject({ ok: true })
+  })
+
+  it('distinguishes a wrong producer from a missing check', () => {
+    expect(verifyEvidenceCheck([green], 'lint', 'github-actions').reason).toBe('no-check-named')
+    expect(
+      classifyEvidenceFailure('test (22)', { ok: false, reason: 'wrong-producer' }, 'github-actions'),
+    ).toContain('did not come from `github-actions`')
   })
 
   it('refuses an empty or absent name', () => {
@@ -275,6 +296,7 @@ describe('emit-review lane', () => {
     status: 'completed',
     conclusion: 'success',
     html_url: 'https://github.com/o/r/runs/7',
+    app: { slug: 'github-actions' },
   }
   const listGreen = vi.fn().mockResolvedValue([greenCheck])
 
@@ -419,6 +441,25 @@ describe('emit-review lane', () => {
     expect(submit).not.toHaveBeenCalled()
     expect(result.ok).toBe(false)
     expect(result.reviewState).toBe('no-check-runs')
+  })
+
+  it('does not approve on a green check from the wrong producer', async () => {
+    // The end-to-end version of the forge: a fork reports a green run with the
+    // expected name, and the gate must not take it.
+    const submit = vi.fn()
+    const result = await emitApprovalReview(
+      { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
+      {
+        submit,
+        head: headAt,
+        reviews: listRev,
+        list: async () => [{ ...greenCheck, app: { slug: 'some-fork-app' } }],
+        read: async () => ({ verdict: 'pass', findings: [] }),
+      },
+    )
+    expect(submit).not.toHaveBeenCalled()
+    expect(result.reviewState).toBe('unverified-evidence')
+    expect(lines()).toContain('did not come from `github-actions`')
   })
 
   it('refuses to submit once the head has moved under the run', async () => {

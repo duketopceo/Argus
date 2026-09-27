@@ -89,6 +89,15 @@ inputs:
       negative review still goes out while CI is red.
     default: ''
     required: false
+  approval-check-app:
+    description: >-
+      App slug that is allowed to produce the approval-check run, e.g.
+      'github-actions'. A check name is not a producer: a fork can add a
+      workflow that reports a green run with the expected name, so the match is
+      pinned to one App. Set this to your own App slug if your CI is not GitHub
+      Actions. Empty accepts any producer and is not the default.
+    default: 'github-actions'
+    required: false
   emit-review:
     description: >-
       Submit the formal review when `approval-token` is supplied. 'false' keeps
@@ -230,6 +239,7 @@ runs:
         ARGUS_APPROVAL_TOKEN: ${{ inputs.approval-token }}
         ARGUS_APPROVAL_EVIDENCE: ${{ inputs.approval-evidence }}
         ARGUS_APPROVAL_CHECK: ${{ inputs.approval-check }}
+        ARGUS_APPROVAL_CHECK_APP: ${{ inputs.approval-check-app }}
         ARGUS_REPORT_DIR: ${{ inputs.report-dir }}
         VISION_E2E_WORKING_DIR: ${{ inputs.working-directory }}
         ARGUS_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}

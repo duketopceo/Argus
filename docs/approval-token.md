@@ -49,7 +49,13 @@ authenticates.
 ## What does work
 
 A **GitHub App installation token** minted from an app installed on the
-repository, with `pull-requests: write`:
+repository, with `pull-requests: write` **and `checks: read`**. The first
+submits and dismisses reviews; the second reads the check runs `approval-check`
+verifies. Mint it with both permissions or the approval lane refuses to run:
+
+```json
+{ "permissions": { "pull_requests": "write", "checks": "read" } }
+```
 
 ```bash
 # App private key -> installation token for the repo
@@ -66,22 +72,32 @@ repository (`cursor` appId 1210556, 24 `APPROVED` reviews).
 
 ## Wiring
 
+The composite action lives at `action/`, so it is used as a **step**, not as a
+reusable job. `pull-requests: write` is required for the workflow token: the
+sticky comment is an *issue* comment, and creating one needs write, not read.
+
 ```yaml
 permissions:
   contents: read
-  pull-requests: read        # the sticky comment only needs read
+  pull-requests: write       # the sticky comment writes an issue comment
 
 jobs:
   argus:
-    uses: duketopceo/Argus/@main
-    with:
-      openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
-      approval-token: ${{ secrets.ARGUS_APPROVAL_TOKEN }}
-      approval-evidence: 'python -m unittest discover -s tests && ruff check .'
-      approval-check: 'test (22)'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: token
+        run: echo "token=$(mint-installation-token)" >> "$GITHUB_OUTPUT"
+      - uses: duketopceo/Argus/action@main
+        with:
+          openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+          approval-token: ${{ steps.token.outputs.token }}
+          approval-evidence: 'python -m unittest discover -s tests && ruff check .'
+          approval-check: 'test (22)'
+          approval-check-app: 'github-actions'
 ```
 
-Mint the installation token in a prior step and hand it to the action; the
+Mint the installation token in an earlier step and hand it to the action; the
 action never mints one itself.
 
 `approval-evidence` is not optional once `approval-token` is set. The lane
