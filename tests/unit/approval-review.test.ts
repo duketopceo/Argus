@@ -89,6 +89,21 @@ describe('review body', () => {
     expect(body).toContain('problem 0 second line')
   })
 
+  it('cites the test command the approval stands on', () => {
+    const body = reviewBody({ verdict: 'pass' }, undefined, 'python -m unittest -v && ruff check .')
+    expect(body).toContain('**Verified by:** `python -m unittest -v && ruff check .`')
+  })
+
+  it('says so plainly when no command is cited, rather than implying one', () => {
+    const body = reviewBody({ verdict: 'pass' }, undefined)
+    expect(body).toContain('cites no test command')
+  })
+
+  it('keeps a multi-line evidence string on one line so it stays a command', () => {
+    const body = reviewBody({ verdict: 'pass' }, undefined, 'pytest -q\nruff check .')
+    expect(body).toContain('`pytest -q ruff check .`')
+  })
+
   it('omits the finding block entirely when there are none', () => {
     const body = reviewBody({ verdict: 'pass', findings: [] }, undefined)
     expect(body).not.toContain('finding(s)')
@@ -134,6 +149,10 @@ describe('emit-review lane', () => {
     GITHUB_SERVER_URL: 'https://github.com',
     GITHUB_RUN_ID: '42',
   }
+  const approved = {
+    ARGUS_APPROVAL_TOKEN: 'ghs_secret',
+    ARGUS_APPROVAL_EVIDENCE: 'python -m unittest discover -s tests',
+  }
 
   async function writeReport(report: unknown): Promise<void> {
     await mkdir(join(workdir, 'argus-reviewer-report'), { recursive: true })
@@ -149,13 +168,15 @@ describe('emit-review lane', () => {
       stdout: JSON.stringify({ id: 1, state: 'APPROVED', user: { login: 'argus[bot]' } }),
     })
     const result = await emitApprovalReview(
-      { ...baseEnv, ARGUS_APPROVAL_TOKEN: 'ghs_secret', __event: { pull_request: { number: 101 } } },
+      { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
       { submit, read: async () => ({ verdict: 'pass', findings: [], summary: 'clean' }) },
     )
     expect(submit).toHaveBeenCalledOnce()
     const arg = submit.mock.calls[0][0]
     expect(arg).toMatchObject({ repo: 'duketopceo/orchestral', pr: 101, event: 'APPROVE' })
     expect(arg.body).toContain('`pass`')
+    // AC: an approval must cite the command it stands on.
+    expect(arg.body).toContain('`python -m unittest discover -s tests`')
     expect(result).toMatchObject({ ok: true, reviewEvent: 'APPROVE', reviewState: 'APPROVED' })
     expect(lines()).toContain('as argus[bot]')
   })
@@ -166,14 +187,28 @@ describe('emit-review lane', () => {
       stdout: JSON.stringify({ id: 2, state: 'CHANGES_REQUESTED', user: { login: 'argus[bot]' } }),
     })
     const result = await emitApprovalReview(
-      { ...baseEnv, ARGUS_APPROVAL_TOKEN: 'ghs_secret', __event: { pull_request: { number: 101 } } },
+      { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
       { submit, read: async () => ({ verdict: 'needs_changes', findings: [] }) },
     )
     expect(submit.mock.calls[0][0].event).toBe('REQUEST_CHANGES')
     expect(result).toMatchObject({ ok: true, reviewEvent: 'REQUEST_CHANGES' })
   })
 
+  it('refuses to approve when no test command is cited', async () => {
+    // The rule is enforced, not documented: an uncited approval is a signature.
+    const submit = vi.fn()
+    const result = await emitApprovalReview(
+      { ...baseEnv, ARGUS_APPROVAL_TOKEN: 'ghs_secret', __event: { pull_request: { number: 101 } } },
+      { submit, read: async () => ({ verdict: 'pass', findings: [] }) },
+    )
+    expect(submit).not.toHaveBeenCalled()
+    expect(result.ok).toBe(false)
+    expect(result.reviewState).toBe('no-evidence')
+    expect(lines()).toContain('must cite the test command')
+  })
+
   it('is a no-op, not a failure, when no approval token is supplied', async () => {
+    // No token means the evidence rule does not apply — commenting is the default.
     const submit = vi.fn()
     const result = await emitApprovalReview(
       { ...baseEnv, __event: { pull_request: { number: 101 } } },
@@ -187,7 +222,7 @@ describe('emit-review lane', () => {
   it('fails closed when the report is missing rather than approving', async () => {
     const submit = vi.fn()
     const result = await emitApprovalReview(
-      { ...baseEnv, ARGUS_APPROVAL_TOKEN: 'ghs_secret', __event: { pull_request: { number: 101 } } },
+      { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
       {
         submit,
         read: async () => {
@@ -206,7 +241,7 @@ describe('emit-review lane', () => {
       Object.assign(new Error(GITHUB_TOKEN_422), { status: 422 }),
     )
     const result = await emitApprovalReview(
-      { ...baseEnv, ARGUS_APPROVAL_TOKEN: 'ghs_secret', __event: { pull_request: { number: 101 } } },
+      { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
       { submit, read: async () => ({ verdict: 'pass', findings: [] }) },
     )
     expect(result.ok).toBe(false)
@@ -217,10 +252,7 @@ describe('emit-review lane', () => {
 
   it('skips quietly on an event with no pull request', async () => {
     const submit = vi.fn()
-    const result = await emitApprovalReview(
-      { ...baseEnv, ARGUS_APPROVAL_TOKEN: 'ghs_secret' },
-      { submit },
-    )
+    const result = await emitApprovalReview({ ...baseEnv, ...approved }, { submit })
     expect(submit).not.toHaveBeenCalled()
     expect(result.ok).toBe(true)
     expect(lines()).toContain('no pull request in this event')

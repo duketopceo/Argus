@@ -77,10 +77,23 @@ jobs:
     with:
       openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
       approval-token: ${{ secrets.ARGUS_APPROVAL_TOKEN }}
+      approval-evidence: 'python -m unittest discover -s tests && ruff check .'
 ```
 
 Mint the installation token in a prior step and hand it to the action; the
 action never mints one itself.
+
+`approval-evidence` is not optional once `approval-token` is set. The lane
+refuses to submit an approval that cites no command:
+
+```
+argus-reviewer: approval-token was supplied without approval-evidence. An
+approval must cite the test command it stands on. […] or drop approval-token
+to stay on the comment lane.
+```
+
+An approval nobody can re-run is a signature, not a review, so the rule is
+enforced rather than documented.
 
 ## Review discipline
 

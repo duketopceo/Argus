@@ -68,17 +68,28 @@ export function classifyApprovalFailure(status, message) {
 }
 
 /**
- * Build the review body: the verdict in one line, then the finding count.
+ * Build the review body: the verdict, the test command the approval is standing
+ * on, then the finding count.
  *
  * Deliberately short. The full report, the flow results, and the cost ledger
  * already live in the sticky comment; a formal review is a gate signal, not a
- * second copy of the evidence.
+ * second copy of the evidence. The one thing it must not omit is the command,
+ * because an approval nobody can re-run is a signature, not a review.
+ *
+ * @param {{ verdict?: string, summary?: string, findings?: unknown[] }} codeReview
+ * @param {string} [runUrl]
+ * @param {string} [evidence] test command(s) the approval stands on
  */
-export function reviewBody(codeReview, runUrl) {
+export function reviewBody(codeReview, runUrl, evidence) {
   const lines = []
   const verdict = String(codeReview?.verdict ?? 'unknown')
   lines.push(`**Argus verdict:** \`${verdict}\``)
   if (codeReview?.summary) lines.push('', codeReview.summary)
+  if (evidence !== undefined && evidence !== '') {
+    lines.push('', `**Verified by:** \`${oneLine(evidence)}\``)
+  } else {
+    lines.push('', '**Verified by:** none — this approval cites no test command.')
+  }
   const findings = codeReview?.findings
   if (Array.isArray(findings) && findings.length > 0) {
     const blocking = findings.filter((f) => isBlockingSeverity(f?.severity))

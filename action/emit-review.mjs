@@ -62,6 +62,7 @@ export function resolveLane(env) {
   const pr = Number(env.ARGUS_PR_NUMBER ?? '') || prNumberFromEvent(env.GITHUB_EVENT_NAME, env.__event)
   return {
     token,
+    evidence: (env.ARGUS_APPROVAL_EVIDENCE ?? '').trim(),
     repo,
     pr,
     reportDir: workDir === '' ? reportDir : `${workDir}/${reportDir}`,
@@ -85,7 +86,7 @@ export async function emitApprovalReview(env, deps = {}) {
   const submit = deps.submit ?? submitApprovalReview
   const read = deps.read ?? readCodeReview
   const log = (line) => process.stdout.write(`${line}\n`)
-  const { token, repo, pr, reportDir, headSha, runUrl } = resolveLane(env)
+  const { token, evidence, repo, pr, reportDir, headSha, runUrl } = resolveLane(env)
 
   if (token === '') {
     // Not an error. The sticky comment is Argus's default behaviour; approving
@@ -95,6 +96,18 @@ export async function emitApprovalReview(env, deps = {}) {
     setActionOutput('review-event', 'none')
     setActionOutput('review-state', 'not-submitted')
     return { ok: true, reviewEvent: 'none', reviewState: 'not-submitted', message }
+  }
+
+  if (evidence === '') {
+    // Enforced, not advisory. An approval on a protected branch that cites no
+    // command is a rubber stamp with extra steps: nobody can re-run what the
+    // approval is standing on. Refuse rather than emit an uncited APPROVE.
+    const message =
+      'argus-reviewer: approval-token was supplied without approval-evidence. An approval must ' +
+      'cite the test command it stands on. Set approval-evidence to the command(s) that verify ' +
+      'this pull request, or drop approval-token to stay on the comment lane.'
+    fail(message)
+    return { ok: false, reviewEvent: 'none', reviewState: 'no-evidence', message }
   }
 
   if (repo === '') {
@@ -135,7 +148,7 @@ export async function emitApprovalReview(env, deps = {}) {
       pr,
       token,
       event,
-      body: reviewBody(codeReview, runUrl),
+      body: reviewBody(codeReview, runUrl, evidence),
       commitId: headSha,
     })
     const review = JSON.parse(stdout)
