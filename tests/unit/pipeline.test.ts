@@ -43,6 +43,20 @@ describe('lane budgets', () => {
     expect(budget.exceeded).toBe(true)
   })
 
+  it('does not trip the cap when float error puts spend exactly on the limit', () => {
+    // 0.1 + 0.2 is 0.30000000000000004 in IEEE-754, so a bare `sum > limit`
+    // marks a lane exceeded while it is exactly at — not over — its cap.
+    let budget = createBudget('review', { limitUsd: 0.3 })
+    budget = addProviderCalls(budget, [call(0.1), call(0.2)])
+    expect(budget.exceeded).toBe(false)
+    expect(budgetCanSpend(budget, 0)).toBe(true)
+
+    // Genuinely over the cap must still stop.
+    budget = addProviderCalls(budget, [call(0.0001)])
+    expect(budget.exceeded).toBe(true)
+    expect(budgetCanSpend(budget, 0)).toBe(false)
+  })
+
   it('tracks A0 task and wall-clock boundaries without inventing USD', () => {
     let budget = createBudget('a0', { maxTasks: 1, maxDurationMs: 100 })
     budget = addA0Task(budget, 50, false)

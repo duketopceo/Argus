@@ -20,6 +20,18 @@ export function createBudget(lane: LaneId, options: BudgetOptions = {}): BudgetS
   }
 }
 
+/**
+ * USD spend is summed as IEEE-754 doubles, so a lane that lands exactly on its
+ * cap (0.1 + 0.2 === 0.30000000000000004, not 0.3) would otherwise read as over
+ * budget and abort a run that never exceeded the cap. Compare with a tolerance
+ * far below the 1e-6 precision reports render, and far above double noise here.
+ */
+const USD_EPSILON = 1e-9
+
+function overLimit(spentUsd: number, limitUsd: number): boolean {
+  return spentUsd > limitUsd + USD_EPSILON
+}
+
 export function addProviderCalls(
   budget: BudgetSummary,
   calls: CallCost[] | undefined,
@@ -28,7 +40,7 @@ export function addProviderCalls(
   const spentUsd = calls.reduce((sum, call) => sum + call.costUsd, 0)
   const exceeded =
     budget.exceeded ||
-    (budget.limitUsd !== undefined && budget.spentUsd + spentUsd > budget.limitUsd)
+    (budget.limitUsd !== undefined && overLimit(budget.spentUsd + spentUsd, budget.limitUsd))
   return {
     ...budget,
     spentUsd: budget.spentUsd + spentUsd,
@@ -47,13 +59,14 @@ export function addA0Task(
     budget.exceeded ||
     (budget.maxTasks !== undefined && tasks > budget.maxTasks) ||
     (budget.maxDurationMs !== undefined && elapsed > budget.maxDurationMs) ||
-    (budget.limitUsd !== undefined && metered && budget.spentUsd > budget.limitUsd)
+    (budget.limitUsd !== undefined && metered && overLimit(budget.spentUsd, budget.limitUsd))
   return { ...budget, tasks, elapsedMs: elapsed, exceeded }
 }
 
 export function budgetCanSpend(budget: BudgetSummary, nextCostUsd: number): boolean {
   return (
     !budget.exceeded &&
-    (budget.limitUsd === undefined || budget.spentUsd + nextCostUsd <= budget.limitUsd)
+    (budget.limitUsd === undefined ||
+      budget.spentUsd + nextCostUsd <= budget.limitUsd + USD_EPSILON)
   )
 }
