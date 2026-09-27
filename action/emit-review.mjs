@@ -9,11 +9,14 @@ import { readFileSync } from 'node:fs'
 
 import {
   classifyApprovalFailure,
+  classifyEvidenceFailure,
+  listCheckRuns,
   prNumberFromEvent,
   readCodeReview,
   reviewBody,
   reviewEventFor,
   submitApprovalReview,
+  verifyEvidenceCheck,
 } from './approval-review.mjs'
 import { setActionOutput } from './runtime.mjs'
 
@@ -63,6 +66,7 @@ export function resolveLane(env) {
   return {
     token,
     evidence: (env.ARGUS_APPROVAL_EVIDENCE ?? '').trim(),
+    check: (env.ARGUS_APPROVAL_CHECK ?? '').trim(),
     repo,
     pr,
     reportDir: workDir === '' ? reportDir : `${workDir}/${reportDir}`,
@@ -79,14 +83,15 @@ export function resolveLane(env) {
  * below is what turns a non-ok result into a failed step.
  *
  * @param {Record<string, string | undefined>} env
- * @param {{ submit?: typeof submitApprovalReview, read?: typeof readCodeReview }} [deps]
+ * @param {{ submit?: typeof submitApprovalReview, read?: typeof readCodeReview, list?: typeof listCheckRuns }} [deps]
  * @returns {Promise<{ ok: boolean, reviewEvent: string, reviewState: string, message: string }>}
  */
 export async function emitApprovalReview(env, deps = {}) {
   const submit = deps.submit ?? submitApprovalReview
   const read = deps.read ?? readCodeReview
+  const list = deps.list ?? listCheckRuns
   const log = (line) => process.stdout.write(`${line}\n`)
-  const { token, evidence, repo, pr, reportDir, headSha, runUrl } = resolveLane(env)
+  const { token, evidence, check, repo, pr, reportDir, headSha, runUrl } = resolveLane(env)
 
   if (token === '') {
     // Not an error. The sticky comment is Argus's default behaviour; approving
@@ -142,13 +147,52 @@ export async function emitApprovalReview(env, deps = {}) {
 
   const event = reviewEventFor(codeReview.verdict)
 
+  // APPROVE is the only event that satisfies a protected branch, so it is the
+  // only one that has to be backed by a check which actually ran. A negative
+  // review is exempt on purpose: red CI is exactly when a REQUEST_CHANGES
+  // should still go out.
+  let evidenceCheck
+  if (event === 'APPROVE') {
+    // Two ways to have no evidence, both cheap to detect without an API call:
+    // nobody named a check, or the head commit is unknown so the check cannot
+    // be bound to anything. Binding to a branch tip instead is the hole this
+    // exists to close, so an unknown SHA is a refusal rather than a guess.
+    if (check === '' || headSha === undefined) {
+      const message = `argus-reviewer: ${classifyEvidenceFailure(check, { ok: false, reason: 'no-check-named' })}`
+      fail(message)
+      setActionOutput('review-event', 'none')
+      setActionOutput('review-state', 'unverified-evidence')
+      return { ok: false, reviewEvent: 'none', reviewState: 'unverified-evidence', message }
+    }
+    let verdictOnCheck
+    try {
+      verdictOnCheck = verifyEvidenceCheck(await list({ repo, ref: headSha, token }), check)
+    } catch (err) {
+      const message =
+        `argus-reviewer: could not read check runs for ${headSha} — ${err?.message ?? err}. ` +
+        'No review was submitted.'
+      fail(message)
+      setActionOutput('review-event', 'none')
+      setActionOutput('review-state', 'no-check-runs')
+      return { ok: false, reviewEvent: 'none', reviewState: 'no-check-runs', message }
+    }
+    if (!verdictOnCheck.ok) {
+      const message = `argus-reviewer: ${classifyEvidenceFailure(check, verdictOnCheck)}`
+      fail(message)
+      setActionOutput('review-event', 'none')
+      setActionOutput('review-state', 'unverified-evidence')
+      return { ok: false, reviewEvent: 'none', reviewState: 'unverified-evidence', message }
+    }
+    evidenceCheck = verdictOnCheck.check
+  }
+
   try {
     const { stdout } = await submit({
       repo,
       pr,
       token,
       event,
-      body: reviewBody(codeReview, runUrl, evidence),
+      body: reviewBody(codeReview, runUrl, evidence, evidenceCheck),
       commitId: headSha,
     })
     const review = JSON.parse(stdout)

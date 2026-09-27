@@ -79,6 +79,16 @@ inputs:
       Ignored when approval-token is empty.
     default: ''
     required: false
+  approval-check:
+    description: >-
+      Name of a check run that must have completed successfully on the head
+      commit before Argus will submit an APPROVE, e.g. 'test (22)' or 'lint'.
+      This is what makes the cited test command evidence rather than a claim:
+      the review cites the real run. An APPROVE with no green run of this name
+      is refused. Ignored on the REQUEST_CHANGES and COMMENT paths, so a
+      negative review still goes out while CI is red.
+    default: ''
+    required: false
   emit-review:
     description: >-
       Submit the formal review when `approval-token` is supplied. 'false' keeps
@@ -216,6 +226,7 @@ runs:
       env:
         ARGUS_APPROVAL_TOKEN: ${{ inputs.approval-token }}
         ARGUS_APPROVAL_EVIDENCE: ${{ inputs.approval-evidence }}
+        ARGUS_APPROVAL_CHECK: ${{ inputs.approval-check }}
         ARGUS_REPORT_DIR: ${{ inputs.report-dir }}
         VISION_E2E_WORKING_DIR: ${{ inputs.working-directory }}
         ARGUS_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}

@@ -6,9 +6,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // @ts-expect-error plain-node action helper — no type declarations
 import {
   classifyApprovalFailure,
+  classifyEvidenceFailure,
   prNumberFromEvent,
   reviewBody,
   reviewEventFor,
+  verifyEvidenceCheck,
 } from '../../action/approval-review.mjs'
 
 // @ts-expect-error plain-node action helper — no type declarations
@@ -128,6 +130,62 @@ describe('pull request number resolution', () => {
   })
 })
 
+describe('evidence check verification', () => {
+  const green = { name: 'test (22)', status: 'completed', conclusion: 'success' }
+
+  it('accepts a completed successful run of the named check', () => {
+    expect(verifyEvidenceCheck([green], 'test (22)')).toEqual({ ok: true, check: green })
+  })
+
+  it('matches the name case-insensitively but not loosely', () => {
+    // 'test' must not match 'test (22)' — a loose match would let a green
+    // unit job stand in for the whole suite.
+    expect(verifyEvidenceCheck([green], 'test').ok).toBe(false)
+    expect(verifyEvidenceCheck([green], 'TEST (22)').ok).toBe(true)
+  })
+
+  it('distinguishes still-running from failed', () => {
+    const running = verifyEvidenceCheck(
+      [{ name: 'test (22)', status: 'in_progress', conclusion: null }],
+      'test (22)',
+    )
+    expect(running.reason).toBe('not-completed')
+    const failed = verifyEvidenceCheck(
+      [{ name: 'test (22)', status: 'completed', conclusion: 'failure' }],
+      'test (22)',
+    )
+    expect(failed.reason).toBe('not-successful')
+  })
+
+  it('picks the green run when a check name appears more than once', () => {
+    const stale = { name: 'test (22)', status: 'completed', conclusion: 'failure' }
+    expect(verifyEvidenceCheck([stale, green], 'test (22)')).toEqual({ ok: true, check: green })
+  })
+
+  it('refuses an empty or absent name', () => {
+    expect(verifyEvidenceCheck([green], '').reason).toBe('no-check-named')
+    expect(verifyEvidenceCheck(undefined, 'test (22)').reason).toBe('no-check-named')
+  })
+
+  it('explains a missing check as a missing check, not as a credential problem', () => {
+    const msg = classifyEvidenceFailure('test (22)', { ok: false, reason: 'no-check-named' })
+    expect(msg).toContain('No check run named `test (22)`')
+    // The remedy is a config fix, so it must not send anyone hunting a scope.
+    expect(msg).not.toContain('lacks pull-request write access')
+    expect(msg).not.toContain('cannot see this repository')
+  })
+
+  it('reports the observed conclusion and the run URL when a check is red', () => {
+    const msg = classifyEvidenceFailure('test (22)', {
+      ok: false,
+      reason: 'not-successful',
+      check: { conclusion: 'failure', html_url: 'https://github.com/o/r/runs/7' },
+    })
+    expect(msg).toContain('`failure`')
+    expect(msg).toContain('https://github.com/o/r/runs/7')
+  })
+})
+
 describe('emit-review lane', () => {
   let workdir: string
   let stdout: string[]
@@ -152,7 +210,16 @@ describe('emit-review lane', () => {
   const approved = {
     ARGUS_APPROVAL_TOKEN: 'ghs_secret',
     ARGUS_APPROVAL_EVIDENCE: 'python -m unittest discover -s tests',
+    ARGUS_APPROVAL_CHECK: 'test (22)',
+    ARGUS_HEAD_SHA: 'a'.repeat(40),
   }
+  const greenCheck = {
+    name: 'test (22)',
+    status: 'completed',
+    conclusion: 'success',
+    html_url: 'https://github.com/o/r/runs/7',
+  }
+  const listGreen = vi.fn().mockResolvedValue([greenCheck])
 
   async function writeReport(report: unknown): Promise<void> {
     await mkdir(join(workdir, 'argus-reviewer-report'), { recursive: true })
@@ -169,7 +236,11 @@ describe('emit-review lane', () => {
     })
     const result = await emitApprovalReview(
       { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
-      { submit, read: async () => ({ verdict: 'pass', findings: [], summary: 'clean' }) },
+      {
+        submit,
+        list: listGreen,
+        read: async () => ({ verdict: 'pass', findings: [], summary: 'clean' }),
+      },
     )
     expect(submit).toHaveBeenCalledOnce()
     const arg = submit.mock.calls[0][0]
@@ -177,19 +248,125 @@ describe('emit-review lane', () => {
     expect(arg.body).toContain('`pass`')
     // AC: an approval must cite the command it stands on.
     expect(arg.body).toContain('`python -m unittest discover -s tests`')
+    // ...and the citation is checked against a real run, not trusted.
+    expect(arg.body).toContain('Green on this commit')
+    expect(arg.body).toContain('https://github.com/o/r/runs/7')
+    // Bound to the same commit the review is submitted against.
+    expect(listGreen).toHaveBeenCalledWith(expect.objectContaining({ ref: 'a'.repeat(40) }))
+    expect(arg.commitId).toBe('a'.repeat(40))
     expect(result).toMatchObject({ ok: true, reviewEvent: 'APPROVE', reviewState: 'APPROVED' })
     expect(lines()).toContain('as argus[bot]')
   })
 
-  it('submits REQUEST_CHANGES on a failing verdict', async () => {
+  it('refuses to approve when the named check is not green', async () => {
+    // A cited command is a claim. This is the control: the named check must
+    // have actually finished green on the head commit.
+    const submit = vi.fn()
+    const result = await emitApprovalReview(
+      { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
+      {
+        submit,
+        list: async () => [{ ...greenCheck, conclusion: 'failure' }],
+        read: async () => ({ verdict: 'pass', findings: [] }),
+      },
+    )
+    expect(submit).not.toHaveBeenCalled()
+    expect(result.ok).toBe(false)
+    expect(result.reviewState).toBe('unverified-evidence')
+    expect(lines()).toContain('Refusing to approve a commit whose named check is not green')
+  })
+
+  it('refuses to approve while the named check is still running', async () => {
+    const submit = vi.fn()
+    const result = await emitApprovalReview(
+      { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
+      {
+        submit,
+        list: async () => [{ ...greenCheck, status: 'in_progress', conclusion: null }],
+        read: async () => ({ verdict: 'pass', findings: [] }),
+      },
+    )
+    expect(submit).not.toHaveBeenCalled()
+    expect(result.reviewState).toBe('unverified-evidence')
+    expect(lines()).toContain('has not finished on the head commit')
+  })
+
+  it('refuses to approve when no check of that name exists at all', async () => {
+    // The rubber-stamp route: cite a command, name a check that does not exist.
+    const submit = vi.fn()
+    const result = await emitApprovalReview(
+      { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
+      {
+        submit,
+        list: async () => [{ ...greenCheck, name: 'smoke' }],
+        read: async () => ({ verdict: 'pass', findings: [] }),
+      },
+    )
+    expect(submit).not.toHaveBeenCalled()
+    expect(result.reviewState).toBe('unverified-evidence')
+    expect(lines()).toContain('cannot be shown to have run')
+  })
+
+  it('refuses to approve when no approval-check is named', async () => {
+    const submit = vi.fn()
+    const result = await emitApprovalReview(
+      {
+        ...baseEnv,
+        ARGUS_APPROVAL_TOKEN: 'ghs_secret',
+        ARGUS_APPROVAL_EVIDENCE: 'pytest -q',
+        ARGUS_HEAD_SHA: 'a'.repeat(40),
+        __event: { pull_request: { number: 101 } },
+      },
+      { submit, read: async () => ({ verdict: 'pass', findings: [] }) },
+    )
+    expect(submit).not.toHaveBeenCalled()
+    expect(result.reviewState).toBe('unverified-evidence')
+  })
+
+  it('refuses to approve when the head commit is unknown', async () => {
+    // Without a SHA the check cannot be bound to anything, and binding it to a
+    // moving branch tip is the hole this closes.
+    const submit = vi.fn()
+    const list = vi.fn()
+    const result = await emitApprovalReview(
+      { ...baseEnv, ...approved, ARGUS_HEAD_SHA: '', __event: { pull_request: { number: 101 } } },
+      { submit, list, read: async () => ({ verdict: 'pass', findings: [] }) },
+    )
+    expect(list).not.toHaveBeenCalled()
+    expect(submit).not.toHaveBeenCalled()
+    expect(result.reviewState).toBe('unverified-evidence')
+  })
+
+  it('fails closed when the check runs cannot be read', async () => {
+    const submit = vi.fn()
+    const result = await emitApprovalReview(
+      { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
+      {
+        submit,
+        list: async () => {
+          throw new Error('HTTP 403')
+        },
+        read: async () => ({ verdict: 'pass', findings: [] }),
+      },
+    )
+    expect(submit).not.toHaveBeenCalled()
+    expect(result.ok).toBe(false)
+    expect(result.reviewState).toBe('no-check-runs')
+  })
+
+  it('submits REQUEST_CHANGES without requiring a green check', async () => {
+    // Red CI is exactly when a negative review must still go out, so the
+    // evidence gate must not gate the negative path.
     await writeReport({ verdict: 'needs_changes', findings: [] })
     const submit = vi.fn().mockResolvedValue({
       stdout: JSON.stringify({ id: 2, state: 'CHANGES_REQUESTED', user: { login: 'argus[bot]' } }),
     })
+    const list = vi.fn()
     const result = await emitApprovalReview(
       { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
-      { submit, read: async () => ({ verdict: 'needs_changes', findings: [] }) },
+      { submit, list, read: async () => ({ verdict: 'needs_changes', findings: [] }) },
     )
+    expect(list).not.toHaveBeenCalled()
     expect(submit.mock.calls[0][0].event).toBe('REQUEST_CHANGES')
     expect(result).toMatchObject({ ok: true, reviewEvent: 'REQUEST_CHANGES' })
   })
@@ -242,7 +419,11 @@ describe('emit-review lane', () => {
     )
     const result = await emitApprovalReview(
       { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
-      { submit, read: async () => ({ verdict: 'pass', findings: [] }) },
+      {
+        submit,
+        list: listGreen,
+        read: async () => ({ verdict: 'pass', findings: [] }),
+      },
     )
     expect(result.ok).toBe(false)
     const out = lines()

@@ -78,6 +78,7 @@ jobs:
       openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
       approval-token: ${{ secrets.ARGUS_APPROVAL_TOKEN }}
       approval-evidence: 'python -m unittest discover -s tests && ruff check .'
+      approval-check: 'test (22)'
 ```
 
 Mint the installation token in a prior step and hand it to the action; the
@@ -95,6 +96,44 @@ to stay on the comment lane.
 An approval nobody can re-run is a signature, not a review, so the rule is
 enforced rather than documented.
 
+## `approval-check` is what makes that evidence rather than a claim
+
+`approval-evidence` is a string the caller supplies. A string is a claim:
+nothing in it proves the command ever ran, so on its own it would let a
+reviewer approve by typing a plausible command.
+
+`approval-check` closes that. Name a check run on this repository, and Argus
+reads the check runs recorded against the **head commit of the pull request**
+and refuses to submit an `APPROVE` unless that check has completed
+successfully:
+
+```
+argus-reviewer: `test (22)` reported `failure` on the head commit
+(https://github.com/o/r/runs/7). Refusing to approve a commit whose named
+check is not green.
+```
+
+Three properties make this a control rather than a convention:
+
+- **It is bound to the head SHA**, not the branch tip, so an approval cannot be
+  carried over to commits that were never tested. If the head SHA is unknown
+  the lane refuses rather than falling back to the tip.
+- **It fails closed.** No check of that name, still queued, still running, or
+  unreadable are all refusals — never an approval.
+- **It matches names exactly** (case-insensitively). `test` does not match
+  `test (22)`, so a green unit job cannot stand in for the whole suite.
+
+When it does verify, the review cites the real run, not just the command:
+
+```
+**Verified by:** `python -m unittest discover -s tests && ruff check .`
+**Green on this commit:** [`test (22)` → https://github.com/o/r/runs/7](…) reported `success`.
+```
+
+`REQUEST_CHANGES` and `COMMENT` do **not** consult the check. Red CI is
+exactly when a negative review must still go out, so gating that path would
+suppress the review you most want.
+
 ## Review discipline
 
 An approval token is an identity, not a judgement. Two rules keep it from
@@ -102,10 +141,12 @@ becoming a rubber stamp:
 
 1. **No self-approval of your own commits.** The App must be a distinct
    identity from whoever opened the pull request.
-2. **The approval cites its evidence.** Argus's review body carries the
-   verdict, the blocking findings with file and line, and a link to the run
-   that produced them — so an `APPROVE` is traceable to a `code-review.json`,
-   never a bare signature.
+2. **The approval cites its evidence, and the evidence is checked.**
+   `approval-evidence` names the command; `approval-check` proves it ran. The
+   review body carries the verdict, the blocking findings with file and line,
+   and a link to both the Argus run and the verified check run — so an
+   `APPROVE` is traceable to a `code-review.json` and a green CI run, never a
+   bare signature.
 
 Name a human owner for the discipline. An unattended approver on a protected
 branch is an approval gate with no reviewer behind it.

@@ -79,8 +79,10 @@ export function classifyApprovalFailure(status, message) {
  * @param {{ verdict?: string, summary?: string, findings?: unknown[] }} codeReview
  * @param {string} [runUrl]
  * @param {string} [evidence] test command(s) the approval stands on
+ * @param {{ name?: string, conclusion?: string, html_url?: string }} [evidenceCheck]
+ *   the check run the caller verified before this approval was allowed
  */
-export function reviewBody(codeReview, runUrl, evidence) {
+export function reviewBody(codeReview, runUrl, evidence, evidenceCheck) {
   const lines = []
   const verdict = String(codeReview?.verdict ?? 'unknown')
   lines.push(`**Argus verdict:** \`${verdict}\``)
@@ -89,6 +91,17 @@ export function reviewBody(codeReview, runUrl, evidence) {
     lines.push('', `**Verified by:** \`${oneLine(evidence)}\``)
   } else {
     lines.push('', '**Verified by:** none — this approval cites no test command.')
+  }
+  if (evidenceCheck) {
+    // The command above is the caller's claim; this line is the receipt. A
+    // reviewer can open the run and see the result rather than trust a string.
+    const cited = evidenceCheck.html_url
+      ? `[\`${oneLine(evidenceCheck.name)}\` → ${evidenceCheck.html_url}](${evidenceCheck.html_url})`
+      : `\`${oneLine(evidenceCheck.name)}\``
+    lines.push(
+      '',
+      `**Green on this commit:** ${cited} reported \`${evidenceCheck.conclusion ?? 'unknown'}\`.`,
+    )
   }
   const findings = codeReview?.findings
   if (Array.isArray(findings) && findings.length > 0) {
@@ -156,6 +169,98 @@ function execFileAsync(file, args, options) {
       res({ stdout, stderr })
     })
   })
+}
+
+/**
+ * List the check runs recorded against a commit.
+ *
+ * `ref` is the head SHA, not the branch tip: an approval has to describe the
+ * code it was actually run against, so it is bound to the same SHA the review
+ * is submitted with.
+ */
+export async function listCheckRuns({ repo, ref, token }) {
+  const args = [
+    'api',
+    '--method',
+    'GET',
+    `${GH_API}/repos/${repo}/commits/${ref}/check-runs?per_page=100`,
+  ]
+  const { stdout, stderr } = await execFileAsync('gh', args, {
+    env: { ...process.env, GH_TOKEN: token },
+    maxBuffer: 8 * 1024 * 1024,
+  })
+  const parsed = JSON.parse(stdout)
+  return Array.isArray(parsed?.check_runs) ? parsed.check_runs : []
+}
+
+function isGreenCheck(check) {
+  return (
+    String(check?.status ?? '').toLowerCase() === 'completed' &&
+    String(check?.conclusion ?? '').toLowerCase() === 'success'
+  )
+}
+
+/**
+ * Decide whether a named check run can carry an approval.
+ *
+ * A cited test command is a claim. This is the part that makes it evidence:
+ * the named check must exist on the head commit and have finished green. It
+ * returns the check on success so the review body can cite the real run rather
+ * than repeat the caller's string back at them.
+ *
+ * @param {Array<{name?: string, status?: string, conclusion?: string}>} checkRuns
+ * @param {string} name
+ * @returns {{ ok: boolean, reason?: string, check?: object }}
+ */
+export function verifyEvidenceCheck(checkRuns, name) {
+  const wanted = String(name ?? '')
+    .trim()
+    .toLowerCase()
+  if (wanted === '') return { ok: false, reason: 'no-check-named' }
+  const matches = (Array.isArray(checkRuns) ? checkRuns : []).filter(
+    (r) =>
+      String(r?.name ?? '')
+        .trim()
+        .toLowerCase() === wanted,
+  )
+  if (matches.length === 0) return { ok: false, reason: 'no-check-named' }
+  const green = matches.find(isGreenCheck)
+  if (green) return { ok: true, check: green }
+  // Report a still-running state ahead of a failed one: "pending" is transient,
+  // "failed" is the outcome somebody has to act on.
+  const running = matches.find(
+    (r) =>
+      String(r?.status ?? '')
+        .toLowerCase() !== 'completed',
+  )
+  return { ok: false, reason: running ? 'not-completed' : 'not-successful', check: running ?? matches[0] }
+}
+
+/**
+ * Explain a refused approval in terms of the check, not the token. Returns the
+ * whole sentence so the caller cannot accidentally emit a vaguer one.
+ */
+export function classifyEvidenceFailure(name, verdict) {
+  const label = `\`${name}\``
+  const seen = verdict?.check
+  const suffix = seen?.html_url ? ` (${seen.html_url})` : ''
+  if (verdict?.reason === 'not-completed') {
+    return (
+      `${label} has not finished on the head commit${suffix}, so there is no evidence the cited ` +
+      'tests ran. Refusing to approve.'
+    )
+  }
+  if (verdict?.reason === 'not-successful') {
+    return (
+      `${label} reported \`${seen?.conclusion ?? 'no conclusion'}\` on the head commit${suffix}. ` +
+      'Refusing to approve a commit whose named check is not green.'
+    )
+  }
+  return (
+    `No check run named ${label} is recorded on the head commit, so the test command this ` +
+    'approval cites cannot be shown to have run. Set approval-check to a required check on this ' +
+    'repository, or drop approval-token to stay on the comment lane.'
+  )
 }
 
 /** Read the code-review report the harness already wrote. */
