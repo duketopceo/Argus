@@ -38,6 +38,7 @@ jobs:
       - run: npm ci
       # Tests exercise the real browser driver — same install step as ci.yml.
       - run: npx playwright install --with-deps chromium
+      - run: npm run lint
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
