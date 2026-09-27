@@ -263,9 +263,91 @@ export function classifyEvidenceFailure(name, verdict) {
   )
 }
 
+// Stale approval.
+//
+// `dismiss_stale_reviews` is false on the protected branch, so an APPROVE
+// survives every later push to the same pull request. That is not theoretical:
+// on duketopceo/orchestral, 5 of 9 cursor approvals were issued at one head SHA
+// and the pull request then merged at a different one — up to 8 commits landed
+// after the approval. A reviewer cannot revoke their own stale approval unless
+// something does it for them, so this lane does.
+//
+// The two operations below close different windows and neither closes all of
+// it. The gap between a push and this lane starting is closed only by enabling
+// `dismiss_stale_reviews`, which is a branch-protection setting and not ours
+// to change.
+
+/** Read the current head SHA of a pull request. */
+export async function readPullRequestHead({ repo, pr, token }) {
+  const args = ['api', '--method', 'GET', `${GH_API}/repos/${repo}/pulls/${pr}`]
+  const { stdout, stderr } = await execFileAsync('gh', args, {
+    env: { ...process.env, GH_TOKEN: token },
+    maxBuffer: 8 * 1024 * 1024,
+  })
+  return String(JSON.parse(stdout)?.head?.sha ?? '')
+}
+
+/** List the reviews already on a pull request. */
+export async function listReviews({ repo, pr, token }) {
+  const args = [
+    'api',
+    '--method',
+    'GET',
+    `${GH_API}/repos/${repo}/pulls/${pr}/reviews?per_page=100`,
+  ]
+  const { stdout, stderr } = await execFileAsync('gh', args, {
+    env: { ...process.env, GH_TOKEN: token },
+    maxBuffer: 8 * 1024 * 1028,
+  })
+  const parsed = JSON.parse(stdout)
+  return Array.isArray(parsed) ? parsed : []
+}
+
+/** Dismiss one review, so it stops counting toward the gate. */
+export async function dismissReview({ repo, pr, reviewId, token, message }) {
+  const args = [
+    'api',
+    '--method',
+    'PUT',
+    `${GH_API}/repos/${repo}/pulls/${pr}/reviews/${reviewId}/dismissals`,
+    '-f',
+    `message=${message}`,
+  ]
+  const { stdout, stderr } = await execFileAsync('gh', args, {
+    env: { ...process.env, GH_TOKEN: token },
+    maxBuffer: 8 * 1024 * 1024,
+  })
+  return JSON.parse(stdout)
+}
+
+/**
+ * Prior approvals by this same identity that no longer describe the head.
+ *
+ * Scoped to `login` on purpose. An approver revoking *its own* outgrown
+ * approval is self-correction; an approver revoking a colleague's is not
+ * something a bot should do, so anyone else's review is left alone.
+ *
+ * @param {Array<{state?: string, commit_id?: string, user?: {login?: string}, id?: number}>} reviews
+ * @param {{ login?: string, headSha?: string }} opts
+ */
+export function staleApprovals(reviews, { login, headSha }) {
+  const want = String(login ?? '')
+    .trim()
+    .toLowerCase()
+  if (want === '') return []
+  const head = String(headSha ?? '')
+  return (Array.isArray(reviews) ? reviews : []).filter(
+    (r) =>
+      String(r?.state ?? '').toUpperCase() === 'APPROVED' &&
+      String(r?.user?.login ?? '')
+        .trim()
+        .toLowerCase() === want &&
+      String(r?.commit_id ?? '') !== head,
+  )
+}
+
 /** Read the code-review report the harness already wrote. */
-export async function readCodeReview(reportDir) {
-  const raw = await readFile(join(reportDir, 'code-review.json'), 'utf8')
+export async function readCodeReview(reportDir) {  const raw = await readFile(join(reportDir, 'code-review.json'), 'utf8')
   return JSON.parse(raw)
 }
 

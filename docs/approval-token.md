@@ -134,6 +134,47 @@ When it does verify, the review cites the real run, not just the command:
 exactly when a negative review must still go out, so gating that path would
 suppress the review you most want.
 
+## Stale approvals: the hole `dismiss_stale_reviews: false` leaves
+
+`dismiss_stale_reviews` is `false` on the protected branch, so an `APPROVE`
+keeps counting after someone pushes to the same pull request. This is not
+theoretical. On `duketopceo/orchestral`, **5 of 9** `cursor` approvals were
+issued at one head SHA and the pull request then merged at a different one:
+
+| PR | Commits pushed *after* its approval |
+|---|---|
+| #30 | 8 |
+| #27 | 6 |
+| #29 | 4 |
+
+Those merges passed a gate the approver's decision no longer described.
+
+Argus closes part of this itself, in two places:
+
+1. **The head-moved guard.** Before submitting, the lane re-reads the pull
+   request's head. If it no longer matches the SHA this run reviewed, nothing is
+   submitted:
+
+   ```
+   argus-reviewer: the head of #101 moved from a1b2c3d to e4f5a6b while this
+   run was working. This run reviewed the older commit, so no review was
+   submitted. The push triggers a new run, which will review the new head.
+   ```
+
+2. **Stale self-retirement.** After an `APPROVE` lands, the lane dismisses any
+   earlier `APPROVED` review **by the same identity** whose `commit_id` is not
+   the current head. Scoped to its own login on purpose: an approver revoking
+   its own outgrown approval is self-correction, while revoking a colleague's is
+   not something a bot should do. Dismissals happen *after* the submit, so a
+   failed review can never destroy an approval the pull request already had, and
+   a failed dismissal warns without failing a review that succeeded.
+
+**What this does not close.** The window between a push and Argus's next run
+starting. Only `dismiss_stale_reviews: true` closes that, and it is a
+branch-protection setting, so it is a decision for the repository owner rather
+than something this action can do. Treat Argus's self-retirement as a second
+line, not a replacement.
+
 ## Review discipline
 
 An approval token is an identity, not a judgement. Two rules keep it from

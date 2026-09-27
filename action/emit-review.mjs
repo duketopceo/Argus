@@ -10,11 +10,15 @@ import { readFileSync } from 'node:fs'
 import {
   classifyApprovalFailure,
   classifyEvidenceFailure,
+  dismissReview,
   listCheckRuns,
+  listReviews,
   prNumberFromEvent,
   readCodeReview,
+  readPullRequestHead,
   reviewBody,
   reviewEventFor,
+  staleApprovals,
   submitApprovalReview,
   verifyEvidenceCheck,
 } from './approval-review.mjs'
@@ -53,6 +57,63 @@ function detailFrom(err) {
   )
 }
 
+function shortSha(sha) {
+  const s = String(sha ?? '')
+  return s.length > 7 ? s.slice(0, 7) : s
+}
+
+/**
+ * Dismiss this identity's own approvals that describe a commit other than the
+ * current head.
+ *
+ * Best effort by design. The new approval is already submitted, so failing the
+ * step here would report a successful review as broken. A dismissal that fails
+ * is a real gap in the control, so it is logged loudly and surfaced as an
+ * output rather than swallowed.
+ */
+async function retireStaleApprovals({ repo, pr, token, headSha, login, readReviews, dismiss, log }) {
+  const warn = (m) => process.stdout.write(`::warning::${m}\n`)
+  let existing
+  try {
+    existing = await readReviews({ repo, pr, token })
+  } catch (err) {
+    warn(
+      `argus-reviewer: could not list existing reviews on #${pr} — ${err?.message ?? err}. ` +
+        'Any earlier approval of an older commit by this identity is still standing.',
+    )
+    setActionOutput('stale-dismissed', 'unknown')
+    return
+  }
+  const stale = staleApprovals(existing, { login, headSha })
+  if (stale.length === 0) {
+    setActionOutput('stale-dismissed', '0')
+    return
+  }
+  let dismissed = 0
+  for (const r of stale) {
+    try {
+      await dismiss({
+        repo,
+        pr,
+        reviewId: r.id,
+        token,
+        message: `Superseded: this approval covered ${shortSha(r.commit_id)}, which is no longer the head of this pull request.`,
+      })
+      dismissed += 1
+    } catch (err) {
+      warn(
+        `argus-reviewer: could not dismiss review ${r.id} on #${pr} — ${err?.message ?? err}. ` +
+          'It still counts toward the approval gate for a commit it did not review.',
+      )
+    }
+  }
+  log(
+    `argus-reviewer: retired ${dismissed} of ${stale.length} stale approval(s) by this identity on #${pr} ` +
+      `(head ${shortSha(headSha)}).`,
+  )
+  setActionOutput('stale-dismissed', String(dismissed))
+}
+
 /**
  * Resolve everything the lane needs from the step environment.
  * Exported so the wiring is testable without a runner.
@@ -83,13 +144,16 @@ export function resolveLane(env) {
  * below is what turns a non-ok result into a failed step.
  *
  * @param {Record<string, string | undefined>} env
- * @param {{ submit?: typeof submitApprovalReview, read?: typeof readCodeReview, list?: typeof listCheckRuns }} [deps]
+ * @param {{ submit?: typeof submitApprovalReview, read?: typeof readCodeReview, list?: typeof listCheckRuns, head?: typeof readPullRequestHead, reviews?: typeof listReviews, dismiss?: typeof dismissReview }} [deps]
  * @returns {Promise<{ ok: boolean, reviewEvent: string, reviewState: string, message: string }>}
  */
 export async function emitApprovalReview(env, deps = {}) {
   const submit = deps.submit ?? submitApprovalReview
   const read = deps.read ?? readCodeReview
   const list = deps.list ?? listCheckRuns
+  const readHead = deps.head ?? readPullRequestHead
+  const readReviews = deps.reviews ?? listReviews
+  const dismiss = deps.dismiss ?? dismissReview
   const log = (line) => process.stdout.write(`${line}\n`)
   const { token, evidence, check, repo, pr, reportDir, headSha, runUrl } = resolveLane(env)
 
@@ -147,6 +211,36 @@ export async function emitApprovalReview(env, deps = {}) {
 
   const event = reviewEventFor(codeReview.verdict)
 
+  // The run reviewed the code at the head SHA its event carried. If the head has
+  // moved since, this review describes commits nobody looked at, and GitHub
+  // would attach it to a commit that is no longer the head. Refuse and let a
+  // fresh run answer the new head — the same reason `dismiss_stale_reviews`
+  // exists, enforced at submit time instead of in the branch settings.
+  if (headSha !== undefined) {
+    let currentHead
+    try {
+      currentHead = await readHead({ repo, pr, token })
+    } catch (err) {
+      const message =
+        `argus-reviewer: could not read the current head of #${pr} — ${err?.message ?? err}. ` +
+        'No review was submitted.'
+      fail(message)
+      setActionOutput('review-event', 'none')
+      setActionOutput('review-state', 'no-head')
+      return { ok: false, reviewEvent: 'none', reviewState: 'no-head', message }
+    }
+    if (currentHead !== '' && currentHead !== headSha) {
+      const message =
+        `argus-reviewer: the head of #${pr} moved from ${shortSha(headSha)} to ${shortSha(currentHead)} ` +
+        'while this run was working. This run reviewed the older commit, so no review was submitted. ' +
+        'The push triggers a new run, which will review the new head.'
+      fail(message)
+      setActionOutput('review-event', 'none')
+      setActionOutput('review-state', 'head-moved')
+      return { ok: false, reviewEvent: 'none', reviewState: 'head-moved', message }
+    }
+  }
+
   // APPROVE is the only event that satisfies a protected branch, so it is the
   // only one that has to be backed by a check which actually ran. A negative
   // review is exempt on purpose: red CI is exactly when a REQUEST_CHANGES
@@ -202,6 +296,15 @@ export async function emitApprovalReview(env, deps = {}) {
     log(message)
     setActionOutput('review-event', event)
     setActionOutput('review-state', review.state ?? 'unknown')
+
+    // Retire this identity's own approvals of commits that are no longer the
+    // head. Done *after* the submit on purpose: if the submit fails, the
+    // previous approval is still standing, and a failed review must never be
+    // the reason a pull request loses the approval it already had.
+    if (event === 'APPROVE' && headSha !== undefined) {
+      await retireStaleApprovals({ repo, pr, token, headSha, login: review.user?.login, readReviews, dismiss, log })
+    }
+
     return { ok: true, reviewEvent: event, reviewState: review.state ?? 'unknown', message }
   } catch (err) {
     const status = err?.status ?? statusFromMessage(err?.message ?? '')

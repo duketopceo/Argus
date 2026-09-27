@@ -106,6 +106,9 @@ outputs:
   review-state:
     description: 'State of the submitted review, or why none was submitted'
     value: ${{ steps.approve.outputs.review-state }}
+  stale-dismissed:
+    description: 'Stale approvals by this identity that were dismissed because they no longer describe the head. "unknown" if the existing reviews could not be read.'
+    value: ${{ steps.approve.outputs.stale-dismissed }}
 runs:
   using: composite
   steps:

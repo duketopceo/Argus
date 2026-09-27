@@ -10,6 +10,7 @@ import {
   prNumberFromEvent,
   reviewBody,
   reviewEventFor,
+  staleApprovals,
   verifyEvidenceCheck,
 } from '../../action/approval-review.mjs'
 
@@ -186,13 +187,68 @@ describe('evidence check verification', () => {
   })
 })
 
+describe('stale approval retirement', () => {
+  const head = 'b'.repeat(40)
+  const old = 'a'.repeat(40)
+  const approveAt = (over: Record<string, unknown> = {}) => ({
+    id: 1,
+    state: 'APPROVED',
+    commit_id: old,
+    user: { login: 'argus-reviewer[bot]' },
+    ...over,
+  })
+
+  it('selects this identity approvals of commits that are no longer the head', () => {
+    const found = staleApprovals([approveAt()], { login: 'argus-reviewer[bot]', headSha: head })
+    expect(found).toHaveLength(1)
+  })
+
+  it('leaves an approval of the current head alone', () => {
+    expect(
+      staleApprovals([approveAt({ commit_id: head })], {
+        login: 'argus-reviewer[bot]',
+        headSha: head,
+      }),
+    ).toHaveLength(0)
+  })
+
+  it("never touches another identity's review", () => {
+    // An approver revoking its own outgrown approval is self-correction.
+    // Revoking a colleague's is not something a bot should do.
+    expect(
+      staleApprovals([approveAt({ user: { login: 'coderabbitai[bot]' } })], {
+        login: 'argus-reviewer[bot]',
+        headSha: head,
+      }),
+    ).toHaveLength(0)
+  })
+
+  it('ignores non-approvals and already-dismissed reviews', () => {
+    expect(
+      staleApprovals([approveAt({ state: 'COMMENTED' }), approveAt({ state: 'DISMISSED', id: 2 })], {
+        login: 'argus-reviewer[bot]',
+        headSha: head,
+      }),
+    ).toHaveLength(0)
+  })
+
+  it('does nothing when the submitting identity is unknown', () => {
+    expect(staleApprovals([approveAt()], { login: undefined, headSha: head })).toEqual([])
+  })
+})
+
 describe('emit-review lane', () => {
   let workdir: string
   let stdout: string[]
+  let headAt: ReturnType<typeof vi.fn>
+  let listRev: ReturnType<typeof vi.fn>
 
   beforeEach(async () => {
     workdir = await mkdtemp(join(tmpdir(), 'argus-approve-'))
     stdout = []
+    // Defaults: the head has not moved, and there are no prior reviews to retire.
+    headAt = vi.fn().mockResolvedValue(HEAD_SHA)
+    listRev = vi.fn().mockResolvedValue([])
     vi.spyOn(process.stdout, 'write').mockImplementation((chunk: unknown) => {
       stdout.push(String(chunk))
       return true
@@ -213,6 +269,7 @@ describe('emit-review lane', () => {
     ARGUS_APPROVAL_CHECK: 'test (22)',
     ARGUS_HEAD_SHA: 'a'.repeat(40),
   }
+  const HEAD_SHA = 'a'.repeat(40)
   const greenCheck = {
     name: 'test (22)',
     status: 'completed',
@@ -238,6 +295,8 @@ describe('emit-review lane', () => {
       { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
       {
         submit,
+        head: headAt,
+        reviews: listRev,
         list: listGreen,
         read: async () => ({ verdict: 'pass', findings: [], summary: 'clean' }),
       },
@@ -266,6 +325,8 @@ describe('emit-review lane', () => {
       { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
       {
         submit,
+        head: headAt,
+        reviews: listRev,
         list: async () => [{ ...greenCheck, conclusion: 'failure' }],
         read: async () => ({ verdict: 'pass', findings: [] }),
       },
@@ -282,6 +343,8 @@ describe('emit-review lane', () => {
       { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
       {
         submit,
+        head: headAt,
+        reviews: listRev,
         list: async () => [{ ...greenCheck, status: 'in_progress', conclusion: null }],
         read: async () => ({ verdict: 'pass', findings: [] }),
       },
@@ -298,6 +361,8 @@ describe('emit-review lane', () => {
       { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
       {
         submit,
+        head: headAt,
+        reviews: listRev,
         list: async () => [{ ...greenCheck, name: 'smoke' }],
         read: async () => ({ verdict: 'pass', findings: [] }),
       },
@@ -317,7 +382,7 @@ describe('emit-review lane', () => {
         ARGUS_HEAD_SHA: 'a'.repeat(40),
         __event: { pull_request: { number: 101 } },
       },
-      { submit, read: async () => ({ verdict: 'pass', findings: [] }) },
+      { submit, head: headAt, reviews: listRev, read: async () => ({ verdict: 'pass', findings: [] }) },
     )
     expect(submit).not.toHaveBeenCalled()
     expect(result.reviewState).toBe('unverified-evidence')
@@ -343,6 +408,8 @@ describe('emit-review lane', () => {
       { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
       {
         submit,
+        head: headAt,
+        reviews: listRev,
         list: async () => {
           throw new Error('HTTP 403')
         },
@@ -352,6 +419,147 @@ describe('emit-review lane', () => {
     expect(submit).not.toHaveBeenCalled()
     expect(result.ok).toBe(false)
     expect(result.reviewState).toBe('no-check-runs')
+  })
+
+  it('refuses to submit once the head has moved under the run', async () => {
+    // The run reviewed the code at the event's head SHA. If the head has moved,
+    // submitting would attach a verdict about old code to a new commit.
+    const submit = vi.fn()
+    const result = await emitApprovalReview(
+      { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
+      {
+        submit,
+        head: async () => 'c'.repeat(40),
+        reviews: listRev,
+        list: listGreen,
+        read: async () => ({ verdict: 'pass', findings: [] }),
+      },
+    )
+    expect(submit).not.toHaveBeenCalled()
+    expect(result.ok).toBe(false)
+    expect(result.reviewState).toBe('head-moved')
+    expect(lines()).toContain('The push triggers a new run')
+  })
+
+  it('fails closed when the current head cannot be read', async () => {
+    const submit = vi.fn()
+    const result = await emitApprovalReview(
+      { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
+      {
+        submit,
+        head: async () => {
+          throw new Error('HTTP 404')
+        },
+        reviews: listRev,
+        list: listGreen,
+        read: async () => ({ verdict: 'pass', findings: [] }),
+      },
+    )
+    expect(submit).not.toHaveBeenCalled()
+    expect(result.reviewState).toBe('no-head')
+  })
+
+  it('retires its own stale approvals after submitting a new one', async () => {
+    // `dismiss_stale_reviews` is false on the protected branch, so an APPROVE
+    // of an old head keeps counting until something dismisses it.
+    const submit = vi.fn().mockResolvedValue({
+      stdout: JSON.stringify({ id: 9, state: 'APPROVED', user: { login: 'argus-reviewer[bot]' } }),
+    })
+    const dismiss = vi.fn().mockResolvedValue({})
+    const reviews = vi.fn().mockResolvedValue([
+      { id: 5, state: 'APPROVED', commit_id: 'd'.repeat(40), user: { login: 'argus-reviewer[bot]' } },
+      { id: 6, state: 'APPROVED', commit_id: 'e'.repeat(40), user: { login: 'argus-reviewer[bot]' } },
+    ])
+    const result = await emitApprovalReview(
+      { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
+      {
+        submit,
+        head: headAt,
+        reviews,
+        dismiss,
+        list: listGreen,
+        read: async () => ({ verdict: 'pass', findings: [] }),
+      },
+    )
+    expect(result.ok).toBe(true)
+    expect(dismiss).toHaveBeenCalledTimes(2)
+    expect(dismiss.mock.calls[0][0]).toMatchObject({ pr: 101, reviewId: 5 })
+    expect(dismiss.mock.calls[0][0].message).toContain('no longer the head')
+    expect(lines()).toContain('retired 2 of 2 stale approval(s)')
+  })
+
+  it('never dismisses a review by a different identity', async () => {
+    const submit = vi.fn().mockResolvedValue({
+      stdout: JSON.stringify({ id: 9, state: 'APPROVED', user: { login: 'argus-reviewer[bot]' } }),
+    })
+    const dismiss = vi.fn()
+    const reviews = vi.fn().mockResolvedValue([
+      { id: 5, state: 'APPROVED', commit_id: 'd'.repeat(40), user: { login: 'coderabbitai[bot]' } },
+    ])
+    await emitApprovalReview(
+      { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
+      {
+        submit,
+        head: headAt,
+        reviews,
+        dismiss,
+        list: listGreen,
+        read: async () => ({ verdict: 'pass', findings: [] }),
+      },
+    )
+    expect(dismiss).not.toHaveBeenCalled()
+  })
+
+  it('keeps the submitted approval when retiring stale ones fails', async () => {
+    // The review already landed. Failing the step now would report a good
+    // review as broken, and must not retract what was just approved.
+    const submit = vi.fn().mockResolvedValue({
+      stdout: JSON.stringify({ id: 9, state: 'APPROVED', user: { login: 'argus-reviewer[bot]' } }),
+    })
+    const dismiss = vi.fn().mockRejectedValue(new Error('HTTP 403'))
+    const reviews = vi.fn().mockResolvedValue([
+      { id: 5, state: 'APPROVED', commit_id: 'd'.repeat(40), user: { login: 'argus-reviewer[bot]' } },
+    ])
+    const result = await emitApprovalReview(
+      { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
+      {
+        submit,
+        head: headAt,
+        reviews,
+        dismiss,
+        list: listGreen,
+        read: async () => ({ verdict: 'pass', findings: [] }),
+      },
+    )
+    expect(result.ok).toBe(true)
+    expect(result.reviewState).toBe('APPROVED')
+    expect(lines()).toContain('::warning::')
+  })
+
+  it('does not retire anything when the submit itself failed', async () => {
+    // Fail-safe ordering: a rejected review must never destroy the approval the
+    // pull request already had.
+    const submit = vi.fn().mockRejectedValue(
+      Object.assign(new Error(GITHUB_TOKEN_422), { status: 422 }),
+    )
+    const dismiss = vi.fn()
+    const reviews = vi.fn().mockResolvedValue([
+      { id: 5, state: 'APPROVED', commit_id: 'd'.repeat(40), user: { login: 'argus-reviewer[bot]' } },
+    ])
+    const result = await emitApprovalReview(
+      { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
+      {
+        submit,
+        head: headAt,
+        reviews,
+        dismiss,
+        list: listGreen,
+        read: async () => ({ verdict: 'pass', findings: [] }),
+      },
+    )
+    expect(result.ok).toBe(false)
+    expect(dismiss).not.toHaveBeenCalled()
+    expect(reviews).not.toHaveBeenCalled()
   })
 
   it('submits REQUEST_CHANGES without requiring a green check', async () => {
@@ -364,7 +572,7 @@ describe('emit-review lane', () => {
     const list = vi.fn()
     const result = await emitApprovalReview(
       { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
-      { submit, list, read: async () => ({ verdict: 'needs_changes', findings: [] }) },
+      { submit, list, head: headAt, reviews: listRev, read: async () => ({ verdict: 'needs_changes', findings: [] }) },
     )
     expect(list).not.toHaveBeenCalled()
     expect(submit.mock.calls[0][0].event).toBe('REQUEST_CHANGES')
@@ -376,7 +584,7 @@ describe('emit-review lane', () => {
     const submit = vi.fn()
     const result = await emitApprovalReview(
       { ...baseEnv, ARGUS_APPROVAL_TOKEN: 'ghs_secret', __event: { pull_request: { number: 101 } } },
-      { submit, read: async () => ({ verdict: 'pass', findings: [] }) },
+      { submit, head: headAt, reviews: listRev, read: async () => ({ verdict: 'pass', findings: [] }) },
     )
     expect(submit).not.toHaveBeenCalled()
     expect(result.ok).toBe(false)
@@ -389,7 +597,7 @@ describe('emit-review lane', () => {
     const submit = vi.fn()
     const result = await emitApprovalReview(
       { ...baseEnv, __event: { pull_request: { number: 101 } } },
-      { submit },
+      { submit, head: headAt, reviews: listRev },
     )
     expect(submit).not.toHaveBeenCalled()
     expect(result.ok).toBe(true)
@@ -402,6 +610,8 @@ describe('emit-review lane', () => {
       { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
       {
         submit,
+        head: headAt,
+        reviews: listRev,
         read: async () => {
           throw new Error('ENOENT')
         },
@@ -421,6 +631,8 @@ describe('emit-review lane', () => {
       { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
       {
         submit,
+        head: headAt,
+        reviews: listRev,
         list: listGreen,
         read: async () => ({ verdict: 'pass', findings: [] }),
       },
@@ -433,7 +645,7 @@ describe('emit-review lane', () => {
 
   it('skips quietly on an event with no pull request', async () => {
     const submit = vi.fn()
-    const result = await emitApprovalReview({ ...baseEnv, ...approved }, { submit })
+    const result = await emitApprovalReview({ ...baseEnv, ...approved }, { submit, head: headAt, reviews: listRev })
     expect(submit).not.toHaveBeenCalled()
     expect(result.ok).toBe(true)
     expect(lines()).toContain('no pull request in this event')
