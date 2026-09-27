@@ -194,6 +194,10 @@ export async function scanSecrets(opts) {
             severity: adjudicated ? 'bug' : 'risk',
             category: 'security',
             message: maskFindingMessage(c, adjudicated),
+            // A Jev-confirmed live secret counts as proven for the review-event
+            // gate — pLive IS the true-positive probability for this finding.
+            // Unadjudicated findings carry no p (degrade-open, like U8).
+            ...(adjudicated && pLive !== undefined ? { p: pLive } : {}),
         });
         records.push({
             file: c.file,

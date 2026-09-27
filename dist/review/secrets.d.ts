@@ -42,6 +42,8 @@ export interface SecretsScanResult {
         severity: string;
         category?: string;
         message: string;
+        /** Jev P(live) carried through adjudication — feeds the review gate. */
+        p?: number;
     }[];
     /** Audit records for report.secretsScan — literals never included. */
     records: SecretScanRecord[];

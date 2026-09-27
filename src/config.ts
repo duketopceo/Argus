@@ -182,6 +182,9 @@ export interface Config {
    * finding after Jev adjudication — 1.0 (default) is annotate-only,
    * lowering it suppresses progressively more low-confidence nits.
    * bug/risk are never suppressed.
+   * `requestChanges`: allow the review event to escalate to
+   * REQUEST_CHANGES for proven blockers (probe-reproduced or Jev
+   * high-confidence). Default true — set false for advisory-only posting.
    */
   review: {
     secretsThreshold: number
@@ -190,6 +193,7 @@ export interface Config {
     triage: 'off' | 'annotate' | 'route'
     lowRiskModel: string | undefined
     findingThreshold: number
+    requestChanges: boolean
   }
 }
 
@@ -248,6 +252,7 @@ const defaults: Config = {
     triage: 'annotate',
     lowRiskModel: undefined,
     findingThreshold: 1.0,
+    requestChanges: true,
   },
 }
 
@@ -331,6 +336,9 @@ export function resolveConfig(input: ConfigInput = {}): Config {
     review.lowRiskModel = undefined
   }
   review.findingThreshold = prob01(review.findingThreshold, defaults.review.findingThreshold)
+  // Advisory-only escape hatch — only literal `false` opts out; anything
+  // else (mis-typed values included) keeps the default-true posture.
+  review.requestChanges = review.requestChanges !== false
   const resolved: Config = { ...defaults, ...input, provider, sandbox, review }
   resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP)
   if (resolved.heal !== 'a0') resolved.heal = 'local'

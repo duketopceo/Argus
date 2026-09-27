@@ -860,27 +860,51 @@ interface PrFile {
   patch?: string
 }
 
+export interface ReviewFinding {
+  file: string
+  line?: number
+  severity: string
+  category?: string
+  message: string
+  /** U8 — Jev true-positive probability (absent = unadjudicated). */
+  p?: number
+  /** R1 — committable replacement lines for the commented range (parse-bounded). */
+  suggestion?: string
+  /** R1 — first line of the replaced range; absent = single-line fix at `line`. */
+  startLine?: number
+  evidence?: Evidence
+}
+
+/** KTD3 — one pre-rendered inline review comment; posters POST it verbatim. */
+export interface ReviewComment {
+  path: string
+  line: number
+  start_line?: number
+  start_side?: 'RIGHT'
+  side: 'RIGHT'
+  body: string
+  /** R10 — path:line:bodyFirstLine:hash8(suggestion); a corrected suggestion re-posts. */
+  dedupKey: string
+}
+
 interface CodeReviewReport {
   ok: boolean
   skipped: boolean
   summary: string
   verdict: 'pass' | 'needs_changes' | 'approve'
-  findings: {
-    file: string
-    line?: number
-    severity: string
-    category?: string
-    message: string
-    /** U8 — Jev true-positive probability (absent = unadjudicated). */
-    p?: number
-    /** R1 — committable replacement lines for the commented range (parse-bounded). */
-    suggestion?: string
-    /** R1 — first line of the replaced range; absent = single-line fix at `line`. */
-    startLine?: number
-    evidence?: Evidence
-  }[]
+  findings: ReviewFinding[]
   /** Inline-comment cap consumed by the sticky poster (Tencent max_comments pull). */
   maxComments?: number
+  /** R3/KTD2 — poster gate: 'request_changes' only for proven blockers. */
+  reviewEvent: 'comment' | 'request_changes'
+  /** Blocker-severity findings a sandbox probe reproduced. */
+  provenBlockers: number
+  /** Blocker-severity findings at/above the Jev P(true-positive) gate. */
+  highConfidenceBlockers: number
+  /** KTD3 — eligibility-filtered, severity-sorted, sanitized, capped. */
+  reviewComments: ReviewComment[]
+  /** Eligible findings dropped by the maxComments cap. */
+  commentsOverflow: number
   /** B.2 probe audit records — present only when the sandbox lane ran. */
   probes?: ProbeRecord[]
   /** Why an enabled lane bowed out (fork gate, no docker, no harness…). */
@@ -1180,6 +1204,139 @@ export function carryForwardSuggestions(
   })
 }
 
+/**
+ * R3/KTD2 — Jev P(true-positive) at/above which a blocker-severity finding
+ * counts as proven for the REQUEST_CHANGES gate. This is a different axis
+ * from `review.findingThreshold` (P(false-positive) for nit/q suppression)
+ * — never reuse that knob. 0.7: high-confidence without demanding
+ * near-certainty from a calibrated scorer.
+ */
+export const P_TRUE_POSITIVE_THRESHOLD = 0.7
+
+/**
+ * KTD2 — the poster-facing review gate, computed once at report assembly
+ * on linkedFindings (post-adjudication `p`, post-probe `evidence`,
+ * secrets-lane `pLive` already carried as `p`) and serialized into
+ * code-review.json; posters read `reviewEvent`, never recompute.
+ * Unadjudicated blockers (no p, not reproduced) never escalate —
+ * degrade-open by design. The two counts overlap deliberately: a
+ * reproduced AND Jev-confident finding is reported under both.
+ */
+export function computeReviewEvent(
+  findings: ReviewFinding[],
+  blockSeverities: string[],
+  allowRequestChanges: boolean,
+): {
+  reviewEvent: 'comment' | 'request_changes'
+  provenBlockers: number
+  highConfidenceBlockers: number
+} {
+  const blockers = findings.filter((f) => blockSeverities.includes(f.severity))
+  const provenBlockers = blockers.filter((f) => f.evidence?.status === 'reproduced').length
+  const highConfidenceBlockers = blockers.filter(
+    (f) => typeof f.p === 'number' && f.p >= P_TRUE_POSITIVE_THRESHOLD,
+  ).length
+  const reviewEvent =
+    allowRequestChanges && provenBlockers + highConfidenceBlockers > 0
+      ? 'request_changes'
+      : 'comment'
+  return { reviewEvent, provenBlockers, highConfidenceBlockers }
+}
+
+/** Message text bound after sanitization — bodies stay one-paragraph. */
+const MAX_COMMENT_MESSAGE = 500
+
+/** R2 — stable severity order applied before the maxComments cap. */
+const SEVERITY_RANK: Record<string, number> = { bug: 0, risk: 1, nit: 2, q: 3 }
+
+/**
+ * R5 — `message`/`evidence.detail` are model-or-runner-controlled text
+ * landing in a PR comment body. Collapse to a single line (a fenced block
+ * needs a line start), zero-width-break backtick/tilde runs of ≥3 so a
+ * fake ```suggestion block can't ride the message past the suggestion-side
+ * guards, and defuse @mentions so findings can't ping arbitrary users.
+ */
+function sanitizeCommentText(s: string): string {
+  return s
+    .replace(/\s+/g, ' ')
+    .replace(/([`~])\1{2,}/g, (run) => `${run[0]}\u200B${run.slice(1)}`)
+    .replace(/@(?=[A-Za-z0-9])/g, '@\u200B')
+    .trim()
+    .slice(0, MAX_COMMENT_MESSAGE)
+}
+
+/**
+ * Suggestion fence must exceed every backtick run inside the suggestion —
+ * tilde runs can't close a backtick fence, so only backticks count. Min 4
+ * so a suggestion already containing ``` stays wrapped.
+ */
+function suggestionFence(suggestion: string): string {
+  let longest = 0
+  for (const m of suggestion.matchAll(/`+/g)) longest = Math.max(longest, m[0].length)
+  return '`'.repeat(Math.max(4, longest + 1))
+}
+
+/** djb2 → 8 hex chars — dedup identity only, not a security boundary. */
+function shortHash(s: string): string {
+  let h = 5381
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
+  return (h >>> 0).toString(16).padStart(8, '0')
+}
+
+/**
+ * KTD3 — pre-render the inline review surface: eligibility-filtered
+ * (R8's static half — real path, positive integer line), severity-sorted
+ * before the maxComments cap so nits can't crowd out bugs (R2), sanitized
+ * (R5), suggestion-fenced, each carrying a dedupKey (R10). Posters consume
+ * `comments` verbatim — dedup + live-diff validation + POST, no render
+ * policy. `overflow` is the count of eligible findings past the cap.
+ */
+export function renderReviewComments(
+  findings: ReviewFinding[],
+  maxComments = 20,
+): { comments: ReviewComment[]; overflow: number } {
+  const eligible = findings.filter(
+    (f): f is ReviewFinding & { line: number } =>
+      typeof f.file === 'string' &&
+      f.file !== '' &&
+      f.file !== '-' &&
+      Number.isInteger(f.line) &&
+      (f.line as number) > 0,
+  )
+  const sorted = [...eligible].sort(
+    (a, b) => (SEVERITY_RANK[a.severity] ?? 4) - (SEVERITY_RANK[b.severity] ?? 4),
+  )
+  const comments = sorted.slice(0, Math.max(0, maxComments)).map((f) => {
+    let body = `**argus-reviewer ${sanitizeCommentText(String(f.severity))}:** ${sanitizeCommentText(String(f.message ?? ''))}`
+    if (typeof f.category === 'string' && f.category !== '') body += ` \`${f.category}\``
+    if (f.evidence?.status === 'reproduced') {
+      body +=
+        '\n\n*🧪 Reproduced by an Argus probe — fails on this PR head, clean on base. See workflow artifacts.*'
+    } else if (f.evidence !== undefined && f.evidence.status !== 'exercised') {
+      body += `\n\n*CI evidence: ${sanitizeCommentText(f.evidence.detail)}*`
+    }
+    const suggestion = typeof f.suggestion === 'string' && f.suggestion !== '' ? f.suggestion : ''
+    if (suggestion !== '') {
+      const fence = suggestionFence(suggestion)
+      body += `\n\n${fence}suggestion\n${suggestion}\n${fence}`
+      body += '\n\n*Suggested change — review before committing.*'
+    }
+    const comment: ReviewComment = {
+      path: f.file,
+      line: f.line,
+      side: 'RIGHT',
+      body,
+      dedupKey: `${f.file}:${f.line}:${body.split('\n')[0]}:${shortHash(suggestion)}`,
+    }
+    if (typeof f.startLine === 'number' && Number.isInteger(f.startLine) && f.startLine < f.line) {
+      comment.start_line = f.startLine
+      comment.start_side = 'RIGHT'
+    }
+    return comment
+  })
+  return { comments, overflow: eligible.length - comments.length }
+}
+
 async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> {
   const { values } = parseArgs({
     args,
@@ -1245,6 +1402,11 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       summary: `Code review skipped — ${reason}`,
       verdict: 'pass',
       findings: [],
+      reviewEvent: 'comment',
+      provenBlockers: 0,
+      highConfidenceBlockers: 0,
+      reviewComments: [],
+      commentsOverflow: 0,
       calls: [],
       visionCostUsd: 0,
       tokens: 0,
@@ -1688,6 +1850,13 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       }
     }
 
+    // KTD2/KTD3 — the poster-facing surface is computed here, once, on
+    // linkedFindings (post-probe `evidence`, adjudicated/carried `p`), and
+    // serialized: posters read `reviewEvent` and POST `reviewComments`
+    // verbatim rather than re-deriving render or gate policy.
+    const gate = computeReviewEvent(linkedFindings, blockSeverities, config.review.requestChanges)
+    const rendered = renderReviewComments(linkedFindings, maxComments)
+
     const hasBlocker = finalFindings.some((f) => blockSeverities.includes(f.severity))
     const report: CodeReviewReport = {
       ok: !hasBlocker && !ledger.budgetExceeded && isHeadBindingConclusive(headBinding),
@@ -1695,6 +1864,11 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       summary,
       verdict,
       findings: linkedFindings,
+      reviewEvent: gate.reviewEvent,
+      provenBlockers: gate.provenBlockers,
+      highConfidenceBlockers: gate.highConfidenceBlockers,
+      reviewComments: rendered.comments,
+      commentsOverflow: rendered.overflow,
       ...(probes !== undefined ? { probes } : {}),
       ...(probeLaneSkipped !== undefined ? { probeLaneSkipped } : {}),
       ...(secretsScan !== undefined ? { secretsScan } : {}),
