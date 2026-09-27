@@ -18,7 +18,12 @@ import {
 } from '../../action/runtime.mjs'
 
 // @ts-expect-error plain-node action helper — no type declarations
-import { renderBody as renderStickyBody, run, shortHash } from '../../action/sticky-comment.cjs'
+import {
+  renderBody as renderStickyBody,
+  renderReviewOnlyBody,
+  run,
+  shortHash,
+} from '../../action/sticky-comment.cjs'
 
 const execFileAsync = promisify(execFile)
 const ACTION = join(process.cwd(), 'action')
@@ -216,6 +221,171 @@ describe('action input contract', () => {
         },
       }),
     ).rejects.toThrow(/config must stay inside/)
+  })
+})
+
+// U4/R6 — the sticky's scannable top block: verdict + one-line summary +
+// honest counts under the sentinel, ahead of every <details> fold.
+describe('sticky review top block (U4)', () => {
+  const runReport = {
+    ok: true,
+    totals: {
+      passed: 1,
+      tests: 1,
+      visionCalls: 0,
+      visionCostUsd: 0,
+      sandboxSeconds: 1,
+      cacheHits: 0,
+      cacheMisses: 0,
+      cacheHeals: 0,
+      callsByModel: {},
+      costByModel: {},
+      budgetExceeded: false,
+    },
+    tests: [],
+    artifacts: { videos: [] },
+  }
+
+  function review(overrides: Record<string, unknown> = {}) {
+    return {
+      ok: true,
+      skipped: false,
+      summary: 'found real problems',
+      verdict: 'needs_changes',
+      findings: [],
+      model: 'test/model',
+      tokens: 0,
+      visionCostUsd: 0,
+      reviewEvent: 'comment',
+      provenBlockers: 0,
+      highConfidenceBlockers: 0,
+      reviewComments: [],
+      commentsOverflow: 0,
+      maxComments: 20,
+      ...overrides,
+    }
+  }
+
+  it('renders verdict + counts under the sentinel, before the first details section', () => {
+    const cr = review({
+      verdict: 'needs_changes',
+      findings: [
+        {
+          file: 'a.ts',
+          line: 3,
+          severity: 'bug',
+          message: 'boom',
+          evidence: { status: 'reproduced', detail: 'fails on head' },
+        },
+        { file: 'b.ts', line: 8, severity: 'risk', message: 'hmm' },
+        { file: 'c.ts', line: 1, severity: 'nit', message: 'meh' },
+      ],
+      provenBlockers: 1,
+      reviewEvent: 'request_changes',
+    })
+
+    const body = renderStickyBody(runReport, cr, 'https://github.com/run/1', false, undefined)
+
+    expect(body.indexOf('<!-- argus-reviewer -->')).toBeLessThan(body.indexOf('**Code review:**'))
+    expect(body.indexOf('**Code review:**')).toBeLessThan(body.indexOf('<details>'))
+    expect(body).toContain('**Code review:** 🔴 **needs_changes** — found real problems')
+    expect(body).toContain('🐛 1 · ⚠️ 1 · 💡 1 · ❓ 0')
+    expect(body).toContain('⛔ 1 reproduced')
+    expect(body).not.toContain('◎')
+  })
+
+  it('renders a clean zero-finding block with no proof counts', () => {
+    const cr = review({ verdict: 'pass', summary: 'clean diff' })
+    const body = renderStickyBody(runReport, cr, 'https://github.com/run/1', true, undefined)
+
+    expect(body).toContain('**Code review:** ✅ **pass** — clean diff')
+    expect(body).toContain('no findings')
+    expect(body).not.toContain('⛔')
+    expect(body).not.toContain('◎')
+    expect(body).not.toMatch(/🔧 \d+ suggestion/)
+  })
+
+  it('counts reproduced and p-only findings separately — p alone is never proven', () => {
+    // No serialized counts — exercises the finding-level recount fallback:
+    // the p-only blocker must land under ◎ and never leak into ⛔.
+    const cr = review({
+      findings: [
+        {
+          file: 'a.ts',
+          line: 3,
+          severity: 'bug',
+          message: 'boom',
+          evidence: { status: 'reproduced', detail: 'fails on head' },
+        },
+        { file: 'b.ts', line: 8, severity: 'bug', message: 'confident', p: 0.95 },
+        { file: 'c.ts', line: 9, severity: 'bug', message: 'plain' },
+      ],
+    })
+    delete (cr as Record<string, unknown>).provenBlockers
+    delete (cr as Record<string, unknown>).highConfidenceBlockers
+
+    const body = renderStickyBody(runReport, cr, 'https://github.com/run/1', false, undefined)
+
+    expect(body).toContain('⛔ 1 reproduced')
+    expect(body).toContain('◎ 1 high-confidence')
+    expect(body).not.toContain('⛔ 2')
+    expect(body).not.toContain('◎ 2')
+  })
+
+  it('counts only serialized comments that carry a committable suggestion', () => {
+    const cr = review({
+      findings: [
+        { file: 'a.ts', line: 3, severity: 'bug', message: 'boom', suggestion: 'const x = 1' },
+        // A second patched finding that never made reviewComments (cap/
+        // ineligible) — its suggestion is not committable on the PR.
+        { file: 'b.ts', line: 8, severity: 'nit', message: 'meh', suggestion: 'const y = 2' },
+      ],
+      reviewComments: [
+        {
+          path: 'a.ts',
+          line: 3,
+          side: 'RIGHT',
+          body:
+            '**argus-reviewer bug:** boom\n\n' +
+            '````suggestion\nconst x = 1\n````\n\n' +
+            '*Suggested change — review before committing.*',
+          dedupKey: 'k1',
+        },
+        {
+          path: 'b.ts',
+          line: 8,
+          side: 'RIGHT',
+          body: '**argus-reviewer nit:** meh',
+          dedupKey: 'k2',
+        },
+      ],
+    })
+
+    const body = renderStickyBody(runReport, cr, 'https://github.com/run/1', false, undefined)
+
+    expect(body).toContain('🔧 1 suggestion\n')
+    expect(body).not.toContain('🔧 2')
+  })
+
+  it('renders the same top block in the review-only body', () => {
+    const cr = review({
+      findings: [
+        {
+          file: 'a.ts',
+          line: 3,
+          severity: 'bug',
+          message: 'boom',
+          evidence: { status: 'reproduced', detail: 'fails on head' },
+        },
+      ],
+      provenBlockers: 1,
+      reviewEvent: 'request_changes',
+    })
+
+    const body = renderReviewOnlyBody(cr, 'https://github.com/run/1', false, undefined)
+
+    expect(body.indexOf('**Code review:**')).toBeLessThan(body.indexOf('<details>'))
+    expect(body).toContain('⛔ 1 reproduced')
   })
 })
 

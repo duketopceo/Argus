@@ -71,6 +71,7 @@ function renderBody(report, codeReview, runUrl, ok, inlinePlan) {
   lines.push('')
   lines.push(`## argus-reviewer ${ok ? '✅ PASS' : '❌ FAIL'}`)
   lines.push('')
+  pushReviewTop(lines, codeReview)
   lines.push(
     `**Summary:** ${report.totals.passed}/${report.totals.tests} passed · ` +
       `${report.totals.visionCalls} vision calls · ` +
@@ -243,6 +244,59 @@ function renderBody(report, codeReview, runUrl, ok, inlinePlan) {
   return lines.join('\n')
 }
 
+// ---------------------------------------------------------------------------
+// R6 — scannable top block under the sentinel: verdict icon + one-line
+// summary + honest counts, so the first screen answers "verdict, what
+// kinds, what needs me" before the <details> fold. ⛔ counts
+// probe-reproduced findings only — a high p alone is never "proven" —
+// while ◎ carries the Jev-confidence count; the two overlap when a
+// finding is both (KTD2). The serialized blocker counts win when present
+// (same numbers reviewBody prints); the recount is the fallback for
+// reports predating them — P_FALLBACK_GATE must match
+// P_TRUE_POSITIVE_THRESHOLD in src/cli.ts.
+
+const REVIEW_VERDICT_ICON = { pass: '✅', approve: '👍', needs_changes: '🔴' }
+const P_FALLBACK_GATE = 0.7
+
+function pushReviewTop(lines, codeReview) {
+  if (!codeReview || codeReview.skipped) return
+  const findings = Array.isArray(codeReview.findings) ? codeReview.findings : []
+  const icon = REVIEW_VERDICT_ICON[codeReview.verdict] ?? '❔'
+  lines.push(
+    `**Code review:** ${icon} **${cell(codeReview.verdict ?? 'unknown')}** — ${cell(codeReview.summary)}`,
+  )
+  if (findings.length === 0) {
+    lines.push('no findings')
+    lines.push('')
+    return
+  }
+  const sev = { bug: 0, risk: 0, nit: 0, q: 0 }
+  for (const f of findings) if (Object.hasOwn(sev, f.severity)) sev[f.severity] += 1
+  const tail = []
+  // 🔧 counts serialized comments carrying a committable block — what
+  // actually lands on the PR — not every finding the model offered a
+  // patch for (overflowed/ineligible suggestions aren't committable).
+  const suggestions = Array.isArray(codeReview.reviewComments)
+    ? codeReview.reviewComments.filter((c) => extractSuggestion(c.body ?? '') !== '').length
+    : findings.filter((f) => typeof f.suggestion === 'string' && f.suggestion !== '').length
+  if (suggestions > 0) tail.push(`🔧 ${suggestions} suggestion${suggestions === 1 ? '' : 's'}`)
+  const reproduced =
+    typeof codeReview.provenBlockers === 'number'
+      ? codeReview.provenBlockers
+      : findings.filter((f) => f.evidence?.status === 'reproduced').length
+  if (reproduced > 0) tail.push(`⛔ ${reproduced} reproduced`)
+  const confident =
+    typeof codeReview.highConfidenceBlockers === 'number'
+      ? codeReview.highConfidenceBlockers
+      : findings.filter((f) => typeof f.p === 'number' && f.p >= P_FALLBACK_GATE).length
+  if (confident > 0) tail.push(`◎ ${confident} high-confidence`)
+  lines.push(
+    `🐛 ${sev.bug} · ⚠️ ${sev.risk} · 💡 ${sev.nit} · ❓ ${sev.q}` +
+      (tail.length > 0 ? ` — ${tail.join(' · ')}` : ''),
+  )
+  lines.push('')
+}
+
 // The 🧠 Code review details block — shared by the full body and the
 // review-only body (run lane disabled).
 function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
@@ -314,19 +368,6 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
       )
     }
     lines.push('')
-    // Serialized comments that didn't post — the maxComments cap
-    // (serialized overflow) plus post-time drops (off-diff anchors,
-    // retry-ladder discards).
-    if (inlinePlan !== undefined && inlinePlan.dropped > 0) {
-      const overflow = inlinePlan.overflow ?? 0
-      const reasons = []
-      if (overflow > 0) reasons.push(`\`review.maxComments\` cap ${inlinePlan.cap}`)
-      if (inlinePlan.dropped - overflow > 0) {
-        reasons.push(`${inlinePlan.dropped - overflow} outside the PR diff`)
-      }
-      lines.push(`*+${inlinePlan.dropped} inline comment(s) not posted — ${reasons.join(', ')}.*`)
-      lines.push('')
-    }
     // Secrets-lane audit line — adjudicated/suppressed counts, never literals.
     if (codeReview.secretsScan) {
       if (typeof codeReview.secretsScan.skipped === 'string') {
@@ -343,6 +384,20 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
       }
       lines.push('')
     }
+  }
+  // Serialized comments that didn't post — the maxComments cap
+  // (serialized overflow) plus post-time drops (off-diff anchors,
+  // retry-ladder discards). Outside the findings guard: drops still
+  // disclose even when the findings table rendered nothing.
+  if (inlinePlan !== undefined && inlinePlan.dropped > 0) {
+    const overflow = inlinePlan.overflow ?? 0
+    const reasons = []
+    if (overflow > 0) reasons.push(`\`review.maxComments\` cap ${inlinePlan.cap}`)
+    if (inlinePlan.dropped - overflow > 0) {
+      reasons.push(`${inlinePlan.dropped - overflow} outside the PR diff`)
+    }
+    lines.push(`*+${inlinePlan.dropped} inline comment(s) not posted — ${reasons.join(', ')}.*`)
+    lines.push('')
   }
   // U8 adjudication audit — outside the findings guard so suppressed-
   // only reviews still show what Jev removed. p values live on the
@@ -375,6 +430,7 @@ function renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan) {
   lines.push('')
   lines.push(`## argus-reviewer ${ok ? '✅ PASS' : '❌ FAIL'}`)
   lines.push('')
+  pushReviewTop(lines, codeReview)
   if (!codeReview) {
     lines.push(
       '**Summary:** code-review only (run lane disabled) — no `code-review.json` found. The review step crashed or produced no report; the commit status fails closed — check the action logs before merging.',
