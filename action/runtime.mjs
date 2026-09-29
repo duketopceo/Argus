@@ -93,6 +93,18 @@ export function validateMaxComments(raw) {
   return Number(raw)
 }
 
+export function validateCodeModel(raw) {
+  if (raw === undefined || raw === '') return undefined
+  const value = String(raw).trim()
+  // OpenRouter slugs are `vendor/model` with an optional `:variant`
+  // (`deepseek/deepseek-r1:free`). Env-only value — no shell — but keep it
+  // to slug-shaped input so typos surface here instead of at the API.
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/.test(value)) {
+    throw new Error('code-model must be an OpenRouter model slug (e.g. openai/gpt-5-mini)')
+  }
+  return value
+}
+
 export function resolveWorkingDirectory(workspace, input) {
   const root = realpathSync(resolve(workspace))
   const requested = String(input ?? '').trim()

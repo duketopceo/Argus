@@ -14,7 +14,7 @@ import type { ProviderRules } from '../../src/config.js'
 const MIN_ENV = { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' }
 
 class StubClient implements VisionClient {
-  calls: { kind: CallKind | undefined }[] = []
+  calls: { kind: CallKind | undefined; model: string }[] = []
   constructor(private queue: { content: string }[]) {}
   async complete(opts: {
     model: string
@@ -23,7 +23,7 @@ class StubClient implements VisionClient {
     provider?: ProviderRules
     kind?: CallKind
   }): Promise<{ id: string; content: string; cost: CallCost; model: string }> {
-    this.calls.push({ kind: opts.kind })
+    this.calls.push({ kind: opts.kind, model: opts.model })
     const next = this.queue.shift()
     if (next === undefined) throw new Error('StubClient queue exhausted')
     const cost: CallCost = { model: opts.model, provider: 'stub', tokens: 10, costUsd: 0.001, kind: opts.kind ?? 'code' }
@@ -208,6 +208,34 @@ describe('code-review --fixture', () => {
     const finding = report.findings.find((f: { file: string }) => f.file === 'src/a.ts')
     expect(finding.suggestion).toBe('export const a = 3\nexport const b = 2')
     expect(finding.startLine).toBe(1)
+  })
+
+  it('ARGUS_CODE_MODEL env overrides the checkout config code_model', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'argus-fix-'))
+    materializeFixture(
+      repo,
+      { 'src/a.ts': 'export const a = 1\n' },
+      { 'src/a.ts': 'export const a = 2\n' },
+    )
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-fix-cwd-'))
+    const reportDir = join(cwd, 'report')
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({ decisionModel: '', code_model: 'config/model', reportDir }),
+    )
+    const client = new StubClient([
+      { content: JSON.stringify({ summary: 'ok', verdict: 'pass', findings: [] }) },
+    ])
+    const code = await main(['code-review', '--fixture', repo, '--report-dir', reportDir], {
+      cwd,
+      env: { ...MIN_ENV, OPENROUTER_API_KEY: 'test-key', ARGUS_CODE_MODEL: 'env/model' },
+      out: () => {},
+      err: () => {},
+      createClient: () => client,
+    })
+    expect(code).toBe(0)
+    // Operator env beats the checkout's config value.
+    expect(client.calls[0]?.model).toBe('env/model')
   })
 
   it('restores original suggestions after synthesis; synthesized-only fields drop', async () => {

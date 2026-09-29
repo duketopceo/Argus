@@ -13,6 +13,7 @@ import {
   setActionOutput,
   validateBrowser,
   validateBudget,
+  validateCodeModel,
   validateMaxComments,
   validatePathInput,
   validateVersion,
@@ -29,6 +30,7 @@ const reportDir = validatePathInput(
 validateBrowser(process.env.ARGUS_BROWSER || 'chromium')
 validateBudget(process.env.ARGUS_BUDGET_USD)
 validateMaxComments(process.env.ARGUS_MAX_COMMENTS)
+validateCodeModel(process.env.ARGUS_CODE_MODEL)
 
 async function stageConfig() {
   if (configInput === '' || configInput === 'argus-reviewer.config.ts') return
