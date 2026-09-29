@@ -54,6 +54,21 @@ export interface Sandbox {
   allowForks: boolean
 }
 
+/**
+ * Exploratory lane (roadmap E2.U4): free runtime capture today
+ * (console/pageerror/failed-request taps render as `observed` findings),
+ * bounded act policy later. Opt-in — `enabled` defaults to false. On
+ * untrusted checkouts the whole block is stripped by the config allowlist.
+ */
+export interface Explore {
+  /** Master switch for capture + act. Default false. */
+  enabled: boolean
+  /** Step cap for the exploratory act policy (U4b). Default 20. */
+  maxSteps: number
+  /** Model budget for the act policy (U4b). Unset = bounded by run budget. */
+  budgetUsd: number | undefined
+}
+
 export interface Config {
   model: string
   escalation_model: string
@@ -164,6 +179,11 @@ export interface Config {
    */
   sandbox: Sandbox
   /**
+   * Exploratory lane. Always populated after `resolveConfig` —
+   * `enabled: false` by default so capture is opt-in.
+   */
+  explore: Explore
+  /**
    * Code-review policy knobs. Always populated after `resolveConfig`.
    * `secretsThreshold`: Jev `noul` probability at/above which a
    * secret-shaped diff literal is reported as a finding (below →
@@ -202,13 +222,20 @@ export interface Config {
   }
 }
 
-export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review'>> & {
+export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review' | 'explore'>> & {
   provider?: Partial<ProviderRules>
   sandbox?: Partial<Sandbox>
   review?: Partial<Config['review']>
+  explore?: Partial<Explore>
 }
 
 export const DEFAULT_RECORD_STEP_CAP = 40
+
+export const DEFAULT_EXPLORE: Explore = {
+  enabled: false,
+  maxSteps: 20,
+  budgetUsd: undefined,
+}
 
 export const DEFAULT_SANDBOX: Sandbox = {
   enabled: false,
@@ -250,6 +277,7 @@ const defaults: Config = {
   a0: undefined,
   heal: 'local',
   sandbox: { ...DEFAULT_SANDBOX },
+  explore: { ...DEFAULT_EXPLORE },
   review: {
     secretsThreshold: 0.3,
     maxComments: 20,
@@ -321,6 +349,19 @@ export function resolveConfig(input: ConfigInput = {}): Config {
   sandbox.maxProbes = posInt(sandbox.maxProbes, DEFAULT_SANDBOX.maxProbes)
   sandbox.timeoutMs = posInt(sandbox.timeoutMs, DEFAULT_SANDBOX.timeoutMs)
   sandbox.pidsLimit = posInt(sandbox.pidsLimit, DEFAULT_SANDBOX.pidsLimit)
+  // Same wrong-typed degrade as sandbox — a mis-typed flag must never
+  // self-enable the lane.
+  const rawExplore =
+    typeof input.explore === 'object' && input.explore !== null ? input.explore : {}
+  const explore: Explore = { ...defaults.explore, ...rawExplore }
+  explore.enabled = rawExplore.enabled === true
+  explore.maxSteps = posInt(explore.maxSteps, DEFAULT_EXPLORE.maxSteps)
+  explore.budgetUsd =
+    typeof explore.budgetUsd === 'number' &&
+    Number.isFinite(explore.budgetUsd) &&
+    explore.budgetUsd > 0
+      ? explore.budgetUsd
+      : undefined
   const rawReview = typeof input.review === 'object' && input.review !== null ? input.review : {}
   const review = { ...defaults.review, ...rawReview }
   // Thresholds must be probabilities — anything else (NaN, >1,
@@ -351,7 +392,7 @@ export function resolveConfig(input: ConfigInput = {}): Config {
   review.profiles = Array.isArray(rawReview.profiles)
     ? [...new Set(rawReview.profiles.filter(isReviewProfile))]
     : []
-  const resolved: Config = { ...defaults, ...input, provider, sandbox, review }
+  const resolved: Config = { ...defaults, ...input, provider, sandbox, explore, review }
   resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP)
   if (resolved.heal !== 'a0') resolved.heal = 'local'
   // '' is the documented opt-out — an empty slug would send a broken

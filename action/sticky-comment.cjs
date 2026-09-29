@@ -182,6 +182,53 @@ function renderBody(report, codeReview, runUrl, ok, inlinePlan) {
   lines.push('</details>')
   lines.push('')
 
+  // U4a — Exploratory lane: observed runtime anomalies from the browser
+  // session (console errors, page errors, failed same-origin requests).
+  // Evidence only — captures never change the verdict. Rendered only when
+  // the lane was enabled so the section never becomes ambient noise.
+  if (report.explore && report.explore.enabled === true) {
+    lines.push('<details>')
+    lines.push('<summary>🔭 Exploratory</summary>')
+    lines.push('')
+    if (typeof report.explore.skipped === 'string') {
+      lines.push(`- ⚪ explore skipped — ${cell(report.explore.skipped)}`)
+      lines.push('')
+    } else {
+      // The same signature can appear on multiple test reports from one
+      // file's shared browser session — collapse before rendering.
+      const seen = new Map()
+      for (const t of report.tests) {
+        for (const c of t.captures ?? []) {
+          const key = `${c.kind}|${c.text}|${c.url ?? ''}`
+          const existing = seen.get(key)
+          if (existing) existing.count += c.count
+          else seen.set(key, { ...c })
+        }
+      }
+      const LABEL = {
+        'console-error': 'console error',
+        pageerror: 'page error',
+        'request-failed': 'failed request',
+      }
+      const caps = [...seen.values()]
+      if (caps.length === 0) {
+        lines.push('No page errors, console errors, or failed same-origin requests captured.')
+      } else {
+        for (const c of caps.slice(0, 10)) {
+          const times = c.count > 1 ? ` ×${c.count}` : ''
+          const target = c.url !== undefined ? ` — \`${cell(c.url)}\`` : ''
+          lines.push(`- 🟡 observed · ${LABEL[c.kind] ?? cell(c.kind)}${times}: \`${cell(c.text)}\`${target}`)
+        }
+        if (caps.length > 10) lines.push(`- … +${caps.length - 10} more distinct capture(s)`)
+        lines.push('')
+        lines.push('*Observed findings are evidence only — they do not change the verdict.*')
+      }
+      lines.push('')
+    }
+    lines.push('</details>')
+    lines.push('')
+  }
+
   lines.push('<details>')
   lines.push('<summary>📂 Evidence</summary>')
   lines.push('')

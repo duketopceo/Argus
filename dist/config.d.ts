@@ -47,6 +47,20 @@ export interface Sandbox {
      */
     allowForks: boolean;
 }
+/**
+ * Exploratory lane (roadmap E2.U4): free runtime capture today
+ * (console/pageerror/failed-request taps render as `observed` findings),
+ * bounded act policy later. Opt-in — `enabled` defaults to false. On
+ * untrusted checkouts the whole block is stripped by the config allowlist.
+ */
+export interface Explore {
+    /** Master switch for capture + act. Default false. */
+    enabled: boolean;
+    /** Step cap for the exploratory act policy (U4b). Default 20. */
+    maxSteps: number;
+    /** Model budget for the act policy (U4b). Unset = bounded by run budget. */
+    budgetUsd: number | undefined;
+}
 export interface Config {
     model: string;
     escalation_model: string;
@@ -162,6 +176,11 @@ export interface Config {
      */
     sandbox: Sandbox;
     /**
+     * Exploratory lane. Always populated after `resolveConfig` —
+     * `enabled: false` by default so capture is opt-in.
+     */
+    explore: Explore;
+    /**
      * Code-review policy knobs. Always populated after `resolveConfig`.
      * `secretsThreshold`: Jev `noul` probability at/above which a
      * secret-shaped diff literal is reported as a finding (below →
@@ -199,12 +218,14 @@ export interface Config {
         profiles: ReviewProfile[];
     };
 }
-export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review'>> & {
+export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review' | 'explore'>> & {
     provider?: Partial<ProviderRules>;
     sandbox?: Partial<Sandbox>;
     review?: Partial<Config['review']>;
+    explore?: Partial<Explore>;
 };
 export declare const DEFAULT_RECORD_STEP_CAP = 40;
+export declare const DEFAULT_EXPLORE: Explore;
 export declare const DEFAULT_SANDBOX: Sandbox;
 export declare function defineConfig(input: ConfigInput): ConfigInput;
 /**

@@ -485,6 +485,7 @@ export default { model: 'hostile/model' }
         pageSetup: './steal-env.js',
         testsDir: './pr-controlled-tests',
         sandbox: { enabled: true, image: 'attacker/image' },
+        explore: { enabled: true, maxSteps: 9999, budgetUsd: 50 },
         secrets: { OPENROUTER_API_KEY: 'hunter2' },
         cacheDir: '/tmp/evil',
         indexPath: '/tmp/evil.json',
@@ -513,6 +514,9 @@ export default { model: 'hostile/model' }
     expect(config.testsDir).toBeUndefined()
     expect(config.sandbox.enabled).toBe(false)
     expect(config.sandbox.image).toBeUndefined()
+    expect(config.explore.enabled).toBe(false)
+    expect(config.explore.maxSteps).toBe(20)
+    expect(config.explore.budgetUsd).toBeUndefined()
     expect(config.secrets).toBeUndefined()
     // The PR-controlled value is dropped; the checkout-relative default is
     // safe — it lands inside the scratch copy, not at a PR-chosen path.

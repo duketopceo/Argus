@@ -80,3 +80,28 @@ describe('resolveConfig sandbox', () => {
     expect(DEFAULT_SANDBOX.maxProbes).toBe(3)
   })
 })
+
+describe('resolveConfig explore', () => {
+  it('populates disabled defaults when explore is absent', () => {
+    const config = resolveConfig({})
+    expect(config.explore).toEqual({ enabled: false, maxSteps: 20, budgetUsd: undefined })
+  })
+
+  it('fills unspecified fields of a partial explore block with defaults', () => {
+    const config = resolveConfig({ explore: { enabled: true } })
+    expect(config.explore.enabled).toBe(true)
+    expect(config.explore.maxSteps).toBe(20)
+    expect(config.explore.budgetUsd).toBeUndefined()
+  })
+
+  it('normalizes non-positive maxSteps and budgetUsd', () => {
+    const config = resolveConfig({ explore: { enabled: true, maxSteps: 0, budgetUsd: -1 } })
+    expect(config.explore.maxSteps).toBe(20)
+    expect(config.explore.budgetUsd).toBeUndefined()
+  })
+
+  it('never self-enables on a mis-typed block', () => {
+    const config = resolveConfig({ explore: 'yes' as never })
+    expect(config.explore.enabled).toBe(false)
+  })
+})

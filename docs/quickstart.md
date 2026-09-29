@@ -326,3 +326,21 @@ verdict or exit code.
 v1 covers Node harnesses (vitest, jest, `node --test`) on the PR's own
 checkout — probes exercise whatever commit `actions/checkout` fetched
 (typically the merge ref).
+
+### Exploratory capture (opt-in)
+
+With `explore: { enabled: true }` in config, `argus-reviewer run` records
+page-level anomalies while your tests drive the app: `console.error`
+messages, uncaught page errors, and failed **same-origin** requests
+(third-party noise like blocked trackers is dropped). Identical signatures
+collapse into one finding with a repeat count, distinct signatures are
+capped, and the run report carries them under `tests[].captures` rendered
+as an **Exploratory** section of `🟡 observed` findings in the PR comment.
+
+Captures are evidence, not adjudication — they never change a verdict or
+the exit code, and they cost nothing (no model calls). If the lane is
+enabled but no page ever loads, the report says so explicitly
+(`explore.skipped`) instead of silently producing nothing. `maxSteps` and
+`budgetUsd` bounds on the block are reserved for the upcoming exploratory
+*act* policy — capture alone does not consume them. On untrusted/fork
+checkouts the whole `explore` block is stripped by the config allowlist.

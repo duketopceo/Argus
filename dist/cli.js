@@ -198,6 +198,7 @@ async function launchDriver(config, deps) {
     return BrowserDriver.launch({
         browser: config.browser,
         browserTimeoutMs: config.browserTimeoutMs,
+        captureErrors: config.explore.enabled,
     });
 }
 function warnUnknownProviders(config, ctx) {
@@ -471,6 +472,18 @@ async function cmdRun(args, ctx, deps) {
     const junitCases = [];
     const tmpDir = join(reportDir, '.transpiled');
     const tagErrors = (recs, tag) => recs.map((r) => ({ ...r, context: r.context ? `${r.context} [${tag}]` : tag }));
+    // One driver serves a whole test file — captures are file-session scoped,
+    // attached to every report produced under that session (observed findings,
+    // never verdict-changing).
+    const attachCaptures = (d, file) => {
+        const caps = d.pageCaptures();
+        if (caps.length === 0)
+            return;
+        for (const r of reports) {
+            if (r.file === file && r.captures === undefined)
+                r.captures = caps;
+        }
+    };
     const makeSession = (flowName, driver, client) => TdSession.create({
         driver,
         client,
@@ -602,6 +615,7 @@ async function cmdRun(args, ctx, deps) {
                             ctx.err(`  reason: ${failureMessage}`);
                     }
                 }
+                attachCaptures(driver, file);
                 const video = await driver.close();
                 driver = undefined;
                 if (video !== undefined) {
@@ -631,6 +645,8 @@ async function cmdRun(args, ctx, deps) {
                 });
                 ctx.out(`FAIL ${fileSlug} (${fileName})`);
                 ctx.err(`  reason: ${e.message}`);
+                if (driver !== undefined)
+                    attachCaptures(driver, file);
             }
             finally {
                 await driver?.close();
@@ -696,6 +712,17 @@ async function cmdRun(args, ctx, deps) {
         });
     }
     const report = buildRunReport(reports, startedAt, Date.now() - runStart);
+    if (config.explore.enabled) {
+        // Explicit skip line when the lane could not observe anything: every
+        // report failed before a single step ran, so no page ever loaded.
+        const pageLoaded = reports.some((r) => r.ok || r.steps.length > 0);
+        report.explore = {
+            enabled: true,
+            ...(pageLoaded || reports.length === 0
+                ? {}
+                : { skipped: 'no page loaded — nothing captured' }),
+        };
+    }
     try {
         await mkdir(reportDir, { recursive: true });
         await writeJunitXml(join(reportDir, 'junit.xml'), 'argus-reviewer', junitCases);
@@ -1854,7 +1881,12 @@ export default defineConfig({
   // Hard per-run cap on vision-model spend (USD). Steps replayed from the
   // fingerprint cache cost $0 regardless of this cap.
   budgetUsd: 1,
-  testsDir: 'tests/argus',${a0Block}
+  testsDir: 'tests/argus',
+  // Exploratory lane: capture console errors, page errors, and failed
+  // same-origin requests during test runs. Findings render as 'observed'
+  // in the report/comment — evidence only, never verdict-changing. Free
+  // (no model calls).
+  // explore: { enabled: true, maxSteps: 20 },${a0Block}
 })
 `;
 }

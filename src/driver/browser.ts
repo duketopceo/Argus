@@ -23,7 +23,32 @@ export interface BrowserDriverOptions {
   browser?: 'chromium' | 'firefox' | 'webkit' | undefined
   /** Hard limit in ms for Playwright cleanup. */
   browserTimeoutMs?: number | undefined
+  /**
+   * Exploratory capture (U4a): record page errors, console errors, and
+   * failed same-origin requests during the run. Free — no model calls.
+   */
+  captureErrors?: boolean
 }
+
+/**
+ * One runtime anomaly observed while the browser was driving the app —
+ * becomes an `observed` finding on the run report. Captures never change a
+ * verdict; they are evidence, not adjudication.
+ */
+export interface PageCapture {
+  kind: 'console-error' | 'pageerror' | 'request-failed'
+  /** Normalized, truncated message or failure signature. */
+  text: string
+  /** Failing request URL (request-failed only, same-origin only). */
+  url?: string
+  /** Collapsed repeat count for this signature. */
+  count: number
+}
+
+/** Distinct capture signatures kept per browser session. */
+export const MAX_CAPTURE_SIGNATURES = 50
+/** Per-capture message length — console text is attacker/page-controlled. */
+const MAX_CAPTURE_TEXT = 240
 
 export interface Observation {
   screenshotJpeg: Buffer
@@ -41,6 +66,8 @@ const DEFAULT_QUALITY = 70
  * vision-model pixel coordinates map 1:1 to viewport pixels (KTD2).
  */
 export class BrowserDriver {
+  private readonly captures = new Map<string, PageCapture>()
+
   private constructor(
     private readonly browser: Browser,
     private readonly context: BrowserContext,
@@ -87,7 +114,7 @@ export class BrowserDriver {
         recordVideo: { dir: videoDir, size: viewport },
       })
       const page = await context.newPage()
-      return new BrowserDriver(
+      const driver = new BrowserDriver(
         browser,
         context,
         page,
@@ -97,11 +124,59 @@ export class BrowserDriver {
         options.browserTimeoutMs ?? 30_000,
         undefined,
       )
+      if (options.captureErrors === true) driver._attachCaptureTaps()
+      return driver
     } catch (e) {
       await browser.close().catch(() => undefined)
       await cleanupVideoDir()
       throw e
     }
+  }
+
+  /**
+   * Exploratory capture taps (U4a). Noise controls are applied at collection:
+   * identical signatures collapse into one capture with a repeat count,
+   * request-failed events drop third-party origins (analytics/tag beacons
+   * failing is noise, not signal), and distinct signatures are capped.
+   */
+  private _attachCaptureTaps(): void {
+    const page = this.page
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') this._addCapture('console-error', msg.text())
+    })
+    page.on('pageerror', (err) => {
+      this._addCapture('pageerror', err.message)
+    })
+    page.on('requestfailed', (req) => {
+      const url = req.url()
+      // Third-party failures (blocked trackers, dead CDNs) are ambient —
+      // keep only requests same-origin with the page under test.
+      try {
+        const pageOrigin = new URL(page.url()).origin
+        if (pageOrigin !== 'null' && new URL(url).origin !== pageOrigin) return
+      } catch {
+        // Unparseable page URL (pre-navigation) — keep the capture.
+      }
+      const failure = req.failure()?.errorText ?? 'failed'
+      this._addCapture('request-failed', failure, url)
+    })
+  }
+
+  private _addCapture(kind: PageCapture['kind'], text: string, url?: string): void {
+    const clean = text.replace(/\s+/g, ' ').trim().slice(0, MAX_CAPTURE_TEXT)
+    const key = `${kind}|${clean}|${url ?? ''}`
+    const existing = this.captures.get(key)
+    if (existing !== undefined) {
+      existing.count++
+      return
+    }
+    if (this.captures.size >= MAX_CAPTURE_SIGNATURES) return
+    this.captures.set(key, { kind, text: clean, ...(url !== undefined ? { url } : {}), count: 1 })
+  }
+
+  /** Captured page anomalies for this session — empty unless captureErrors. */
+  pageCaptures(): PageCapture[] {
+    return [...this.captures.values()]
   }
 
   get rawPage(): Page {

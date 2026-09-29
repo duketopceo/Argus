@@ -70,6 +70,54 @@ function assertRows(tests) {
     }
     return lines;
 }
+const CAPTURE_LABEL = {
+    'console-error': 'console error',
+    pageerror: 'page error',
+    'request-failed': 'failed request',
+};
+/** Exploratory captures — `observed` findings, rendered but never gated on. */
+function exploreRows(tests, explore) {
+    const lines = ['### Exploratory', ''];
+    if (explore?.skipped !== undefined) {
+        lines.push(`- ⚪ explore skipped — ${explore.skipped}`);
+        return lines;
+    }
+    // Same capture can appear on multiple test reports from one file's shared
+    // browser session — dedupe by signature before rendering.
+    const seen = new Map();
+    for (const t of tests) {
+        for (const c of t.captures ?? []) {
+            const key = `${c.kind}|${c.text}|${c.url ?? ''}`;
+            const existing = seen.get(key);
+            if (existing !== undefined) {
+                existing.count += c.count;
+            }
+            else {
+                seen.set(key, {
+                    label: CAPTURE_LABEL[c.kind] ?? c.kind,
+                    text: c.text.replace(/\|/g, '\\|'),
+                    ...(c.url !== undefined ? { url: c.url } : {}),
+                    count: c.count,
+                });
+            }
+        }
+    }
+    if (seen.size === 0) {
+        lines.push('No page errors, console errors, or failed same-origin requests captured.');
+        return lines;
+    }
+    const caps = [...seen.values()];
+    for (const c of caps.slice(0, 10)) {
+        const times = c.count > 1 ? ` ×${c.count}` : '';
+        const target = c.url !== undefined ? ` — \`${c.url}\`` : '';
+        lines.push(`- 🟡 observed · ${c.label}${times}: \`${c.text}\`${target}`);
+    }
+    if (caps.length > 10)
+        lines.push(`- … +${caps.length - 10} more distinct capture(s)`);
+    lines.push('');
+    lines.push('*Observed findings are evidence only — they do not change the verdict.*');
+    return lines;
+}
 function evidenceRows(videos, runUrl) {
     const lines = ['### Evidence', ''];
     for (const v of videos) {
@@ -121,6 +169,9 @@ export function renderComment(report, opts = {}) {
         lines.push(...costRows(report.totals));
         lines.push(...healRows(report.tests));
         lines.push(...assertRows(report.tests));
+        if (report.explore?.enabled === true) {
+            lines.push(...exploreRows(report.tests, report.explore));
+        }
         lines.push(...evidenceRows(report.artifacts.videos, opts.runUrl));
     }
     return lines.join('\n');

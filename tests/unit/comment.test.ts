@@ -113,6 +113,57 @@ describe('renderComment', () => {
     expect(body).toContain('OPENROUTER_API_KEY')
     expect(body).toContain('neutral')
   })
+
+  it('omits the Exploratory section when the lane is disabled', () => {
+    const body = renderComment(stubReport())
+    expect(body).not.toContain('### Exploratory')
+  })
+
+  it('renders captures as observed findings, deduped across tests, verdict untouched', () => {
+    const report = stubReport({
+      explore: { enabled: true },
+      ok: true,
+    })
+    const capture = {
+      kind: 'console-error' as const,
+      text: 'seeded console boom',
+      count: 3,
+    }
+    // Same signature attached to both tests (shared browser session) —
+    // counts merge in the rendered section.
+    report.tests[0]!.captures = [capture]
+    report.tests[1]!.captures = [
+      capture,
+      {
+        kind: 'request-failed' as const,
+        text: 'net::ERR_ABORTED',
+        url: 'http://127.0.0.1:4000/api/missing',
+        count: 1,
+      },
+    ]
+    const body = renderComment(report)
+    expect(body).toContain('### Exploratory')
+    expect(body).toContain('🟡 observed · console error ×6: `seeded console boom`')
+    expect(body).toContain(
+      '🟡 observed · failed request: `net::ERR_ABORTED` — `http://127.0.0.1:4000/api/missing`',
+    )
+    expect(body).toContain('evidence only')
+    // Non-blocking: the verdict line still reflects test results only.
+    expect(body).toContain('## argus-reviewer ✅ PASS')
+  })
+
+  it('renders an explicit skip line when the lane could not observe', () => {
+    const body = renderComment(
+      stubReport({ explore: { enabled: true, skipped: 'no page loaded — nothing captured' } }),
+    )
+    expect(body).toContain('### Exploratory')
+    expect(body).toContain('explore skipped — no page loaded — nothing captured')
+  })
+
+  it('reports a clean lane when enabled and nothing was captured', () => {
+    const body = renderComment(stubReport({ explore: { enabled: true } }))
+    expect(body).toContain('No page errors, console errors, or failed same-origin requests captured.')
+  })
 })
 
 describe('conclusionFromReport', () => {

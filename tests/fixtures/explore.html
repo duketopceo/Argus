@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>argus explore fixture</title>
+  </head>
+  <body>
+    <h1>explore fixture</h1>
+    <script>
+      // Seeded anomalies for the U4a exploratory-capture lane.
+      // Identical console signatures must collapse into one capture.
+      console.error('seeded console boom')
+      console.error('seeded console boom')
+      console.error('seeded console boom')
+      setTimeout(() => {
+        throw new Error('seeded page boom')
+      }, 0)
+    </script>
+  </body>
+</html>
