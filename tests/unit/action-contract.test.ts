@@ -13,6 +13,7 @@ import {
   resolveWorkingDirectory,
   validateBrowser,
   validateBudget,
+  validateCodeModel,
   validateMaxComments,
   validateVersion,
 } from '../../action/runtime.mjs'
@@ -75,6 +76,8 @@ describe('action input contract', () => {
     expect(() => validateBudget('-1')).toThrow(/positive/)
     expect(validateMaxComments('0')).toBe(0)
     expect(() => validateMaxComments('1e2')).toThrow(/integer/)
+    expect(validateCodeModel('deepseek/deepseek-r1:free')).toBe('deepseek/deepseek-r1:free')
+    expect(() => validateCodeModel('model; rm -rf /')).toThrow(/slug/)
     expect(validateVersion('0.2.0')).toBe('0.2.0')
     expect(() => validateVersion('latest')).toThrow(/pinned semver/)
   })

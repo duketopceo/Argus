@@ -124,7 +124,15 @@ export default defineConfig({
 
 `provider.order` prefers Cerebras/Groq first but still falls back if neither
 serves the model; `provider.only` would hard-restrict instead. Provider slugs
-are validated against a known list and warn on typos. Spend is still yours:
+are validated against a known list and warn on typos.
+
+The caller environment can also pin the code-review model without touching
+the checkout: `ARGUS_CODE_MODEL="owner/model"` wins over `code_model` in
+config — including on `pull_request` events, where the PR's config never
+executes. This is how the GitHub Action and the Agent Zero plugin choose a
+review model per deployment.
+
+Spend is still yours:
 the `run.json` ledger records the per-run dollar figure regardless of which
 provider served the call.
 

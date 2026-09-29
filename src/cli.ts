@@ -1387,6 +1387,11 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
   // (github.event.pull_request.number is empty), and '' is not nullish.
   const pr = fixtureDir !== undefined ? '0' : trace?.pr || trustResult.pr
   const token = ctx.env.GITHUB_TOKEN ?? ctx.env.GH_TOKEN
+  // ARGUS_CODE_MODEL is an operator surface (workflow/plugin env) and wins
+  // over checkout config — in the untrusted lane it is the only way to pick
+  // the review model, since PR-controlled config never executes.
+  const envCodeModel = ctx.env.ARGUS_CODE_MODEL?.trim()
+  if (envCodeModel !== undefined && envCodeModel !== '') config.code_model = envCodeModel
   const model = config.code_model ?? config.model
   debug(
     'code-review',
