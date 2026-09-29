@@ -165,6 +165,17 @@ runs:
           echo "Argus runtime lanes require a same-repository PR or an explicitly trusted workflow." >&2
           exit 1
         fi
+        if [ "$EVENT_NAME" = "issue_comment" ]; then
+          # issue_comment checks out the BASE ref, never the PR head —
+          # consumer deps on the base tree are trusted. The replay `run`
+          # lane is still meaningless here (it would test the base app
+          # against a head diff); @argus record covers that case.
+          if [ "${{ inputs.run }}" != "false" ]; then
+            echo "Argus run lane is disabled on issue_comment — use '@argus record'." >&2
+            exit 1
+          fi
+          exit 0
+        fi
         if [ "$EVENT_NAME" != "pull_request" ] && [ "$EVENT_NAME" != "" ]; then
           echo "Argus runtime lanes are disabled for unlisted CI events: $EVENT_NAME" >&2
           exit 1
@@ -177,7 +188,7 @@ runs:
       run: npm ci
 
     - name: Install Playwright browser for explicit runtime lanes
-      if: inputs.run != 'false'
+      if: inputs.run != 'false' || (github.event_name == 'issue_comment' && contains(github.event.comment.body, 'record'))
       shell: bash
       working-directory: ${{ inputs.working-directory || '.' }}
       env:
@@ -196,7 +207,38 @@ runs:
         ARGUS_WORKING_DIRECTORY: ${{ steps.bootstrap.outputs.working-directory }}
       run: node "$ARGUS_ACTION_PATH/cli.mjs" index
 
+    - name: Dispatch @argus mention
+      # issue_comment runs never check out the PR head — the workflow
+      # checks out the base ref and `mention` dispatches whitelisted
+      # commands (review/record/persist/help). Results still land in the
+      # report dir for the sticky post step below.
+      if: github.event_name == 'issue_comment'
+      id: mention
+      shell: bash
+      working-directory: ${{ inputs.working-directory || '.' }}
+      env:
+        ARGUS_ACTION_PATH: ${{ github.action_path }}
+        OPENROUTER_API_KEY: ${{ inputs.openrouter-api-key }}
+        GITHUB_TOKEN: ${{ github.token }}
+        ARGUS_CLI_JSON: ${{ steps.bootstrap.outputs.cli-json }}
+        ARGUS_WORKING_DIRECTORY: ${{ steps.bootstrap.outputs.working-directory }}
+        ARGUS_REPORT_DIR: ${{ inputs.report-dir }}
+        ARGUS_BUDGET_USD: ${{ inputs.budget-usd }}
+        ARGUS_MAX_COMMENTS: ${{ inputs.max-comments }}
+        ARGUS_CODE_MODEL: ${{ inputs.code-model }}
+        ARGUS_REVIEW_PROFILES: ${{ inputs.review-profiles }}
+        ARGUS_DEBUG: '1'
+        ARGUS_REVIEWER_TRACE: >-
+          {"repo":"${{ github.repository }}",
+          "pr":"${{ github.event.issue.number }}",
+          "commit":"${{ github.sha }}",
+          "run_id":"${{ github.run_id }}",
+          "run_attempt":"${{ github.run_attempt }}",
+          "workflow":"${{ github.workflow }}"}
+      run: node "$ARGUS_ACTION_PATH/cli.mjs" mention --report-dir "$ARGUS_REPORT_DIR"
+
     - name: Run selected Argus lanes
+      if: github.event_name != 'issue_comment'
       id: verify
       shell: bash
       working-directory: ${{ inputs.working-directory || '.' }}

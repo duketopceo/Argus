@@ -368,6 +368,85 @@ describe('argus-reviewer CLI', () => {
   })
 })
 
+describe('argus-reviewer mention', () => {
+  const mentionEvent = async (
+    body: string,
+    opts: { association?: string; onPr?: boolean } = {},
+  ): Promise<{ env: Record<string, string>; dir: string }> => {
+    const dir = await mkdtemp(join(tmpdir(), 'argus-mention-'))
+    const eventPath = join(dir, 'event.json')
+    await writeFile(
+      eventPath,
+      JSON.stringify({
+        issue:
+          opts.onPr === false ? { number: 7 } : { number: 7, pull_request: {} },
+        comment: { body, author_association: opts.association ?? 'MEMBER' },
+      }),
+    )
+    return {
+      dir,
+      env: {
+        GITHUB_EVENT_NAME: 'issue_comment',
+        GITHUB_EVENT_PATH: eventPath,
+      },
+    }
+  }
+
+  it('ignores non-PR comments and non-mention bodies', async () => {
+    const out = capture()
+    const noPr = await mentionEvent('@argus review', { onPr: false })
+    expect(await main(['mention'], { env: noPr.env, out: out.fn })).toBe(0)
+    expect(out.lines.join('\n')).toContain('not on a pull request')
+
+    const noMention = await mentionEvent('looks good to me')
+    expect(await main(['mention'], { env: noMention.env, out: out.fn })).toBe(0)
+    expect(out.lines.join('\n')).toContain('no @argus command')
+  })
+
+  it('ignores untrusted commenters without replying', async () => {
+    const out = capture()
+    const err = capture()
+    const { env } = await mentionEvent('@argus review', { association: 'FIRST_TIMER' })
+    expect(await main(['mention'], { env, out: out.fn, err: err.fn })).toBe(0)
+    expect(err.lines.join('\n')).toContain('not trusted')
+    // No fetch happened — no token/repo env, and the gate fired before meta.
+  })
+
+  it('errors when run outside an issue_comment event', async () => {
+    const err = capture()
+    expect(
+      await main(['mention'], {
+        env: { GITHUB_EVENT_NAME: 'pull_request', GITHUB_EVENT_PATH: '/nope' },
+        err: err.fn,
+      }),
+    ).toBe(2)
+    expect(err.lines.join('\n')).toContain('issue_comment')
+  })
+
+  it('replies help for unknown commands when the commenter is trusted', async () => {
+    const posts: string[] = []
+    const fetchStub = async (input: RequestInfo | URL, init?: RequestInit) => {
+      posts.push(String(init?.body))
+      return new Response('{}', { status: 201 })
+    }
+    const original = globalThis.fetch
+    globalThis.fetch = fetchStub as typeof fetch
+    try {
+      const { env } = await mentionEvent('@argus delete everything')
+      const code = await main(['mention'], {
+        env: { ...env, GITHUB_REPOSITORY: 'a/b', GITHUB_TOKEN: 'tok' },
+        out: capture().fn,
+        err: capture().fn,
+      })
+      expect(code).toBe(0)
+      expect(posts).toHaveLength(1)
+      expect(posts[0]).toContain('@argus review')
+    } finally {
+      globalThis.fetch = original
+    }
+  })
+})
+
 describe('loadConfig', () => {
   it('loads a TypeScript config via transpile fallback', async () => {
     const { loadConfig } = await import('../../src/config.js')

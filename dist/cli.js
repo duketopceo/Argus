@@ -17,7 +17,7 @@ import { buildReviewContext, CONTEXT_PREFIX } from './index/context.js';
 import { diffChangedFiles } from './index/diff.js';
 import { invalidateForDiff } from './index/invalidate.js';
 import { readIndex, scanRepo, writeIndex } from './index/scan.js';
-import { fetchCheckRuns, fetchPrMeta, ghGet } from './evidence/ci.js';
+import { fetchCheckRuns, fetchPrMeta, ghGet, isTrustedAssociation, } from './evidence/ci.js';
 import { resolveTrust } from './trust.js';
 import { linkFindings } from './evidence/link.js';
 import { DecisionClient } from './vision/decisions.js';
@@ -39,6 +39,7 @@ import { writeAtomicJson } from './fsutil.js';
 import { OpenRouterClient } from './vision/openrouter.js';
 import { Ledger } from './vision/ledger.js';
 import { defaultLaneSelection, selectionFromFlags } from './pipeline/contracts.js';
+import { MENTION_HELP, mayRunMention, parseMention, postIssueComment, } from './mention.js';
 import { runVerify } from './pipeline/verify.js';
 const USAGE = `argus-reviewer — vision-model E2E testing harness (BYOK via OPENROUTER_API_KEY)
 
@@ -47,6 +48,7 @@ Usage:
   argus-reviewer run [pattern] [--url <target>] [--dir <testsDir>] [--report-dir <dir>]
   argus-reviewer verify [--flow] [--app] [--a0] [--report-dir <dir>]
   argus-reviewer code-review [--report-dir <dir>]
+  argus-reviewer mention [--report-dir <dir>]
   argus-reviewer delegate "<task>" [--url <target>] [--host <a0-url>]
   argus-reviewer cache list [--dir <cacheDir>]
   argus-reviewer cache prune [name|--all] [--dir <cacheDir>]
@@ -120,6 +122,8 @@ export async function main(argv, deps = {}) {
             return cmdVerify(rest, ctx, deps);
         case 'code-review':
             return cmdCodeReview(rest, ctx, deps);
+        case 'mention':
+            return cmdMention(rest, ctx, deps);
         case 'delegate':
             return cmdDelegate(rest, ctx, deps);
         case 'cache':
@@ -1788,6 +1792,120 @@ async function cmdCache(args, ctx) {
     ctx.out(`pruned ${removed} cached flow(s) from ${cacheDir}`);
     return 0;
 }
+const MENTION_USAGE = `Usage: argus-reviewer mention [--report-dir <dir>]
+
+Dispatch an @argus command from a GitHub issue_comment event. Reads
+GITHUB_EVENT_PATH for the comment body, commenter association, and issue
+number — runs nothing unless the comment is on a pull request and starts
+with @argus. Never checks out the PR head: review runs API-diff-only
+against the base checkout.
+
+Commands: @argus review · @argus record "<flow>" · @argus persist · @argus help`;
+/**
+ * `argus-reviewer mention` — the E3.U5 dispatch lane. Everything upstream
+ * of the command handler is a gate: untrusted commenters are ignored
+ * silently (no reply channel for drive-by spam), fork-head PRs need the
+ * per-head probe label for execution commands, and record/persist never
+ * run on forks at all.
+ */
+async function cmdMention(args, ctx, deps) {
+    const { values } = parseArgs({
+        args,
+        options: {
+            help: { type: 'boolean', short: 'h', default: false },
+            'report-dir': { type: 'string' },
+        },
+    });
+    if (values.help) {
+        ctx.out(MENTION_USAGE);
+        return 0;
+    }
+    const reportDir = resolve(ctx.cwd, values['report-dir'] ?? 'argus-reviewer-report');
+    const eventName = ctx.env.GITHUB_EVENT_NAME;
+    if (eventName !== undefined && eventName !== '' && eventName !== 'issue_comment') {
+        ctx.err(`mention: GITHUB_EVENT_NAME is "${eventName}" — expected issue_comment`);
+        return 2;
+    }
+    const eventPath = ctx.env.GITHUB_EVENT_PATH;
+    if (eventPath === undefined || eventPath === '') {
+        ctx.err('mention: GITHUB_EVENT_PATH not set — this command runs on issue_comment events');
+        return 2;
+    }
+    let payload;
+    try {
+        payload = JSON.parse(await readFile(eventPath, 'utf8'));
+    }
+    catch (e) {
+        ctx.err(`mention: could not read event payload — ${e.message}`);
+        return 2;
+    }
+    const issue = payload.issue;
+    const comment = payload.comment;
+    if (issue?.pull_request === undefined || typeof issue.number !== 'number') {
+        ctx.out('mention: comment is not on a pull request — ignoring');
+        return 0;
+    }
+    const parsed = parseMention(typeof comment?.body === 'string' ? comment.body : '');
+    if (parsed === undefined) {
+        ctx.out('mention: no @argus command — ignoring');
+        return 0;
+    }
+    const repo = ctx.env.GITHUB_REPOSITORY;
+    const token = ctx.env.GITHUB_TOKEN ?? ctx.env.GH_TOKEN;
+    const issueNum = String(issue.number);
+    const reply = async (text) => {
+        if (repo === undefined || token === undefined) {
+            ctx.err(`mention: reply suppressed (no repo/token) — ${text}`);
+            return;
+        }
+        await postIssueComment(repo, issueNum, `**argus:** ${text}`, token, ctx);
+    };
+    // Silent ignore: a reply would hand untrusted commenters a spam channel.
+    if (!isTrustedAssociation(comment?.author_association)) {
+        ctx.err(`mention: ignored — commenter association "${comment?.author_association ?? 'unknown'}" is not trusted`);
+        return 0;
+    }
+    if (parsed === 'unknown' || parsed.name === 'help') {
+        await reply(MENTION_HELP);
+        return 0;
+    }
+    const meta = repo !== undefined && token !== undefined
+        ? await fetchPrMeta(repo, issueNum, token, ctx)
+        : undefined;
+    const gate = mayRunMention(parsed, comment?.author_association, meta);
+    if (!gate.allowed) {
+        ctx.err(`mention: ${parsed.name} denied`);
+        if (gate.reply !== undefined)
+            await reply(gate.reply);
+        return 0;
+    }
+    if (parsed.name === 'persist') {
+        await reply('`persist` isn\'t wired yet — a reproduced probe still copies from the sticky comment for now.');
+        return 0;
+    }
+    if (parsed.name === 'record') {
+        if (parsed.arg === undefined) {
+            await reply('`record` needs a flow description — e.g. `@argus record "sign in with Google"`');
+            return 0;
+        }
+        ctx.out(`mention: recording flow "${parsed.arg}"`);
+        // `--` keeps a commenter-controlled description starting with `-` from
+        // being parsed as record flags (e.g. a smuggled `--url` retarget).
+        const code = await cmdRecord(['--', parsed.arg], ctx, deps);
+        const runId = ctx.env.GITHUB_RUN_ID;
+        const runLink = repo !== undefined && runId !== undefined && runId !== ''
+            ? ` [workflow artifacts](https://github.com/${repo}/actions/runs/${runId})`
+            : '';
+        await reply(code === 0
+            ? `recorded \`${parsed.arg}\` — the generated test and flow cache are in the run's artifacts.${runLink}`
+            : `record failed for \`${parsed.arg}\` — see the workflow log.${runLink}`);
+        return code;
+    }
+    // review
+    ctx.out(`mention: running review on PR #${issueNum}`);
+    await reply('running review — results land in the Argus comment below.');
+    return cmdCodeReview(['--report-dir', reportDir], ctx, deps);
+}
 const DELEGATE_USAGE = `Usage: argus-reviewer delegate "<task>" [options]
 
 Sends a task to an Agent Zero instance (a0 headless). The agent works
@@ -1852,6 +1970,7 @@ Scaffolds a working setup in the current directory:
   argus-reviewer.config.ts               config (target, budget, testsDir)
   tests/argus/smoke.test.ts              a td-API smoke test
   .github/workflows/argus-reviewer.yml   PR workflow using the action
+  .github/workflows/argus-mention.yml    @argus PR-comment commands
 
 Then reports which optional features your environment already supports
 (OpenRouter key, Playwright browsers, gh auth, Agent Zero).
@@ -1926,6 +2045,49 @@ jobs:
         with:
           openrouter-api-key: \${{ secrets.OPENROUTER_API_KEY }}
 `;
+const INIT_MENTION_WORKFLOW = `name: argus-mention
+
+# @argus mention commands on PR comments — '@argus review', '@argus
+# record "<flow>"', '@argus persist', '@argus help'. issue_comment is
+# strictly more privileged than pull_request (secrets + write token are
+# present), so the checkout below deliberately resolves the BASE ref —
+# never the PR head. Argus reviews the head diff over the API.
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  argus-mention:
+    runs-on: ubuntu-latest
+    if: github.event.issue.pull_request && startsWith(github.event.comment.body, '@argus')
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      checks: write
+      statuses: write
+    steps:
+      # No 'ref' — the default checkout resolves the base branch.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      # Record commands need the app's dependencies to boot its target.
+      # Uncomment if you use '@argus record':
+      # - run: npm ci
+      - uses: duketopceo/Argus/action@75492b8a6b10338d1f141ac9f8544135edc34409 # v0.2.0
+        with:
+          openrouter-api-key: \${{ secrets.OPENROUTER_API_KEY }}
+      # '@argus record' uploads the generated test + flow cache as an
+      # artifact — committing to a PR branch is intentionally not done.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: contains(github.event.comment.body, 'record')
+        with:
+          name: argus-recorded-flow
+          path: |
+            tests/argus/
+            .argus-reviewer-cache/
+          if-no-files-found: ignore
+`;
 /** `argus-reviewer init` — scaffold config, a smoke test, and the workflow. */
 async function cmdInit(args, ctx, deps) {
     const { values } = parseArgs({
@@ -1953,6 +2115,7 @@ async function cmdInit(args, ctx, deps) {
     const files = [
         ['tests/argus/smoke.test.ts', INIT_TEST],
         ['.github/workflows/argus-reviewer.yml', INIT_WORKFLOW],
+        ['.github/workflows/argus-mention.yml', INIT_MENTION_WORKFLOW],
     ];
     const hasConfig = configNames.some((n) => existsSync(join(ctx.cwd, n)));
     if (!hasConfig || values.force) {

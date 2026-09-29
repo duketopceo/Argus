@@ -344,3 +344,24 @@ enabled but no page ever loads, the report says so explicitly
 `budgetUsd` bounds on the block are reserved for the upcoming exploratory
 *act* policy — capture alone does not consume them. On untrusted/fork
 checkouts the whole `explore` block is stripped by the config allowlist.
+
+### `@argus` mention commands (opt-in)
+
+`argus-reviewer init` also scaffolds `.github/workflows/argus-mention.yml`,
+an `issue_comment` workflow that answers PR comments starting with
+`@argus`:
+
+- `@argus review` — re-run code review on the latest head; the sticky
+  comment updates in place
+- `@argus record "<flow>"` — record a test flow against the base-checkout
+  app; the generated test + flow cache upload as a workflow artifact
+- `@argus persist` — turn a reproduced probe into a regression-test PR
+- `@argus help` — the command menu
+
+Security posture: `issue_comment` runs carry secrets and a write-capable
+`GITHUB_TOKEN`, so the workflow **never checks out the PR head** — it runs
+on the base ref and reviews the diff over the GitHub API. Only comments by
+MEMBER/OWNER/COLLABORATOR are answered; everything else is ignored
+silently. On fork-head PRs, commands additionally need the `argus-probe`
+label covering the current head SHA, and `record`/`persist` are refused
+outright.
