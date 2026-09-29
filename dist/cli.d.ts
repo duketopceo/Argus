@@ -11,6 +11,7 @@ import { type FindingAdjudicationAudit } from './review/adjudicate.js';
 import { type ProbeRecord } from './probe/queue.js';
 import { type HeadBinding } from './report/manifest.js';
 import { CallCost } from './vision/cost.js';
+import { Message } from './vision/openrouter.js';
 export interface CliDeps {
     cwd?: string;
     env?: NodeJS.ProcessEnv;
@@ -113,6 +114,7 @@ export declare function loadFixture(dir: string, exec?: ExecFn): Promise<{
     skipped: string;
 }>;
 export declare function buildPatchChunks(files: PrFile[], contexts?: Record<string, string>): string[];
+export declare function buildCodeReviewMessages(repo: string, pr: string, patchText: string, chunkIndex?: number, totalChunks?: number, profiles?: readonly string[]): Message[];
 export declare function parseCodeReview(content: string): {
     summary: string;
     verdict: 'pass' | 'needs_changes' | 'approve';

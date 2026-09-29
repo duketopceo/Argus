@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url'
 
+import { isReviewProfile, type ReviewProfile } from './review/packs.js'
 import type { Trust } from './trust.js'
 import { JEV_DEFAULT_MODEL } from './vision/decisions.js'
 
@@ -185,6 +186,9 @@ export interface Config {
    * `requestChanges`: allow the review event to escalate to
    * REQUEST_CHANGES for proven blockers (probe-reproduced or Jev
    * high-confidence). Default true — set false for advisory-only posting.
+   * `profiles`: named review lenses appended to the review prompt
+   * ('security'|'perf'|'debloat' — see src/review/packs.ts). Unknown names
+   * are dropped at config load. Default [] — no extra rubric.
    */
   review: {
     secretsThreshold: number
@@ -194,6 +198,7 @@ export interface Config {
     lowRiskModel: string | undefined
     findingThreshold: number
     requestChanges: boolean
+    profiles: ReviewProfile[]
   }
 }
 
@@ -253,6 +258,7 @@ const defaults: Config = {
     lowRiskModel: undefined,
     findingThreshold: 1.0,
     requestChanges: true,
+    profiles: [],
   },
 }
 
@@ -339,6 +345,12 @@ export function resolveConfig(input: ConfigInput = {}): Config {
   // Advisory-only escape hatch — only literal `false` opts out; anything
   // else (mis-typed values included) keeps the default-true posture.
   review.requestChanges = review.requestChanges !== false
+  // Unknown profile names are rejected at config load — a typo silently
+  // disabling a lens is worse than dropping it. Non-array input means the
+  // field was mis-typed entirely and also drops to the empty default.
+  review.profiles = Array.isArray(rawReview.profiles)
+    ? [...new Set(rawReview.profiles.filter(isReviewProfile))]
+    : []
   const resolved: Config = { ...defaults, ...input, provider, sandbox, review }
   resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP)
   if (resolved.heal !== 'a0') resolved.heal = 'local'

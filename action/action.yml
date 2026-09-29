@@ -55,6 +55,10 @@ inputs:
     description: Optional OpenRouter model slug for code review (e.g. openai/gpt-5-mini). Wins over the checkout's config code_model — including on pull_request events, where PR config never executes.
     default: ''
     required: false
+  review-profiles:
+    description: Optional comma-separated review lenses appended to the review prompt — security, perf, debloat (e.g. 'security,perf'). Wins over the checkout's config review.profiles.
+    default: ''
+    required: false
   install-consumer-dependencies:
     description: Explicitly install the consumer project's dependencies for a trusted runtime lane. Disabled by default so code review never runs PR-controlled lifecycle scripts beside secrets.
     default: 'false'
@@ -143,6 +147,7 @@ runs:
         ARGUS_BUDGET_USD: ${{ inputs.budget-usd }}
         ARGUS_MAX_COMMENTS: ${{ inputs.max-comments }}
         ARGUS_CODE_MODEL: ${{ inputs.code-model }}
+        ARGUS_REVIEW_PROFILES: ${{ inputs.review-profiles }}
       run: node "$ARGUS_ACTION_PATH/bootstrap.mjs"
 
     - name: Reject executable lanes on untrusted pull requests
@@ -210,6 +215,7 @@ runs:
         ARGUS_DIFF_BASE: ${{ inputs.diff-base }}
         ARGUS_BUDGET_USD: ${{ inputs.budget-usd }}
         ARGUS_CODE_MODEL: ${{ inputs.code-model }}
+        ARGUS_REVIEW_PROFILES: ${{ inputs.review-profiles }}
         ARGUS_REVIEWER_TRACE: >-
           {"repo":"${{ github.repository }}",
           "pr":"${{ github.event.pull_request.number }}",

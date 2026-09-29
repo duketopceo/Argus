@@ -1,4 +1,5 @@
 import { pathToFileURL } from 'node:url';
+import { isReviewProfile } from './review/packs.js';
 import { JEV_DEFAULT_MODEL } from './vision/decisions.js';
 export const DEFAULT_RECORD_STEP_CAP = 40;
 export const DEFAULT_SANDBOX = {
@@ -48,6 +49,7 @@ const defaults = {
         lowRiskModel: undefined,
         findingThreshold: 1.0,
         requestChanges: true,
+        profiles: [],
     },
 };
 export function defineConfig(input) {
@@ -127,6 +129,12 @@ export function resolveConfig(input = {}) {
     // Advisory-only escape hatch — only literal `false` opts out; anything
     // else (mis-typed values included) keeps the default-true posture.
     review.requestChanges = review.requestChanges !== false;
+    // Unknown profile names are rejected at config load — a typo silently
+    // disabling a lens is worse than dropping it. Non-array input means the
+    // field was mis-typed entirely and also drops to the empty default.
+    review.profiles = Array.isArray(rawReview.profiles)
+        ? [...new Set(rawReview.profiles.filter(isReviewProfile))]
+        : [];
     const resolved = { ...defaults, ...input, provider, sandbox, review };
     resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP);
     if (resolved.heal !== 'a0')

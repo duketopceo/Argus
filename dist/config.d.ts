@@ -1,3 +1,4 @@
+import { type ReviewProfile } from './review/packs.js';
 import type { Trust } from './trust.js';
 export interface ProviderRules {
     only?: string[];
@@ -183,6 +184,9 @@ export interface Config {
      * `requestChanges`: allow the review event to escalate to
      * REQUEST_CHANGES for proven blockers (probe-reproduced or Jev
      * high-confidence). Default true — set false for advisory-only posting.
+     * `profiles`: named review lenses appended to the review prompt
+     * ('security'|'perf'|'debloat' — see src/review/packs.ts). Unknown names
+     * are dropped at config load. Default [] — no extra rubric.
      */
     review: {
         secretsThreshold: number;
@@ -192,6 +196,7 @@ export interface Config {
         lowRiskModel: string | undefined;
         findingThreshold: number;
         requestChanges: boolean;
+        profiles: ReviewProfile[];
     };
 }
 export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review'>> & {

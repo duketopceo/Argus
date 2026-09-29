@@ -16,6 +16,7 @@ import {
   validateCodeModel,
   validateMaxComments,
   validatePathInput,
+  validateReviewProfiles,
   validateVersion,
 } from './runtime.mjs'
 
@@ -31,6 +32,7 @@ validateBrowser(process.env.ARGUS_BROWSER || 'chromium')
 validateBudget(process.env.ARGUS_BUDGET_USD)
 validateMaxComments(process.env.ARGUS_MAX_COMMENTS)
 validateCodeModel(process.env.ARGUS_CODE_MODEL)
+validateReviewProfiles(process.env.ARGUS_REVIEW_PROFILES)
 
 async function stageConfig() {
   if (configInput === '' || configInput === 'argus-reviewer.config.ts') return

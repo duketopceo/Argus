@@ -15,6 +15,7 @@ import {
   validateBudget,
   validateCodeModel,
   validateMaxComments,
+  validateReviewProfiles,
   validateVersion,
 } from '../../action/runtime.mjs'
 
@@ -78,6 +79,9 @@ describe('action input contract', () => {
     expect(() => validateMaxComments('1e2')).toThrow(/integer/)
     expect(validateCodeModel('deepseek/deepseek-r1:free')).toBe('deepseek/deepseek-r1:free')
     expect(() => validateCodeModel('model; rm -rf /')).toThrow(/slug/)
+    expect(validateReviewProfiles('security, perf')).toBe('security,perf')
+    expect(validateReviewProfiles('')).toBeUndefined()
+    expect(() => validateReviewProfiles('security,style')).toThrow(/review-profiles/)
     expect(validateVersion('0.2.0')).toBe('0.2.0')
     expect(() => validateVersion('latest')).toThrow(/pinned semver/)
   })

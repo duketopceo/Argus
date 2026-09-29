@@ -130,7 +130,26 @@ The caller environment can also pin the code-review model without touching
 the checkout: `ARGUS_CODE_MODEL="owner/model"` wins over `code_model` in
 config — including on `pull_request` events, where the PR's config never
 executes. This is how the GitHub Action and the Agent Zero plugin choose a
-review model per deployment.
+review model per deployment. The verified per-lane model menu lives in
+[docs/models.md](models.md).
+
+### Review lenses
+
+`review.profiles` appends named rubric blocks to the review prompt —
+`'security'`, `'perf'`, `'debloat'` — tuning recall without changing the
+severity gate or posting policy:
+
+```ts
+export default defineConfig({
+  review: { profiles: ['security', 'perf'] },
+})
+```
+
+or per deployment: `ARGUS_REVIEW_PROFILES="security,perf"` (action input
+`review-profiles`). The `security` lens runs alongside the always-on
+deterministic secrets scan — the rubric steers the model toward
+exploitability; the regex lane catches secret-shaped literals even when the
+model doesn't.
 
 Spend is still yours:
 the `run.json` ledger records the per-run dollar figure regardless of which
