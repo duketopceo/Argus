@@ -15,6 +15,7 @@ import {
   buildProbeMessages,
   parseProbe,
   probeImportsSafe,
+  PROBE_CONTENT_CAP,
   PROBE_SCHEMA,
   type AuthoredProbe,
 } from './author.js'
@@ -72,6 +73,18 @@ export interface ProbeRecord {
   detail: string
   /** Capped, control-char-stripped stdout+stderr for audit. */
   output?: string | undefined
+  /**
+   * Repo-relative suggested write path (argus-probe-<name> beside the
+   * exemplar) — serialized only for `reproduced` outcomes; the persist
+   * lane re-validates it before any write.
+   */
+  path?: string | undefined
+  /**
+   * Probe source, serialized only for `reproduced` outcomes so `@argus
+   * persist` can commit it from a later run without a head checkout.
+   * Capped at PROBE_CONTENT_CAP bytes.
+   */
+  content?: string | undefined
 }
 
 export interface ProbeLaneResult {
@@ -359,6 +372,8 @@ function record(
     headOutcome: extra.headOutcome,
     baseOutcome: extra.baseOutcome,
     output: extra.output,
+    path: extra.path,
+    content: extra.content,
   }
 }
 
@@ -569,10 +584,16 @@ export async function runProbeLane(
 
         let outcome: ProbeReportOutcome
         let detail: string
+        let persist: Partial<ProbeRecord> = {}
         if (headOutcome === 'failed-test' && baseOutcome === 'clean') {
           outcome = 'reproduced'
           detail = `reproduced by Argus probe ${probe.filename} (fails on head, clean on base)`
           target.evidence = { ...target.evidence, status: 'reproduced', detail }
+          // The probe file is deleted below, so the content must travel
+          // with the report — `@argus persist` commits it later from a
+          // base-only checkout. Content is already validated (safe path +
+          // imports) and capped for serialization.
+          persist = { path: relProbe, content: probe.content.slice(0, PROBE_CONTENT_CAP) }
         } else if (headOutcome !== 'failed-test') {
           outcome = headOutcome
           detail = `head outcome: ${headOutcome}`
@@ -588,7 +609,7 @@ export async function runProbeLane(
           outcome = 'error'
           detail = `fails on head but base run inconclusive (${baseOutcome}) — unverified`
         }
-        records.push(record(target, probe, outcome, detail, extra))
+        records.push(record(target, probe, outcome, detail, { ...extra, ...persist }))
       } finally {
         await rm(join(o.cwd, relProbe), { force: true }).catch(() => undefined)
         if (baseDir !== undefined) {

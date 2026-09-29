@@ -21,6 +21,8 @@ export interface PrMeta {
     headSha: string | undefined;
     /** PR base SHA — the merge base probes run against for the double-run. */
     baseSha: string | undefined;
+    /** PR base branch name (e.g. `main`) — the persist lane's PR target. */
+    baseRef: string | undefined;
     /** `head.repo.fork` — true when the PR head branch lives in a fork. */
     isFork: boolean;
     /**
@@ -52,6 +54,16 @@ export interface PrMeta {
  * api.github.com read (fetchPrFiles in cli.ts paginates over it).
  */
 export declare function ghGet(url: string, token: string, ctx: Ctx): Promise<unknown | undefined>;
+/**
+ * Write twin of `ghGet` — POST/PUT/PATCH/DELETE with an optional JSON body,
+ * same auth/timeout contract. Unlike ghGet, callers usually need the status
+ * (201-created vs 422-exists is meaningful for idempotent writes), so the
+ * response returns `{ status, data }` and failures return `{ status: 0 }`.
+ */
+export declare function ghWrite(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', url: string, token: string, ctx: Ctx, body?: unknown): Promise<{
+    status: number;
+    data: unknown;
+}>;
 /**
  * PR metadata for the evidence + probe lanes — the head SHA check-runs attach
  * to, plus the fork/association/label signals the sandbox fork gate (KTD5)

@@ -54,6 +54,8 @@ import {
 } from './review/triage.js'
 import { adjudicateFindings, type FindingAdjudicationAudit } from './review/adjudicate.js'
 import { runProbeLane, type ProbeRecord } from './probe/queue.js'
+import { decodeProbePayload, encodeProbePayload, persistProbes } from './probe/persist.js'
+import { SENTINEL } from './report/comment.js'
 import { A0_DEFAULT_TIMEOUT_MS, a0TaskPrompt, runA0Task } from './executor/a0.js'
 import { buildJournalEntry } from './journal/build.js'
 import { ErrorRecord } from './journal/schema.js'
@@ -963,6 +965,12 @@ interface CodeReviewReport {
   budgetExceeded: boolean
   /** Identity relationship between the report source and checkout. */
   headBinding?: HeadBinding
+  /**
+   * Base64 HTML-comment payload (`argus-probe-persist`) carrying reproduced
+   * probe source — the sticky poster embeds it verbatim so `@argus persist`
+   * can commit the probes later from a base-only checkout (E1.U3).
+   */
+  persistPayload?: string
 }
 
 const CHUNK_TOKEN_TARGET = 6000
@@ -1038,6 +1046,7 @@ export async function loadFixture(
   const meta: PrMeta = {
     headSha,
     baseSha,
+    baseRef: undefined,
     isFork: false,
     authorAssociation: 'OWNER',
     labels: [],
@@ -1917,6 +1926,10 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     const rendered = renderReviewComments(linkedFindings, maxComments)
 
     const hasBlocker = finalFindings.some((f) => blockSeverities.includes(f.severity))
+    // E1.U3 — reproduced probes carry serialized source; embed the
+    // machine-readable payload so a later `issue_comment` run can persist
+    // them without a head checkout. Keyed to the reviewed head sha.
+    const persistPayload = encodeProbePayload(probes, headBinding?.intendedSha)
     const report: CodeReviewReport = {
       ok: !hasBlocker && !ledger.budgetExceeded && isHeadBindingConclusive(headBinding),
       skipped: false,
@@ -1940,6 +1953,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       model: lastModel,
       budgetExceeded: ledger.budgetExceeded,
       headBinding,
+      ...(persistPayload !== undefined ? { persistPayload } : {}),
     }
     await writeAtomicJson(codeReviewPath, report)
     stage(
@@ -2214,9 +2228,50 @@ async function cmdMention(args: string[], ctx: Ctx, deps: CliDeps): Promise<numb
   }
 
   if (parsed.name === 'persist') {
-    await reply(
-      '`persist` isn\'t wired yet — a reproduced probe still copies from the sticky comment for now.',
-    )
+    // E1.U3 — decode the reproduced-probe payload embedded in the Argus
+    // sticky comment, then commit it to a regression-test branch + PR via
+    // the contents API. Runs on the base checkout — nothing executes.
+    if (repo === undefined || token === undefined) {
+      ctx.err('mention: persist needs GITHUB_REPOSITORY + GITHUB_TOKEN')
+      return 2
+    }
+    if (meta?.baseRef === undefined) {
+      await reply("I couldn't resolve this PR's base branch — persist is unavailable right now.")
+      return 0
+    }
+    const comments = (await ghGet(
+      `https://api.github.com/repos/${repo}/issues/${issueNum}/comments?per_page=100`,
+      token,
+      ctx,
+    )) as { body?: string }[] | undefined
+    const sticky = comments?.find((c) => typeof c.body === 'string' && c.body.includes(SENTINEL))
+    const decoded =
+      sticky?.body === undefined ? undefined : decodeProbePayload(sticky.body)
+    if (decoded === undefined) {
+      await reply('no reproduced probes to persist — a 🧪 reproduced probe carries the payload.')
+      return 0
+    }
+    // Stale-head guard: probes were authored against a specific head — a
+    // moved head can mean the finding (and probe) no longer applies.
+    if (
+      decoded.head !== undefined &&
+      meta.headSha !== undefined &&
+      decoded.head !== meta.headSha
+    ) {
+      await reply(
+        `the persisted probes were authored against head \`${decoded.head.slice(0, 8)}\`, ` +
+          `but the PR is now at \`${meta.headSha.slice(0, 8)}\` — run \`@argus review\` first.`,
+      )
+      return 0
+    }
+    const result = await persistProbes(repo, issueNum, meta.baseRef, decoded.probes, token, ctx)
+    if (result.error !== undefined) {
+      await reply(`persist failed — ${result.error}. The probe source is still in the sticky comment.`)
+      return 1
+    }
+    const wrote = result.written.map((p) => `\`${p}\``).join(', ')
+    const dup = result.skipped.length > 0 ? ` (${result.skipped.length} already present)` : ''
+    await reply(`persisted ${wrote} — regression-test PR: ${result.prUrl}${dup}`)
     return 0
   }
   if (parsed.name === 'record') {
@@ -2409,13 +2464,16 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.issue.pull_request && startsWith(github.event.comment.body, '@argus')
     permissions:
-      contents: read
+      # contents: write — '@argus persist' commits reproduced probes to an
+      # argus/ branch via the git/refs + contents APIs and opens a PR.
+      contents: write
       issues: write
       pull-requests: write
       checks: write
       statuses: write
     steps:
-      # No 'ref' — the default checkout resolves the base branch.
+      # No 'ref' — the default checkout resolves the base branch. persist
+      # writes via the API, so checkout credentials stay disabled.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false

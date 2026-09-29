@@ -445,6 +445,135 @@ describe('argus-reviewer mention', () => {
       globalThis.fetch = original
     }
   })
+
+  it('persist commits the embedded probe and replies with the new PR', async () => {
+    const { encodeProbePayload } = await import('../../src/probe/persist.js')
+    const marker = encodeProbePayload(
+      [
+        {
+          file: 'x.test.ts',
+          findingFile: 'src/x.ts',
+          findingLine: 1,
+          outcome: 'reproduced',
+          durationMs: 1,
+          costUsd: 0,
+          tokens: 0,
+          detail: 'reproduced',
+          path: 'tests/argus-probe-x.test.ts',
+          content: 'test("x",()=>{})',
+        },
+      ],
+      'h1',
+    )
+    const replies: string[] = []
+    const fetchStub = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (method === 'POST' && url.endsWith('/issues/7/comments')) {
+        replies.push(String(init?.body))
+        return new Response('{}', { status: 201 })
+      }
+      if (url.endsWith('/pulls/7')) {
+        return new Response(
+          JSON.stringify({
+            head: { sha: 'h1', repo: { fork: false } },
+            base: { sha: 'b1', ref: 'main' },
+            author_association: 'MEMBER',
+            labels: [],
+          }),
+          { status: 200 },
+        )
+      }
+      if (url.includes('/compare/')) {
+        return new Response(JSON.stringify({ merge_base_commit: { sha: 'b1' } }), { status: 200 })
+      }
+      if (url.includes('/issues/7/comments')) {
+        return new Response(
+          JSON.stringify([{ body: `<!-- argus-reviewer -->\nsticky\n${marker}` }]),
+          { status: 200 },
+        )
+      }
+      if (url.endsWith('/git/ref/heads/main')) {
+        return new Response(JSON.stringify({ object: { sha: 'b1' } }), { status: 200 })
+      }
+      if (method === 'POST' && url.endsWith('/git/refs')) {
+        return new Response('{}', { status: 201 })
+      }
+      if (method === 'PUT') return new Response('{}', { status: 201 })
+      if (method === 'GET' && url.includes('/pulls?head=')) {
+        return new Response('[]', { status: 200 })
+      }
+      if (method === 'POST' && url.endsWith('/pulls')) {
+        return new Response(JSON.stringify({ html_url: 'https://github.com/a/b/pull/42' }), {
+          status: 201,
+        })
+      }
+      return new Response('{}', { status: 404 })
+    }
+    const original = globalThis.fetch
+    globalThis.fetch = fetchStub as typeof fetch
+    try {
+      const { env } = await mentionEvent('@argus persist')
+      const code = await main(['mention'], {
+        env: { ...env, GITHUB_REPOSITORY: 'a/b', GITHUB_TOKEN: 'tok' },
+        out: capture().fn,
+        err: capture().fn,
+      })
+      expect(code).toBe(0)
+      expect(replies).toHaveLength(1)
+      expect(replies[0]).toContain('https://github.com/a/b/pull/42')
+    } finally {
+      globalThis.fetch = original
+    }
+  })
+
+  it('persist replies "no reproduced probes" when the sticky has no payload', async () => {
+    const replies: string[] = []
+    const fetchStub = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (method === 'POST' && url.endsWith('/issues/7/comments')) {
+        replies.push(String(init?.body))
+        return new Response('{}', { status: 201 })
+      }
+      if (url.endsWith('/pulls/7')) {
+        return new Response(
+          JSON.stringify({
+            head: { sha: 'h1', repo: { fork: false } },
+            base: { sha: 'b1', ref: 'main' },
+            author_association: 'MEMBER',
+            labels: [],
+          }),
+          { status: 200 },
+        )
+      }
+      if (url.includes('/compare/')) {
+        return new Response(JSON.stringify({ merge_base_commit: { sha: 'b1' } }), { status: 200 })
+      }
+      if (url.includes('/issues/7/comments')) {
+        return new Response(
+          JSON.stringify([{ body: '<!-- argus-reviewer -->\nsticky, no payload' }]),
+          { status: 200 },
+        )
+      }
+      return new Response('{}', { status: 404 })
+    }
+    const original = globalThis.fetch
+    globalThis.fetch = fetchStub as typeof fetch
+    try {
+      const { env } = await mentionEvent('@argus persist')
+      const code = await main(['mention'], {
+        env: { ...env, GITHUB_REPOSITORY: 'a/b', GITHUB_TOKEN: 'tok' },
+        out: capture().fn,
+        err: capture().fn,
+      })
+      expect(code).toBe(0)
+      expect(replies).toHaveLength(1)
+      expect(replies[0]).toContain('no reproduced probes')
+    } finally {
+      globalThis.fetch = original
+    }
+  })
 })
 
 describe('loadConfig', () => {

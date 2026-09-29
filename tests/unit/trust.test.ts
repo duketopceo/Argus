@@ -8,6 +8,7 @@ const META_FORK: PrMeta = {
   body: undefined,
   headSha: 'abc',
   baseSha: 'def',
+  baseRef: undefined,
   isFork: true,
   authorAssociation: 'NONE',
   labels: [],

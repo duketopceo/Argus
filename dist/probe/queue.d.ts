@@ -46,6 +46,18 @@ export interface ProbeRecord {
     detail: string;
     /** Capped, control-char-stripped stdout+stderr for audit. */
     output?: string | undefined;
+    /**
+     * Repo-relative suggested write path (argus-probe-<name> beside the
+     * exemplar) — serialized only for `reproduced` outcomes; the persist
+     * lane re-validates it before any write.
+     */
+    path?: string | undefined;
+    /**
+     * Probe source, serialized only for `reproduced` outcomes so `@argus
+     * persist` can commit it from a later run without a head checkout.
+     * Capped at PROBE_CONTENT_CAP bytes.
+     */
+    content?: string | undefined;
 }
 export interface ProbeLaneResult {
     records: ProbeRecord[];

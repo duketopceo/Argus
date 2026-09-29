@@ -355,7 +355,12 @@ an `issue_comment` workflow that answers PR comments starting with
   comment updates in place
 - `@argus record "<flow>"` — record a test flow against the base-checkout
   app; the generated test + flow cache upload as a workflow artifact
-- `@argus persist` — turn a reproduced probe into a regression-test PR
+- `@argus persist` — commit a reproduced probe to `argus/probe-regression-pr-<n>`
+  and open a regression-test PR against the base branch. The probe source
+  travels with the sticky comment (copy-pasteable details block + a
+  machine-readable payload), so persist works even though the probe file is
+  deleted after review. Idempotent — re-running reuses the branch and open
+  PR; a moved PR head is refused until `@argus review` re-runs
 - `@argus help` — the command menu
 
 Security posture: `issue_comment` runs carry secrets and a write-capable

@@ -382,6 +382,35 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
   if (typeof codeReview.probeLaneSkipped === 'string') {
     lines.push(` · 🧪 probe lane skipped — ${cell(codeReview.probeLaneSkipped)}`)
   }
+  // E1.U3 — reproduced probes render copy-pasteable source + the
+  // machine-readable payload `@argus persist` parses back. Content is
+  // rendered bounded (2 probes, 8KB each) and fenced — ``` runs inside the
+  // source are flattened so the block can't break out of its fence.
+  const persistable = (codeReview.probes ?? []).filter(
+    (p) => p.outcome === 'reproduced' && typeof p.path === 'string' && typeof p.content === 'string',
+  )
+  if (persistable.length > 0) {
+    lines.push('')
+    lines.push(
+      `*Reproduced probe(s) — comment \`@argus persist\` to open a regression-test PR, or copy into your suite:*`,
+    )
+    for (const p of persistable.slice(0, 2)) {
+      const rendered = p.content.replace(/`{3,}/g, '``').slice(0, 8 * 1024)
+      lines.push('<details>')
+      lines.push(`<summary>🧪 \`${cell(p.path)}\`</summary>`)
+      lines.push('')
+      lines.push('```ts')
+      lines.push(rendered)
+      lines.push('```')
+      lines.push('</details>')
+    }
+    if (persistable.length > 2) {
+      lines.push(`*…and ${persistable.length - 2} more in \`code-review.json\`.*`)
+    }
+  }
+  if (typeof codeReview.persistPayload === 'string' && codeReview.persistPayload.length < 32768) {
+    lines.push(codeReview.persistPayload)
+  }
   lines.push('')
   lines.push(codeReview.summary)
   lines.push('')

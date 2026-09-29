@@ -92,6 +92,12 @@ interface CodeReviewReport {
     budgetExceeded: boolean;
     /** Identity relationship between the report source and checkout. */
     headBinding?: HeadBinding;
+    /**
+     * Base64 HTML-comment payload (`argus-probe-persist`) carrying reproduced
+     * probe source — the sticky poster embeds it verbatim so `@argus persist`
+     * can commit the probes later from a base-only checkout (E1.U3).
+     */
+    persistPayload?: string;
 }
 /**
  * Split `git diff` text into per-file PrFile entries — the local-diff

@@ -11,6 +11,7 @@ import {
 const meta = (overrides: Partial<PrMeta> = {}): PrMeta => ({
   headSha: 'abc',
   baseSha: 'def',
+  baseRef: 'main',
   isFork: false,
   authorAssociation: 'MEMBER',
   labels: [],
