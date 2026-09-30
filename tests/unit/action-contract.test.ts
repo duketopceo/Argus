@@ -121,6 +121,31 @@ describe('action input contract', () => {
       inline,
     )
     expect(skipped).toContain('explore skipped — no page loaded')
+
+    // U4b act pass — step/visited/stopReason summary plus its own captures
+    // merged with the per-file ones.
+    const acted = renderStickyBody(
+      {
+        ...base,
+        explore: {
+          enabled: true,
+          steps: 7,
+          visited: 2,
+          stopReason: 'max-steps',
+          visionCalls: 7,
+          visionCostUsd: 0.0012,
+          captures: [{ kind: 'pageerror', text: 'TypeError: boom', count: 1 }],
+        },
+      },
+      undefined,
+      undefined,
+      true,
+      inline,
+    )
+    expect(acted).toContain('explored **7** step(s) across **2** page(s)')
+    expect(acted).toContain('stopped: max-steps')
+    expect(acted).toContain('🟡 observed · page error: `TypeError: boom`')
+    expect(acted).toContain('🟡 observed · console error ×3: `seeded console boom`')
   })
 
   it('parses trusted CLI argv without a shell and rejects shell operators', () => {

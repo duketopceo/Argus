@@ -2,6 +2,7 @@ import { writeAtomicJson } from '../fsutil.js'
 
 import type { HealEvent, TdAssertRecord, TdStepRecord } from '../api.js'
 import type { PageCapture } from '../driver/browser.js'
+import type { ExploreStopReason } from '../engine/explore.js'
 import type { CacheStats } from '../engine/loop.js'
 import type { CallCost } from '../vision/cost.js'
 
@@ -68,28 +69,47 @@ export interface RunReport {
   tests: TestReport[]
   artifacts: { videos: string[] }
   /**
-   * Exploratory-lane summary (U4a). Present only when `explore.enabled` —
+   * Exploratory-lane summary (U4). Present only when `explore.enabled` —
    * the comment renders an Exploratory section for it. `skipped` carries an
    * explicit reason when the lane was on but could not observe anything
    * (e.g. the target URL was unreachable), so a silent no-op is impossible.
+   * `steps`/`visited`/`stopReason`/`visionCalls`/`visionCostUsd`/`captures`
+   * describe the bounded free-explore act pass (U4b) when it ran; they are
+   * `observed` evidence, never verdict-changing.
    */
-  explore?: { enabled: boolean; skipped?: string }
+  explore?: {
+    enabled: boolean
+    skipped?: string
+    steps?: number
+    visited?: number
+    stopReason?: ExploreStopReason
+    visionCalls?: number
+    visionCostUsd?: number
+    captures?: PageCapture[]
+    /** Video of the explore session itself (also in `artifacts.videos`). */
+    videoPath?: string
+  }
 }
 
 export function buildRunReport(
   tests: TestReport[],
   startedAt: Date,
   durationMs: number,
+  /**
+   * Model calls outside the per-test sessions (the explore act pass bills
+   * its own ledger). Folded into the run totals so `run.json` spend is
+   * complete even though no TestReport owns these calls.
+   */
+  extraCalls: CallCost[] = [],
 ): RunReport {
   const failed = tests.filter((t) => !t.ok).length
   const callsByModel: Record<string, number> = {}
   const costByModel: Record<string, number> = {}
-  for (const t of tests) {
-    for (const c of t.calls) {
-      callsByModel[c.model] = (callsByModel[c.model] ?? 0) + 1
-      costByModel[c.model] = (costByModel[c.model] ?? 0) + c.costUsd
-    }
+  for (const c of [...tests.flatMap((t) => t.calls), ...extraCalls]) {
+    callsByModel[c.model] = (callsByModel[c.model] ?? 0) + 1
+    costByModel[c.model] = (costByModel[c.model] ?? 0) + c.costUsd
   }
+  const extraVisionCost = extraCalls.reduce((s, c) => s + c.costUsd, 0)
   return {
     tool: 'argus-reviewer',
     startedAt: startedAt.toISOString(),
@@ -102,8 +122,8 @@ export function buildRunReport(
       tests: tests.length,
       passed: tests.length - failed,
       failed,
-      visionCalls: tests.reduce((sum, t) => sum + t.visionCalls, 0),
-      visionCostUsd: tests.reduce((sum, t) => sum + t.visionCostUsd, 0),
+      visionCalls: tests.reduce((sum, t) => sum + t.visionCalls, 0) + extraCalls.length,
+      visionCostUsd: tests.reduce((sum, t) => sum + t.visionCostUsd, 0) + extraVisionCost,
       sandboxSeconds: tests.reduce((sum, t) => sum + t.sandboxSeconds, 0),
       budgetExceeded: tests.some((t) => t.budgetExceeded),
       callsByModel,

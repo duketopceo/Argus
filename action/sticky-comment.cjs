@@ -194,16 +194,31 @@ function renderBody(report, codeReview, runUrl, ok, inlinePlan) {
       lines.push(`- ⚪ explore skipped — ${cell(report.explore.skipped)}`)
       lines.push('')
     } else {
+      // U4b act pass summary — the bounded free-explore run's step count,
+      // pages visited, and stop reason.
+      if (typeof report.explore.steps === 'number') {
+        const pages = typeof report.explore.visited === 'number' ? report.explore.visited : 0
+        const spend =
+          typeof report.explore.visionCostUsd === 'number'
+            ? ` · $${report.explore.visionCostUsd.toFixed(6)}`
+            : ''
+        lines.push(
+          `explored **${report.explore.steps}** step(s) across **${pages}** page(s) — ` +
+            `stopped: ${cell(report.explore.stopReason ?? 'unknown')}${spend}`,
+        )
+        lines.push('')
+      }
       // The same signature can appear on multiple test reports from one
       // file's shared browser session — collapse before rendering.
       const seen = new Map()
-      for (const t of report.tests) {
-        for (const c of t.captures ?? []) {
-          const key = `${c.kind}|${c.text}|${c.url ?? ''}`
-          const existing = seen.get(key)
-          if (existing) existing.count += c.count
-          else seen.set(key, { ...c })
-        }
+      for (const c of [
+        ...(report.explore.captures ?? []),
+        ...report.tests.flatMap((t) => t.captures ?? []),
+      ]) {
+        const key = `${c.kind}|${c.text}|${c.url ?? ''}`
+        const existing = seen.get(key)
+        if (existing) existing.count += c.count
+        else seen.set(key, { ...c })
       }
       const LABEL = {
         'console-error': 'console error',

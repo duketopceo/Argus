@@ -94,23 +94,33 @@ function exploreRows(tests: TestReport[], explore: RunReport['explore']): string
     lines.push(`- ⚪ explore skipped — ${explore.skipped}`)
     return lines
   }
+  // Act pass (U4b): summarize the bounded free-explore run, then merge its
+  // session captures with the per-file ones below.
+  if (explore?.steps !== undefined) {
+    const pages = explore.visited ?? 0
+    const spend =
+      explore.visionCostUsd !== undefined ? ` · ${formatUsd(explore.visionCostUsd)}` : ''
+    lines.push(
+      `explored **${explore.steps}** step(s) across **${pages}** page(s) — ` +
+        `stopped: ${explore.stopReason ?? 'unknown'}${spend}`,
+    )
+    lines.push('')
+  }
   // Same capture can appear on multiple test reports from one file's shared
   // browser session — dedupe by signature before rendering.
   const seen = new Map<string, { label: string; text: string; url?: string; count: number }>()
-  for (const t of tests) {
-    for (const c of t.captures ?? []) {
-      const key = `${c.kind}|${c.text}|${c.url ?? ''}`
-      const existing = seen.get(key)
-      if (existing !== undefined) {
-        existing.count += c.count
-      } else {
-        seen.set(key, {
-          label: CAPTURE_LABEL[c.kind] ?? c.kind,
-          text: c.text.replace(/\|/g, '\\|'),
-          ...(c.url !== undefined ? { url: c.url } : {}),
-          count: c.count,
-        })
-      }
+  for (const c of [...(explore?.captures ?? []), ...tests.flatMap((t) => t.captures ?? [])]) {
+    const key = `${c.kind}|${c.text}|${c.url ?? ''}`
+    const existing = seen.get(key)
+    if (existing !== undefined) {
+      existing.count += c.count
+    } else {
+      seen.set(key, {
+        label: CAPTURE_LABEL[c.kind] ?? c.kind,
+        text: c.text.replace(/\|/g, '\\|'),
+        ...(c.url !== undefined ? { url: c.url } : {}),
+        count: c.count,
+      })
     }
   }
   if (seen.size === 0) {

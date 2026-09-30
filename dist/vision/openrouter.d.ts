@@ -21,6 +21,8 @@ export interface JsonSchema {
 export interface OpenRouterClientOptions {
     apiKey: string;
     fetch?: typeof fetch;
+    /** Per-request timeout in ms. Default 120_000. */
+    timeoutMs?: number;
     /**
      * Extra metadata sent on every request. `trace` is merged into the request
      * body `trace` field for cost attribution. `headers` are merged into the
@@ -44,10 +46,12 @@ export interface OpenRouterClientOptions {
 export declare class OpenRouterClient {
     private _apiKey;
     private _fetch;
+    private _timeoutMs;
     private _trace;
     private _headers;
     private _onCall;
     constructor(opts: OpenRouterClientOptions);
+    private _request;
     complete(opts: {
         model: string;
         messages: Message[];

@@ -1,14 +1,19 @@
 import { writeAtomicJson } from '../fsutil.js';
-export function buildRunReport(tests, startedAt, durationMs) {
+export function buildRunReport(tests, startedAt, durationMs, 
+/**
+ * Model calls outside the per-test sessions (the explore act pass bills
+ * its own ledger). Folded into the run totals so `run.json` spend is
+ * complete even though no TestReport owns these calls.
+ */
+extraCalls = []) {
     const failed = tests.filter((t) => !t.ok).length;
     const callsByModel = {};
     const costByModel = {};
-    for (const t of tests) {
-        for (const c of t.calls) {
-            callsByModel[c.model] = (callsByModel[c.model] ?? 0) + 1;
-            costByModel[c.model] = (costByModel[c.model] ?? 0) + c.costUsd;
-        }
+    for (const c of [...tests.flatMap((t) => t.calls), ...extraCalls]) {
+        callsByModel[c.model] = (callsByModel[c.model] ?? 0) + 1;
+        costByModel[c.model] = (costByModel[c.model] ?? 0) + c.costUsd;
     }
+    const extraVisionCost = extraCalls.reduce((s, c) => s + c.costUsd, 0);
     return {
         tool: 'argus-reviewer',
         startedAt: startedAt.toISOString(),
@@ -21,8 +26,8 @@ export function buildRunReport(tests, startedAt, durationMs) {
             tests: tests.length,
             passed: tests.length - failed,
             failed,
-            visionCalls: tests.reduce((sum, t) => sum + t.visionCalls, 0),
-            visionCostUsd: tests.reduce((sum, t) => sum + t.visionCostUsd, 0),
+            visionCalls: tests.reduce((sum, t) => sum + t.visionCalls, 0) + extraCalls.length,
+            visionCostUsd: tests.reduce((sum, t) => sum + t.visionCostUsd, 0) + extraVisionCost,
             sandboxSeconds: tests.reduce((sum, t) => sum + t.sandboxSeconds, 0),
             budgetExceeded: tests.some((t) => t.budgetExceeded),
             callsByModel,

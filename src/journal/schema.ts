@@ -6,7 +6,7 @@
 export const JOURNAL_SCHEMA_VERSION = 1
 
 export interface ErrorRecord {
-  /** Pipeline stage: boot | target | locate | assert | heal | report | index */
+  /** Pipeline stage: boot | target | locate | assert | heal | explore | report | index */
   stage: string
   message: string
   /** Minimal context: step instruction, model, page URL — never secrets. */
