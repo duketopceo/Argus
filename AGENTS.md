@@ -66,3 +66,13 @@ is a security change, not a config tidy.
 Other standing rules from `SECURITY.md`: treat PR-controlled code, config,
 test files, and generated probes as hostile; fail closed on parse, path, and
 trust errors; `node:vm` is **not** an isolation boundary.
+
+## Code graph index (optional accelerator)
+
+This repo may be indexed by `codebase-memory-mcp` (CBM) on an agent's local
+machine — `.codebase-memory/` is gitignored. If your harness exposes CBM
+tools (`search_graph`, `trace_path`, `get_architecture`, `detect_changes`),
+prefer them for structural questions — symbol lookup, caller/callee traces,
+impact analysis — instead of grep/read loops. Reindex after large refactors
+(`index_repository`); treat `.codebase-memory/graph.db.zst` as a local cache
+artifact, never commit it.
