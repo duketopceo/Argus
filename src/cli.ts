@@ -919,13 +919,15 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
       // the act pass failed to reach the target, or every test report
       // failed before a single step ran so no page ever loaded.
       const pageLoaded = reports.some((r) => r.ok || r.steps.length > 0)
+      const skipped =
+        exploreSkipped !== undefined
+          ? `no reachable target — ${exploreSkipped}`
+          : pageLoaded || reports.length === 0
+            ? undefined
+            : 'no page loaded — nothing captured'
       report.explore = {
         enabled: true,
-        ...(exploreSkipped !== undefined
-          ? { skipped: `no reachable target — ${exploreSkipped}` }
-          : pageLoaded || reports.length === 0
-            ? {}
-            : { skipped: 'no page loaded — nothing captured' }),
+        ...(skipped !== undefined ? { skipped } : {}),
       }
     }
   }

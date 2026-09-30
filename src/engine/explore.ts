@@ -20,7 +20,7 @@ const MAX_TYPE_CHARS = 500
 const MAX_WAIT_MS = 5_000
 /** Scroll deltas are clamped so a model can't request absurd jumps. */
 const MAX_SCROLL_PX = 3_000
-/** Same page signature this many times in a row → 'stalled'. */
+/** Same page signature this many times total → 'stalled' (catches ping-pong, not just idle). */
 const STALL_LIMIT = 3
 /**
  * Explore needs form submit and focus movement, not arbitrary chords —
@@ -110,14 +110,14 @@ export async function runExplore(opts: ExploreOptions): Promise<ExploreResult> {
     visionCostUsd: ledger.visionCostUsd - costStart,
     notes,
   })
-  const budgeted = (): boolean =>
+  const budgetExhausted = (): boolean =>
     ledger.replayOnly ||
     !ledger.canSpend(0.001) ||
     (laneBudget !== undefined && ledger.visionCostUsd - costStart >= laneBudget)
 
   let observation: Observation | undefined
   for (let i = 0; i < maxSteps; i++) {
-    if (budgeted()) return finish('budget')
+    if (budgetExhausted()) return finish('budget')
 
     try {
       observation = observation ?? (await driver.observe({ grid: true }))
@@ -333,16 +333,16 @@ export function parseExploreAction(content: string): ExploreAction | undefined {
     }
     return {
       action: action as ExploreAction['action'],
-      x,
-      y,
-      text: typeof parsed.text === 'string' ? parsed.text : undefined,
-      keys: Array.isArray(parsed.keys) ? parsed.keys.map((k) => String(k)) : undefined,
-      dx: typeof parsed.dx === 'number' ? parsed.dx : undefined,
-      dy: typeof parsed.dy === 'number' ? parsed.dy : undefined,
-      ms: typeof parsed.ms === 'number' ? parsed.ms : undefined,
-      url: typeof parsed.url === 'string' ? parsed.url : undefined,
+      ...(x !== undefined ? { x } : {}),
+      ...(y !== undefined ? { y } : {}),
+      ...(typeof parsed.text === 'string' ? { text: parsed.text } : {}),
+      ...(Array.isArray(parsed.keys) ? { keys: parsed.keys.map((k) => String(k)) } : {}),
+      ...(typeof parsed.dx === 'number' ? { dx: parsed.dx } : {}),
+      ...(typeof parsed.dy === 'number' ? { dy: parsed.dy } : {}),
+      ...(typeof parsed.ms === 'number' ? { ms: parsed.ms } : {}),
+      ...(typeof parsed.url === 'string' ? { url: parsed.url } : {}),
       reasoning: typeof parsed.reasoning === 'string' ? parsed.reasoning : '',
-    } as unknown as ExploreAction
+    }
   }
 
   try {
