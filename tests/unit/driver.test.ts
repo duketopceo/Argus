@@ -96,6 +96,95 @@ describe('BrowserDriver + Actions (fixture page)', () => {
   })
 })
 
+describe('exploratory capture (U4a)', () => {
+  const EXPLORE_URL = fileURLToPath(new URL('../fixtures/explore.html', import.meta.url))
+  let port: number
+  let target: TargetProcess | undefined
+
+  beforeAll(async () => {
+    port = 4300 + Math.floor(Math.random() * 500)
+    target = await TargetProcess.start({
+      command: `${JSON.stringify(process.execPath)} ${JSON.stringify(SERVE_SCRIPT)} ${port} ${JSON.stringify(FIXTURE_DIR)}`,
+      url: `http://127.0.0.1:${port}/`,
+      readyTimeoutMs: 10_000,
+    })
+  })
+
+  afterAll(async () => {
+    await target?.stop()
+  })
+
+  const settle = async (driver: BrowserDriver, ms = 250) =>
+    new Promise<void>((resolve) => setTimeout(resolve, ms)).then(() =>
+      driver.pageCaptures(),
+    )
+
+  it('is off by default — no taps, no captures', async () => {
+    const driver = await BrowserDriver.launch({ browserTimeoutMs: 8_000 })
+    try {
+      await driver.goto(`file://${EXPLORE_URL}`)
+      await new Promise((r) => setTimeout(r, 250))
+      expect(driver.pageCaptures()).toEqual([])
+    } finally {
+      await driver.close()
+    }
+  })
+
+  it('captures console errors and page errors, collapsing repeats', async () => {
+    const driver = await BrowserDriver.launch({ captureErrors: true, browserTimeoutMs: 8_000 })
+    try {
+      await driver.goto(`file://${EXPLORE_URL}`)
+      const caps = await settle(driver)
+      const consoleErr = caps.find(
+        (c) => c.kind === 'console-error' && c.text.includes('seeded console boom'),
+      )
+      expect(consoleErr?.count).toBe(3)
+      expect(
+        caps.some((c) => c.kind === 'pageerror' && c.text.includes('seeded page boom')),
+      ).toBe(true)
+    } finally {
+      await driver.close()
+    }
+  })
+
+  it('keeps same-origin request failures, drops third-party', async () => {
+    const driver = await BrowserDriver.launch({ captureErrors: true, browserTimeoutMs: 8_000 })
+    try {
+      await driver.rawPage.route('**/explore-aborted', (route) => route.abort())
+      await driver.goto(`http://127.0.0.1:${port}/explore.html`)
+      // Same-origin request aborted → requestfailed kept.
+      await driver.rawPage.evaluate(() => fetch('/explore-aborted').catch(() => 'done'))
+      // Third-party (different port = different origin) connection refused → filtered.
+      await driver.rawPage.evaluate(() => fetch('http://127.0.0.1:1/beacon').catch(() => 'done'))
+      const caps = await settle(driver)
+      const failed = caps.filter((c) => c.kind === 'request-failed')
+      expect(failed).toHaveLength(1)
+      expect(failed[0]?.url).toBe(`http://127.0.0.1:${port}/explore-aborted`)
+    } finally {
+      await driver.close()
+    }
+  })
+
+  it('caps distinct signatures', async () => {
+    const driver = await BrowserDriver.launch({ captureErrors: true, browserTimeoutMs: 8_000 })
+    try {
+      await driver.goto(`http://127.0.0.1:${port}/`)
+      for (let i = 0; i < 60; i++) {
+        await driver.rawPage.evaluate((n) => console.error(`distinct boom ${n}`), i)
+      }
+      // Console events dispatch asynchronously — poll until capped.
+      let caps = driver.pageCaptures()
+      for (let i = 0; i < 20 && caps.length < 50; i++) {
+        await new Promise((r) => setTimeout(r, 100))
+        caps = driver.pageCaptures()
+      }
+      expect(caps.filter((c) => c.text.startsWith('distinct boom')).length).toBe(50)
+    } finally {
+      await driver.close()
+    }
+  })
+})
+
 describe('TargetProcess boot adapter', () => {
   it('spawns the command, waits for ready, and stop() kills the child tree', async () => {
     const port = 4199

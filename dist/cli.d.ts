@@ -11,6 +11,7 @@ import { type FindingAdjudicationAudit } from './review/adjudicate.js';
 import { type ProbeRecord } from './probe/queue.js';
 import { type HeadBinding } from './report/manifest.js';
 import { CallCost } from './vision/cost.js';
+import { Message } from './vision/openrouter.js';
 export interface CliDeps {
     cwd?: string;
     env?: NodeJS.ProcessEnv;
@@ -91,6 +92,12 @@ interface CodeReviewReport {
     budgetExceeded: boolean;
     /** Identity relationship between the report source and checkout. */
     headBinding?: HeadBinding;
+    /**
+     * Base64 HTML-comment payload (`argus-probe-persist`) carrying reproduced
+     * probe source — the sticky poster embeds it verbatim so `@argus persist`
+     * can commit the probes later from a base-only checkout (E1.U3).
+     */
+    persistPayload?: string;
 }
 /**
  * Split `git diff` text into per-file PrFile entries — the local-diff
@@ -113,6 +120,7 @@ export declare function loadFixture(dir: string, exec?: ExecFn): Promise<{
     skipped: string;
 }>;
 export declare function buildPatchChunks(files: PrFile[], contexts?: Record<string, string>): string[];
+export declare function buildCodeReviewMessages(repo: string, pr: string, patchText: string, chunkIndex?: number, totalChunks?: number, profiles?: readonly string[]): Message[];
 export declare function parseCodeReview(content: string): {
     summary: string;
     verdict: 'pass' | 'needs_changes' | 'approve';

@@ -15,6 +15,7 @@ import {
   validateBudget,
   validateCodeModel,
   validateMaxComments,
+  validateReviewProfiles,
   validateVersion,
 } from '../../action/runtime.mjs'
 
@@ -57,6 +58,71 @@ describe('action input contract', () => {
     expect(body).toContain('**Fingerprint cache:** 3 hit(s) · 2 miss(es) · 1 heal(s)')
   })
 
+  it('renders the Exploratory section only when the lane was enabled', () => {
+    const base = {
+      totals: {
+        passed: 1,
+        tests: 1,
+        visionCalls: 0,
+        visionCostUsd: 0,
+        sandboxSeconds: 1,
+        callsByModel: {},
+        costByModel: {},
+        budgetExceeded: false,
+      },
+      ok: true,
+      tests: [
+        {
+          name: 'landing',
+          file: 'tests/landing.test.ts',
+          ok: true,
+          visionCalls: 0,
+          visionCostUsd: 0,
+          healEvents: [],
+          asserts: [],
+          captures: [
+            { kind: 'console-error', text: 'seeded console boom', count: 3 },
+            {
+              kind: 'request-failed',
+              text: 'net::ERR_ABORTED',
+              url: 'http://127.0.0.1:4000/api/missing',
+              count: 1,
+            },
+          ],
+        },
+      ],
+      artifacts: { videos: [] },
+    }
+    const inline = { comments: [], dropped: 0, cap: 20, overflow: 0, offDiff: 0 }
+
+    // Lane off → captures present but no section rendered.
+    expect(
+      renderStickyBody({ ...base }, undefined, undefined, true, inline),
+    ).not.toContain('Exploratory')
+
+    // Lane on → observed findings with collapsed counts.
+    const on = renderStickyBody(
+      { ...base, explore: { enabled: true } },
+      undefined,
+      undefined,
+      true,
+      inline,
+    )
+    expect(on).toContain('🔭 Exploratory')
+    expect(on).toContain('🟡 observed · console error ×3: `seeded console boom`')
+    expect(on).toContain('do not change the verdict')
+
+    // Skip line — unreachable target is explicit, not silent.
+    const skipped = renderStickyBody(
+      { ...base, explore: { enabled: true, skipped: 'no page loaded — nothing captured' } },
+      undefined,
+      undefined,
+      true,
+      inline,
+    )
+    expect(skipped).toContain('explore skipped — no page loaded')
+  })
+
   it('parses trusted CLI argv without a shell and rejects shell operators', () => {
     expect(parseCommand('node dist/cli.js')).toEqual(['node', 'dist/cli.js'])
     expect(parseCommand('npx --no-install argus-reviewer')).toEqual([
@@ -78,6 +144,9 @@ describe('action input contract', () => {
     expect(() => validateMaxComments('1e2')).toThrow(/integer/)
     expect(validateCodeModel('deepseek/deepseek-r1:free')).toBe('deepseek/deepseek-r1:free')
     expect(() => validateCodeModel('model; rm -rf /')).toThrow(/slug/)
+    expect(validateReviewProfiles('security, perf')).toBe('security,perf')
+    expect(validateReviewProfiles('')).toBeUndefined()
+    expect(() => validateReviewProfiles('security,style')).toThrow(/review-profiles/)
     expect(validateVersion('0.2.0')).toBe('0.2.0')
     expect(() => validateVersion('latest')).toThrow(/pinned semver/)
   })

@@ -368,6 +368,214 @@ describe('argus-reviewer CLI', () => {
   })
 })
 
+describe('argus-reviewer mention', () => {
+  const mentionEvent = async (
+    body: string,
+    opts: { association?: string; onPr?: boolean } = {},
+  ): Promise<{ env: Record<string, string>; dir: string }> => {
+    const dir = await mkdtemp(join(tmpdir(), 'argus-mention-'))
+    const eventPath = join(dir, 'event.json')
+    await writeFile(
+      eventPath,
+      JSON.stringify({
+        issue:
+          opts.onPr === false ? { number: 7 } : { number: 7, pull_request: {} },
+        comment: { body, author_association: opts.association ?? 'MEMBER' },
+      }),
+    )
+    return {
+      dir,
+      env: {
+        GITHUB_EVENT_NAME: 'issue_comment',
+        GITHUB_EVENT_PATH: eventPath,
+      },
+    }
+  }
+
+  it('ignores non-PR comments and non-mention bodies', async () => {
+    const out = capture()
+    const noPr = await mentionEvent('@argus review', { onPr: false })
+    expect(await main(['mention'], { env: noPr.env, out: out.fn })).toBe(0)
+    expect(out.lines.join('\n')).toContain('not on a pull request')
+
+    const noMention = await mentionEvent('looks good to me')
+    expect(await main(['mention'], { env: noMention.env, out: out.fn })).toBe(0)
+    expect(out.lines.join('\n')).toContain('no @argus command')
+  })
+
+  it('ignores untrusted commenters without replying', async () => {
+    const out = capture()
+    const err = capture()
+    const { env } = await mentionEvent('@argus review', { association: 'FIRST_TIMER' })
+    expect(await main(['mention'], { env, out: out.fn, err: err.fn })).toBe(0)
+    expect(err.lines.join('\n')).toContain('not trusted')
+    // No fetch happened — no token/repo env, and the gate fired before meta.
+  })
+
+  it('errors when run outside an issue_comment event', async () => {
+    const err = capture()
+    expect(
+      await main(['mention'], {
+        env: { GITHUB_EVENT_NAME: 'pull_request', GITHUB_EVENT_PATH: '/nope' },
+        err: err.fn,
+      }),
+    ).toBe(2)
+    expect(err.lines.join('\n')).toContain('issue_comment')
+  })
+
+  it('replies help for unknown commands when the commenter is trusted', async () => {
+    const posts: string[] = []
+    const fetchStub = async (input: RequestInfo | URL, init?: RequestInit) => {
+      posts.push(String(init?.body))
+      return new Response('{}', { status: 201 })
+    }
+    const original = globalThis.fetch
+    globalThis.fetch = fetchStub as typeof fetch
+    try {
+      const { env } = await mentionEvent('@argus delete everything')
+      const code = await main(['mention'], {
+        env: { ...env, GITHUB_REPOSITORY: 'a/b', GITHUB_TOKEN: 'tok' },
+        out: capture().fn,
+        err: capture().fn,
+      })
+      expect(code).toBe(0)
+      expect(posts).toHaveLength(1)
+      expect(posts[0]).toContain('@argus review')
+    } finally {
+      globalThis.fetch = original
+    }
+  })
+
+  it('persist commits the embedded probe and replies with the new PR', async () => {
+    const { encodeProbePayload } = await import('../../src/probe/persist.js')
+    const marker = encodeProbePayload(
+      [
+        {
+          file: 'x.test.ts',
+          findingFile: 'src/x.ts',
+          findingLine: 1,
+          outcome: 'reproduced',
+          durationMs: 1,
+          costUsd: 0,
+          tokens: 0,
+          detail: 'reproduced',
+          path: 'tests/argus-probe-x.test.ts',
+          content: 'test("x",()=>{})',
+        },
+      ],
+      'h1',
+    )
+    const replies: string[] = []
+    const fetchStub = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (method === 'POST' && url.endsWith('/issues/7/comments')) {
+        replies.push(String(init?.body))
+        return new Response('{}', { status: 201 })
+      }
+      if (url.endsWith('/pulls/7')) {
+        return new Response(
+          JSON.stringify({
+            head: { sha: 'h1', repo: { fork: false } },
+            base: { sha: 'b1', ref: 'main' },
+            author_association: 'MEMBER',
+            labels: [],
+          }),
+          { status: 200 },
+        )
+      }
+      if (url.includes('/compare/')) {
+        return new Response(JSON.stringify({ merge_base_commit: { sha: 'b1' } }), { status: 200 })
+      }
+      if (url.includes('/issues/7/comments')) {
+        return new Response(
+          JSON.stringify([{ body: `<!-- argus-reviewer -->\nsticky\n${marker}` }]),
+          { status: 200 },
+        )
+      }
+      if (url.endsWith('/git/ref/heads/main')) {
+        return new Response(JSON.stringify({ object: { sha: 'b1' } }), { status: 200 })
+      }
+      if (method === 'POST' && url.endsWith('/git/refs')) {
+        return new Response('{}', { status: 201 })
+      }
+      if (method === 'PUT') return new Response('{}', { status: 201 })
+      if (method === 'GET' && url.includes('/pulls?head=')) {
+        return new Response('[]', { status: 200 })
+      }
+      if (method === 'POST' && url.endsWith('/pulls')) {
+        return new Response(JSON.stringify({ html_url: 'https://github.com/a/b/pull/42' }), {
+          status: 201,
+        })
+      }
+      return new Response('{}', { status: 404 })
+    }
+    const original = globalThis.fetch
+    globalThis.fetch = fetchStub as typeof fetch
+    try {
+      const { env } = await mentionEvent('@argus persist')
+      const code = await main(['mention'], {
+        env: { ...env, GITHUB_REPOSITORY: 'a/b', GITHUB_TOKEN: 'tok' },
+        out: capture().fn,
+        err: capture().fn,
+      })
+      expect(code).toBe(0)
+      expect(replies).toHaveLength(1)
+      expect(replies[0]).toContain('https://github.com/a/b/pull/42')
+    } finally {
+      globalThis.fetch = original
+    }
+  })
+
+  it('persist replies "no reproduced probes" when the sticky has no payload', async () => {
+    const replies: string[] = []
+    const fetchStub = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (method === 'POST' && url.endsWith('/issues/7/comments')) {
+        replies.push(String(init?.body))
+        return new Response('{}', { status: 201 })
+      }
+      if (url.endsWith('/pulls/7')) {
+        return new Response(
+          JSON.stringify({
+            head: { sha: 'h1', repo: { fork: false } },
+            base: { sha: 'b1', ref: 'main' },
+            author_association: 'MEMBER',
+            labels: [],
+          }),
+          { status: 200 },
+        )
+      }
+      if (url.includes('/compare/')) {
+        return new Response(JSON.stringify({ merge_base_commit: { sha: 'b1' } }), { status: 200 })
+      }
+      if (url.includes('/issues/7/comments')) {
+        return new Response(
+          JSON.stringify([{ body: '<!-- argus-reviewer -->\nsticky, no payload' }]),
+          { status: 200 },
+        )
+      }
+      return new Response('{}', { status: 404 })
+    }
+    const original = globalThis.fetch
+    globalThis.fetch = fetchStub as typeof fetch
+    try {
+      const { env } = await mentionEvent('@argus persist')
+      const code = await main(['mention'], {
+        env: { ...env, GITHUB_REPOSITORY: 'a/b', GITHUB_TOKEN: 'tok' },
+        out: capture().fn,
+        err: capture().fn,
+      })
+      expect(code).toBe(0)
+      expect(replies).toHaveLength(1)
+      expect(replies[0]).toContain('no reproduced probes')
+    } finally {
+      globalThis.fetch = original
+    }
+  })
+})
+
 describe('loadConfig', () => {
   it('loads a TypeScript config via transpile fallback', async () => {
     const { loadConfig } = await import('../../src/config.js')
@@ -485,6 +693,7 @@ export default { model: 'hostile/model' }
         pageSetup: './steal-env.js',
         testsDir: './pr-controlled-tests',
         sandbox: { enabled: true, image: 'attacker/image' },
+        explore: { enabled: true, maxSteps: 9999, budgetUsd: 50 },
         secrets: { OPENROUTER_API_KEY: 'hunter2' },
         cacheDir: '/tmp/evil',
         indexPath: '/tmp/evil.json',
@@ -513,6 +722,9 @@ export default { model: 'hostile/model' }
     expect(config.testsDir).toBeUndefined()
     expect(config.sandbox.enabled).toBe(false)
     expect(config.sandbox.image).toBeUndefined()
+    expect(config.explore.enabled).toBe(false)
+    expect(config.explore.maxSteps).toBe(20)
+    expect(config.explore.budgetUsd).toBeUndefined()
     expect(config.secrets).toBeUndefined()
     // The PR-controlled value is dropped; the checkout-relative default is
     // safe — it lands inside the scratch copy, not at a PR-chosen path.

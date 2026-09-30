@@ -93,6 +93,26 @@ export function validateMaxComments(raw) {
   return Number(raw)
 }
 
+const KNOWN_REVIEW_PROFILES = new Set(['security', 'perf', 'debloat'])
+
+export function validateReviewProfiles(raw) {
+  if (raw === undefined || raw === '') return undefined
+  const names = String(raw)
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s !== '')
+  // Env-only value — no shell — but reject unknown names so a typo fails
+  // here instead of silently dropping the intended lens at config load.
+  for (const name of names) {
+    if (!KNOWN_REVIEW_PROFILES.has(name)) {
+      throw new Error(
+        `review-profiles must be a comma-separated list of: ${[...KNOWN_REVIEW_PROFILES].join(', ')} — got '${name}'`,
+      )
+    }
+  }
+  return names.join(',')
+}
+
 export function validateCodeModel(raw) {
   if (raw === undefined || raw === '') return undefined
   const value = String(raw).trim()

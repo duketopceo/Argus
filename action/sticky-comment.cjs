@@ -182,6 +182,53 @@ function renderBody(report, codeReview, runUrl, ok, inlinePlan) {
   lines.push('</details>')
   lines.push('')
 
+  // U4a — Exploratory lane: observed runtime anomalies from the browser
+  // session (console errors, page errors, failed same-origin requests).
+  // Evidence only — captures never change the verdict. Rendered only when
+  // the lane was enabled so the section never becomes ambient noise.
+  if (report.explore && report.explore.enabled === true) {
+    lines.push('<details>')
+    lines.push('<summary>🔭 Exploratory</summary>')
+    lines.push('')
+    if (typeof report.explore.skipped === 'string') {
+      lines.push(`- ⚪ explore skipped — ${cell(report.explore.skipped)}`)
+      lines.push('')
+    } else {
+      // The same signature can appear on multiple test reports from one
+      // file's shared browser session — collapse before rendering.
+      const seen = new Map()
+      for (const t of report.tests) {
+        for (const c of t.captures ?? []) {
+          const key = `${c.kind}|${c.text}|${c.url ?? ''}`
+          const existing = seen.get(key)
+          if (existing) existing.count += c.count
+          else seen.set(key, { ...c })
+        }
+      }
+      const LABEL = {
+        'console-error': 'console error',
+        pageerror: 'page error',
+        'request-failed': 'failed request',
+      }
+      const caps = [...seen.values()]
+      if (caps.length === 0) {
+        lines.push('No page errors, console errors, or failed same-origin requests captured.')
+      } else {
+        for (const c of caps.slice(0, 10)) {
+          const times = c.count > 1 ? ` ×${c.count}` : ''
+          const target = c.url !== undefined ? ` — \`${cell(c.url)}\`` : ''
+          lines.push(`- 🟡 observed · ${LABEL[c.kind] ?? cell(c.kind)}${times}: \`${cell(c.text)}\`${target}`)
+        }
+        if (caps.length > 10) lines.push(`- … +${caps.length - 10} more distinct capture(s)`)
+        lines.push('')
+        lines.push('*Observed findings are evidence only — they do not change the verdict.*')
+      }
+      lines.push('')
+    }
+    lines.push('</details>')
+    lines.push('')
+  }
+
   lines.push('<details>')
   lines.push('<summary>📂 Evidence</summary>')
   lines.push('')
@@ -334,6 +381,35 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
   }
   if (typeof codeReview.probeLaneSkipped === 'string') {
     lines.push(` · 🧪 probe lane skipped — ${cell(codeReview.probeLaneSkipped)}`)
+  }
+  // E1.U3 — reproduced probes render copy-pasteable source + the
+  // machine-readable payload `@argus persist` parses back. Content is
+  // rendered bounded (2 probes, 8KB each) and fenced — ``` runs inside the
+  // source are flattened so the block can't break out of its fence.
+  const persistable = (codeReview.probes ?? []).filter(
+    (p) => p.outcome === 'reproduced' && typeof p.path === 'string' && typeof p.content === 'string',
+  )
+  if (persistable.length > 0) {
+    lines.push('')
+    lines.push(
+      `*Reproduced probe(s) — comment \`@argus persist\` to open a regression-test PR, or copy into your suite:*`,
+    )
+    for (const p of persistable.slice(0, 2)) {
+      const rendered = p.content.replace(/`{3,}/g, '``').slice(0, 8 * 1024)
+      lines.push('<details>')
+      lines.push(`<summary>🧪 \`${cell(p.path)}\`</summary>`)
+      lines.push('')
+      lines.push('```ts')
+      lines.push(rendered)
+      lines.push('```')
+      lines.push('</details>')
+    }
+    if (persistable.length > 2) {
+      lines.push(`*…and ${persistable.length - 2} more in \`code-review.json\`.*`)
+    }
+  }
+  if (typeof codeReview.persistPayload === 'string' && codeReview.persistPayload.length < 32768) {
+    lines.push(codeReview.persistPayload)
   }
   lines.push('')
   lines.push(codeReview.summary)

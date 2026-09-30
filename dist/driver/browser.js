@@ -3,6 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { debug } from '../debug.js';
 import { chromium, firefox, webkit } from 'playwright';
+/** Distinct capture signatures kept per browser session. */
+export const MAX_CAPTURE_SIGNATURES = 50;
+/** Per-capture message length — console text is attacker/page-controlled. */
+const MAX_CAPTURE_TEXT = 240;
 const DEFAULT_VIEWPORT = { width: 1280, height: 720 };
 const DEFAULT_QUALITY = 70;
 /**
@@ -19,6 +23,7 @@ export class BrowserDriver {
     browserTimeoutMs;
     video;
     closed;
+    captures = new Map();
     constructor(browser, context, page, quality, videoDir, viewport, browserTimeoutMs, video, closed = false) {
         this.browser = browser;
         this.context = context;
@@ -62,13 +67,63 @@ export class BrowserDriver {
                 recordVideo: { dir: videoDir, size: viewport },
             });
             const page = await context.newPage();
-            return new BrowserDriver(browser, context, page, options.screenshotQuality ?? DEFAULT_QUALITY, videoDir, viewport, options.browserTimeoutMs ?? 30_000, undefined);
+            const driver = new BrowserDriver(browser, context, page, options.screenshotQuality ?? DEFAULT_QUALITY, videoDir, viewport, options.browserTimeoutMs ?? 30_000, undefined);
+            if (options.captureErrors === true)
+                driver._attachCaptureTaps();
+            return driver;
         }
         catch (e) {
             await browser.close().catch(() => undefined);
             await cleanupVideoDir();
             throw e;
         }
+    }
+    /**
+     * Exploratory capture taps (U4a). Noise controls are applied at collection:
+     * identical signatures collapse into one capture with a repeat count,
+     * request-failed events drop third-party origins (analytics/tag beacons
+     * failing is noise, not signal), and distinct signatures are capped.
+     */
+    _attachCaptureTaps() {
+        const page = this.page;
+        page.on('console', (msg) => {
+            if (msg.type() === 'error')
+                this._addCapture('console-error', msg.text());
+        });
+        page.on('pageerror', (err) => {
+            this._addCapture('pageerror', err.message);
+        });
+        page.on('requestfailed', (req) => {
+            const url = req.url();
+            // Third-party failures (blocked trackers, dead CDNs) are ambient —
+            // keep only requests same-origin with the page under test.
+            try {
+                const pageOrigin = new URL(page.url()).origin;
+                if (pageOrigin !== 'null' && new URL(url).origin !== pageOrigin)
+                    return;
+            }
+            catch {
+                // Unparseable page URL (pre-navigation) — keep the capture.
+            }
+            const failure = req.failure()?.errorText ?? 'failed';
+            this._addCapture('request-failed', failure, url);
+        });
+    }
+    _addCapture(kind, text, url) {
+        const clean = text.replace(/\s+/g, ' ').trim().slice(0, MAX_CAPTURE_TEXT);
+        const key = `${kind}|${clean}|${url ?? ''}`;
+        const existing = this.captures.get(key);
+        if (existing !== undefined) {
+            existing.count++;
+            return;
+        }
+        if (this.captures.size >= MAX_CAPTURE_SIGNATURES)
+            return;
+        this.captures.set(key, { kind, text: clean, ...(url !== undefined ? { url } : {}), count: 1 });
+    }
+    /** Captured page anomalies for this session — empty unless captureErrors. */
+    pageCaptures() {
+        return [...this.captures.values()];
     }
     get rawPage() {
         return this.page;

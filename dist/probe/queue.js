@@ -4,7 +4,7 @@ import { DEFAULT_SANDBOX } from '../config.js';
 import { defaultExec } from '../detect.js';
 import { mayProbePr } from '../evidence/gate.js';
 import { isTestFile } from '../evidence/link.js';
-import { buildProbeMessages, parseProbe, probeImportsSafe, PROBE_SCHEMA, } from './author.js';
+import { buildProbeMessages, parseProbe, probeImportsSafe, PROBE_CONTENT_CAP, PROBE_SCHEMA, } from './author.js';
 import { detectHarness } from './harness.js';
 import { checkSandboxPaths, dockerAvailable, resolveSandboxImage, runProbeInSandbox, SANDBOX_OUTPUT_CAP, SCRATCH_DIR_NAME, stripControlChars, sandboxLimits, } from '../executor/sandbox.js';
 /** U9 — below this confidence the triage area signal is ignored. */
@@ -207,6 +207,8 @@ function record(target, probe, outcome, detail, extra = {}) {
         headOutcome: extra.headOutcome,
         baseOutcome: extra.baseOutcome,
         output: extra.output,
+        path: extra.path,
+        content: extra.content,
     };
 }
 /** `timedOut` or the never-ran `-1` sentinel → infra error; else the harness classifies. */
@@ -401,10 +403,16 @@ export async function runProbeLane(findings, o) {
                 };
                 let outcome;
                 let detail;
+                let persist = {};
                 if (headOutcome === 'failed-test' && baseOutcome === 'clean') {
                     outcome = 'reproduced';
                     detail = `reproduced by Argus probe ${probe.filename} (fails on head, clean on base)`;
                     target.evidence = { ...target.evidence, status: 'reproduced', detail };
+                    // The probe file is deleted below, so the content must travel
+                    // with the report — `@argus persist` commits it later from a
+                    // base-only checkout. Content is already validated (safe path +
+                    // imports) and capped for serialization.
+                    persist = { path: relProbe, content: probe.content.slice(0, PROBE_CONTENT_CAP) };
                 }
                 else if (headOutcome !== 'failed-test') {
                     outcome = headOutcome;
@@ -424,7 +432,7 @@ export async function runProbeLane(findings, o) {
                     outcome = 'error';
                     detail = `fails on head but base run inconclusive (${baseOutcome}) — unverified`;
                 }
-                records.push(record(target, probe, outcome, detail, extra));
+                records.push(record(target, probe, outcome, detail, { ...extra, ...persist }));
             }
             finally {
                 await rm(join(o.cwd, relProbe), { force: true }).catch(() => undefined);

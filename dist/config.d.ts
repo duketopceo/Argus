@@ -1,3 +1,4 @@
+import { type ReviewProfile } from './review/packs.js';
 import type { Trust } from './trust.js';
 export interface ProviderRules {
     only?: string[];
@@ -45,6 +46,20 @@ export interface Sandbox {
      * author_association. Same-repo PRs are unaffected either way.
      */
     allowForks: boolean;
+}
+/**
+ * Exploratory lane (roadmap E2.U4): free runtime capture today
+ * (console/pageerror/failed-request taps render as `observed` findings),
+ * bounded act policy later. Opt-in — `enabled` defaults to false. On
+ * untrusted checkouts the whole block is stripped by the config allowlist.
+ */
+export interface Explore {
+    /** Master switch for capture + act. Default false. */
+    enabled: boolean;
+    /** Step cap for the exploratory act policy (U4b). Default 20. */
+    maxSteps: number;
+    /** Model budget for the act policy (U4b). Unset = bounded by run budget. */
+    budgetUsd: number | undefined;
 }
 export interface Config {
     model: string;
@@ -161,6 +176,11 @@ export interface Config {
      */
     sandbox: Sandbox;
     /**
+     * Exploratory lane. Always populated after `resolveConfig` —
+     * `enabled: false` by default so capture is opt-in.
+     */
+    explore: Explore;
+    /**
      * Code-review policy knobs. Always populated after `resolveConfig`.
      * `secretsThreshold`: Jev `noul` probability at/above which a
      * secret-shaped diff literal is reported as a finding (below →
@@ -183,6 +203,9 @@ export interface Config {
      * `requestChanges`: allow the review event to escalate to
      * REQUEST_CHANGES for proven blockers (probe-reproduced or Jev
      * high-confidence). Default true — set false for advisory-only posting.
+     * `profiles`: named review lenses appended to the review prompt
+     * ('security'|'perf'|'debloat' — see src/review/packs.ts). Unknown names
+     * are dropped at config load. Default [] — no extra rubric.
      */
     review: {
         secretsThreshold: number;
@@ -192,14 +215,17 @@ export interface Config {
         lowRiskModel: string | undefined;
         findingThreshold: number;
         requestChanges: boolean;
+        profiles: ReviewProfile[];
     };
 }
-export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review'>> & {
+export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review' | 'explore'>> & {
     provider?: Partial<ProviderRules>;
     sandbox?: Partial<Sandbox>;
     review?: Partial<Config['review']>;
+    explore?: Partial<Explore>;
 };
 export declare const DEFAULT_RECORD_STEP_CAP = 40;
+export declare const DEFAULT_EXPLORE: Explore;
 export declare const DEFAULT_SANDBOX: Sandbox;
 export declare function defineConfig(input: ConfigInput): ConfigInput;
 /**

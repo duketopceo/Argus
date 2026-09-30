@@ -27,6 +27,8 @@ export interface PrMeta {
   headSha: string | undefined
   /** PR base SHA — the merge base probes run against for the double-run. */
   baseSha: string | undefined
+  /** PR base branch name (e.g. `main`) — the persist lane's PR target. */
+  baseRef: string | undefined
   /** `head.repo.fork` — true when the PR head branch lives in a fork. */
   isFork: boolean
   /**
@@ -92,6 +94,48 @@ export async function ghGet(url: string, token: string, ctx: Ctx): Promise<unkno
 }
 
 /**
+ * Write twin of `ghGet` — POST/PUT/PATCH/DELETE with an optional JSON body,
+ * same auth/timeout contract. Unlike ghGet, callers usually need the status
+ * (201-created vs 422-exists is meaningful for idempotent writes), so the
+ * response returns `{ status, data }` and failures return `{ status: 0 }`.
+ */
+export async function ghWrite(
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  url: string,
+  token: string,
+  ctx: Ctx,
+  body?: unknown,
+): Promise<{ status: number; data: unknown }> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 30_000)
+  try {
+    const res = await fetch(url, {
+      method,
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json',
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    })
+    const data = await res.json().catch(() => undefined)
+    if (!res.ok) ctx.err(`evidence: github ${method} ${res.status} ${res.statusText} — ${url}`)
+    return { status: res.status, data }
+  } catch (e) {
+    ctx.err(
+      `evidence: github ${method} failed — ${url} (${
+        e instanceof Error && e.name === 'AbortError' ? 'timeout' : (e as Error).message
+      })`,
+    )
+    return { status: 0, data: undefined }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+/**
  * PR metadata for the evidence + probe lanes — the head SHA check-runs attach
  * to, plus the fork/association/label signals the sandbox fork gate (KTD5)
  * evaluates. One `/pulls/{pr}` request; undefined when the request fails.
@@ -105,7 +149,7 @@ export async function fetchPrMeta(
   const data = (await ghGet(`${GH_API}/repos/${repo}/pulls/${pr}`, token, ctx)) as
     | {
         head?: { sha?: string; repo?: { fork?: boolean; pushed_at?: string } | null }
-        base?: { sha?: string }
+        base?: { sha?: string; ref?: string }
         author_association?: string
         labels?: ({ name?: string } | null)[] | null
         title?: string
@@ -137,6 +181,7 @@ export async function fetchPrMeta(
   return {
     headSha,
     baseSha: mergeBase ?? baseSha,
+    baseRef: typeof data.base?.ref === 'string' ? data.base.ref : undefined,
     // head.repo is null when the source fork was deleted — fail closed and
     // treat it as a fork so the probe gate still applies.
     isFork: data.head?.repo?.fork !== false,

@@ -8,7 +8,7 @@ import { isTrustedAssociation, PROBE_LABEL, type PrMeta } from './ci.js'
  * maintainer never saw. Either timestamp missing → label doesn't approve
  * (fail closed).
  */
-function labelCoversHead(meta: PrMeta): boolean {
+export function labelCoversHead(meta: PrMeta): boolean {
   return (
     meta.labelApprovedAt !== undefined &&
     meta.pushedAt !== undefined &&

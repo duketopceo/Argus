@@ -130,7 +130,26 @@ The caller environment can also pin the code-review model without touching
 the checkout: `ARGUS_CODE_MODEL="owner/model"` wins over `code_model` in
 config — including on `pull_request` events, where the PR's config never
 executes. This is how the GitHub Action and the Agent Zero plugin choose a
-review model per deployment.
+review model per deployment. The verified per-lane model menu lives in
+[docs/models.md](models.md).
+
+### Review lenses
+
+`review.profiles` appends named rubric blocks to the review prompt —
+`'security'`, `'perf'`, `'debloat'` — tuning recall without changing the
+severity gate or posting policy:
+
+```ts
+export default defineConfig({
+  review: { profiles: ['security', 'perf'] },
+})
+```
+
+or per deployment: `ARGUS_REVIEW_PROFILES="security,perf"` (action input
+`review-profiles`). The `security` lens runs alongside the always-on
+deterministic secrets scan — the rubric steers the model toward
+exploitability; the regex lane catches secret-shaped literals even when the
+model doesn't.
 
 Spend is still yours:
 the `run.json` ledger records the per-run dollar figure regardless of which
@@ -307,3 +326,47 @@ verdict or exit code.
 v1 covers Node harnesses (vitest, jest, `node --test`) on the PR's own
 checkout — probes exercise whatever commit `actions/checkout` fetched
 (typically the merge ref).
+
+### Exploratory capture (opt-in)
+
+With `explore: { enabled: true }` in config, `argus-reviewer run` records
+page-level anomalies while your tests drive the app: `console.error`
+messages, uncaught page errors, and failed **same-origin** requests
+(third-party noise like blocked trackers is dropped). Identical signatures
+collapse into one finding with a repeat count, distinct signatures are
+capped, and the run report carries them under `tests[].captures` rendered
+as an **Exploratory** section of `🟡 observed` findings in the PR comment.
+
+Captures are evidence, not adjudication — they never change a verdict or
+the exit code, and they cost nothing (no model calls). If the lane is
+enabled but no page ever loads, the report says so explicitly
+(`explore.skipped`) instead of silently producing nothing. `maxSteps` and
+`budgetUsd` bounds on the block are reserved for the upcoming exploratory
+*act* policy — capture alone does not consume them. On untrusted/fork
+checkouts the whole `explore` block is stripped by the config allowlist.
+
+### `@argus` mention commands (opt-in)
+
+`argus-reviewer init` also scaffolds `.github/workflows/argus-mention.yml`,
+an `issue_comment` workflow that answers PR comments starting with
+`@argus`:
+
+- `@argus review` — re-run code review on the latest head; the sticky
+  comment updates in place
+- `@argus record "<flow>"` — record a test flow against the base-checkout
+  app; the generated test + flow cache upload as a workflow artifact
+- `@argus persist` — commit a reproduced probe to `argus/probe-regression-pr-<n>`
+  and open a regression-test PR against the base branch. The probe source
+  travels with the sticky comment (copy-pasteable details block + a
+  machine-readable payload), so persist works even though the probe file is
+  deleted after review. Idempotent — re-running reuses the branch and open
+  PR; a moved PR head is refused until `@argus review` re-runs
+- `@argus help` — the command menu
+
+Security posture: `issue_comment` runs carry secrets and a write-capable
+`GITHUB_TOKEN`, so the workflow **never checks out the PR head** — it runs
+on the base ref and reviews the diff over the GitHub API. Only comments by
+MEMBER/OWNER/COLLABORATOR are answered; everything else is ignored
+silently. On fork-head PRs, commands additionally need the `argus-probe`
+label covering the current head SHA, and `record`/`persist` are refused
+outright.

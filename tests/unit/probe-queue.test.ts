@@ -37,6 +37,7 @@ const META: PrMeta = {
   body: undefined,
   headSha: 'head1',
   baseSha: 'base1',
+  baseRef: undefined,
   isFork: false,
   authorAssociation: 'MEMBER',
   labels: [],
@@ -297,6 +298,10 @@ describe('runProbeLane', () => {
     expect(res?.records[0]?.outcome).toBe('reproduced')
     expect(res?.records[0]?.headOutcome).toBe('failed-test')
     expect(res?.records[0]?.baseOutcome).toBe('clean')
+    // E1.U3 — reproduced records serialize the probe source + suggested
+    // path so `@argus persist` can commit it later from a base checkout.
+    expect(res?.records[0]?.path).toBe('tests/argus-probe-probe-x.test.ts')
+    expect(res?.records[0]?.content).toContain("describe('probe'")
   })
 
   it('does NOT upgrade when the probe fails on base too (probe bug)', async () => {
@@ -325,6 +330,10 @@ describe('runProbeLane', () => {
     const res = await runProbeLane(fs, laneOpts(cwd, reportDir, index, exec))
     expect(fs[0]?.evidence.status).toBe('not_exercised')
     expect(res?.records[0]?.outcome).toBe('clean')
+    // Probe source serializes only for `reproduced` — a passing probe is
+    // not persistable and shouldn't bloat code-review.json.
+    expect(res?.records[0]?.content).toBeUndefined()
+    expect(res?.records[0]?.path).toBeUndefined()
   })
 
   it('records error when the sandbox spawn rejects', async () => {

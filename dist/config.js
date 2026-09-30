@@ -1,6 +1,12 @@
 import { pathToFileURL } from 'node:url';
+import { isReviewProfile } from './review/packs.js';
 import { JEV_DEFAULT_MODEL } from './vision/decisions.js';
 export const DEFAULT_RECORD_STEP_CAP = 40;
+export const DEFAULT_EXPLORE = {
+    enabled: false,
+    maxSteps: 20,
+    budgetUsd: undefined,
+};
 export const DEFAULT_SANDBOX = {
     enabled: false,
     image: undefined,
@@ -40,6 +46,7 @@ const defaults = {
     a0: undefined,
     heal: 'local',
     sandbox: { ...DEFAULT_SANDBOX },
+    explore: { ...DEFAULT_EXPLORE },
     review: {
         secretsThreshold: 0.3,
         maxComments: 20,
@@ -48,6 +55,7 @@ const defaults = {
         lowRiskModel: undefined,
         findingThreshold: 1.0,
         requestChanges: true,
+        profiles: [],
     },
 };
 export function defineConfig(input) {
@@ -103,6 +111,18 @@ export function resolveConfig(input = {}) {
     sandbox.maxProbes = posInt(sandbox.maxProbes, DEFAULT_SANDBOX.maxProbes);
     sandbox.timeoutMs = posInt(sandbox.timeoutMs, DEFAULT_SANDBOX.timeoutMs);
     sandbox.pidsLimit = posInt(sandbox.pidsLimit, DEFAULT_SANDBOX.pidsLimit);
+    // Same wrong-typed degrade as sandbox — a mis-typed flag must never
+    // self-enable the lane.
+    const rawExplore = typeof input.explore === 'object' && input.explore !== null ? input.explore : {};
+    const explore = { ...defaults.explore, ...rawExplore };
+    explore.enabled = rawExplore.enabled === true;
+    explore.maxSteps = posInt(explore.maxSteps, DEFAULT_EXPLORE.maxSteps);
+    explore.budgetUsd =
+        typeof explore.budgetUsd === 'number' &&
+            Number.isFinite(explore.budgetUsd) &&
+            explore.budgetUsd > 0
+            ? explore.budgetUsd
+            : undefined;
     const rawReview = typeof input.review === 'object' && input.review !== null ? input.review : {};
     const review = { ...defaults.review, ...rawReview };
     // Thresholds must be probabilities — anything else (NaN, >1,
@@ -127,7 +147,13 @@ export function resolveConfig(input = {}) {
     // Advisory-only escape hatch — only literal `false` opts out; anything
     // else (mis-typed values included) keeps the default-true posture.
     review.requestChanges = review.requestChanges !== false;
-    const resolved = { ...defaults, ...input, provider, sandbox, review };
+    // Unknown profile names are rejected at config load — a typo silently
+    // disabling a lens is worse than dropping it. Non-array input means the
+    // field was mis-typed entirely and also drops to the empty default.
+    review.profiles = Array.isArray(rawReview.profiles)
+        ? [...new Set(rawReview.profiles.filter(isReviewProfile))]
+        : [];
+    const resolved = { ...defaults, ...input, provider, sandbox, explore, review };
     resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP);
     if (resolved.heal !== 'a0')
         resolved.heal = 'local';

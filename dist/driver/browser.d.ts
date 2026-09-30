@@ -16,7 +16,28 @@ export interface BrowserDriverOptions {
     browser?: 'chromium' | 'firefox' | 'webkit' | undefined;
     /** Hard limit in ms for Playwright cleanup. */
     browserTimeoutMs?: number | undefined;
+    /**
+     * Exploratory capture (U4a): record page errors, console errors, and
+     * failed same-origin requests during the run. Free — no model calls.
+     */
+    captureErrors?: boolean;
 }
+/**
+ * One runtime anomaly observed while the browser was driving the app —
+ * becomes an `observed` finding on the run report. Captures never change a
+ * verdict; they are evidence, not adjudication.
+ */
+export interface PageCapture {
+    kind: 'console-error' | 'pageerror' | 'request-failed';
+    /** Normalized, truncated message or failure signature. */
+    text: string;
+    /** Failing request URL (request-failed only, same-origin only). */
+    url?: string;
+    /** Collapsed repeat count for this signature. */
+    count: number;
+}
+/** Distinct capture signatures kept per browser session. */
+export declare const MAX_CAPTURE_SIGNATURES = 50;
 export interface Observation {
     screenshotJpeg: Buffer;
     a11yYaml: string;
@@ -38,8 +59,19 @@ export declare class BrowserDriver {
     private readonly browserTimeoutMs;
     private video;
     private closed;
+    private readonly captures;
     private constructor();
     static launch(options?: BrowserDriverOptions): Promise<BrowserDriver>;
+    /**
+     * Exploratory capture taps (U4a). Noise controls are applied at collection:
+     * identical signatures collapse into one capture with a repeat count,
+     * request-failed events drop third-party origins (analytics/tag beacons
+     * failing is noise, not signal), and distinct signatures are capped.
+     */
+    private _attachCaptureTaps;
+    private _addCapture;
+    /** Captured page anomalies for this session — empty unless captureErrors. */
+    pageCaptures(): PageCapture[];
     get rawPage(): Page;
     get recordingDir(): string;
     goto(url: string): Promise<void>;
