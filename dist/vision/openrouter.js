@@ -1,8 +1,15 @@
 import { debug } from '../debug.js';
 import { makeCallCost } from './cost.js';
+/**
+ * Per-request timeout for OpenRouter calls. A hung connection otherwise
+ * blocks the caller forever — observed in the wild pinning a self-hosted
+ * review job for 90+ minutes on one socket.
+ */
+const REQUEST_TIMEOUT_MS = 120_000;
 export class OpenRouterClient {
     _apiKey;
     _fetch;
+    _timeoutMs;
     _trace;
     _headers;
     _onCall;
@@ -12,9 +19,13 @@ export class OpenRouterClient {
         }
         this._apiKey = opts.apiKey;
         this._fetch = opts.fetch ?? globalThis.fetch;
+        this._timeoutMs = opts.timeoutMs ?? REQUEST_TIMEOUT_MS;
         this._trace = opts.trace;
         this._headers = opts.headers;
         this._onCall = opts.onCall;
+    }
+    _request(url, init) {
+        return this._fetch(url, { ...init, signal: AbortSignal.timeout(this._timeoutMs) });
     }
     async complete(opts) {
         const candidates = [opts.model, ...(opts.escalationModels ?? [])];
@@ -56,7 +67,7 @@ export class OpenRouterClient {
         throw new Error(`OpenRouter completion failed for all candidate models: ${errors.map((e) => e.message).join('; ')}`);
     }
     async reconcile(id) {
-        const res = await this._fetch(`https://openrouter.ai/api/v1/generation?id=${encodeURIComponent(id)}`, {
+        const res = await this._request(`https://openrouter.ai/api/v1/generation?id=${encodeURIComponent(id)}`, {
             method: 'GET',
             headers: { Authorization: `Bearer ${this._apiKey}` },
         });
@@ -98,7 +109,7 @@ export class OpenRouterClient {
             'X-OpenRouter-Metadata': 'enabled',
             ...(this._headers ?? {}),
         };
-        const res = await this._fetch('https://openrouter.ai/api/v1/chat/completions', {
+        const res = await this._request('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers,
             body: JSON.stringify(body),

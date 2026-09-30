@@ -158,6 +158,30 @@ describe('OpenRouterClient', () => {
     })
   })
 
+  it('aborts a hung request after timeoutMs instead of waiting forever', async () => {
+    // Stub fetch hangs until the caller's signal aborts — mirrors the
+    // observed production hang where one OpenRouter socket pinned a
+    // self-hosted review job for 90+ minutes.
+    const hangingFetch: typeof fetch = (_input, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal
+        if (signal == null) {
+          // Fail fast rather than hang — a missing signal means the
+          // timeout wiring regressed.
+          reject(new Error('no abort signal passed to fetch'))
+          return
+        }
+        signal.addEventListener('abort', () =>
+          reject(signal.reason instanceof Error ? signal.reason : new Error('aborted')),
+        )
+      })
+    const client = new OpenRouterClient({ apiKey: 'test', fetch: hangingFetch, timeoutMs: 50 })
+
+    await expect(
+      client.complete({ model: 'qwen/qwen3.7-flash', messages: [sampleMessage] }),
+    ).rejects.toThrow(/failed for all candidate models|timed? ?out|abort/i)
+  })
+
   it('sends response_format json_schema when a schema is given', async () => {
     const { fetch: stub, calls } = makeStubFetch([
       { status: 200, body: okResponse({ cost: 0.002 }) },
