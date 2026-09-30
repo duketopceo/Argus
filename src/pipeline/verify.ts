@@ -71,6 +71,8 @@ interface FlowReport {
     assertionMisses?: number
   }
   tests?: { calls?: CallCost[] }[]
+  /** Present when the run had the explore lane on — itself the evidence. */
+  explore?: { enabled?: boolean }
 }
 
 async function readJson<T>(path: string): Promise<T | undefined> {
@@ -140,9 +142,11 @@ function flowCache(report: FlowReport | undefined): CacheSummary | undefined {
   }
 }
 
-/** A green `ok` is only evidence when at least one test actually executed. */
+/** A green `ok` is only evidence when a test executed or the explore lane
+ * ran as the evidence source (its pass or explicit skip is recorded). */
 function flowEvidenceRan(report: FlowReport | undefined): boolean {
   if (report === undefined) return false
+  if (report.explore?.enabled === true) return true
   return (report.totals?.tests ?? report.tests?.length ?? 0) > 0
 }
 

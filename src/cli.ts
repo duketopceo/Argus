@@ -902,6 +902,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
     startedAt,
     Date.now() - runStart,
     exploreOutcome?.calls ?? [],
+    config.explore.enabled,
   )
   if (config.explore.enabled) {
     if (exploreOutcome !== undefined) {

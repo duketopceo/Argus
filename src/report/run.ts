@@ -101,6 +101,13 @@ export function buildRunReport(
    * complete even though no TestReport owns these calls.
    */
   extraCalls: CallCost[] = [],
+  /**
+   * An enabled explore lane makes a zero-test run a legitimate shape — the
+   * act pass is the evidence source for repos with no recorded flows, and
+   * its outcome (or explicit skip reason) lands in `report.explore`, so the
+   * empty suite is never a silent pass.
+   */
+  exploreEnabled = false,
 ): RunReport {
   const failed = tests.filter((t) => !t.ok).length
   const callsByModel: Record<string, number> = {}
@@ -116,8 +123,9 @@ export function buildRunReport(
     durationMs,
     // Zero executed tests is not a pass — an empty suite produces no evidence,
     // so the report fails closed rather than letting a misconfigured testsDir
-    // or a non-matching pattern read as green.
-    ok: tests.length > 0 && failed === 0,
+    // or a non-matching pattern read as green. An enabled explore lane is the
+    // exception: its pass (or explicit skip) is the evidence.
+    ok: (tests.length > 0 || exploreEnabled) && failed === 0,
     totals: {
       tests: tests.length,
       passed: tests.length - failed,
