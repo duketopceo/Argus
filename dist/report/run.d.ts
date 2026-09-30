@@ -1,5 +1,6 @@
 import type { HealEvent, TdAssertRecord, TdStepRecord } from '../api.js';
 import type { PageCapture } from '../driver/browser.js';
+import type { ExploreStopReason } from '../engine/explore.js';
 import type { CacheStats } from '../engine/loop.js';
 import type { CallCost } from '../vision/cost.js';
 /**
@@ -64,15 +65,32 @@ export interface RunReport {
         videos: string[];
     };
     /**
-     * Exploratory-lane summary (U4a). Present only when `explore.enabled` —
+     * Exploratory-lane summary (U4). Present only when `explore.enabled` —
      * the comment renders an Exploratory section for it. `skipped` carries an
      * explicit reason when the lane was on but could not observe anything
      * (e.g. the target URL was unreachable), so a silent no-op is impossible.
+     * `steps`/`visited`/`stopReason`/`visionCalls`/`visionCostUsd`/`captures`
+     * describe the bounded free-explore act pass (U4b) when it ran; they are
+     * `observed` evidence, never verdict-changing.
      */
     explore?: {
         enabled: boolean;
         skipped?: string;
+        steps?: number;
+        visited?: number;
+        stopReason?: ExploreStopReason;
+        visionCalls?: number;
+        visionCostUsd?: number;
+        captures?: PageCapture[];
+        /** Video of the explore session itself (also in `artifacts.videos`). */
+        videoPath?: string;
     };
 }
-export declare function buildRunReport(tests: TestReport[], startedAt: Date, durationMs: number): RunReport;
+export declare function buildRunReport(tests: TestReport[], startedAt: Date, durationMs: number, 
+/**
+ * Model calls outside the per-test sessions (the explore act pass bills
+ * its own ledger). Folded into the run totals so `run.json` spend is
+ * complete even though no TestReport owns these calls.
+ */
+extraCalls?: CallCost[]): RunReport;
 export declare function writeRunReport(path: string, report: RunReport): Promise<void>;

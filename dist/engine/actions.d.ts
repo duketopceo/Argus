@@ -23,4 +23,9 @@ export declare class Actions {
     scroll(dx: number, dy: number): Promise<Observation>;
     /** Wait ms milliseconds, then observe. */
     wait(ms: number): Promise<Observation>;
+    /**
+     * Navigate to a URL, then observe. Explore-lane primitive — the caller
+     * (ExploreLoop) enforces the same-origin bound before this is invoked.
+     */
+    navigate(url: string): Promise<Observation>;
 }
