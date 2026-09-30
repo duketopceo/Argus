@@ -643,6 +643,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
         result: ExploreResult
         captures: PageCapture[]
         calls: CallCost[]
+        budgetExceeded: boolean
         videoPath: string | undefined
       }
     | undefined
@@ -795,7 +796,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
         await applyPageSetup(config, exploreDriver, ctx, tmpDir)
         const targetUrl = target?.url ?? url
         await exploreDriver.goto(targetUrl)
-        const exploreLedger = new Ledger(config.budgetUsd)
+        const exploreLedger = new Ledger(config.explore.budgetUsd ?? config.budgetUsd)
         const result = await runExplore({
           driver: exploreDriver,
           actions: new Actions(exploreDriver),
@@ -815,7 +816,13 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
         // Record the outcome before close() — a video-finalize failure must
         // not hide a completed explore pass (the error still lands in
         // runErrors via the catch).
-        exploreOutcome = { result, captures, calls, videoPath: undefined }
+        exploreOutcome = {
+          result,
+          captures,
+          calls,
+          budgetExceeded: exploreLedger.budgetExceeded,
+          videoPath: undefined,
+        }
         const videoPath = await exploreDriver.close()
         exploreDriver = undefined
         exploreOutcome.videoPath = videoPath
@@ -897,20 +904,30 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
   )
   if (config.explore.enabled) {
     if (exploreOutcome !== undefined) {
-      // Act pass ran — report the bounded summary plus the anomalies its
-      // own session captured.
+      // An errored pass is reported as an explicit skip — 'stopped: error'
+      // alone doesn't read as a failure. Its calls, captures, and video are
+      // still kept: spend already billed stays in the totals.
+      const errored = exploreOutcome.result.stopReason === 'error'
       report.explore = {
         enabled: true,
-        steps: exploreOutcome.result.steps.length,
-        visited: exploreOutcome.result.visited,
-        stopReason: exploreOutcome.result.stopReason,
-        visionCalls: exploreOutcome.result.visionCalls,
-        visionCostUsd: exploreOutcome.result.visionCostUsd,
+        ...(errored
+          ? {
+              skipped:
+                exploreOutcome.result.notes.at(-1)?.message ?? 'exploration error',
+            }
+          : {
+              steps: exploreOutcome.result.steps.length,
+              visited: exploreOutcome.result.visited,
+              stopReason: exploreOutcome.result.stopReason,
+              visionCalls: exploreOutcome.result.visionCalls,
+              visionCostUsd: exploreOutcome.result.visionCostUsd,
+            }),
         ...(exploreOutcome.captures.length > 0 ? { captures: exploreOutcome.captures } : {}),
         ...(exploreOutcome.videoPath !== undefined
           ? { videoPath: exploreOutcome.videoPath }
           : {}),
       }
+      if (exploreOutcome.budgetExceeded) report.totals.budgetExceeded = true
       if (exploreOutcome.videoPath !== undefined) {
         report.artifacts.videos.push(exploreOutcome.videoPath)
       }

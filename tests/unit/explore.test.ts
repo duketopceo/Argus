@@ -22,10 +22,16 @@ function observation(tag: string): Observation {
 
 class StubDriver {
   url = BASE_URL
+  /** Next click navigates here — simulates a link leaving the origin. */
+  pendingUrl: string | undefined
   private tick = 0
 
   get rawPage() {
     return { url: () => this.url }
+  }
+
+  async goto(url: string): Promise<void> {
+    this.url = url
   }
 
   async observe(): Promise<Observation> {
@@ -45,6 +51,10 @@ class StubActions {
 
   async click(): Promise<Observation> {
     this.calls.push('click')
+    if (this.driver.pendingUrl !== undefined) {
+      this.driver.url = this.driver.pendingUrl
+      this.driver.pendingUrl = undefined
+    }
     return this.driver.observe()
   }
   async type(): Promise<Observation> {
@@ -120,7 +130,7 @@ function setup(
   const actions = new StubActions(driver)
   const client = new FakeClient(queue)
   const config = resolveConfig({ budgetUsd: 10, ...configInput })
-  const ledger = new Ledger(config.budgetUsd)
+  const ledger = new Ledger(config.explore.budgetUsd ?? config.budgetUsd)
   return { driver, actions, client, config, ledger }
 }
 
@@ -174,6 +184,38 @@ describe('runExplore', () => {
     expect(res.stopReason).toBe('budget')
     expect(res.visionCalls).toBe(1)
     expect(res.visionCostUsd).toBeCloseTo(0.001)
+  })
+
+  it('explore.budgetUsd overrides the run budget when larger', async () => {
+    const h = setup(
+      [
+        act({ action: 'wait', ms: 1, reasoning: 'a' }),
+        act({ action: 'wait', ms: 1, reasoning: 'b' }),
+        act({ action: 'wait', ms: 1, reasoning: 'c' }),
+      ],
+      // Run budget alone would stop the pass before the first call; the
+      // lane-specific cap wins and two $0.001 calls fit inside it.
+      { budgetUsd: 0.0005, explore: { enabled: true, maxSteps: 20, budgetUsd: 0.0025 } },
+    )
+    const res = await run(h)
+    expect(res.stopReason).toBe('budget')
+    expect(res.visionCalls).toBe(2)
+    expect(h.ledger.budgetExceeded).toBe(true)
+  })
+
+  it('click-induced cross-origin navigation returns to the last in-origin page', async () => {
+    const h = setup([
+      act({ action: 'click', x: 10, y: 10, reasoning: 'external link' }),
+      act({ action: 'done', reasoning: 'stop' }),
+    ])
+    h.driver.pendingUrl = 'https://evil.example/landing'
+    const res = await run(h)
+    expect(res.steps[0]?.note).toBe('refused: left target origin')
+    expect(res.steps[0]?.url).toBe(BASE_URL)
+    expect(h.driver.url).toBe(BASE_URL)
+    expect(res.visited).toBe(1)
+    expect(res.notes.some((n) => n.message.includes('left target origin'))).toBe(true)
+    expect(res.stopReason).toBe('done')
   })
 
   it('replayOnly ledger stops explore before the first call', async () => {

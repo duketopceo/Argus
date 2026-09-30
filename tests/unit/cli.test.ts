@@ -289,6 +289,82 @@ describe('argus-reviewer CLI', () => {
     expect(kinds).toContain('pageerror')
   }, 60_000)
 
+  it('explore errored pass renders as skipped while keeping captured evidence', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-explore-err-'))
+    const testsDir = join(cwd, 'tests')
+    await mkdir(testsDir, { recursive: true })
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({
+        testsDir,
+        reportDir: join(cwd, 'report'),
+        cacheDir: join(cwd, 'cache'),
+        explore: { enabled: true, maxSteps: 5 },
+        budgetUsd: 1,
+      }),
+    )
+    const exploreUrl = `file://${fileURLToPath(new URL('../fixtures/explore.html', import.meta.url))}`
+    // Empty queue — the first explore model call throws inside the loop.
+    const client = new StubClient([])
+    const code = await main(['run', '--url', exploreUrl], {
+      cwd,
+      out: capture().fn,
+      err: capture().fn,
+      createClient: () => client,
+    })
+    expect(code).toBe(0)
+    const report = JSON.parse(await readFile(join(cwd, 'report', 'run.json'), 'utf8')) as {
+      ok: boolean
+      explore?: {
+        skipped?: string
+        steps?: number
+        captures?: { kind: string }[]
+      }
+    }
+    expect(report.ok).toBe(true)
+    // 'stopped: error' reports as an explicit skip, not a bare pass summary.
+    expect(report.explore?.skipped).toContain('model call threw')
+    expect(report.explore?.steps).toBeUndefined()
+    // The page loaded before the error — its seeded anomalies survive.
+    expect((report.explore?.captures ?? []).some((c) => c.kind === 'pageerror')).toBe(true)
+  }, 60_000)
+
+  it('explore budget exhaustion flags run totals', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-explore-budget-'))
+    const testsDir = join(cwd, 'tests')
+    await mkdir(testsDir, { recursive: true })
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({
+        testsDir,
+        reportDir: join(cwd, 'report'),
+        cacheDir: join(cwd, 'cache'),
+        // Lane cap below one $0.001 call's next projection — the second
+        // canSpend check trips the ledger's budgetExceeded flag.
+        explore: { enabled: true, maxSteps: 5, budgetUsd: 0.001 },
+        budgetUsd: 10,
+      }),
+    )
+    const exploreUrl = `file://${fileURLToPath(new URL('../fixtures/explore.html', import.meta.url))}`
+    const client = new StubClient([
+      { content: JSON.stringify({ action: 'wait', ms: 1 }) },
+      { content: JSON.stringify({ action: 'wait', ms: 1 }) },
+    ])
+    const code = await main(['run', '--url', exploreUrl], {
+      cwd,
+      out: capture().fn,
+      err: capture().fn,
+      createClient: () => client,
+    })
+    expect(code).toBe(0)
+    const report = JSON.parse(await readFile(join(cwd, 'report', 'run.json'), 'utf8')) as {
+      totals: { budgetExceeded: boolean }
+      explore?: { stopReason?: string }
+    }
+    expect(report.explore?.stopReason).toBe('budget')
+    expect(report.totals.budgetExceeded).toBe(true)
+  }, 60_000)
+
   it('explore degrades to an explicit skip when the target is unreachable', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'argus-explore-skip-'))
     const testsDir = join(cwd, 'tests')

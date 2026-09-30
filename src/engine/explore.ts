@@ -84,7 +84,7 @@ export interface ExploreOptions {
 export async function runExplore(opts: ExploreOptions): Promise<ExploreResult> {
   const { driver, actions, client, ledger, config, logger } = opts
   const maxSteps = config.explore.maxSteps
-  const laneBudget = config.explore.budgetUsd
+  const laneBudget = config.explore.budgetUsd ?? config.budgetUsd
   const costStart = ledger.visionCostUsd
 
   // Non-http(s) targets (file:// demos) get a no-navigate policy — 'null'
@@ -151,7 +151,7 @@ export async function runExplore(opts: ExploreOptions): Promise<ExploreResult> {
     }
     ledger.recordCall(response.cost)
     visionCalls++
-    if (config.budgetUsd !== undefined && ledger.visionCostUsd > config.budgetUsd) {
+    if (laneBudget !== undefined && ledger.visionCostUsd - costStart > laneBudget) {
       ledger.flagBudgetExceeded()
     }
 
@@ -174,7 +174,27 @@ export async function runExplore(opts: ExploreOptions): Promise<ExploreResult> {
       try {
         observation = await executeExploreAction(actions, bounded.action)
         nextUrl = driver.rawPage.url()
-        visited.add(nextUrl)
+        if (httpOrigin(nextUrl) === targetOrigin) {
+          visited.add(nextUrl)
+        } else {
+          // A click or submit can leave the target without a navigate
+          // proposal — the origin bound applies to wherever an act
+          // lands, not just to navigate. Discard the foreign
+          // observation and return to the last in-origin page; if we
+          // can't get back, the pass stops rather than act off-origin.
+          note('act left target origin — returning', nextUrl)
+          stepNote = 'refused: left target origin'
+          observation = undefined
+          nextUrl = url
+          try {
+            await driver.goto(url)
+          } catch (e) {
+            note('return to target origin failed', (e as Error).message)
+            steps.push({ action: bounded.action.action, url, note: stepNote })
+            priorActs.push({ action: bounded.action, url, note: stepNote })
+            return finish('error')
+          }
+        }
       } catch (e) {
         // A failed act (nav timeout, detached node, dead page) is evidence of
         // a broken app, not a loop failure — journal it and let the model
