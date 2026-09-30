@@ -38,8 +38,9 @@ origin: docs/brainstorms/2026-09-23-insight-first-open-source-review-requirement
 #88/#89/#97 already landed the four-lane `verify` contract, the versioned
 manifest, head-bound evidence, the action trust gate, the mention lane,
 review packs, probe persistence, the verified model menu, and U4a captures.
-The U4b act pass is landing on `feat/explore-act-policy` under a different
-owner. What remains is the product's promise made real end-to-end: the `app`
+The U4b act pass has since landed on `main` via #99 — `src/engine/explore.ts`
+is the real substrate U3 builds against. What remains is the product's
+promise made real end-to-end: the `app`
 and `a0` lanes exist in the manifest but have no runners (they can only ever
 report `unavailable`), the dashboard never reads the manifest, the
 `file://` smoke path is still a release gate, and `init`/docs predate the
@@ -227,10 +228,11 @@ selector-based test authoring, a hosted dashboard as the only review surface.
   tolerance, last-valid retention) that feeds the Electron workspace; TUI
   uses the same collected shape. Raw `run.json`/`code-review.json` remain
   lane-detail, not the aggregate source.
-- KTD6. **Isolated worktree for implementation.** The shared checkout
-  carries another agent's uncommitted U4b WIP on `feat/explore-act-policy`.
-  All units implement on a new branch in a separate `git worktree` off
-  `main`; nothing in this plan edits that checkout.
+- KTD6. **Isolated worktree for implementation.** All units implement on
+  the dedicated branch in a separate `git worktree` off `main`; the shared
+  checkout is not edited. (The U4b WIP that motivated this has since merged
+  via #99; the isolation rule still holds — this plan's branch lives at
+  `../argus-insight-follow`.)
 
 ### High-Level Technical Design
 
@@ -273,9 +275,11 @@ flowchart LR
 
 ### Assumptions
 
-- The U4b `feat/explore-act-policy` work lands (or is committed on its
-  branch) before U4 begins; until then U4 builds against the plan-specified
-  `ExploreLoop` interface. U1–U3, U5 have no such dependency.
+- The U4b `feat/explore-act-policy` work has landed on `main` (#99) —
+  `src/engine/explore.ts` is real, so U3 builds against the actual
+  `ExploreLoop`, not the planned interface. The implementation branch must
+  rebase onto (or merge) current `main` before U3 so the lane composes the
+  shipped substrate; it merges cleanly today.
 - No reachable A0 host exists this cycle — every A0 behavior is verified by
   stubbed tests and reported honestly (R14).
 - `docs/models.md` + `scripts/check-models.mjs` + `model-catalog.yml`
@@ -312,9 +316,16 @@ CacheStats getter may already be superseded by `Engine.cacheStats`
 (`src/engine/loop.ts`); the a0-plugin stash belongs to the shipped
 a0-plugin-argus repo — drop or relocate it to that repo's notes.
 
+**State at resume (2026-09-30):** `feat/insight-first-four-lane-review` is
+already absent from local and remote refs and `git stash list` is empty —
+the retirement happened between the plan's write and this resume. Remaining
+work is verification only: confirm the salvage decision was recorded (PR
+body, commit message, or solutions doc) and reconstruct it in the PR body
+here if it was not.
+
 **Test scenarios:** none — git hygiene. Verification: `git branch -a` and
-`git stash list` are clean of the retired refs; any salvaged fix carries its
-own regression test per repo rules.
+`git stash list` are clean of the retired refs (already true); the salvage
+record exists in this PR's body or a prior one.
 
 ### U2. Vision lane release gates
 
@@ -359,8 +370,8 @@ smoke paths; run.json exposes the cache economics fields.
 ### U3. `verify --app` task lane
 
 **Goal:** A real bounded application lane where the manifest slot is empty
-today. **Requirements:** R7–R10. **Dependencies:** U4b landed (explore
-substrate); U1 recommended first.
+today. **Requirements:** R7–R10. **Dependencies:** explore substrate is on
+`main` (#99) — branch must include it first; U1 recommended first.
 
 **Files:** new `src/pipeline/app.ts`, `src/engine/explore.ts` (consumer-side
 options/hooks only — no rewrite), `src/pipeline/verify.ts`,
@@ -540,10 +551,9 @@ head binding, and skipped optional lanes on a real Argus PR.
 
 ## Risks & Dependencies
 
-- **U4b landing order** — U3 consumes `src/engine/explore.ts`; if its owner
-  hasn't committed it when U3 starts, implement against the planned
-  ExploreLoop interface and reconcile at merge (both touch `cli.ts`/`run.ts`
-  wiring — small conflict surface).
+- ~~**U4b landing order**~~ — resolved: `src/engine/explore.ts` shipped on
+  `main` via #99; U3 composes the real ExploreLoop after rebasing the branch
+  onto `main`.
 - **A0 host** — external blocker (#53) caps U4 at stubbed verification; the
   plan forbids claiming otherwise (R14).
 - **Electron on this machine** — dashboard smoke needs Playwright chromium;
