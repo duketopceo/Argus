@@ -25,9 +25,18 @@ export interface JsonSchema {
   strict?: boolean
 }
 
+/**
+ * Per-request timeout for OpenRouter calls. A hung connection otherwise
+ * blocks the caller forever — observed in the wild pinning a self-hosted
+ * review job for 90+ minutes on one socket.
+ */
+const REQUEST_TIMEOUT_MS = 120_000
+
 export interface OpenRouterClientOptions {
   apiKey: string
   fetch?: typeof fetch
+  /** Per-request timeout in ms. Default 120_000. */
+  timeoutMs?: number
   /**
    * Extra metadata sent on every request. `trace` is merged into the request
    * body `trace` field for cost attribution. `headers` are merged into the
@@ -52,6 +61,7 @@ export interface OpenRouterClientOptions {
 export class OpenRouterClient {
   private _apiKey: string
   private _fetch: typeof fetch
+  private _timeoutMs: number
   private _trace: Record<string, string> | undefined
   private _headers: Record<string, string> | undefined
   private _onCall: OpenRouterClientOptions['onCall']
@@ -62,9 +72,14 @@ export class OpenRouterClient {
     }
     this._apiKey = opts.apiKey
     this._fetch = opts.fetch ?? globalThis.fetch
+    this._timeoutMs = opts.timeoutMs ?? REQUEST_TIMEOUT_MS
     this._trace = opts.trace
     this._headers = opts.headers
     this._onCall = opts.onCall
+  }
+
+  private _request(url: string, init: RequestInit): Promise<Response> {
+    return this._fetch(url, { ...init, signal: AbortSignal.timeout(this._timeoutMs) })
   }
 
   async complete(opts: {
@@ -120,7 +135,7 @@ export class OpenRouterClient {
   }
 
   async reconcile(id: string): Promise<{ costUsd: number }> {
-    const res = await this._fetch(
+    const res = await this._request(
       `https://openrouter.ai/api/v1/generation?id=${encodeURIComponent(id)}`,
       {
         method: 'GET',
@@ -175,7 +190,7 @@ export class OpenRouterClient {
       ...(this._headers ?? {}),
     }
 
-    const res = await this._fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const res = await this._request('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
