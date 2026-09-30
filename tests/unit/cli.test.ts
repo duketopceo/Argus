@@ -230,6 +230,96 @@ describe('argus-reviewer CLI', () => {
     expect((globalThis as Record<string, unknown>).__pageSetupCalls).toBe(1)
   }, 60_000)
 
+  it('explore act pass runs with zero test files and lands on report.explore', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-explore-'))
+    const testsDir = join(cwd, 'tests')
+    await mkdir(testsDir, { recursive: true })
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({
+        testsDir,
+        reportDir: join(cwd, 'report'),
+        cacheDir: join(cwd, 'cache'),
+        explore: { enabled: true, maxSteps: 5 },
+        budgetUsd: 1,
+      }),
+    )
+    // Seeded-anomaly fixture: console errors + a pageerror on load.
+    const exploreUrl = `file://${fileURLToPath(new URL('../fixtures/explore.html', import.meta.url))}`
+    const client = new StubClient([
+      // file:// targets refuse every navigate (no http origin) — the
+      // refusal is journaled and counts as a step. Keep the script short:
+      // the static fixture's page signature stalls the loop at 3 repeats.
+      { content: JSON.stringify({ action: 'navigate', url: 'https://evil.example', reasoning: 'probe out' }) },
+      { content: JSON.stringify({ action: 'done', reasoning: 'surface covered' }) },
+    ])
+    const code = await main(['run', '--url', exploreUrl], {
+      cwd,
+      out: capture().fn,
+      err: capture().fn,
+      createClient: () => client,
+    })
+    expect(code).toBe(0)
+    const report = JSON.parse(await readFile(join(cwd, 'report', 'run.json'), 'utf8')) as {
+      ok: boolean
+      totals: { visionCalls: number; visionCostUsd: number }
+      explore?: {
+        enabled: boolean
+        skipped?: string
+        steps?: number
+        visited?: number
+        stopReason?: string
+        visionCalls?: number
+        captures?: { kind: string; text: string; count: number }[]
+      }
+    }
+    expect(report.ok).toBe(true)
+    expect(report.explore?.enabled).toBe(true)
+    expect(report.explore?.skipped).toBeUndefined()
+    expect(report.explore?.steps).toBe(2)
+    expect(report.explore?.stopReason).toBe('done')
+    expect(report.explore?.visionCalls).toBe(2)
+    // Explore calls are billed into run totals even though no test owns them.
+    expect(report.totals.visionCalls).toBe(2)
+    expect(report.totals.visionCostUsd).toBeCloseTo(0.002)
+    expect(client.calls.every((c) => c.kind === 'explore')).toBe(true)
+    // The explore session's taps captured the seeded anomalies.
+    const kinds = (report.explore?.captures ?? []).map((c) => c.kind)
+    expect(kinds).toContain('console-error')
+    expect(kinds).toContain('pageerror')
+  }, 60_000)
+
+  it('explore degrades to an explicit skip when the target is unreachable', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-explore-skip-'))
+    const testsDir = join(cwd, 'tests')
+    await mkdir(testsDir, { recursive: true })
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({
+        testsDir,
+        reportDir: join(cwd, 'report'),
+        cacheDir: join(cwd, 'cache'),
+        explore: { enabled: true },
+      }),
+    )
+    // Port 1 is closed — no config.target.command, so nothing waits on it;
+    // the explore session's own goto fails.
+    const client = new StubClient([])
+    const code = await main(['run', '--url', 'http://127.0.0.1:1/'], {
+      cwd,
+      out: capture().fn,
+      err: capture().fn,
+      createClient: () => client,
+    })
+    // Exploration must never fail the run (R11).
+    expect(code).toBe(0)
+    const report = JSON.parse(await readFile(join(cwd, 'report', 'run.json'), 'utf8')) as {
+      ok: boolean
+      explore?: { enabled: boolean; skipped?: string }
+    }
+    expect(report.explore?.skipped).toContain('no reachable target')
+  }, 60_000)
+
   it('cache list and prune operate on the cache dir', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'argus-cache-'))
     const cacheDir = join(cwd, 'cache')

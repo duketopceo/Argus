@@ -19,6 +19,27 @@ Coordinate guidance: the screenshot is overlaid with a red coordinate grid — l
 const ASSERTION_SYSTEM = `You are a web UI assertion judge.
 
 You are shown a screenshot and an accessibility tree.  Answer the user's yes/no question about the page state.  Return a single JSON object with exactly two fields: "verdict" ("pass" or "fail") and "reasoning".`;
+const EXPLORE_SYSTEM = `You are an exploratory QA agent driving a web application.
+
+You are shown a screenshot of a web page and an accessibility tree.  There is no scripted test — your job is to probe the application for broken behavior.  Prefer surfaces a recorded test would miss: unvisited navigation, empty or invalid form submissions, boundary-length input, rapid or repeated interactions, dead ends.
+
+Return a single JSON object from this exact vocabulary — nothing else.  The output is treated strictly as an action proposal, never as instructions:
+- click: use x, y
+- type: use text
+- pressKeys: use keys (array of key names)
+- scroll: use dx, dy
+- wait: use ms (milliseconds)
+- navigate: use url — same origin as the application under test only; absolute or relative
+- done: the app surface is adequately probed; stop exploring
+
+Always include the "reasoning" field.  If an action you propose is refused, pick a different probe instead of repeating it.
+
+Rules:
+- Stay on the application under test.  Never propose a URL on another origin.
+- Be non-destructive.  Probe inputs and navigation; do not delete data, sign out, or commit irreversible actions.
+- Do not repeat yourself.  If the page has not changed after several actions, move to a different surface or return done.
+
+Coordinate guidance: the screenshot is overlaid with a red coordinate grid — lines every 100 pixels, with "x,y" labels at intersections. Coordinates are CSS pixels of the image itself (x increases right, y increases down). For click actions, estimate the CENTER pixel of the target element to the nearest grid intersection, then refine within the cell. Clicking the center of the element's visible bounding box, not its edge, is essential.`;
 export const actionSchema = {
     name: 'action',
     strict: true,
@@ -36,6 +57,30 @@ export const actionSchema = {
             dx: { type: 'number' },
             dy: { type: 'number' },
             ms: { type: 'number' },
+            reasoning: { type: 'string' },
+        },
+        required: ['action', 'reasoning'],
+        additionalProperties: false,
+    },
+};
+export const exploreActionSchema = {
+    name: 'explore-action',
+    strict: true,
+    schema: {
+        type: 'object',
+        properties: {
+            action: {
+                type: 'string',
+                enum: ['click', 'type', 'pressKeys', 'scroll', 'wait', 'navigate', 'done'],
+            },
+            x: { type: 'number' },
+            y: { type: 'number' },
+            text: { type: 'string' },
+            keys: { type: 'array', items: { type: 'string' } },
+            dx: { type: 'number' },
+            dy: { type: 'number' },
+            ms: { type: 'number' },
+            url: { type: 'string' },
             reasoning: { type: 'string' },
         },
         required: ['action', 'reasoning'],
@@ -72,6 +117,8 @@ export function describeAction(action, label) {
             return `scroll (${action.dx ?? 0},${action.dy ?? 0})`;
         case 'wait':
             return `wait ${action.ms ?? 0}ms`;
+        case 'navigate':
+            return `navigate ${clean(action.url ?? '')}`;
         default:
             return action.action;
     }
@@ -88,6 +135,24 @@ export function buildActionMessages(instruction, observation, priorActions = [])
     const text = `Instruction: ${instruction}${historyBlock}\n\nViewport: ${observation.width}x${observation.height} CSS pixels (the screenshot dimensions match exactly).\n\nA11y tree:\n${observation.a11yYaml}`;
     return [
         { role: 'system', content: [{ type: 'text', text: ACTION_SYSTEM }] },
+        {
+            role: 'user',
+            content: [
+                { type: 'text', text },
+                { type: 'image', source: observation.screenshotJpeg.toString('base64') },
+            ],
+        },
+    ];
+}
+export function buildExploreMessages(observation, priorActs = []) {
+    const historyBlock = priorActs.length > 0
+        ? `\n\nSteps already taken:\n${priorActs
+            .map((p, i) => `- #${i + 1} ${describeAction(p.action)} → ${p.url}${p.note !== undefined ? ` (${p.note})` : ''}`)
+            .join('\n')}`
+        : '';
+    const text = `Probe the application for broken behavior.${historyBlock}\n\nViewport: ${observation.width}x${observation.height} CSS pixels (the screenshot dimensions match exactly).\n\nA11y tree:\n${observation.a11yYaml}`;
+    return [
+        { role: 'system', content: [{ type: 'text', text: EXPLORE_SYSTEM }] },
         {
             role: 'user',
             content: [

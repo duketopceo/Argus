@@ -25,10 +25,11 @@ import {
 } from './config.js'
 import { debug, setLiveDir } from './debug.js'
 import { defaultExec, detectEnvironment, type ExecFn } from './detect.js'
-import { BrowserDriver } from './driver/browser.js'
+import { BrowserDriver, PageCapture } from './driver/browser.js'
 import { TargetProcess, waitForReady } from './driver/target.js'
 import { Engine, VisionClient } from './engine/loop.js'
 import { Actions } from './engine/actions.js'
+import { runExplore, type ExploreResult } from './engine/explore.js'
 import { buildReviewContext, CONTEXT_PREFIX } from './index/context.js'
 import { diffChangedFiles } from './index/diff.js'
 import { invalidateForDiff } from './index/invalidate.js'
@@ -635,6 +636,17 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
 
   let runFailed = false
   let target: TargetProcess | undefined
+  // Exploratory act pass (U4b) outcome — populated inside the try so an
+  // argus-booted target is still alive, merged into report.explore below.
+  let exploreOutcome:
+    | {
+        result: ExploreResult
+        captures: PageCapture[]
+        calls: CallCost[]
+        videoPath: string | undefined
+      }
+    | undefined
+  let exploreSkipped: string | undefined
   const patches = patchGlobals()
   try {
     target = await startTarget(config)
@@ -771,6 +783,51 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
       }
     }
 
+    // Exploratory act pass (U4b): after the test sessions, a bounded
+    // free-explore loop probes the app itself — its own driver session so
+    // captures are attributed to the lane, not to a test file. Runs inside
+    // the try so an argus-booted target is still alive. Any failure here
+    // degrades to report.explore.skipped — exploration never fails the run.
+    if (config.explore.enabled) {
+      let exploreDriver: BrowserDriver | undefined
+      try {
+        exploreDriver = await launchDriver(config, deps)
+        await applyPageSetup(config, exploreDriver, ctx, tmpDir)
+        const targetUrl = target?.url ?? url
+        await exploreDriver.goto(targetUrl)
+        const exploreLedger = new Ledger(config.budgetUsd)
+        const result = await runExplore({
+          driver: exploreDriver,
+          actions: new Actions(exploreDriver),
+          client,
+          ledger: exploreLedger,
+          config,
+          targetUrl,
+          logger,
+        })
+        runErrors.push(...result.notes)
+        const captures = exploreDriver.pageCaptures()
+        const calls = exploreLedger.calls
+        ctx.out(
+          `explore: ${result.steps.length} steps, ${result.visited} page(s), ` +
+            `stopped: ${result.stopReason}, $${result.visionCostUsd.toFixed(6)}`,
+        )
+        // Record the outcome before close() — a video-finalize failure must
+        // not hide a completed explore pass (the error still lands in
+        // runErrors via the catch).
+        exploreOutcome = { result, captures, calls, videoPath: undefined }
+        const videoPath = await exploreDriver.close()
+        exploreDriver = undefined
+        exploreOutcome.videoPath = videoPath
+      } catch (e) {
+        exploreSkipped = (e as Error).message
+        runErrors.push({ stage: 'explore', message: `explore skipped: ${exploreSkipped}` })
+        ctx.err(`explore skipped: ${exploreSkipped}`)
+      } finally {
+        await exploreDriver?.close()
+      }
+    }
+
     // heal: 'a0' — each failed test gets an autonomous second opinion from
     // the Agent Zero instance: it clicks through the app itself and reports
     // whether the app or the expectation is wrong. Runs inside the try so an
@@ -832,16 +889,44 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
       failureMessage: report.failureMessage,
     })
   }
-  const report = buildRunReport(reports, startedAt, Date.now() - runStart)
+  const report = buildRunReport(
+    reports,
+    startedAt,
+    Date.now() - runStart,
+    exploreOutcome?.calls ?? [],
+  )
   if (config.explore.enabled) {
-    // Explicit skip line when the lane could not observe anything: every
-    // report failed before a single step ran, so no page ever loaded.
-    const pageLoaded = reports.some((r) => r.ok || r.steps.length > 0)
-    report.explore = {
-      enabled: true,
-      ...(pageLoaded || reports.length === 0
-        ? {}
-        : { skipped: 'no page loaded — nothing captured' }),
+    if (exploreOutcome !== undefined) {
+      // Act pass ran — report the bounded summary plus the anomalies its
+      // own session captured.
+      report.explore = {
+        enabled: true,
+        steps: exploreOutcome.result.steps.length,
+        visited: exploreOutcome.result.visited,
+        stopReason: exploreOutcome.result.stopReason,
+        visionCalls: exploreOutcome.result.visionCalls,
+        visionCostUsd: exploreOutcome.result.visionCostUsd,
+        ...(exploreOutcome.captures.length > 0 ? { captures: exploreOutcome.captures } : {}),
+        ...(exploreOutcome.videoPath !== undefined
+          ? { videoPath: exploreOutcome.videoPath }
+          : {}),
+      }
+      if (exploreOutcome.videoPath !== undefined) {
+        report.artifacts.videos.push(exploreOutcome.videoPath)
+      }
+    } else {
+      // Explicit skip line when the lane could not observe anything: either
+      // the act pass failed to reach the target, or every test report
+      // failed before a single step ran so no page ever loaded.
+      const pageLoaded = reports.some((r) => r.ok || r.steps.length > 0)
+      report.explore = {
+        enabled: true,
+        ...(exploreSkipped !== undefined
+          ? { skipped: `no reachable target — ${exploreSkipped}` }
+          : pageLoaded || reports.length === 0
+            ? {}
+            : { skipped: 'no page loaded — nothing captured' }),
+      }
     }
   }
   try {
@@ -2401,11 +2486,14 @@ export default defineConfig({
   // fingerprint cache cost $0 regardless of this cap.
   budgetUsd: 1,
   testsDir: 'tests/argus',
-  // Exploratory lane: capture console errors, page errors, and failed
-  // same-origin requests during test runs. Findings render as 'observed'
-  // in the report/comment — evidence only, never verdict-changing. Free
-  // (no model calls).
-  // explore: { enabled: true, maxSteps: 20 },${a0Block}
+  // Exploratory lane: after the test loop, a bounded agent pass probes the
+  // app itself — same-origin navigation, clicks, invalid input — while taps
+  // capture console errors, page errors, and failed requests. Findings
+  // render as 'observed' — evidence only, never verdict-changing.
+  // maxSteps caps acts per run; budgetUsd caps explore model spend (falls
+  // back to budgetUsd). Point it at disposable targets only — clicks and
+  // form submits have real side effects.
+  // explore: { enabled: true, maxSteps: 20, budgetUsd: 0.25 },${a0Block}
 })
 `
 }

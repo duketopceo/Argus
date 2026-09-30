@@ -327,23 +327,44 @@ v1 covers Node harnesses (vitest, jest, `node --test`) on the PR's own
 checkout — probes exercise whatever commit `actions/checkout` fetched
 (typically the merge ref).
 
-### Exploratory capture (opt-in)
+### Exploratory lane (opt-in)
 
-With `explore: { enabled: true }` in config, `argus-reviewer run` records
-page-level anomalies while your tests drive the app: `console.error`
-messages, uncaught page errors, and failed **same-origin** requests
-(third-party noise like blocked trackers is dropped). Identical signatures
-collapse into one finding with a repeat count, distinct signatures are
-capped, and the run report carries them under `tests[].captures` rendered
-as an **Exploratory** section of `🟡 observed` findings in the PR comment.
+With `explore: { enabled: true }` in config, `argus-reviewer run` does two
+things. During the test loop it records page-level anomalies while your
+tests drive the app: `console.error` messages, uncaught page errors, and
+failed **same-origin** requests (third-party noise like blocked trackers
+is dropped). After the test loop finishes, a bounded **act pass** probes
+the app on its own — the model is shown the page (screenshot + a11y tree)
+and proposes one action at a time from a fixed vocabulary: `click`,
+`type`, `pressKeys`, `scroll`, `wait`, `navigate`, `done`. It needs no
+recorded tests, so apps with zero `tests/` files still get probed.
 
-Captures are evidence, not adjudication — they never change a verdict or
-the exit code, and they cost nothing (no model calls). If the lane is
-enabled but no page ever loads, the report says so explicitly
-(`explore.skipped`) instead of silently producing nothing. `maxSteps` and
-`budgetUsd` bounds on the block are reserved for the upcoming exploratory
-*act* policy — capture alone does not consume them. On untrusted/fork
-checkouts the whole `explore` block is stripped by the config allowlist.
+The act pass is structurally bounded — model output is a proposal, never
+an instruction:
+
+- `explore.maxSteps` (default 20) caps acts per run; `explore.budgetUsd`
+  caps explore model spend (falls back to the run `budgetUsd`).
+- `navigate` is confined to the target's origin — cross-origin and
+  non-`http(s)` proposals are refused and journaled, so the agent cannot
+  be steered off the app under test.
+- Typed input is truncated (500 chars), `pressKeys` is filtered to a small
+  allowlist (Enter/Tab/arrows etc.), scroll and wait are clamped, and the
+  loop stops on `done`, the step/budget caps, an unchanging page, or an
+  error.
+- **Point it at disposable targets only.** The prompt instructs
+  non-destructive probing, but clicks and form submits on a live app have
+  real side effects — explore against preview/staging deploys, not
+  production.
+
+Everything the lane sees lands as `🟡 observed` findings in the
+**Exploratory** section of the PR comment and under `explore.captures` /
+`tests[].captures` in `run.json`, alongside the pass's step count, pages
+visited, stop reason, and vision spend. Captures are evidence, not
+adjudication — they never change a verdict or the exit code, and an
+unreachable target degrades to an explicit `explore.skipped` reason
+instead of a failure. On untrusted/fork checkouts the whole `explore`
+block is stripped by the config allowlist, so a hostile PR cannot turn it
+on.
 
 ### `@argus` mention commands (opt-in)
 

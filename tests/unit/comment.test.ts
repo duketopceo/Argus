@@ -164,6 +164,41 @@ describe('renderComment', () => {
     const body = renderComment(stubReport({ explore: { enabled: true } }))
     expect(body).toContain('No page errors, console errors, or failed same-origin requests captured.')
   })
+
+  it('renders the act-pass summary and merges its captures with test captures', () => {
+    const body = renderComment(
+      stubReport({
+        explore: {
+          enabled: true,
+          steps: 7,
+          visited: 2,
+          stopReason: 'max-steps',
+          visionCalls: 7,
+          visionCostUsd: 0.0012,
+          captures: [
+            {
+              kind: 'pageerror' as const,
+              text: 'TypeError: boom',
+              count: 1,
+            },
+          ],
+        },
+      }),
+    )
+    expect(body).toContain('### Exploratory')
+    expect(body).toContain('explored **7** step(s) across **2** page(s)')
+    expect(body).toContain('stopped: max-steps')
+    expect(body).toContain('🟡 observed · page error: `TypeError: boom`')
+  })
+
+  it('renders a reachable-target skip line from the act pass', () => {
+    const body = renderComment(
+      stubReport({
+        explore: { enabled: true, skipped: 'no reachable target — net::ERR_CONNECTION_REFUSED' },
+      }),
+    )
+    expect(body).toContain('explore skipped — no reachable target')
+  })
 })
 
 describe('conclusionFromReport', () => {

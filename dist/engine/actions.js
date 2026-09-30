@@ -44,4 +44,12 @@ export class Actions {
         await this.driver.rawPage.waitForTimeout(ms);
         return this.driver.observe({ grid: true });
     }
+    /**
+     * Navigate to a URL, then observe. Explore-lane primitive — the caller
+     * (ExploreLoop) enforces the same-origin bound before this is invoked.
+     */
+    async navigate(url) {
+        await this.driver.goto(url);
+        return this.driver.observe({ grid: true });
+    }
 }
