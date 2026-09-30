@@ -580,6 +580,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
 
   if (files.length === 0) {
     ctx.out(`no test files found under ${testsDir}`)
+    ctx.err(`no test files found under ${testsDir} — run reports a failure rather than a pass`)
   }
 
   const runStart = Date.now()

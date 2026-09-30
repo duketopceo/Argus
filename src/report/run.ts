@@ -94,7 +94,10 @@ export function buildRunReport(
     tool: 'argus-reviewer',
     startedAt: startedAt.toISOString(),
     durationMs,
-    ok: failed === 0,
+    // Zero executed tests is not a pass — an empty suite produces no evidence,
+    // so the report fails closed rather than letting a misconfigured testsDir
+    // or a non-matching pattern read as green.
+    ok: tests.length > 0 && failed === 0,
     totals: {
       tests: tests.length,
       passed: tests.length - failed,

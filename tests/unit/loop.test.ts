@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { BrowserDriver } from '../../src/driver/browser.js'
+import { TargetProcess } from '../../src/driver/target.js'
 import { Actions } from '../../src/engine/actions.js'
 import { Engine, VisionClient } from '../../src/engine/loop.js'
 import { resolveConfig, ProviderRules } from '../../src/config.js'
@@ -13,7 +14,8 @@ import { Ledger } from '../../src/vision/ledger.js'
 import { CallCost, CallKind } from '../../src/vision/cost.js'
 import { JsonSchema, Message } from '../../src/vision/openrouter.js'
 
-const FIXTURE_URL = fileURLToPath(new URL('../fixtures/index.html', import.meta.url))
+const SERVE_SCRIPT = fileURLToPath(new URL('../fixtures/serve.mjs', import.meta.url))
+const FIXTURE_DIR = fileURLToPath(new URL('../fixtures/', import.meta.url))
 
 interface FakeCall {
   kind: CallKind
@@ -66,8 +68,17 @@ class FakeClient implements VisionClient {
 
 describe('Engine record/replay', () => {
   let driver: BrowserDriver
+  let target: TargetProcess | undefined
+  let fixtureUrl = ''
 
   beforeAll(async () => {
+    const port = 4100 + Math.floor(Math.random() * 400)
+    target = await TargetProcess.start({
+      command: `${JSON.stringify(process.execPath)} ${JSON.stringify(SERVE_SCRIPT)} ${port} ${JSON.stringify(FIXTURE_DIR)}`,
+      url: `http://127.0.0.1:${port}/`,
+      readyTimeoutMs: 10_000,
+    })
+    fixtureUrl = target.url
     driver = await BrowserDriver.launch({
       viewport: { width: 1280, height: 720 },
       browserTimeoutMs: 8_000,
@@ -75,11 +86,12 @@ describe('Engine record/replay', () => {
   })
 
   beforeEach(async () => {
-    await driver.goto(`file://${FIXTURE_URL}`)
+    await driver.goto(fixtureUrl)
   })
 
   afterAll(async () => {
     await driver.close()
+    await target?.stop()
   })
 
   it('recorded flow replays with zero model calls when fingerprints resolve', async () => {

@@ -1,16 +1,35 @@
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { main } from '../../src/cli.js'
+import { TargetProcess } from '../../src/driver/target.js'
 import { VisionClient } from '../../src/engine/loop.js'
 import { CallCost, CallKind } from '../../src/vision/cost.js'
 import { JsonSchema, Message } from '../../src/vision/openrouter.js'
 import { ProviderRules } from '../../src/config.js'
 
-const FIXTURE_URL = `file://${fileURLToPath(new URL('../fixtures/index.html', import.meta.url))}`
+const SERVE_SCRIPT = fileURLToPath(new URL('../fixtures/serve.mjs', import.meta.url))
+const FIXTURE_DIR = fileURLToPath(new URL('../fixtures/', import.meta.url))
+
+let FIXTURE_URL = ''
+let fixtureServer: TargetProcess | undefined
+
+beforeAll(async () => {
+  const port = 5400 + Math.floor(Math.random() * 400)
+  fixtureServer = await TargetProcess.start({
+    command: `${JSON.stringify(process.execPath)} ${JSON.stringify(SERVE_SCRIPT)} ${port} ${JSON.stringify(FIXTURE_DIR)}`,
+    url: `http://127.0.0.1:${port}/`,
+    readyTimeoutMs: 10_000,
+  })
+  FIXTURE_URL = fixtureServer.url
+})
+
+afterAll(async () => {
+  await fixtureServer?.stop()
+})
 
 class StubClient implements VisionClient {
   calls: { kind: CallKind; model: string }[] = []
@@ -187,6 +206,32 @@ describe('argus-reviewer CLI', () => {
     const junit = await readFile(join(cwd, 'report', 'junit.xml'), 'utf8')
     expect(junit).toContain('<failure')
     expect(junit).toContain('failing assert')
+  }, 60_000)
+
+  it('run reports a failure rather than a pass when no test files exist', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-cli-empty-'))
+    const testsDir = join(cwd, 'tests')
+    const reportDir = join(cwd, 'report')
+    await mkdir(testsDir, { recursive: true })
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({ testsDir, reportDir, budgetUsd: 1 }),
+    )
+    const err = capture()
+    const code = await main(['run', '--url', FIXTURE_URL], {
+      cwd,
+      out: capture().fn,
+      err: err.fn,
+      createClient: () => new StubClient([]),
+    })
+    expect(code).toBe(1)
+    expect(err.lines.join('\n')).toContain('no test files found')
+    const report = JSON.parse(await readFile(join(reportDir, 'run.json'), 'utf8')) as {
+      ok: boolean
+      totals: { tests: number }
+    }
+    expect(report.ok).toBe(false)
+    expect(report.totals.tests).toBe(0)
   }, 60_000)
 
   it('invokes config pageSetup with the page before navigation', async () => {

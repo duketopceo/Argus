@@ -93,8 +93,18 @@ describe('runVerify', () => {
       join(reportDir, 'run.json'),
       JSON.stringify({
         ok: true,
-        totals: { visionCalls: 0, visionCostUsd: 0 },
-        tests: [],
+        totals: {
+          tests: 1,
+          visionCalls: 1,
+          visionCostUsd: 0.001,
+          cacheHits: 4,
+          cacheMisses: 1,
+          cacheHeals: 1,
+          staleEntries: 0,
+          assertionHits: 2,
+          assertionMisses: 0,
+        },
+        tests: [{ calls: [] }],
       }),
     )
     const result = await runVerify({
@@ -117,11 +127,47 @@ describe('runVerify', () => {
       budgets: { review: { limitUsd: 0.01 } },
     })
     expect(result.exitCode).toBe(0)
-    expect(result.manifest.aggregate).toMatchObject({ status: 'passed', ok: true, costUsd: 0.002 })
+    expect(result.manifest.aggregate).toMatchObject({ status: 'passed', ok: true, costUsd: 0.003 })
     expect(result.manifest.lanes.review.status).toBe('passed')
     expect(result.manifest.lanes.flow.status).toBe('passed')
     expect(result.manifest.lanes.app.status).toBe('skipped')
     expect(result.manifest.lanes.review.reportPath).toBe('reports/code-review.json')
+    expect(result.manifest.lanes.flow.cache).toMatchObject({
+      hits: 4,
+      misses: 1,
+      heals: 1,
+      staleEntries: 0,
+      assertionHits: 2,
+      assertionMisses: 0,
+    })
+  })
+
+  it('marks the flow lane failed when run.json claims ok with zero tests', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-'))
+    const reportDir = join(cwd, 'reports')
+    await mkdir(reportDir, { recursive: true })
+    await writeFile(
+      join(reportDir, 'run.json'),
+      JSON.stringify({ ok: true, totals: { tests: 0, visionCalls: 0 }, tests: [] }),
+    )
+    const result = await runVerify({
+      cwd,
+      runId: 'run-zero',
+      reportDir,
+      identity: {
+        repo: 'o/r',
+        pr: '1',
+        intendedHeadSha: undefined,
+        checkoutSha: undefined,
+        baseSha: undefined,
+      },
+      selection: { review: false, flow: true, app: false, a0: false },
+      flowUrl: 'http://localhost:3000',
+      runners: { flow: async () => 0 },
+    })
+    expect(result.manifest.lanes.flow.status).toBe('failed')
+    expect(result.manifest.lanes.flow.reason).toContain('zero tests')
+    expect(result.exitCode).not.toBe(0)
   })
 
   it('marks an unavailable deep lane and a missing flow target without spending', async () => {

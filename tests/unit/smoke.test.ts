@@ -1,16 +1,35 @@
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { main } from '../../src/cli.js'
+import { TargetProcess } from '../../src/driver/target.js'
 import { VisionClient } from '../../src/engine/loop.js'
 import { CallCost, CallKind } from '../../src/vision/cost.js'
 import { JsonSchema, Message } from '../../src/vision/openrouter.js'
 import { ProviderRules } from '../../src/config.js'
 
-const FIXTURE_URL = `file://${fileURLToPath(new URL('../fixtures/index.html', import.meta.url))}`
+const SERVE_SCRIPT = fileURLToPath(new URL('../fixtures/serve.mjs', import.meta.url))
+const FIXTURE_DIR = fileURLToPath(new URL('../fixtures/', import.meta.url))
+
+let FIXTURE_URL = ''
+let fixtureServer: TargetProcess | undefined
+
+beforeAll(async () => {
+  const port = 5000 + Math.floor(Math.random() * 400)
+  fixtureServer = await TargetProcess.start({
+    command: `${JSON.stringify(process.execPath)} ${JSON.stringify(SERVE_SCRIPT)} ${port} ${JSON.stringify(FIXTURE_DIR)}`,
+    url: `http://127.0.0.1:${port}/`,
+    readyTimeoutMs: 10_000,
+  })
+  FIXTURE_URL = fixtureServer.url
+})
+
+afterAll(async () => {
+  await fixtureServer?.stop()
+})
 
 class StubClient implements VisionClient {
   calls: { kind: CallKind; model: string }[] = []

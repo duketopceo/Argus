@@ -9,6 +9,7 @@ import {
   isHeadBindingConclusive,
   MANIFEST_SCHEMA_VERSION,
   type BudgetSummary,
+  type CacheSummary,
   type HeadBinding,
   type LaneId,
   type LaneManifest,
@@ -57,10 +58,17 @@ interface ReviewReport {
 interface FlowReport {
   ok?: boolean
   totals?: {
+    tests?: number
     visionCalls?: number
     visionCostUsd?: number
     callsByModel?: Record<string, number>
     costByModel?: Record<string, number>
+    cacheHits?: number
+    cacheMisses?: number
+    cacheHeals?: number
+    staleEntries?: number
+    assertionHits?: number
+    assertionMisses?: number
   }
   tests?: { calls?: CallCost[] }[]
 }
@@ -117,6 +125,25 @@ function flowUsage(report: FlowReport | undefined) {
     }
   }
   return usage
+}
+
+function flowCache(report: FlowReport | undefined): CacheSummary | undefined {
+  const totals = report?.totals
+  if (totals === undefined) return undefined
+  return {
+    hits: totals.cacheHits ?? 0,
+    misses: totals.cacheMisses ?? 0,
+    heals: totals.cacheHeals ?? 0,
+    staleEntries: totals.staleEntries ?? 0,
+    assertionHits: totals.assertionHits ?? 0,
+    assertionMisses: totals.assertionMisses ?? 0,
+  }
+}
+
+/** A green `ok` is only evidence when at least one test actually executed. */
+function flowEvidenceRan(report: FlowReport | undefined): boolean {
+  if (report === undefined) return false
+  return (report.totals?.tests ?? report.tests?.length ?? 0) > 0
 }
 
 function budgetFor(
@@ -212,22 +239,40 @@ export async function runVerify(input: VerifyInput): Promise<VerifyResult> {
         ctxError(runnerError)
       }
       const report = await readJson<FlowReport>(join(input.reportDir, 'run.json'))
+      // A run.json claiming ok with zero executed tests carries no evidence —
+      // fail closed instead of letting it pass the lane.
+      const noEvidence =
+        report !== undefined && report.ok === true && code === 0 && !flowEvidenceRan(report)
       lanes.flow = laneEnd({
         ...lanes.flow,
-        status: runnerError !== undefined ? 'failed' : reportStatus(code, report, false),
+        status:
+          runnerError !== undefined
+            ? 'failed'
+            : noEvidence
+              ? 'failed'
+              : reportStatus(code, report, false),
         reportPath:
           report === undefined ? undefined : relativeReport(input.cwd, input.reportDir, 'run.json'),
         summary:
-          report === undefined ? undefined : report.ok === true ? 'flow passed' : 'flow failed',
+          report === undefined
+            ? undefined
+            : noEvidence
+              ? 'flow ran zero tests'
+              : report.ok === true
+                ? 'flow passed'
+                : 'flow failed',
         reason:
           runnerError ??
-          (report === undefined
-            ? 'run.json was not produced'
-            : report.ok === true
-              ? undefined
-              : 'flow failed'),
+          (noEvidence
+            ? 'run.json reports ok but executed zero tests'
+            : report === undefined
+              ? 'run.json was not produced'
+              : report.ok === true
+                ? undefined
+                : 'flow failed'),
         usage: flowUsage(report),
         budget: budgetFor('flow', input, report),
+        cache: flowCache(report),
       })
     }
   }

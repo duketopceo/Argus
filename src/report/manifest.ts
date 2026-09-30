@@ -47,6 +47,15 @@ export interface BudgetSummary {
   tasks: number
 }
 
+export interface CacheSummary {
+  hits: number
+  misses: number
+  heals: number
+  staleEntries: number
+  assertionHits: number
+  assertionMisses: number
+}
+
 export interface LaneManifest {
   lane: LaneId
   selected: boolean
@@ -60,6 +69,8 @@ export interface LaneManifest {
   usage: UsageSummary
   budget: BudgetSummary
   headBinding: HeadBinding | undefined
+  /** Flow-lane replay economics — defined only when the lane produced a run.json. */
+  cache: CacheSummary | undefined
 }
 
 export interface RunIdentity {
@@ -190,6 +201,7 @@ export function emptyLane(lane: LaneId, selected: boolean): LaneManifest {
     usage: emptyUsage(),
     budget: emptyBudget(),
     headBinding: undefined,
+    cache: undefined,
   }
 }
 

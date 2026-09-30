@@ -102,6 +102,7 @@ export function emptyLane(lane, selected) {
         usage: emptyUsage(),
         budget: emptyBudget(),
         headBinding: undefined,
+        cache: undefined,
     };
 }
 export function aggregateLanes(lanes) {
