@@ -277,6 +277,8 @@ export declare const DEFAULT_EXPLORE: Explore;
 export declare const DEFAULT_APP: AppLane;
 export declare const DEFAULT_SANDBOX: Sandbox;
 export declare function defineConfig(input: ConfigInput): ConfigInput;
+/** Keep only string expected-state markers; all-dropped means unconfigured. */
+export declare function sanitizeExpectation(input: unknown): AppExpectation | undefined;
 /**
  * Which severities fail the review status. `review.severityGate` is the
  * consumer-facing alias over `severity` — 'risk' fails on bug|risk,

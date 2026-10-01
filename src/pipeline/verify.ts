@@ -7,6 +7,7 @@ import {
   emptyLane,
   emptyUsage,
   isHeadBindingConclusive,
+  LANE_IDS,
   LANE_STATUSES,
   MANIFEST_SCHEMA_VERSION,
   type BudgetSummary,
@@ -18,8 +19,13 @@ import {
   type RunIdentity,
   type RunManifest,
 } from '../report/manifest.js'
-import { addProviderCalls, createBudget, type BudgetOptions } from './budget.js'
-import { selectedLanes, type LaneSelection } from './contracts.js'
+import {
+  addProviderCalls,
+  createBudget,
+  overLimit,
+  type BudgetOptions,
+} from './budget.js'
+import type { LaneSelection } from './contracts.js'
 import type { CallCost } from '../vision/cost.js'
 
 export interface VerifyRunners {
@@ -150,7 +156,6 @@ function flowUsage(report: FlowReport | undefined) {
   return {
     ...usage,
     calls: totals.visionCalls ?? usage.calls,
-    tokens: usage.tokens,
     costUsd: totals.visionCostUsd ?? usage.costUsd,
   }
 }
@@ -186,7 +191,20 @@ function budgetFor(
   if (lane === 'review') {
     budget = addProviderCalls(budget, (report as ReviewReport | undefined)?.calls)
   } else if (lane === 'flow') {
-    budget = addProviderCalls(budget, flowCalls(report as FlowReport | undefined))
+    const flowReport = report as FlowReport | undefined
+    budget = addProviderCalls(budget, flowCalls(flowReport))
+    // totals fold in lane-level calls the per-test reports never own (the
+    // explore pass) — the budget must count the same spend usage reports.
+    const totalUsd = flowReport?.totals?.visionCostUsd
+    if (totalUsd !== undefined && totalUsd > budget.spentUsd) {
+      budget = {
+        ...budget,
+        spentUsd: totalUsd,
+        exceeded:
+          budget.exceeded ||
+          (budget.limitUsd !== undefined && overLimit(totalUsd, budget.limitUsd)),
+      }
+    }
   }
   return budget
 }
@@ -238,24 +256,27 @@ function laneDetailBudget(
     (budget.limitUsd !== undefined &&
       detail?.calls === undefined &&
       detail?.visionCostUsd !== undefined &&
-      detail.visionCostUsd > budget.limitUsd)
+      overLimit(detail.visionCostUsd, budget.limitUsd))
   budget = { ...budget, tasks, elapsedMs, exceeded }
   return budget
 }
 
-/** Run selected lanes and return one stable manifest without owning subprocesses. */
+/**
+ * Run selected lanes and return one stable manifest without owning
+ * subprocesses. Lanes run sequentially on purpose: flow/app can both boot
+ * `target.command` (port collision) and serial execution keeps budget
+ * accounting and lane timing honest — each lane's startedAt is its own
+ * start, not the run's.
+ */
 export async function runVerify(input: VerifyInput): Promise<VerifyResult> {
   const startedAt = new Date()
   const lanes = Object.fromEntries(
-    (['review', 'flow', 'app', 'a0'] as LaneId[]).map((lane) => [
-      lane,
-      baseLane(lane, input.selection[lane]),
-    ]),
+    LANE_IDS.map((lane) => [lane, baseLane(lane, input.selection[lane])]),
   ) as Record<LaneId, LaneManifest>
 
   const reviewSelected = input.selection.review
   if (reviewSelected) {
-    lanes.review = laneStart(lanes.review, startedAt)
+    lanes.review = laneStart(lanes.review)
     let code = 1
     let runnerError: string | undefined
     try {
@@ -294,7 +315,7 @@ export async function runVerify(input: VerifyInput): Promise<VerifyResult> {
   }
 
   if (input.selection.flow) {
-    lanes.flow = laneStart(lanes.flow, startedAt)
+    lanes.flow = laneStart(lanes.flow)
     if (input.runners.flow === undefined) {
       lanes.flow = laneEnd({
         ...lanes.flow,
@@ -324,11 +345,9 @@ export async function runVerify(input: VerifyInput): Promise<VerifyResult> {
       lanes.flow = laneEnd({
         ...lanes.flow,
         status:
-          runnerError !== undefined
+          runnerError !== undefined || noEvidence
             ? 'failed'
-            : noEvidence
-              ? 'failed'
-              : reportStatus(code, report, false),
+            : reportStatus(code, report, false),
         reportPath:
           report === undefined ? undefined : relativeReport(input.cwd, input.reportDir, 'run.json'),
         summary:
@@ -358,7 +377,7 @@ export async function runVerify(input: VerifyInput): Promise<VerifyResult> {
   for (const lane of ['app', 'a0'] as const) {
     if (!input.selection[lane]) continue
     const runner = input.runners[lane]
-    lanes[lane] = laneStart(lanes[lane], startedAt)
+    lanes[lane] = laneStart(lanes[lane])
     if (runner === undefined) {
       lanes[lane] = laneEnd({
         ...lanes[lane],
@@ -421,8 +440,4 @@ export async function runVerify(input: VerifyInput): Promise<VerifyResult> {
 
 function ctxError(message: string): void {
   console.error(`verify lane error: ${message}`)
-}
-
-export function selectedManifestLanes(selection: LaneSelection): LaneId[] {
-  return selectedLanes(selection)
 }

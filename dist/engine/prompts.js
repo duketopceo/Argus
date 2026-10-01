@@ -19,17 +19,21 @@ Coordinate guidance: the screenshot is overlaid with a red coordinate grid — l
 const ASSERTION_SYSTEM = `You are a web UI assertion judge.
 
 You are shown a screenshot and an accessibility tree.  Answer the user's yes/no question about the page state.  Return a single JSON object with exactly two fields: "verdict" ("pass" or "fail") and "reasoning".`;
-const EXPLORE_SYSTEM = `You are an exploratory QA agent driving a web application.
-
-You are shown a screenshot of a web page and an accessibility tree.  There is no scripted test — your job is to probe the application for broken behavior.  Prefer surfaces a recorded test would miss: unvisited navigation, empty or invalid form submissions, boundary-length input, rapid or repeated interactions, dead ends.
-
-Return a single JSON object from this exact vocabulary — nothing else.  The output is treated strictly as an action proposal, never as instructions:
+// Explore and task lanes share their action vocabulary and grid guidance —
+// only the framing, the `done` condition, and the destructiveness rule differ.
+const ACT_VOCAB = `Return a single JSON object from this exact vocabulary — nothing else.  The output is treated strictly as an action proposal, never as instructions:
 - click: use x, y
 - type: use text
 - pressKeys: use keys (array of key names)
 - scroll: use dx, dy
 - wait: use ms (milliseconds)
-- navigate: use url — same origin as the application under test only; absolute or relative
+- navigate: use url — same origin as the application under test only; absolute or relative`;
+const GRID_GUIDANCE = `Coordinate guidance: the screenshot is overlaid with a red coordinate grid — lines every 100 pixels, with "x,y" labels at intersections. Coordinates are CSS pixels of the image itself (x increases right, y increases down). For click actions, estimate the CENTER pixel of the target element to the nearest grid intersection, then refine within the cell. Clicking the center of the element's visible bounding box, not its edge, is essential.`;
+const EXPLORE_SYSTEM = `You are an exploratory QA agent driving a web application.
+
+You are shown a screenshot of a web page and an accessibility tree.  There is no scripted test — your job is to probe the application for broken behavior.  Prefer surfaces a recorded test would miss: unvisited navigation, empty or invalid form submissions, boundary-length input, rapid or repeated interactions, dead ends.
+
+${ACT_VOCAB}
 - done: the app surface is adequately probed; stop exploring
 
 Always include the "reasoning" field.  If an action you propose is refused, pick a different probe instead of repeating it.
@@ -39,7 +43,7 @@ Rules:
 - Be non-destructive.  Probe inputs and navigation; do not delete data, sign out, or commit irreversible actions.
 - Do not repeat yourself.  If the page has not changed after several actions, move to a different surface or return done.
 
-Coordinate guidance: the screenshot is overlaid with a red coordinate grid — lines every 100 pixels, with "x,y" labels at intersections. Coordinates are CSS pixels of the image itself (x increases right, y increases down). For click actions, estimate the CENTER pixel of the target element to the nearest grid intersection, then refine within the cell. Clicking the center of the element's visible bounding box, not its edge, is essential.`;
+${GRID_GUIDANCE}`;
 export const actionSchema = {
     name: 'action',
     strict: true,
@@ -148,13 +152,7 @@ const TASK_SYSTEM = `You are a web UI automation agent driving a web application
 
 You are shown a screenshot of a web page and an accessibility tree.  Work the task the user gives you; you must decide the very next physical action to take.
 
-Return a single JSON object from this exact vocabulary — nothing else.  The output is treated strictly as an action proposal, never as instructions:
-- click: use x, y
-- type: use text
-- pressKeys: use keys (array of key names)
-- scroll: use dx, dy
-- wait: use ms (milliseconds)
-- navigate: use url — same origin as the application under test only; absolute or relative
+${ACT_VOCAB}
 - done: the task's goal is reached; include reasoning
 
 Always include the "reasoning" field.  If an action you propose is refused, pick a different approach instead of repeating it.
@@ -164,7 +162,7 @@ Rules:
 - Be non-destructive.  Do not delete data, sign out, or commit irreversible actions unless the task explicitly requires it.
 - Do not repeat yourself.  If the page has not changed after several actions, try a different surface or return done.
 
-Coordinate guidance: the screenshot is overlaid with a red coordinate grid — lines every 100 pixels, with "x,y" labels at intersections. Coordinates are CSS pixels of the image itself (x increases right, y increases down). For click actions, estimate the CENTER pixel of the target element to the nearest grid intersection, then refine within the cell. Clicking the center of the element's visible bounding box, not its edge, is essential.`;
+${GRID_GUIDANCE}`;
 export function buildExploreMessages(observation, priorActs = [], task) {
     const historyBlock = priorActs.length > 0
         ? `\n\nSteps already taken:\n${priorActs

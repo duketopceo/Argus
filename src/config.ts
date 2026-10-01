@@ -370,7 +370,7 @@ function optPosInt(v: number | undefined): number | undefined {
 }
 
 /** Keep only string expected-state markers; all-dropped means unconfigured. */
-function sanitizeExpectation(input: unknown): AppExpectation | undefined {
+export function sanitizeExpectation(input: unknown): AppExpectation | undefined {
   if (typeof input !== 'object' || input === null) return undefined
   const raw = input as Record<string, unknown>
   const expected: AppExpectation = {}

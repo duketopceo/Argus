@@ -114,7 +114,7 @@ function renderManifestLanes(manifest) {
     }
     const icon = MANIFEST_STATUS_EMOJI[lane.status] ?? '❔'
     const usage = lane.usage || {}
-    const cost = usage.metered === false ? 'unmetered' : formatUsd(usage.costUsd)
+    const cost = usage.metered === true ? formatUsd(usage.costUsd) : 'unmetered'
     const detail = cell(lane.reason ?? lane.summary ?? '')
     const model = lane.model || usage.model ? ` (\`${cell(lane.model ?? usage.model)}\`)` : ''
     lines.push(

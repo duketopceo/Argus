@@ -1,4 +1,4 @@
-import { defaultExec, defaultProbe } from '../detect.js';
+import { defaultExec, defaultProbe, resolveA0Host, } from '../detect.js';
 /**
  * Agent Zero delegation — the thin seam that hands a natural-language task to
  * an `a0` instance (`a0 headless -p`). The instance runs autonomously inside
@@ -29,9 +29,13 @@ export function buildA0Args(prompt, host) {
 }
 export async function runA0Task(prompt, opts = {}) {
     const exec = opts.exec ?? defaultExec;
+    // The allowlisted child env is the default, not the opt-in — every
+    // delegation path (lane, heal, delegate) gets the R12 sanitization
+    // unless a caller deliberately passes a different env.
+    const baseEnv = opts.env ?? buildA0ChildEnv(process.env);
     let res;
     try {
-        res = await exec(opts.cli ?? 'a0', buildA0Args(prompt, opts.host), opts.timeoutMs ?? A0_DEFAULT_TIMEOUT_MS, undefined, opts.env !== undefined ? { baseEnv: opts.env } : undefined);
+        res = await exec(opts.cli ?? 'a0', buildA0Args(prompt, opts.host), opts.timeoutMs ?? A0_DEFAULT_TIMEOUT_MS, undefined, { baseEnv });
     }
     catch (e) {
         // Spawn rejection (ENOENT when a0 is absent, hard timeout) must degrade
@@ -42,7 +46,10 @@ export async function runA0Task(prompt, opts = {}) {
         ok: res.code === 0,
         output: res.stdout.trim() || res.stderr.trim(),
         timedOut: res.timedOut,
-        spawnError: /ENOENT|not found|no such file/i.test(res.stderr),
+        // ExecResult.spawnError is authoritative when the executor sets it —
+        // a completed run that merely prints "not found" to stderr must not
+        // misclassify. The sniff remains for injected execs without the field.
+        spawnError: res.spawnError ?? /ENOENT|not found|no such file/i.test(res.stderr),
     };
 }
 /** Prompt wrapper: bind the task to an app URL when one is known. */
@@ -141,19 +148,24 @@ export async function runA0Lane(input) {
     }
     // Preflight 1: host resolution — config wins, then the CLI's own chain
     // (env, ~/.agent-zero/.env, localhost probe). Missing both ends = nothing
-    // to reach.
+    // to reach. A configured a0.url skips the probe chain entirely.
     const resolveHost = deps.resolveHost ??
         (async () => {
-            const { resolveA0Host } = await import('../detect.js');
-            const r = await resolveA0Host(input.env);
+            const r = await resolveA0Host(input.env, {
+                ...(deps.probe !== undefined ? { probe: deps.probe } : {}),
+            });
             return { host: r.host, source: r.source };
         });
     const cliVersion = deps.cliVersion ??
         (async () => {
-            const res = await (deps.exec ?? defaultExec)('a0', ['--version'], 5_000);
+            const res = await (deps.exec ?? defaultExec)(deps.cli ?? 'a0', ['--version'], 5_000);
             return res.code === 0 ? res.stdout.trim() : undefined;
         });
-    const [resolved, version] = await Promise.all([resolveHost(), cliVersion()]);
+    const configured = input.a0?.url !== undefined && input.a0.url !== '';
+    const [resolved, version] = await Promise.all([
+        configured ? Promise.resolve({ host: undefined, source: undefined }) : resolveHost(),
+        cliVersion(),
+    ]);
     const host = input.a0?.url ?? resolved.host;
     const hostSource = input.a0?.url !== undefined ? 'config' : resolved.source;
     if (version === undefined && host === undefined) {

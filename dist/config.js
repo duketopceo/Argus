@@ -83,7 +83,7 @@ function optPosInt(v) {
     return v !== undefined && Number.isInteger(v) && v >= 1 ? v : undefined;
 }
 /** Keep only string expected-state markers; all-dropped means unconfigured. */
-function sanitizeExpectation(input) {
+export function sanitizeExpectation(input) {
     if (typeof input !== 'object' || input === null)
         return undefined;
     const raw = input;

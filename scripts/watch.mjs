@@ -25,6 +25,17 @@ const ok = (s) => paint(s, C.green)
 const bad = (s) => paint(s, C.red)
 const warn = (s) => paint(s, C.yellow)
 
+// Every lane status gets an explicit paint — a missing key used to render
+// a literal "undefined" prefix for inconclusive/skipped lanes.
+const STATUS_PAINT = {
+  passed: ok,
+  failed: bad,
+  blocked: warn,
+  unavailable: warn,
+  inconclusive: warn,
+  skipped: (s) => paint(s, C.dim),
+}
+
 const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '')
 const trunc = (s, w = MAX_W - 4) => (strip(s).length > w ? `${strip(s).slice(0, w - 1)}…` : s)
 
@@ -120,7 +131,8 @@ function render() {
 
   // Verify workspace — the same run-manifest.json the comment and
   // dashboard render (R18): aggregate + lane status words, never
-  // color-only, compact fallback rather than a second contract.
+  // color-only, compact fallback rather than a second contract. When the
+  // collector projected the shared RunView we render it directly.
   out.push(hr('Verify'))
   const ws = state.workspace ?? { runs: [], corrupt: 0 }
   if (ws.degraded) out.push(warn(`  ${ws.degraded}`))
@@ -132,33 +144,35 @@ function render() {
     out.push(paint(`  no runs yet — argus-reviewer verify writes run-manifest.json`, C.dim))
   } else {
     const agg = cur.aggregate ?? {}
-    const aggPaint = agg.status === 'passed' ? ok
-      : agg.status === 'failed' ? bad
-      : warn
+    const aggPaint = STATUS_PAINT[agg.status] ?? warn
+    const aggLabel = cur.view?.statusIcon !== undefined
+      ? `${cur.view.statusIcon} ${agg.status}`
+      : (agg.status ?? '?')
     out.push(
-      `  ${aggPaint(agg.status ?? '?')}  ${paint(cur.runId ?? '', C.cyan)}  ` +
+      `  ${aggPaint(aggLabel)}  ${paint(cur.runId ?? '', C.cyan)}  ` +
         `${agg.calls ?? 0} call(s)  $${(agg.costUsd ?? 0).toFixed(6)}`,
     )
+    // LaneViews arrive in canonical order (skipped included); raw records
+    // fall back to the same explicit LANE_IDS order.
+    const lanes = cur.view?.lanes ??
+      ['review', 'flow', 'app', 'a0'].map((id) => cur.lanes?.[id]).filter(Boolean)
     const skipped = []
-    for (const id of ['review', 'flow', 'app', 'a0']) {
-      const lane = cur.lanes?.[id]
-      if (!lane) continue
+    for (const lane of lanes) {
       if (!lane.selected) {
-        skipped.push(id)
+        skipped.push(lane.lane)
         continue
       }
-      const paintFn = lane.status === 'passed' ? ok
-        : lane.status === 'failed' ? bad
-        : lane.status === 'blocked' || lane.status === 'unavailable' ? warn
-        : paint
+      const paintFn = STATUS_PAINT[lane.status] ?? ((s) => paint(s, C.dim))
       const usage = lane.usage ?? {}
-      const cost = usage.metered === false ? 'unmetered' : `$${(usage.costUsd ?? 0).toFixed(6)}`
+      const cost = usage.metered === true ? `$${(usage.costUsd ?? 0).toFixed(6)}` : 'unmetered'
+      const label =
+        lane.statusIcon !== undefined ? `${lane.statusIcon} ${lane.status}` : lane.status
       const detail = lane.reason ?? lane.summary ?? ''
       const head = lane.headBinding
         ? `  head ${lane.headBinding.status === 'match' ? ok('match') : warn(lane.headBinding.status)}`
         : ''
       out.push(
-        `    ${paintFn(lane.status)}  ${id.padEnd(6)}  ` +
+        `    ${paintFn(label)}  ${String(lane.lane).padEnd(6)}  ` +
           `${usage.calls ?? 0} call(s) ${cost} ${paint(lane.model ?? '', C.dim)}${head}` +
           `${detail ? `  ${trunc(detail, 48)}` : ''}`,
       )

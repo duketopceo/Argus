@@ -111,6 +111,9 @@ function renderJournal(s) {
 // keyboard-selectable (arrows move, Enter/Space selects), focus is visible,
 // and statuses render as text — never color alone.
 
+// Lanes render from the collector's RunView projection (canonical order,
+// statusIcon, durationMs, headBinding) — the raw manifest record is the
+// stale-build fallback, kept so a missing dist/ still renders.
 const LANE_ORDER = ['review', 'flow', 'app', 'a0']
 const STATUS_CLS = {
   passed: 'ok', failed: 'bad', skipped: 'dim',
@@ -124,13 +127,24 @@ const STATUS_ICON = {
 let selRun = 0
 let selLane = 0
 let lastState
+let lastVerifyKey = ''
 
 const fmt$ = (n) => `$${(n ?? 0).toFixed(6)}`
 const fmtMs = (ms) => (ms === undefined || !Number.isFinite(ms) ? '—' : ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`)
 
-function laneDuration(lane) {
-  if (!lane.startedAt || !lane.finishedAt) return undefined
-  const ms = Date.parse(lane.finishedAt) - Date.parse(lane.startedAt)
+function lanesOf(run) {
+  if (run?.view?.lanes !== undefined) return run.view.lanes
+  return LANE_ORDER.map((id) => run.lanes?.[id]).filter(Boolean)
+}
+
+function laneIcon(l) {
+  return l.statusIcon ?? STATUS_ICON[l.status] ?? '·'
+}
+
+function laneDuration(l) {
+  if (l.durationMs !== undefined) return l.durationMs
+  if (!l.startedAt || !l.finishedAt) return undefined
+  const ms = Date.parse(l.finishedAt) - Date.parse(l.startedAt)
   return Number.isFinite(ms) && ms >= 0 ? ms : undefined
 }
 
@@ -178,11 +192,11 @@ function renderInspector(lane) {
     d.append(r)
   }
   kv('lane', lane.lane)
-  kv('status', `${STATUS_ICON[lane.status] ?? '·'} ${lane.status}`)
+  kv('status', `${laneIcon(lane)} ${lane.status}`)
   if (lane.summary) kv('summary', lane.summary)
   if (lane.reason) kv('reason', lane.reason)
   const u = lane.usage || {}
-  kv('usage', `${u.calls ?? 0} call(s) · ${u.metered === false ? 'unmetered' : fmt$(u.costUsd)} · ${u.tokens ?? 0}tok${u.provider ? ` · ${u.provider}` : ''}`)
+  kv('usage', `${u.calls ?? 0} call(s) · ${u.metered === true ? fmt$(u.costUsd) : 'unmetered'} · ${u.tokens ?? 0}tok${u.provider ? ` · ${u.provider}` : ''}`)
   if (lane.model || u.model) kv('model', lane.model ?? u.model)
   kv('elapsed', fmtMs(laneDuration(lane) ?? lane.budget?.elapsedMs))
   const b = lane.budget
@@ -225,7 +239,7 @@ function renderVerify(s) {
     row.setAttribute('aria-selected', i === selRun ? 'true' : 'false')
     row.tabIndex = 0
     row.append(
-      el('span', STATUS_CLS[agg.status] || 'dim', `${STATUS_ICON[agg.status] ?? '·'} ${esc(agg.status)}`),
+      el('span', STATUS_CLS[agg.status] || 'dim', `${r.view?.statusIcon ?? STATUS_ICON[agg.status] ?? '·'} ${esc(agg.status)}`),
       el('span', 'rid', esc(r.runId)),
       el('span', 'm', `${agg.calls ?? 0}c ${fmt$(agg.costUsd)}`),
     )
@@ -237,7 +251,7 @@ function renderVerify(s) {
   const run = runs[selRun]
   const lanesEl = $('velanes')
   lanesEl.replaceChildren()
-  const lanes = LANE_ORDER.map((id) => run.lanes?.[id]).filter(Boolean)
+  const lanes = lanesOf(run)
   const selected = lanes.filter((l) => l.selected)
   const skipped = lanes.filter((l) => !l.selected)
   selLane = Math.min(selLane, Math.max(0, selected.length - 1))
@@ -249,9 +263,9 @@ function renderVerify(s) {
     const u = l.usage || {}
     row.append(
       el('span', 'lid', l.lane),
-      el('span', STATUS_CLS[l.status] || 'dim', `${STATUS_ICON[l.status] ?? '·'} ${esc(l.status)}`),
+      el('span', STATUS_CLS[l.status] || 'dim', `${laneIcon(l)} ${esc(l.status)}`),
       el('span', 't', esc(l.summary ?? l.reason ?? '')),
-      el('span', 'm', `${u.calls ?? 0}c ${u.metered === false ? 'unmetered' : fmt$(u.costUsd)}`),
+      el('span', 'm', `${u.calls ?? 0}c ${u.metered === true ? fmt$(u.costUsd) : 'unmetered'}`),
     )
     row.onclick = () => selectLane(i)
     rowKeys(row, i, selected.length, selectLane)
@@ -263,12 +277,30 @@ function renderVerify(s) {
   renderInspector(selected[selLane])
 }
 
+// Fingerprint the workspace so the 30s poll only rebuilds the verify DOM
+// when the rendered data actually changed — a blind rebuild would destroy
+// keyboard focus and wipe scroll positions every tick.
+function verifyKey(ws) {
+  const parts = [ws?.corrupt ?? 0, ws?.degraded ?? '']
+  for (const r of verifyRuns(ws ?? { runs: [] })) {
+    const a = r.aggregate ?? {}
+    parts.push(r.runId ?? '', a.status ?? '', a.calls ?? 0)
+    for (const l of lanesOf(r)) parts.push(l.status, l.durationMs ?? 0, l.selected ? 1 : 0)
+  }
+  return parts.join('|')
+}
+
 async function refresh() {
   const s = await window.argus.collect()
   lastState = s
   $('updated').textContent = 'updated ' + new Date(s.updatedAt).toLocaleTimeString()
   $('err').textContent = s.error || ''
-  renderPrs(s); renderRuns(s); renderJournals(s); renderJournal(s); renderVerify(s)
+  renderPrs(s); renderRuns(s); renderJournals(s); renderJournal(s)
+  const key = verifyKey(s.workspace)
+  if (key !== lastVerifyKey) {
+    lastVerifyKey = key
+    renderVerify(s)
+  }
   $('evalfile').textContent = s.evalFile ? `(${s.evalFile})` : ''
   $('evaldoc').textContent = s.evalDoc || 'no docs/evals/*.md yet — run eval'
 }
@@ -276,6 +308,7 @@ async function refresh() {
 $('refresh').onclick = refresh
 $('eval').onclick = async () => {
   $('evalcard').hidden = false
+  $('evallog').replaceChildren()
   const res = await window.argus.runEval()
   if (!res.ok) {
     $('evallog').append(el('div','warn', esc(res.msg)))
@@ -283,8 +316,10 @@ $('eval').onclick = async () => {
 }
 window.argus.onEvalLog(({ stream, line }) => {
   $('evalcard').hidden = false
-  $('evallog').append(el('div', stream === 'err' ? 'bad' : stream === 'done' ? 'warn' : '', esc(line)))
-  $('evallog').scrollTop = $('evallog').scrollHeight
+  const d = $('evallog')
+  d.append(el('div', stream === 'err' ? 'bad' : stream === 'done' ? 'warn' : '', esc(line)))
+  while (d.childElementCount > 400) d.firstChild.remove()
+  d.scrollTop = d.scrollHeight
   if (stream === 'done') refresh()
 })
 

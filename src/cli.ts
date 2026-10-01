@@ -21,6 +21,7 @@ import {
   resolveBlockSeverities,
   resolveConfig,
   resolveMaxComments,
+  sanitizeExpectation,
   unknownProviderSlugs,
 } from './config.js'
 import { debug, setLiveDir } from './debug.js'
@@ -77,8 +78,10 @@ import {
   archiveManifest,
   classifyHeadBinding,
   isHeadBindingConclusive,
+  LANE_IDS,
   readCheckoutSha,
   type HeadBinding,
+  type LaneId,
 } from './report/manifest.js'
 import { writeAtomicJson } from './fsutil.js'
 import { CallCost } from './vision/cost.js'
@@ -98,7 +101,6 @@ import {
   APP_LANE_REPORT,
   runAppLane,
 } from './pipeline/app.js'
-import type { AppExpectation } from './config.js'
 
 export interface CliDeps {
   cwd?: string
@@ -241,6 +243,11 @@ function resolveCheckoutTrust(ctx: Ctx) {
     fetchMeta: (repo, pr, token) => fetchPrMeta(repo, pr, token, ctx),
     note: (line) => ctx.err(line),
   })
+}
+
+/** Env/flag empty strings normalize to undefined — action inputs default to '' and must not shadow config. */
+function envOr(v: string | undefined): string | undefined {
+  return v !== undefined && v !== '' ? v : undefined
 }
 
 function parseOpenRouterTrace(env: Ctx['env']): Record<string, string> | undefined {
@@ -2154,17 +2161,21 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
   await mkdir(reportDir, { recursive: true })
   // ARGUS_VERIFY_* envs are the action's input bridge — flags win, then
   // env, then config, so a workflow needs no committed CLI invocation.
-  // Action inputs default to '', which must not shadow the config.
-  const envOr = (v: string | undefined): string | undefined =>
-    v !== undefined && v !== '' ? v : undefined
-  const flowUrl = values.url ?? envOr(ctx.env.ARGUS_VERIFY_URL) ?? config.target?.url
-  const verifyTask = values.task ?? envOr(ctx.env.ARGUS_VERIFY_TASK)
+  // Action inputs default to '', which must not shadow the config — and an
+  // explicit '' flag normalizes the same way (an empty task/expect marker
+  // can never vacuously satisfy the lane contract).
+  const flowUrl = envOr(values.url) ?? envOr(ctx.env.ARGUS_VERIFY_URL) ?? config.target?.url
+  const verifyTask = envOr(values.task) ?? envOr(ctx.env.ARGUS_VERIFY_TASK)
   const trace = parseOpenRouterTrace(ctx.env)
   const git = await gitInfo(ctx.cwd)
-  const envBudget = Number(ctx.env.ARGUS_BUDGET_USD)
-  const actionBudget =
-    Number.isFinite(envBudget) && envBudget > 0 ? envBudget : undefined
-  const budgets: Partial<Record<'review' | 'flow' | 'app' | 'a0', BudgetOptions>> = {}
+  const envBudget = envOr(ctx.env.ARGUS_BUDGET_USD)
+  let actionBudget: number | undefined
+  if (envBudget !== undefined) {
+    const parsed = Number(envBudget)
+    if (Number.isFinite(parsed) && parsed > 0) actionBudget = parsed
+    else ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`)
+  }
+  const budgets: Partial<Record<LaneId, BudgetOptions>> = {}
   const reviewBudget = actionBudget ?? config.codeReviewBudgetUsd
   const flowBudget = actionBudget ?? config.budgetUsd
   if (reviewBudget !== undefined) budgets.review = { limitUsd: reviewBudget }
@@ -2180,19 +2191,14 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
   }
   // Flag-level expected-state markers compose into the task contract —
   // they win over config.app.expected so a one-shot verify needs no file.
-  const flagExpected: AppExpectation | undefined = (() => {
-    const e: AppExpectation = {}
-    const text = values['expect-text'] ?? envOr(ctx.env.ARGUS_VERIFY_EXPECT_TEXT)
-    const url = values['expect-url'] ?? envOr(ctx.env.ARGUS_VERIFY_EXPECT_URL)
-    const selector = values['expect-selector'] ?? envOr(ctx.env.ARGUS_VERIFY_EXPECT_SELECTOR)
-    if (text !== undefined) e.text = text
-    if (url !== undefined) e.url = url
-    if (selector !== undefined) e.selector = selector
-    return e.text !== undefined || e.url !== undefined || e.selector !== undefined
-      ? e
-      : undefined
-  })()
-  const verifyTmp = await mkdtemp(join(tmpdir(), 'argus-verify-'))
+  // sanitizeExpectation drops '' markers — an empty --expect-text would
+  // otherwise compile to an always-true check and pass vacuously.
+  const flagExpected = sanitizeExpectation({
+    text: envOr(values['expect-text']) ?? envOr(ctx.env.ARGUS_VERIFY_EXPECT_TEXT),
+    url: envOr(values['expect-url']) ?? envOr(ctx.env.ARGUS_VERIFY_EXPECT_URL),
+    selector:
+      envOr(values['expect-selector']) ?? envOr(ctx.env.ARGUS_VERIFY_EXPECT_SELECTOR),
+  })
   const logger = createLogger(resolveLogLevel(ctx.env, config.logLevel), ctx)
   const result = await runVerify({
     cwd: ctx.cwd,
@@ -2226,7 +2232,16 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
             ...(deps.launchDriver !== undefined ? { launchDriver: deps.launchDriver } : {}),
             createClient: (cfg) => createClient(deps, cfg, ctx),
             applyPageSetup: async (driver) => {
-              await applyPageSetup(config, driver, ctx, verifyTmp)
+              // The transpile scratch dir exists only while a pageSetup
+              // module is imported — no leaked argus-verify-* dirs on
+              // review-only runs.
+              if (config.pageSetup === undefined || config.pageSetup === '') return
+              const verifyTmp = await mkdtemp(join(tmpdir(), 'argus-verify-'))
+              try {
+                await applyPageSetup(config, driver, ctx, verifyTmp)
+              } finally {
+                await rm(verifyTmp, { recursive: true, force: true })
+              }
             },
             logger,
           },
@@ -2279,7 +2294,7 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
     `verify ${result.manifest.aggregate.status}: ${result.manifest.aggregate.calls} provider call(s), ` +
       `$${result.manifest.aggregate.costUsd.toFixed(6)} — manifest ${manifestPath}`,
   )
-  for (const lane of ['review', 'flow', 'app', 'a0'] as const) {
+  for (const lane of LANE_IDS) {
     const record = result.manifest.lanes[lane]
     if (record.selected) ctx.out(`  ${lane}: ${record.status}${record.reason ? ` — ${record.reason}` : ''}`)
   }

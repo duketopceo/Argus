@@ -15,6 +15,11 @@ export interface ExecResult {
     timedOut?: boolean;
     /** Signal the process was terminated by, when killed (e.g. 'SIGTERM'). */
     signal?: string | undefined;
+    /**
+     * The process never started (ENOENT — binary missing) — set by the real
+     * executor so callers don't sniff stderr text for the distinction.
+     */
+    spawnError?: boolean | undefined;
 }
 export type ExecFn = (cmd: string, args: string[], timeoutMs: number, 
 /** Extra env merged over process.env — keeps secrets out of `ps`/`/proc` argv. */

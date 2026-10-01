@@ -1,11 +1,12 @@
 import type { RunManifest } from './manifest.js'
 import { RunReport, TestReport } from './run.js'
 import {
-  formatUsd as fmtUsd,
+  formatUsd,
   LANE_STATUS_EMOJI,
   LANE_STATUS_LABEL,
   manifestToRunView,
   maskSecrets,
+  shortSha,
 } from './viewmodel.js'
 
 export const SENTINEL = '<!-- argus-reviewer -->'
@@ -13,10 +14,6 @@ export const SENTINEL = '<!-- argus-reviewer -->'
 export interface CommentOptions {
   /** Link to the workflow run or artifact index. */
   runUrl?: string
-}
-
-function formatUsd(n: number): string {
-  return `$${(n ?? 0).toFixed(6)}`
 }
 
 function statusLine(report: RunReport | undefined, missingKey: boolean): string {
@@ -231,34 +228,39 @@ export function renderManifestComment(
   lines.push('')
 
   const headBits: string[] = []
-  if (view.intendedHeadSha !== undefined) {
-    headBits.push(`head \`${view.intendedHeadSha.slice(0, 7)}\``)
+  const headSha = shortSha(view.intendedHeadSha)
+  if (headSha !== undefined) {
+    headBits.push(`head \`${headSha}\``)
   }
   if (view.headBinding !== undefined) {
-    headBits.push(`${view.headBinding.status} — ${view.headBinding.detail}`)
+    headBits.push(
+      `${maskSecrets(view.headBinding.status)} — ${maskSecrets(view.headBinding.detail ?? '')}`,
+    )
   }
   lines.push(
-    `**Run:** ${view.runId} · ${view.calls} provider call(s) · ` +
-      `${fmtUsd(view.costUsd)} spend${headBits.length > 0 ? ` · ${headBits.join(' · ')}` : ''}`,
+    `**Run:** ${maskSecrets(view.runId)} · ${view.calls} provider call(s) · ` +
+      `${formatUsd(view.costUsd)} spend${headBits.length > 0 ? ` · ${headBits.join(' · ')}` : ''}`,
   )
   lines.push('')
 
   lines.push('| Lane | Status | Calls | Cost | Detail |')
   lines.push('| --- | --- | ---: | ---: | --- |')
-  for (const lane of view.selectedLanes) {
+  // Canonical lane order — skipped rows interleave in place so the comment
+  // matches the TUI and dashboard ordering under the parity contract.
+  for (const lane of view.lanes) {
+    if (!lane.selected) {
+      lines.push(`| ${lane.lane} | ⚪ skipped | 0 | — | not selected |`)
+      continue
+    }
     const icon = LANE_STATUS_EMOJI[lane.status]
     const usage = lane.usage
-    const cost = usage.metered ? fmtUsd(usage.costUsd) : 'unmetered'
+    const cost = usage.metered === true ? formatUsd(usage.costUsd) : 'unmetered'
     const detail = maskSecrets(lane.reason ?? lane.summary ?? '').replace(/\|/g, '\\|')
-    const model = lane.model !== undefined ? ` (\`${lane.model}\`)` : ''
+    const model = lane.model !== undefined ? ` (\`${maskSecrets(lane.model)}\`)` : ''
     lines.push(
       `| ${lane.lane} | ${icon} ${LANE_STATUS_LABEL[lane.status]} | ` +
         `${usage.calls} | ${cost} | ${detail}${model} |`,
     )
-  }
-  for (const lane of view.lanes) {
-    if (lane.selected) continue
-    lines.push(`| ${lane.lane} | ⚪ skipped | 0 | — | not selected |`)
   }
   lines.push('')
 

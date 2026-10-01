@@ -24,6 +24,7 @@ export const defaultExec = (cmd, args, timeoutMs, env, opts) => new Promise((res
                 timedOut: err.killed === true &&
                     err.code !== 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',
                 signal: typeof err.signal === 'string' ? err.signal : undefined,
+                spawnError: err.code === 'ENOENT',
             });
         }
         else {

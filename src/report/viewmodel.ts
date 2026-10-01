@@ -1,5 +1,6 @@
 import {
   LANE_IDS,
+  LANE_STATUSES,
   type BudgetSummary,
   type CacheSummary,
   type HeadBinding,
@@ -63,6 +64,7 @@ export interface LaneView {
   usage: UsageSummary
   budget: BudgetSummary
   cache: CacheSummary | undefined
+  headBinding: HeadBinding | undefined
   startedAt: string | undefined
   finishedAt: string | undefined
   durationMs: number | undefined
@@ -112,6 +114,7 @@ export function laneView(lane: LaneManifest): LaneView {
     usage: lane.usage,
     budget: lane.budget,
     cache: lane.cache,
+    headBinding: lane.headBinding,
     startedAt: lane.startedAt,
     finishedAt: lane.finishedAt,
     durationMs: laneDurationMs(lane),
@@ -155,7 +158,7 @@ export function isRunManifest(value: unknown): value is RunManifest {
     const lane = m.lanes[id]
     if (lane === undefined || typeof lane !== 'object') return false
     if (typeof lane.lane !== 'string' || typeof lane.status !== 'string') return false
-    if (!Object.hasOwn(LANE_STATUS_LABEL, lane.status)) return false
+    if (!(LANE_STATUSES as readonly string[]).includes(lane.status)) return false
     if (typeof lane.selected !== 'boolean') return false
   }
   return true

@@ -21,6 +21,11 @@ export interface ExecResult {
   timedOut?: boolean
   /** Signal the process was terminated by, when killed (e.g. 'SIGTERM'). */
   signal?: string | undefined
+  /**
+   * The process never started (ENOENT — binary missing) — set by the real
+   * executor so callers don't sniff stderr text for the distinction.
+   */
+  spawnError?: boolean | undefined
 }
 
 export type ExecFn = (
@@ -65,6 +70,7 @@ export const defaultExec: ExecFn = (cmd, args, timeoutMs, env, opts) =>
               err.killed === true &&
               (err as { code?: unknown }).code !== 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',
             signal: typeof err.signal === 'string' ? err.signal : undefined,
+            spawnError: (err as { code?: unknown }).code === 'ENOENT',
           })
         } else {
           resolve({ code: 0, stdout: String(stdout), stderr: String(stderr) })

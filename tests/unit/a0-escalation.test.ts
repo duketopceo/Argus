@@ -311,14 +311,28 @@ describe('runA0Task env contract', () => {
     expect(sawOpts?.baseEnv).toEqual({ PATH: '/usr/bin', HOME: '/home/x' })
   })
 
-  it('leaves ambient inheritance in place when no sanitized env is given', async () => {
+  it('sanitizes the ambient env by default — secrets never reach the child', async () => {
     let sawOpts: { baseEnv?: Record<string, string> } | undefined
     const exec: ExecFn = async (_bin, _args, _timeout, _env, opts) => {
       sawOpts = opts
       return { code: 0, stdout: '', stderr: '', timedOut: false }
     }
-    await runA0Task('task prompt', { exec })
-    expect(sawOpts).toBeUndefined()
+    const saved = { ...process.env }
+    process.env.A0_TEST_SECRET = 'sk-test-secret'
+    try {
+      await runA0Task('task prompt', { exec })
+    } finally {
+      process.env.A0_TEST_SECRET = saved.A0_TEST_SECRET
+    }
+    // The default child env is buildA0ChildEnv(process.env) — allowlisted
+    // keys only, so ambient secrets are never inherited.
+    expect(sawOpts?.baseEnv).toBeDefined()
+    expect(sawOpts?.baseEnv?.A0_TEST_SECRET).toBeUndefined()
+    expect(Object.keys(sawOpts?.baseEnv ?? {})).toEqual(
+      expect.arrayContaining(['PATH']),
+    )
+    expect(sawOpts?.baseEnv?.OPENROUTER_API_KEY).toBeUndefined()
+    expect(sawOpts?.baseEnv?.GITHUB_TOKEN).toBeUndefined()
   })
 
   it('degrades a spawn rejection to a failed delegation, not a throw', async () => {
