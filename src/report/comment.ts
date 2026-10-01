@@ -1,4 +1,12 @@
+import type { RunManifest } from './manifest.js'
 import { RunReport, TestReport } from './run.js'
+import {
+  formatUsd as fmtUsd,
+  LANE_STATUS_EMOJI,
+  LANE_STATUS_LABEL,
+  manifestToRunView,
+  maskSecrets,
+} from './viewmodel.js'
 
 export const SENTINEL = '<!-- argus-reviewer -->'
 
@@ -203,6 +211,83 @@ export function renderComment(
     lines.push(...evidenceRows(report.artifacts.videos, opts.runUrl))
   }
 
+  return lines.join('\n')
+}
+
+/**
+ * Sticky comment for a `verify` run — the manifest is the evidence contract
+ * (R15). Lane names, status labels, model/cost, and head identity come from
+ * the shared view-model so the comment agrees with the TUI and dashboard
+ * under the contract test, not by convention.
+ */
+export function renderManifestComment(
+  manifest: RunManifest,
+  opts: CommentOptions = {},
+): string {
+  const view = manifestToRunView(manifest)
+  const emoji = LANE_STATUS_EMOJI[view.status]
+  const lines = [SENTINEL, '']
+  lines.push(`## argus-reviewer ${emoji} ${view.statusLabel.toUpperCase()}`)
+  lines.push('')
+
+  const headBits: string[] = []
+  if (view.intendedHeadSha !== undefined) {
+    headBits.push(`head \`${view.intendedHeadSha.slice(0, 7)}\``)
+  }
+  if (view.headBinding !== undefined) {
+    headBits.push(`${view.headBinding.status} — ${view.headBinding.detail}`)
+  }
+  lines.push(
+    `**Run:** ${view.runId} · ${view.calls} provider call(s) · ` +
+      `${fmtUsd(view.costUsd)} spend${headBits.length > 0 ? ` · ${headBits.join(' · ')}` : ''}`,
+  )
+  lines.push('')
+
+  lines.push('| Lane | Status | Calls | Cost | Detail |')
+  lines.push('| --- | --- | ---: | ---: | --- |')
+  for (const lane of view.selectedLanes) {
+    const icon = LANE_STATUS_EMOJI[lane.status]
+    const usage = lane.usage
+    const cost = usage.metered ? fmtUsd(usage.costUsd) : 'unmetered'
+    const detail = maskSecrets(lane.reason ?? lane.summary ?? '').replace(/\|/g, '\\|')
+    const model = lane.model !== undefined ? ` (\`${lane.model}\`)` : ''
+    lines.push(
+      `| ${lane.lane} | ${icon} ${LANE_STATUS_LABEL[lane.status]} | ` +
+        `${usage.calls} | ${cost} | ${detail}${model} |`,
+    )
+  }
+  for (const lane of view.lanes) {
+    if (lane.selected) continue
+    lines.push(`| ${lane.lane} | ⚪ skipped | 0 | — | not selected |`)
+  }
+  lines.push('')
+
+  const flowLane = view.lanes.find((l) => l.lane === 'flow')
+  if (flowLane?.cache !== undefined) {
+    const c = flowLane.cache
+    lines.push(
+      `**Fingerprint cache:** ${c.hits} hit(s) · ${c.misses} miss(es) · ${c.heals} heal(s)`,
+    )
+    lines.push('')
+  }
+
+  const evidence = view.selectedLanes.filter((l) => l.reportPath !== undefined)
+  if (evidence.length > 0 || opts.runUrl !== undefined) {
+    lines.push('### Evidence')
+    lines.push('')
+    for (const lane of evidence) {
+      lines.push(`- ${lane.lane}: \`${lane.reportPath}\``)
+    }
+    if (opts.runUrl !== undefined) {
+      lines.push(`- [workflow run / artifacts](${opts.runUrl})`)
+    }
+    lines.push('')
+  }
+
+  lines.push('---')
+  lines.push('')
+  lines.push('<sub>`argus-reviewer` — self-hosted, BYOK review. Lane detail lives in the run manifest.</sub>')
+  lines.push('')
   return lines.join('\n')
 }
 

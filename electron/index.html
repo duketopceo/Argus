@@ -38,6 +38,33 @@
   .ok { color: var(--green); } .bad { color: var(--red); }
   .warn { color: var(--yellow); } .dim { color: var(--dim); }
   .checks { margin-left: 18px; font-size: 11px; }
+
+  /* Verify workspace — run list + lane matrix + inspector, all
+     keyboard-navigable with visible focus (status never color-only). */
+  #verify { display: grid; grid-template-columns: 260px 1fr; gap: 12px; }
+  .runlist { max-height: 300px; overflow-y: auto; }
+  .runrow, .lanerow {
+    display: flex; gap: 8px; align-items: baseline;
+    padding: 5px 8px; border-radius: 6px; cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .runrow .rid { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .runrow[aria-selected="true"], .lanerow[aria-selected="true"] {
+    border-color: var(--cyan); background: #161b22;
+  }
+  .runrow:focus-visible, .lanerow:focus-visible, button:focus-visible {
+    outline: 2px solid var(--cyan); outline-offset: 1px;
+  }
+  .runrow:hover, .lanerow:hover { border-color: var(--border); }
+  .lanes { min-width: 0; }
+  .lanerow .lid { color: var(--cyan); width: 58px; }
+  .inspector {
+    margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px;
+    font-size: 12px; min-height: 40px;
+  }
+  .inspector .k { color: var(--dim); display: inline-block; min-width: 88px; }
+  .notice { color: var(--yellow); padding: 4px 0; }
+  .stat { color: var(--dim); }
   pre.eval {
     white-space: pre-wrap; word-break: break-word; font-size: 12px;
     color: var(--fg); max-height: 340px; overflow-y: auto;
@@ -63,6 +90,16 @@
   <span id="err"></span>
 </header>
 <div class="grid">
+  <section class="card wide">
+    <h2>Verify Runs <span id="wenote" class="dim"></span></h2>
+    <div id="verify">
+      <div id="veruns" class="runlist" role="listbox" aria-label="verify runs"></div>
+      <div class="lanes">
+        <div id="velanes" role="listbox" aria-label="lanes"></div>
+        <div id="vedetail" class="inspector" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
   <section class="card"><h2>Pull Requests</h2><div id="prs"></div></section>
   <section class="card"><h2>Workflow Runs</h2><div id="runs"></div></section>
   <section class="card wide"><h2>Latest Eval <span id="evalfile" class="dim"></span></h2><pre class="eval" id="evaldoc"></pre></section>

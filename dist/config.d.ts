@@ -61,6 +61,37 @@ export interface Explore {
     /** Model budget for the act policy (U4b). Unset = bounded by run budget. */
     budgetUsd: number | undefined;
 }
+/**
+ * Verified expected state for `verify --app`: at least one of these must
+ * hold for the lane to pass — a page that merely loads is never a pass.
+ * All configured conditions are ANDed.
+ */
+export interface AppExpectation {
+    /** Substring that must appear in the a11y tree (case-insensitive). */
+    text?: string;
+    /** Regex source the final page URL must match. */
+    url?: string;
+    /** Playwright/CSS selector that must resolve at least one node. */
+    selector?: string;
+}
+/**
+ * `verify --app` lane (follow-through U3): a bounded natural-language task
+ * run on the ExploreLoop substrate. Opt-in — the lane is selected by the
+ * `--app` flag and this block supplies the task contract. Without `task`
+ * and at least one `expected` marker the lane records `blocked`.
+ */
+export interface AppLane {
+    /** Natural-language task the lane must accomplish. */
+    task: string | undefined;
+    /** Expected-state marker(s) the lane verifies deterministically. */
+    expected: AppExpectation | undefined;
+    /** Step cap for the task loop. Unset → explore.maxSteps. */
+    maxSteps: number | undefined;
+    /** Lane USD budget. Unset = bounded by run budget. */
+    budgetUsd: number | undefined;
+    /** Wall-clock cap in ms. Unset → lane default (120s). */
+    timeoutMs: number | undefined;
+}
 export interface Config {
     model: string;
     escalation_model: string;
@@ -95,6 +126,12 @@ export interface Config {
     testsDir: string | undefined;
     /** Directory for JUnit XML + JSON run report output. */
     reportDir: string | undefined;
+    /**
+     * How many `verify` run manifests the local history keeps
+     * (`<reportDir>/manifests/*.json`) — the dashboard/TUI run list reads it.
+     * `0` disables archival; unset defaults to 20 at write time.
+     */
+    reportRetention: number | undefined;
     /**
      * Named secrets for `td.type(name, { secret: true })`. The value is typed
      * locally and never sent to the model — the model only resolves the field.
@@ -155,13 +192,17 @@ export interface Config {
     recordStepCap: number | undefined;
     /**
      * Agent Zero instance for delegated tasks (`argus-reviewer delegate`,
-     * `heal: 'a0'`). `url` is the instance base URL — leave unset to let the
-     * `a0` CLI resolve it (saved host, AGENT_ZERO_HOST, Docker discovery).
-     * Least-privilege scoping (browser vs full desktop) is configured on the
-     * instance's gateway, not here.
+     * `heal: 'a0'`, `verify --a0`). `url` is the instance base URL — leave
+     * unset to let the `a0` CLI resolve it (saved host, AGENT_ZERO_HOST,
+     * Docker discovery). `maxTasks` caps delegations per `verify` run
+     * (default 1); `timeoutMs` is the per-task wall-clock bound. The lane is
+     * an explicit opt-in escalation and reports `unverified-live` until a
+     * live host round-trip is proven (issue #53).
      */
     a0: {
         url: string | undefined;
+        maxTasks: number | undefined;
+        timeoutMs: number | undefined;
     } | undefined;
     /**
      * Failure escalation for `run`. 'local' (default) heals via the vision
@@ -180,6 +221,12 @@ export interface Config {
      * `enabled: false` by default so capture is opt-in.
      */
     explore: Explore;
+    /**
+     * `verify --app` task lane. Always populated after `resolveConfig` —
+     * every field unset by default so the lane blocks on missing contract
+     * rather than inventing one.
+     */
+    app: AppLane;
     /**
      * Code-review policy knobs. Always populated after `resolveConfig`.
      * `secretsThreshold`: Jev `noul` probability at/above which a
@@ -218,14 +265,16 @@ export interface Config {
         profiles: ReviewProfile[];
     };
 }
-export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review' | 'explore'>> & {
+export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review' | 'explore' | 'app'>> & {
     provider?: Partial<ProviderRules>;
     sandbox?: Partial<Sandbox>;
     review?: Partial<Config['review']>;
     explore?: Partial<Explore>;
+    app?: Partial<AppLane>;
 };
 export declare const DEFAULT_RECORD_STEP_CAP = 40;
 export declare const DEFAULT_EXPLORE: Explore;
+export declare const DEFAULT_APP: AppLane;
 export declare const DEFAULT_SANDBOX: Sandbox;
 export declare function defineConfig(input: ConfigInput): ConfigInput;
 /**

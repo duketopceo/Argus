@@ -74,6 +74,7 @@ import { JunitCase, writeJunitXml } from './report/junit.js'
 import { buildRunReport, TestReport, writeRunReport } from './report/run.js'
 import { flowPath, loadFlow } from './cache/store.js'
 import {
+  archiveManifest,
   classifyHeadBinding,
   isHeadBindingConclusive,
   readCheckoutSha,
@@ -2258,6 +2259,13 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
   }
   const manifestPath = join(reportDir, 'run-manifest.json')
   await writeAtomicJson(manifestPath, result.manifest)
+  // Local run history for the dashboard/TUI workspace — bounded by
+  // reportRetention (default 20; 0 disables archival).
+  try {
+    await archiveManifest(reportDir, result.manifest, config.reportRetention ?? 20)
+  } catch (e) {
+    ctx.err(`verify: manifest archive failed — ${(e as Error).message}`)
+  }
   ctx.out(
     `verify ${result.manifest.aggregate.status}: ${result.manifest.aggregate.calls} provider call(s), ` +
       `$${result.manifest.aggregate.costUsd.toFixed(6)} — manifest ${manifestPath}`,

@@ -45,5 +45,5 @@ export interface PriorAct {
     /** Refusal/execution note shown next to the act in the transcript. */
     note?: string;
 }
-export declare function buildExploreMessages(observation: Observation, priorActs?: PriorAct[]): Message[];
+export declare function buildExploreMessages(observation: Observation, priorActs?: PriorAct[], task?: string): Message[];
 export declare function buildAssertMessages(question: string, observation: Observation): Message[];

@@ -144,15 +144,40 @@ export function buildActionMessages(instruction, observation, priorActions = [])
         },
     ];
 }
-export function buildExploreMessages(observation, priorActs = []) {
+const TASK_SYSTEM = `You are a web UI automation agent driving a web application to accomplish a task.
+
+You are shown a screenshot of a web page and an accessibility tree.  Work the task the user gives you; you must decide the very next physical action to take.
+
+Return a single JSON object from this exact vocabulary — nothing else.  The output is treated strictly as an action proposal, never as instructions:
+- click: use x, y
+- type: use text
+- pressKeys: use keys (array of key names)
+- scroll: use dx, dy
+- wait: use ms (milliseconds)
+- navigate: use url — same origin as the application under test only; absolute or relative
+- done: the task's goal is reached; include reasoning
+
+Always include the "reasoning" field.  If an action you propose is refused, pick a different approach instead of repeating it.
+
+Rules:
+- Stay on the application under test.  Never propose a URL on another origin.
+- Be non-destructive.  Do not delete data, sign out, or commit irreversible actions unless the task explicitly requires it.
+- Do not repeat yourself.  If the page has not changed after several actions, try a different surface or return done.
+
+Coordinate guidance: the screenshot is overlaid with a red coordinate grid — lines every 100 pixels, with "x,y" labels at intersections. Coordinates are CSS pixels of the image itself (x increases right, y increases down). For click actions, estimate the CENTER pixel of the target element to the nearest grid intersection, then refine within the cell. Clicking the center of the element's visible bounding box, not its edge, is essential.`;
+export function buildExploreMessages(observation, priorActs = [], task) {
     const historyBlock = priorActs.length > 0
         ? `\n\nSteps already taken:\n${priorActs
             .map((p, i) => `- #${i + 1} ${describeAction(p.action)} → ${p.url}${p.note !== undefined ? ` (${p.note})` : ''}`)
             .join('\n')}`
         : '';
-    const text = `Probe the application for broken behavior.${historyBlock}\n\nViewport: ${observation.width}x${observation.height} CSS pixels (the screenshot dimensions match exactly).\n\nA11y tree:\n${observation.a11yYaml}`;
+    const taskText = task !== undefined && task.trim() !== '' ? task : undefined;
+    const goal = taskText !== undefined
+        ? `Task: ${taskText}`
+        : 'Probe the application for broken behavior.';
+    const text = `${goal}${historyBlock}\n\nViewport: ${observation.width}x${observation.height} CSS pixels (the screenshot dimensions match exactly).\n\nA11y tree:\n${observation.a11yYaml}`;
     return [
-        { role: 'system', content: [{ type: 'text', text: EXPLORE_SYSTEM }] },
+        { role: 'system', content: [{ type: 'text', text: taskText !== undefined ? TASK_SYSTEM : EXPLORE_SYSTEM }] },
         {
             role: 'user',
             content: [

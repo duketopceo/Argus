@@ -105,11 +105,170 @@ function renderJournal(s) {
   }
 }
 
+// --- Verify workspace -------------------------------------------------------
+// Run list + lane matrix + evidence inspector over the same
+// run-manifest.json contract the comment and TUI render (R17). All rows are
+// keyboard-selectable (arrows move, Enter/Space selects), focus is visible,
+// and statuses render as text — never color alone.
+
+const LANE_ORDER = ['review', 'flow', 'app', 'a0']
+const STATUS_CLS = {
+  passed: 'ok', failed: 'bad', skipped: 'dim',
+  blocked: 'warn', unavailable: 'warn', inconclusive: 'warn',
+}
+const STATUS_ICON = {
+  passed: '✓', failed: '✗', skipped: '—',
+  blocked: '⛔', unavailable: '⚠', inconclusive: '~',
+}
+
+let selRun = 0
+let selLane = 0
+let lastState
+
+const fmt$ = (n) => `$${(n ?? 0).toFixed(6)}`
+const fmtMs = (ms) => (ms === undefined || !Number.isFinite(ms) ? '—' : ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`)
+
+function laneDuration(lane) {
+  if (!lane.startedAt || !lane.finishedAt) return undefined
+  const ms = Date.parse(lane.finishedAt) - Date.parse(lane.startedAt)
+  return Number.isFinite(ms) && ms >= 0 ? ms : undefined
+}
+
+/** Runs for the workspace — archived history newest-first, current merged in. */
+function verifyRuns(ws) {
+  const seen = new Set()
+  const runs = []
+  if (ws.current) { seen.add(ws.current.runId); runs.push(ws.current) }
+  for (const r of [...(ws.runs || [])].reverse()) {
+    if (r && !seen.has(r.runId)) { seen.add(r.runId); runs.push(r) }
+  }
+  return runs
+}
+
+function selectRun(i) {
+  selRun = i
+  selLane = 0
+  renderVerify(lastState)
+  const rows = $('veruns').querySelectorAll('.runrow')
+  rows[Math.min(i, rows.length - 1)]?.focus()
+}
+
+function selectLane(i) {
+  selLane = i
+  renderVerify(lastState)
+  const rows = $('velanes').querySelectorAll('.lanerow')
+  rows[Math.min(i, rows.length - 1)]?.focus()
+}
+
+function rowKeys(row, i, count, select) {
+  row.onkeydown = (e) => {
+    if (e.key === 'ArrowDown' && i + 1 < count) { select(i + 1); e.preventDefault() }
+    else if (e.key === 'ArrowUp' && i > 0) { select(i - 1); e.preventDefault() }
+    else if (e.key === 'Enter' || e.key === ' ') { select(i); e.preventDefault() }
+  }
+}
+
+function renderInspector(lane) {
+  const d = $('vedetail')
+  d.replaceChildren()
+  if (!lane) { d.append(el('div', 'dim', 'select a lane')); return }
+  const kv = (k, v) => {
+    const r = el('div', 'row')
+    r.append(el('span', 'k', k), el('span', 't', esc(v)))
+    d.append(r)
+  }
+  kv('lane', lane.lane)
+  kv('status', `${STATUS_ICON[lane.status] ?? '·'} ${lane.status}`)
+  if (lane.summary) kv('summary', lane.summary)
+  if (lane.reason) kv('reason', lane.reason)
+  const u = lane.usage || {}
+  kv('usage', `${u.calls ?? 0} call(s) · ${u.metered === false ? 'unmetered' : fmt$(u.costUsd)} · ${u.tokens ?? 0}tok${u.provider ? ` · ${u.provider}` : ''}`)
+  if (lane.model || u.model) kv('model', lane.model ?? u.model)
+  kv('elapsed', fmtMs(laneDuration(lane) ?? lane.budget?.elapsedMs))
+  const b = lane.budget
+  if (b && (b.limitUsd !== undefined || b.maxDurationMs !== undefined || b.maxTasks !== undefined)) {
+    const bits = []
+    if (b.limitUsd !== undefined) bits.push(`limit ${fmt$(b.limitUsd)} / spent ${fmt$(b.spentUsd)}`)
+    if (b.maxDurationMs !== undefined) bits.push(`clock ${fmtMs(b.elapsedMs)} / ${fmtMs(b.maxDurationMs)}`)
+    if (b.maxTasks !== undefined) bits.push(`tasks ${b.tasks ?? 0} / ${b.maxTasks}`)
+    kv('budget', `${bits.join(' · ')}${b.exceeded ? ' — EXCEEDED' : ''}`)
+  }
+  if (lane.cache) {
+    const c = lane.cache
+    kv('cache', `${c.hits ?? 0} hit · ${c.misses ?? 0} miss · ${c.heals ?? 0} heal · ${c.staleEntries ?? 0} stale`)
+  }
+  if (lane.headBinding) {
+    kv('head', `${lane.headBinding.status} — ${lane.headBinding.detail ?? ''}`)
+  }
+  if (lane.reportPath) kv('evidence', lane.reportPath)
+}
+
+function renderVerify(s) {
+  const ws = s.workspace || { runs: [] }
+  $('wenote').textContent = ws.degraded
+    ? `— ${ws.degraded}`
+    : ws.corrupt > 0 ? `— ${ws.corrupt} manifest file(s) unreadable` : ''
+  const runs = verifyRuns(ws)
+  selRun = Math.min(selRun, Math.max(0, runs.length - 1))
+  const rl = $('veruns')
+  rl.replaceChildren()
+  if (runs.length === 0) {
+    rl.append(el('div', 'dim', 'no verify runs yet — argus-reviewer verify writes run-manifest.json'))
+    $('velanes').replaceChildren()
+    $('vedetail').replaceChildren()
+    return
+  }
+  runs.forEach((r, i) => {
+    const agg = r.aggregate || {}
+    const row = el('div', 'runrow')
+    row.setAttribute('role', 'option')
+    row.setAttribute('aria-selected', i === selRun ? 'true' : 'false')
+    row.tabIndex = 0
+    row.append(
+      el('span', STATUS_CLS[agg.status] || 'dim', `${STATUS_ICON[agg.status] ?? '·'} ${esc(agg.status)}`),
+      el('span', 'rid', esc(r.runId)),
+      el('span', 'm', `${agg.calls ?? 0}c ${fmt$(agg.costUsd)}`),
+    )
+    row.onclick = () => selectRun(i)
+    rowKeys(row, i, runs.length, selectRun)
+    rl.append(row)
+  })
+
+  const run = runs[selRun]
+  const lanesEl = $('velanes')
+  lanesEl.replaceChildren()
+  const lanes = LANE_ORDER.map((id) => run.lanes?.[id]).filter(Boolean)
+  const selected = lanes.filter((l) => l.selected)
+  const skipped = lanes.filter((l) => !l.selected)
+  selLane = Math.min(selLane, Math.max(0, selected.length - 1))
+  selected.forEach((l, i) => {
+    const row = el('div', 'lanerow')
+    row.setAttribute('role', 'option')
+    row.setAttribute('aria-selected', i === selLane ? 'true' : 'false')
+    row.tabIndex = 0
+    const u = l.usage || {}
+    row.append(
+      el('span', 'lid', l.lane),
+      el('span', STATUS_CLS[l.status] || 'dim', `${STATUS_ICON[l.status] ?? '·'} ${esc(l.status)}`),
+      el('span', 't', esc(l.summary ?? l.reason ?? '')),
+      el('span', 'm', `${u.calls ?? 0}c ${u.metered === false ? 'unmetered' : fmt$(u.costUsd)}`),
+    )
+    row.onclick = () => selectLane(i)
+    rowKeys(row, i, selected.length, selectLane)
+    lanesEl.append(row)
+  })
+  if (skipped.length) {
+    lanesEl.append(el('div', 'dim', `skipped: ${skipped.map((l) => l.lane).join(', ')}`))
+  }
+  renderInspector(selected[selLane])
+}
+
 async function refresh() {
   const s = await window.argus.collect()
+  lastState = s
   $('updated').textContent = 'updated ' + new Date(s.updatedAt).toLocaleTimeString()
   $('err').textContent = s.error || ''
-  renderPrs(s); renderRuns(s); renderJournals(s); renderJournal(s)
+  renderPrs(s); renderRuns(s); renderJournals(s); renderJournal(s); renderVerify(s)
   $('evalfile').textContent = s.evalFile ? `(${s.evalFile})` : ''
   $('evaldoc').textContent = s.evalDoc || 'no docs/evals/*.md yet — run eval'
 }

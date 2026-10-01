@@ -137,6 +137,12 @@ export interface Config {
   /** Directory for JUnit XML + JSON run report output. */
   reportDir: string | undefined
   /**
+   * How many `verify` run manifests the local history keeps
+   * (`<reportDir>/manifests/*.json`) — the dashboard/TUI run list reads it.
+   * `0` disables archival; unset defaults to 20 at write time.
+   */
+  reportRetention: number | undefined
+  /**
    * Named secrets for `td.type(name, { secret: true })`. The value is typed
    * locally and never sent to the model — the model only resolves the field.
    */
@@ -315,6 +321,7 @@ const defaults: Config = {
   cacheDir: undefined,
   testsDir: undefined,
   reportDir: undefined,
+  reportRetention: undefined,
   secrets: undefined,
   pageSetup: undefined,
   openrouter: undefined,
@@ -477,6 +484,14 @@ export function resolveConfig(input: ConfigInput = {}): Config {
     : []
   const resolved: Config = { ...defaults, ...input, provider, sandbox, explore, app, review }
   resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP)
+  // Retention is a non-negative integer (0 = keep none) — a mis-typed or
+  // negative bound degrades to unset, never to "keep everything".
+  resolved.reportRetention =
+    typeof resolved.reportRetention === 'number' &&
+    Number.isInteger(resolved.reportRetention) &&
+    resolved.reportRetention >= 0
+      ? resolved.reportRetention
+      : undefined
   if (resolved.heal !== 'a0') resolved.heal = 'local'
   if (resolved.a0 !== undefined) {
     // A0 bounds degrade like every other numeric knob — a hostile or

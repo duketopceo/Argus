@@ -22,10 +22,15 @@ import {
 // @ts-expect-error plain-node action helper — no type declarations
 import {
   renderBody as renderStickyBody,
+  renderManifestBody,
+  renderManifestLanes,
   renderReviewOnlyBody,
   run,
   shortHash,
 } from '../../action/sticky-comment.cjs'
+
+import { renderManifestComment } from '../../src/report/comment.js'
+import { fixtureManifest } from '../fixtures/manifest.js'
 
 const execFileAsync = promisify(execFile)
 const ACTION = join(process.cwd(), 'action')
@@ -811,5 +816,130 @@ describe('action review poster (U3)', () => {
     await run(runtime)
 
     expect(calls.filter((x) => x.method === 'createReview')).toHaveLength(0)
+  })
+})
+
+// U5/AE-C — the PR comment, the TUI, and the dashboard all render the same
+// manifest contract. The TS renderer (comment.ts → viewmodel.ts) and the
+// action's plain-node block (sticky-comment.cjs) must produce identical lane
+// rows from identical input; this test is the agreement enforcement.
+describe('manifest comment parity (U5)', () => {
+  const manifest = fixtureManifest()
+
+  function laneRows(body: string): string[] {
+    return body
+      .split('\n')
+      .filter((l) => /^\| (review|flow|app|a0) \|/.test(l))
+  }
+
+  it('the action lane block and the shared view-model render identical rows', () => {
+    const cjsBody = renderManifestLanes(manifest).join('\n')
+    const tsBody = renderManifestComment(manifest)
+    const cjsRows = laneRows(cjsBody)
+    const tsRows = laneRows(tsBody)
+    expect(cjsRows).toHaveLength(4)
+    expect(cjsRows).toEqual(tsRows)
+    // Status is always a word, never color-only.
+    expect(tsRows.join('\n')).toContain('inconclusive')
+    expect(tsRows.join('\n')).toContain('unmetered')
+  })
+
+  it('the header and cache line agree across renderers', () => {
+    const cjsBody = renderManifestLanes(manifest).join('\n')
+    const tsBody = renderManifestComment(manifest)
+    for (const text of [
+      '| Lane | Status | Calls | Cost | Detail |',
+      '**Fingerprint cache:** 2 hit(s) · 1 miss(es) · 1 heal(s)',
+    ]) {
+      expect(cjsBody).toContain(text)
+      expect(tsBody).toContain(text)
+    }
+  })
+
+  it('a verify run with only a manifest renders the lane block in the sticky', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'argus-manifest-sticky-'))
+    const saved = {
+      OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+      GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
+      GITHUB_SERVER_URL: process.env.GITHUB_SERVER_URL,
+      GITHUB_RUN_ID: process.env.GITHUB_RUN_ID,
+      ARGUS_RUN_DISABLED: process.env.ARGUS_RUN_DISABLED,
+      ARGUS_REPORT_DIR: process.env.ARGUS_REPORT_DIR,
+    }
+    try {
+      process.env.OPENROUTER_API_KEY = 'test-key'
+      process.env.GITHUB_WORKSPACE = workspace
+      process.env.GITHUB_SERVER_URL = 'https://github.com'
+      process.env.GITHUB_RUN_ID = '1'
+      delete process.env.ARGUS_RUN_DISABLED
+      delete process.env.ARGUS_REPORT_DIR
+      await mkdir(join(workspace, 'argus-reviewer-report'), { recursive: true })
+      await writeFile(
+        join(workspace, 'argus-reviewer-report', 'run-manifest.json'),
+        JSON.stringify(fixtureManifest()),
+      )
+      await writeFile(
+        join(workspace, 'argus-reviewer-report', 'code-review.json'),
+        JSON.stringify({ ok: true, skipped: false, findings: [], reviewComments: [] }),
+      )
+      const calls: { method: string; params: Record<string, unknown> }[] = []
+      const record =
+        (method: string, impl?: (params: Record<string, unknown>) => Promise<unknown>) =>
+        async (params: Record<string, unknown>) => {
+          calls.push({ method, params })
+          if (impl !== undefined) return impl(params)
+          return { data: {} }
+        }
+      const runtime = {
+        github: {
+          rest: {
+            pulls: {
+              listReviewComments: async () => ({ data: [] }),
+              listFiles: async () => ({ data: [] }),
+              listReviews: async () => ({ data: [] }),
+              createReview: record('createReview'),
+              dismissReview: record('dismissReview'),
+            },
+            issues: {
+              listComments: record('listComments', async () => ({ data: [] })),
+              createComment: record('createComment'),
+              updateComment: record('updateComment'),
+            },
+            repos: { createCommitStatus: record('createCommitStatus') },
+          },
+        },
+        context: {
+          actor: 'github-actions[bot]',
+          repo: { owner: 'o', repo: 'r' },
+          sha: 'h'.repeat(40),
+          payload: { pull_request: { number: 7, head: { sha: 'h'.repeat(40) } } },
+        },
+        core: { warning: () => {}, setOutput: () => {} },
+      }
+
+      await run(runtime)
+
+      const sticky = calls.find((c) => c.method === 'createComment')
+      expect(sticky).toBeDefined()
+      const body = sticky!.params.body as string
+      expect(body).toContain('## argus-reviewer ❌ FAILED')
+      expect(body).toContain('| a0 | 🟡 inconclusive | 0 | unmetered |')
+      // The manifest aggregate is the verdict — no run.json exists.
+      const status = calls.find((c) => c.method === 'createCommitStatus')
+      expect(status!.params.state).toBe('failure')
+    } finally {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) Reflect.deleteProperty(process.env, k)
+        else process.env[k] = v
+      }
+    }
+  })
+
+  it('the manifest body masks secret-shaped lane evidence', () => {
+    const m = fixtureManifest()
+    m.lanes.flow.reason = 'provider rejected sk-or-v1-abcdef12345'
+    const body = renderManifestBody(m, undefined, undefined)
+    expect(body).not.toContain('sk-or-v1-abcdef12345')
+    expect(body).toContain('•••')
   })
 })

@@ -18,7 +18,15 @@ export interface ExecResult {
 }
 export type ExecFn = (cmd: string, args: string[], timeoutMs: number, 
 /** Extra env merged over process.env — keeps secrets out of `ps`/`/proc` argv. */
-env?: Record<string, string>) => Promise<ExecResult>;
+env?: Record<string, string>, 
+/**
+ * `baseEnv` replaces the inherited process environment wholesale — the
+ * caller's allowlist, not ambient env. Without it the child inherits
+ * process.env as before.
+ */
+opts?: {
+    baseEnv?: Record<string, string>;
+}) => Promise<ExecResult>;
 export declare const defaultExec: ExecFn;
 export type ProbeFn = (url: string, timeoutMs: number) => Promise<boolean>;
 /**

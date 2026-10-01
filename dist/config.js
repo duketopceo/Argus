@@ -7,6 +7,13 @@ export const DEFAULT_EXPLORE = {
     maxSteps: 20,
     budgetUsd: undefined,
 };
+export const DEFAULT_APP = {
+    task: undefined,
+    expected: undefined,
+    maxSteps: undefined,
+    budgetUsd: undefined,
+    timeoutMs: undefined,
+};
 export const DEFAULT_SANDBOX = {
     enabled: false,
     image: undefined,
@@ -32,6 +39,7 @@ const defaults = {
     cacheDir: undefined,
     testsDir: undefined,
     reportDir: undefined,
+    reportRetention: undefined,
     secrets: undefined,
     pageSetup: undefined,
     openrouter: undefined,
@@ -47,6 +55,7 @@ const defaults = {
     heal: 'local',
     sandbox: { ...DEFAULT_SANDBOX },
     explore: { ...DEFAULT_EXPLORE },
+    app: { ...DEFAULT_APP },
     review: {
         secretsThreshold: 0.3,
         maxComments: 20,
@@ -68,6 +77,26 @@ function posInt(v, dflt) {
 /** Probability config values (must be in [0,1]) fall back to their default. */
 function prob01(v, dflt) {
     return v !== undefined && Number.isFinite(v) && v >= 0 && v <= 1 ? v : dflt;
+}
+/** Optional positive-integer config values stay undefined when absent or wrong-typed. */
+function optPosInt(v) {
+    return v !== undefined && Number.isInteger(v) && v >= 1 ? v : undefined;
+}
+/** Keep only string expected-state markers; all-dropped means unconfigured. */
+function sanitizeExpectation(input) {
+    if (typeof input !== 'object' || input === null)
+        return undefined;
+    const raw = input;
+    const expected = {};
+    if (typeof raw.text === 'string' && raw.text !== '')
+        expected.text = raw.text;
+    if (typeof raw.url === 'string' && raw.url !== '')
+        expected.url = raw.url;
+    if (typeof raw.selector === 'string' && raw.selector !== '')
+        expected.selector = raw.selector;
+    return expected.text === undefined && expected.url === undefined && expected.selector === undefined
+        ? undefined
+        : expected;
 }
 /**
  * Which severities fail the review status. `review.severityGate` is the
@@ -123,6 +152,18 @@ export function resolveConfig(input = {}) {
             explore.budgetUsd > 0
             ? explore.budgetUsd
             : undefined;
+    // Same wrong-typed degrade for the app lane contract — a mis-typed
+    // marker must never self-author a passing condition.
+    const rawApp = typeof input.app === 'object' && input.app !== null ? input.app : {};
+    const app = { ...defaults.app, ...rawApp };
+    app.task = typeof app.task === 'string' && app.task.trim() !== '' ? app.task : undefined;
+    app.expected = sanitizeExpectation(app.expected);
+    app.maxSteps = optPosInt(rawApp.maxSteps);
+    app.timeoutMs = optPosInt(rawApp.timeoutMs);
+    app.budgetUsd =
+        typeof app.budgetUsd === 'number' && Number.isFinite(app.budgetUsd) && app.budgetUsd > 0
+            ? app.budgetUsd
+            : undefined;
     const rawReview = typeof input.review === 'object' && input.review !== null ? input.review : {};
     const review = { ...defaults.review, ...rawReview };
     // Thresholds must be probabilities — anything else (NaN, >1,
@@ -153,10 +194,28 @@ export function resolveConfig(input = {}) {
     review.profiles = Array.isArray(rawReview.profiles)
         ? [...new Set(rawReview.profiles.filter(isReviewProfile))]
         : [];
-    const resolved = { ...defaults, ...input, provider, sandbox, explore, review };
+    const resolved = { ...defaults, ...input, provider, sandbox, explore, app, review };
     resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP);
+    // Retention is a non-negative integer (0 = keep none) — a mis-typed or
+    // negative bound degrades to unset, never to "keep everything".
+    resolved.reportRetention =
+        typeof resolved.reportRetention === 'number' &&
+            Number.isInteger(resolved.reportRetention) &&
+            resolved.reportRetention >= 0
+            ? resolved.reportRetention
+            : undefined;
     if (resolved.heal !== 'a0')
         resolved.heal = 'local';
+    if (resolved.a0 !== undefined) {
+        // A0 bounds degrade like every other numeric knob — a hostile or
+        // mis-typed cap must not become unlimited tasks or no timeout.
+        const a0 = resolved.a0;
+        resolved.a0 = {
+            url: typeof a0.url === 'string' && a0.url !== '' ? a0.url : undefined,
+            maxTasks: optPosInt(a0.maxTasks),
+            timeoutMs: optPosInt(a0.timeoutMs),
+        };
+    }
     // '' is the documented opt-out — an empty slug would send a broken
     // model id to the decisions endpoint on every adjudication call.
     if (resolved.decisionModel === '')

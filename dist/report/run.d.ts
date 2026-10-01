@@ -92,5 +92,12 @@ export declare function buildRunReport(tests: TestReport[], startedAt: Date, dur
  * its own ledger). Folded into the run totals so `run.json` spend is
  * complete even though no TestReport owns these calls.
  */
-extraCalls?: CallCost[]): RunReport;
+extraCalls?: CallCost[], 
+/**
+ * An enabled explore lane makes a zero-test run a legitimate shape — the
+ * act pass is the evidence source for repos with no recorded flows, and
+ * its outcome (or explicit skip reason) lands in `report.explore`, so the
+ * empty suite is never a silent pass.
+ */
+exploreEnabled?: boolean): RunReport;
 export declare function writeRunReport(path: string, report: RunReport): Promise<void>;

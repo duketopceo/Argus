@@ -29,7 +29,7 @@ import { adjudicateFindings } from './review/adjudicate.js';
 import { runProbeLane } from './probe/queue.js';
 import { decodeProbePayload, encodeProbePayload, persistProbes } from './probe/persist.js';
 import { SENTINEL } from './report/comment.js';
-import { A0_DEFAULT_TIMEOUT_MS, a0TaskPrompt, runA0Task } from './executor/a0.js';
+import { A0_DEFAULT_TIMEOUT_MS, A0_LANE_MAX_TASKS, A0_LANE_REPORT, a0TaskPrompt, runA0Lane, runA0Task, } from './executor/a0.js';
 import { buildJournalEntry } from './journal/build.js';
 import { newRunId, writeJournal } from './journal/store.js';
 import { createLogger, resolveLogLevel } from './log.js';
@@ -37,13 +37,14 @@ import { liveLog } from './live.js';
 import { writeJunitXml } from './report/junit.js';
 import { buildRunReport, writeRunReport } from './report/run.js';
 import { flowPath, loadFlow } from './cache/store.js';
-import { classifyHeadBinding, isHeadBindingConclusive, readCheckoutSha, } from './report/manifest.js';
+import { archiveManifest, classifyHeadBinding, isHeadBindingConclusive, readCheckoutSha, } from './report/manifest.js';
 import { writeAtomicJson } from './fsutil.js';
 import { OpenRouterClient } from './vision/openrouter.js';
 import { Ledger } from './vision/ledger.js';
 import { defaultLaneSelection, selectionFromFlags } from './pipeline/contracts.js';
 import { MENTION_HELP, mayRunMention, parseMention, postIssueComment, } from './mention.js';
 import { runVerify } from './pipeline/verify.js';
+import { APP_LANE_DEFAULT_TIMEOUT_MS, APP_LANE_REPORT, runAppLane, } from './pipeline/app.js';
 const USAGE = `argus-reviewer — vision-model E2E testing harness (BYOK via OPENROUTER_API_KEY)
 
 Usage:
@@ -558,8 +559,15 @@ async function cmdRun(args, ctx, deps) {
                 const registered = takeTests();
                 if (registered.length === 0) {
                     const state = fileSession.ledgerState;
-                    const ok = importError === undefined && !fileSession.failed;
-                    const failureMessage = importError?.message ?? (fileSession.failed ? fileSession.failureReason : undefined);
+                    // Fail closed on zero evidence: a file that registers no tests and
+                    // records no steps/asserts produced nothing a reviewer can trust.
+                    const noEvidence = fileSession.steps.length === 0 && fileSession.asserts.length === 0;
+                    const ok = importError === undefined && !fileSession.failed && !noEvidence;
+                    const failureMessage = importError?.message ??
+                        (fileSession.failed ? fileSession.failureReason : undefined) ??
+                        (noEvidence
+                            ? 'no evidence — file registered no tests and recorded no steps or assertions'
+                            : undefined);
                     reports.push({
                         name: fileSlug,
                         file,
@@ -585,7 +593,14 @@ async function cmdRun(args, ctx, deps) {
                 }
                 else {
                     for (const registeredTest of registered) {
-                        const session = await makeSession(`${fileSlug}__${slugify(registeredTest.name)}`, driver, client);
+                        // Generated tests name their single test after the flow and the
+                        // file alike (`smoke-flow` inside `smoke-flow.test.ts`); binding
+                        // the file-level flow lets a recorded flow replay cache-first on
+                        // its very first run instead of missing on `<file>__<test>`.
+                        const sessionFlowName = slugify(registeredTest.name) === fileSlug
+                            ? fileSlug
+                            : `${fileSlug}__${slugify(registeredTest.name)}`;
+                        const session = await makeSession(sessionFlowName, driver, client);
                         bindSession(session);
                         session.ledger.startSandbox();
                         const testStart = Date.now();
@@ -773,7 +788,7 @@ async function cmdRun(args, ctx, deps) {
             failureMessage: report.failureMessage,
         });
     }
-    const report = buildRunReport(reports, startedAt, Date.now() - runStart, exploreOutcome?.calls ?? []);
+    const report = buildRunReport(reports, startedAt, Date.now() - runStart, exploreOutcome?.calls ?? [], config.explore.enabled);
     if (config.explore.enabled) {
         if (exploreOutcome !== undefined) {
             // An errored pass is reported as an explicit skip — 'stopped: error'
@@ -1760,11 +1775,17 @@ async function cmdVerify(args, ctx, deps) {
             app: { type: 'boolean', default: false },
             a0: { type: 'boolean', default: false },
             url: { type: 'string' },
+            task: { type: 'string' },
+            'expect-text': { type: 'string' },
+            'expect-url': { type: 'string' },
+            'expect-selector': { type: 'string' },
             'report-dir': { type: 'string' },
         },
     });
     if (values.help) {
-        ctx.out('Usage: argus-reviewer verify [--flow] [--app] [--a0] [--url <target>] [--report-dir <dir>]\n\n' +
+        ctx.out('Usage: argus-reviewer verify [--flow] [--app] [--a0] [--url <target>] ' +
+            '[--task "<task>" --expect-text <marker>|--expect-url <re>|--expect-selector <sel>] ' +
+            '[--report-dir <dir>]\n\n' +
             'Runs the selected product lanes and writes run-manifest.json. Code review is selected by default; deeper lanes are explicit.');
         return 0;
     }
@@ -1793,6 +1814,31 @@ async function cmdVerify(args, ctx, deps) {
         budgets.review = { limitUsd: reviewBudget };
     if (flowBudget !== undefined)
         budgets.flow = { limitUsd: flowBudget };
+    const appBudget = config.app.budgetUsd ?? actionBudget ?? config.budgetUsd;
+    budgets.app = {
+        ...(appBudget !== undefined ? { limitUsd: appBudget } : {}),
+        maxDurationMs: config.app.timeoutMs ?? APP_LANE_DEFAULT_TIMEOUT_MS,
+    };
+    budgets.a0 = {
+        maxTasks: config.a0?.maxTasks ?? A0_LANE_MAX_TASKS,
+        maxDurationMs: config.a0?.timeoutMs ?? A0_DEFAULT_TIMEOUT_MS,
+    };
+    // Flag-level expected-state markers compose into the task contract —
+    // they win over config.app.expected so a one-shot verify needs no file.
+    const flagExpected = (() => {
+        const e = {};
+        if (values['expect-text'] !== undefined)
+            e.text = values['expect-text'];
+        if (values['expect-url'] !== undefined)
+            e.url = values['expect-url'];
+        if (values['expect-selector'] !== undefined)
+            e.selector = values['expect-selector'];
+        return e.text !== undefined || e.url !== undefined || e.selector !== undefined
+            ? e
+            : undefined;
+    })();
+    const verifyTmp = await mkdtemp(join(tmpdir(), 'argus-verify-'));
+    const logger = createLogger(resolveLogLevel(ctx.env, config.logLevel), ctx);
     const result = await runVerify({
         cwd: ctx.cwd,
         runId: newRunId(),
@@ -1811,6 +1857,51 @@ async function cmdVerify(args, ctx, deps) {
         runners: {
             review: async () => cmdCodeReview(['--report-dir', reportDir], ctx, deps),
             flow: async (url) => cmdRun(['--url', url, '--report-dir', reportDir], ctx, deps),
+            app: async () => {
+                // The lane writes its own detail record — every status path
+                // (blocked/unavailable/inconclusive/failed/passed) lands in the
+                // manifest, none silently no-ops.
+                const report = await runAppLane({
+                    config,
+                    trusted: trust === 'trusted',
+                    url: flowUrl,
+                    task: values.task,
+                    expected: flagExpected,
+                    deps: {
+                        ...(deps.launchDriver !== undefined ? { launchDriver: deps.launchDriver } : {}),
+                        createClient: (cfg) => createClient(deps, cfg, ctx),
+                        applyPageSetup: async (driver) => {
+                            await applyPageSetup(config, driver, ctx, verifyTmp);
+                        },
+                        logger,
+                    },
+                });
+                await writeAtomicJson(join(reportDir, APP_LANE_REPORT), report);
+                ctx.out(`app lane: ${report.status} — ${report.summary ?? report.reason ?? 'no detail'}` +
+                    (report.visionCalls > 0
+                        ? ` (${report.visionCalls} call(s), $${report.visionCostUsd.toFixed(6)})`
+                        : ''));
+                return report.status === 'passed' ? 0 : 1;
+            },
+            a0: async () => {
+                // Explicit-selection escalation lane: sanitized payload, allowlisted
+                // child env, honest statuses — never a `passed` while #53 is open.
+                const report = await runA0Lane({
+                    a0: config.a0,
+                    env: ctx.env,
+                    targetUrl: flowUrl,
+                    intendedHeadSha: trace?.commit ?? git.commitSha,
+                    task: values.task ?? config.app.task,
+                    deps: {
+                        ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
+                        ...(deps.probe !== undefined ? { probe: deps.probe } : {}),
+                        note: ctx.out,
+                    },
+                });
+                await writeAtomicJson(join(reportDir, A0_LANE_REPORT), report);
+                ctx.out(`a0 lane: ${report.status} — ${report.summary ?? report.reason ?? 'no detail'}`);
+                return report.status === 'passed' ? 0 : 1;
+            },
         },
     });
     const reviewBinding = result.manifest.lanes.review.headBinding;
@@ -1819,6 +1910,14 @@ async function cmdVerify(args, ctx, deps) {
     }
     const manifestPath = join(reportDir, 'run-manifest.json');
     await writeAtomicJson(manifestPath, result.manifest);
+    // Local run history for the dashboard/TUI workspace — bounded by
+    // reportRetention (default 20; 0 disables archival).
+    try {
+        await archiveManifest(reportDir, result.manifest, config.reportRetention ?? 20);
+    }
+    catch (e) {
+        ctx.err(`verify: manifest archive failed — ${e.message}`);
+    }
     ctx.out(`verify ${result.manifest.aggregate.status}: ${result.manifest.aggregate.calls} provider call(s), ` +
         `$${result.manifest.aggregate.costUsd.toFixed(6)} — manifest ${manifestPath}`);
     for (const lane of ['review', 'flow', 'app', 'a0']) {

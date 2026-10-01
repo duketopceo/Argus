@@ -118,6 +118,58 @@ function render() {
   }
   out.push('')
 
+  // Verify workspace — the same run-manifest.json the comment and
+  // dashboard render (R18): aggregate + lane status words, never
+  // color-only, compact fallback rather than a second contract.
+  out.push(hr('Verify'))
+  const ws = state.workspace ?? { runs: [], corrupt: 0 }
+  if (ws.degraded) out.push(warn(`  ${ws.degraded}`))
+  if (ws.corrupt > 0 && !ws.degraded) {
+    out.push(warn(`  ${ws.corrupt} manifest file(s) unreadable — skipped`))
+  }
+  const cur = ws.current
+  if (!cur) {
+    out.push(paint(`  no runs yet — argus-reviewer verify writes run-manifest.json`, C.dim))
+  } else {
+    const agg = cur.aggregate ?? {}
+    const aggPaint = agg.status === 'passed' ? ok
+      : agg.status === 'failed' ? bad
+      : warn
+    out.push(
+      `  ${aggPaint(agg.status ?? '?')}  ${paint(cur.runId ?? '', C.cyan)}  ` +
+        `${agg.calls ?? 0} call(s)  $${(agg.costUsd ?? 0).toFixed(6)}`,
+    )
+    const skipped = []
+    for (const id of ['review', 'flow', 'app', 'a0']) {
+      const lane = cur.lanes?.[id]
+      if (!lane) continue
+      if (!lane.selected) {
+        skipped.push(id)
+        continue
+      }
+      const paintFn = lane.status === 'passed' ? ok
+        : lane.status === 'failed' ? bad
+        : lane.status === 'blocked' || lane.status === 'unavailable' ? warn
+        : paint
+      const usage = lane.usage ?? {}
+      const cost = usage.metered === false ? 'unmetered' : `$${(usage.costUsd ?? 0).toFixed(6)}`
+      const detail = lane.reason ?? lane.summary ?? ''
+      const head = lane.headBinding
+        ? `  head ${lane.headBinding.status === 'match' ? ok('match') : warn(lane.headBinding.status)}`
+        : ''
+      out.push(
+        `    ${paintFn(lane.status)}  ${id.padEnd(6)}  ` +
+          `${usage.calls ?? 0} call(s) ${cost} ${paint(lane.model ?? '', C.dim)}${head}` +
+          `${detail ? `  ${trunc(detail, 48)}` : ''}`,
+      )
+    }
+    if (skipped.length > 0) out.push(paint(`    skipped: ${skipped.join(', ')}`, C.dim))
+    if (ws.runs.length > 1) {
+      out.push(paint(`    ${ws.runs.length} run(s) in history`, C.dim))
+    }
+  }
+  out.push('')
+
   out.push(hr('Code Review'))
   const rv = state.review
   if (rv) {
