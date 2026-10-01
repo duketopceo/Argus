@@ -69,6 +69,39 @@ export interface Explore {
   budgetUsd: number | undefined
 }
 
+/**
+ * Verified expected state for `verify --app`: at least one of these must
+ * hold for the lane to pass — a page that merely loads is never a pass.
+ * All configured conditions are ANDed.
+ */
+export interface AppExpectation {
+  /** Substring that must appear in the a11y tree (case-insensitive). */
+  text?: string
+  /** Regex source the final page URL must match. */
+  url?: string
+  /** Playwright/CSS selector that must resolve at least one node. */
+  selector?: string
+}
+
+/**
+ * `verify --app` lane (follow-through U3): a bounded natural-language task
+ * run on the ExploreLoop substrate. Opt-in — the lane is selected by the
+ * `--app` flag and this block supplies the task contract. Without `task`
+ * and at least one `expected` marker the lane records `blocked`.
+ */
+export interface AppLane {
+  /** Natural-language task the lane must accomplish. */
+  task: string | undefined
+  /** Expected-state marker(s) the lane verifies deterministically. */
+  expected: AppExpectation | undefined
+  /** Step cap for the task loop. Unset → explore.maxSteps. */
+  maxSteps: number | undefined
+  /** Lane USD budget. Unset = bounded by run budget. */
+  budgetUsd: number | undefined
+  /** Wall-clock cap in ms. Unset → lane default (120s). */
+  timeoutMs: number | undefined
+}
+
 export interface Config {
   model: string
   escalation_model: string
@@ -160,12 +193,16 @@ export interface Config {
   recordStepCap: number | undefined
   /**
    * Agent Zero instance for delegated tasks (`argus-reviewer delegate`,
-   * `heal: 'a0'`). `url` is the instance base URL — leave unset to let the
-   * `a0` CLI resolve it (saved host, AGENT_ZERO_HOST, Docker discovery).
-   * Least-privilege scoping (browser vs full desktop) is configured on the
-   * instance's gateway, not here.
+   * `heal: 'a0'`, `verify --a0`). `url` is the instance base URL — leave
+   * unset to let the `a0` CLI resolve it (saved host, AGENT_ZERO_HOST,
+   * Docker discovery). `maxTasks` caps delegations per `verify` run
+   * (default 1); `timeoutMs` is the per-task wall-clock bound. The lane is
+   * an explicit opt-in escalation and reports `unverified-live` until a
+   * live host round-trip is proven (issue #53).
    */
-  a0: { url: string | undefined } | undefined
+  a0:
+    | { url: string | undefined; maxTasks: number | undefined; timeoutMs: number | undefined }
+    | undefined
   /**
    * Failure escalation for `run`. 'local' (default) heals via the vision
    * model only. 'a0' additionally sends each failed test to Agent Zero for an
@@ -183,6 +220,12 @@ export interface Config {
    * `enabled: false` by default so capture is opt-in.
    */
   explore: Explore
+  /**
+   * `verify --app` task lane. Always populated after `resolveConfig` —
+   * every field unset by default so the lane blocks on missing contract
+   * rather than inventing one.
+   */
+  app: AppLane
   /**
    * Code-review policy knobs. Always populated after `resolveConfig`.
    * `secretsThreshold`: Jev `noul` probability at/above which a
@@ -222,11 +265,12 @@ export interface Config {
   }
 }
 
-export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review' | 'explore'>> & {
+export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review' | 'explore' | 'app'>> & {
   provider?: Partial<ProviderRules>
   sandbox?: Partial<Sandbox>
   review?: Partial<Config['review']>
   explore?: Partial<Explore>
+  app?: Partial<AppLane>
 }
 
 export const DEFAULT_RECORD_STEP_CAP = 40
@@ -235,6 +279,14 @@ export const DEFAULT_EXPLORE: Explore = {
   enabled: false,
   maxSteps: 20,
   budgetUsd: undefined,
+}
+
+export const DEFAULT_APP: AppLane = {
+  task: undefined,
+  expected: undefined,
+  maxSteps: undefined,
+  budgetUsd: undefined,
+  timeoutMs: undefined,
 }
 
 export const DEFAULT_SANDBOX: Sandbox = {
@@ -278,6 +330,7 @@ const defaults: Config = {
   heal: 'local',
   sandbox: { ...DEFAULT_SANDBOX },
   explore: { ...DEFAULT_EXPLORE },
+  app: { ...DEFAULT_APP },
   review: {
     secretsThreshold: 0.3,
     maxComments: 20,
@@ -302,6 +355,24 @@ function posInt(v: number | undefined, dflt: number): number {
 /** Probability config values (must be in [0,1]) fall back to their default. */
 function prob01(v: number | undefined, dflt: number): number {
   return v !== undefined && Number.isFinite(v) && v >= 0 && v <= 1 ? v : dflt
+}
+
+/** Optional positive-integer config values stay undefined when absent or wrong-typed. */
+function optPosInt(v: number | undefined): number | undefined {
+  return v !== undefined && Number.isInteger(v) && v >= 1 ? v : undefined
+}
+
+/** Keep only string expected-state markers; all-dropped means unconfigured. */
+function sanitizeExpectation(input: unknown): AppExpectation | undefined {
+  if (typeof input !== 'object' || input === null) return undefined
+  const raw = input as Record<string, unknown>
+  const expected: AppExpectation = {}
+  if (typeof raw.text === 'string' && raw.text !== '') expected.text = raw.text
+  if (typeof raw.url === 'string' && raw.url !== '') expected.url = raw.url
+  if (typeof raw.selector === 'string' && raw.selector !== '') expected.selector = raw.selector
+  return expected.text === undefined && expected.url === undefined && expected.selector === undefined
+    ? undefined
+    : expected
 }
 
 /**
@@ -362,6 +433,18 @@ export function resolveConfig(input: ConfigInput = {}): Config {
     explore.budgetUsd > 0
       ? explore.budgetUsd
       : undefined
+  // Same wrong-typed degrade for the app lane contract — a mis-typed
+  // marker must never self-author a passing condition.
+  const rawApp = typeof input.app === 'object' && input.app !== null ? input.app : {}
+  const app: AppLane = { ...defaults.app, ...rawApp }
+  app.task = typeof app.task === 'string' && app.task.trim() !== '' ? app.task : undefined
+  app.expected = sanitizeExpectation(app.expected)
+  app.maxSteps = optPosInt(rawApp.maxSteps)
+  app.timeoutMs = optPosInt(rawApp.timeoutMs)
+  app.budgetUsd =
+    typeof app.budgetUsd === 'number' && Number.isFinite(app.budgetUsd) && app.budgetUsd > 0
+      ? app.budgetUsd
+      : undefined
   const rawReview = typeof input.review === 'object' && input.review !== null ? input.review : {}
   const review = { ...defaults.review, ...rawReview }
   // Thresholds must be probabilities — anything else (NaN, >1,
@@ -392,9 +475,19 @@ export function resolveConfig(input: ConfigInput = {}): Config {
   review.profiles = Array.isArray(rawReview.profiles)
     ? [...new Set(rawReview.profiles.filter(isReviewProfile))]
     : []
-  const resolved: Config = { ...defaults, ...input, provider, sandbox, explore, review }
+  const resolved: Config = { ...defaults, ...input, provider, sandbox, explore, app, review }
   resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP)
   if (resolved.heal !== 'a0') resolved.heal = 'local'
+  if (resolved.a0 !== undefined) {
+    // A0 bounds degrade like every other numeric knob — a hostile or
+    // mis-typed cap must not become unlimited tasks or no timeout.
+    const a0 = resolved.a0
+    resolved.a0 = {
+      url: typeof a0.url === 'string' && a0.url !== '' ? a0.url : undefined,
+      maxTasks: optPosInt(a0.maxTasks),
+      timeoutMs: optPosInt(a0.timeoutMs),
+    }
+  }
   // '' is the documented opt-out — an empty slug would send a broken
   // model id to the decisions endpoint on every adjudication call.
   if (resolved.decisionModel === '') resolved.decisionModel = undefined

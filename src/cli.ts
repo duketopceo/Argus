@@ -24,7 +24,7 @@ import {
   unknownProviderSlugs,
 } from './config.js'
 import { debug, setLiveDir } from './debug.js'
-import { defaultExec, detectEnvironment, type ExecFn } from './detect.js'
+import { defaultExec, detectEnvironment, type ExecFn, type ProbeFn } from './detect.js'
 import { BrowserDriver, PageCapture } from './driver/browser.js'
 import { TargetProcess, waitForReady } from './driver/target.js'
 import { Engine, VisionClient } from './engine/loop.js'
@@ -57,7 +57,14 @@ import { adjudicateFindings, type FindingAdjudicationAudit } from './review/adju
 import { runProbeLane, type ProbeRecord } from './probe/queue.js'
 import { decodeProbePayload, encodeProbePayload, persistProbes } from './probe/persist.js'
 import { SENTINEL } from './report/comment.js'
-import { A0_DEFAULT_TIMEOUT_MS, a0TaskPrompt, runA0Task } from './executor/a0.js'
+import {
+  A0_DEFAULT_TIMEOUT_MS,
+  A0_LANE_MAX_TASKS,
+  A0_LANE_REPORT,
+  a0TaskPrompt,
+  runA0Lane,
+  runA0Task,
+} from './executor/a0.js'
 import { buildJournalEntry } from './journal/build.js'
 import { ErrorRecord } from './journal/schema.js'
 import { newRunId, writeJournal } from './journal/store.js'
@@ -85,6 +92,12 @@ import {
 } from './mention.js'
 import type { BudgetOptions } from './pipeline/budget.js'
 import { runVerify } from './pipeline/verify.js'
+import {
+  APP_LANE_DEFAULT_TIMEOUT_MS,
+  APP_LANE_REPORT,
+  runAppLane,
+} from './pipeline/app.js'
+import type { AppExpectation } from './config.js'
 
 export interface CliDeps {
   cwd?: string
@@ -97,6 +110,8 @@ export interface CliDeps {
   launchDriver?: (config: Config) => Promise<BrowserDriver>
   /** Inject a subprocess runner (tests stub `a0`/`gh` detection + delegation). */
   exec?: ExecFn
+  /** Inject the host reachability probe (tests stub a0 detection). */
+  probe?: ProbeFn
 }
 
 interface Ctx {
@@ -2102,12 +2117,18 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
       app: { type: 'boolean', default: false },
       a0: { type: 'boolean', default: false },
       url: { type: 'string' },
+      task: { type: 'string' },
+      'expect-text': { type: 'string' },
+      'expect-url': { type: 'string' },
+      'expect-selector': { type: 'string' },
       'report-dir': { type: 'string' },
     },
   })
   if (values.help) {
     ctx.out(
-      'Usage: argus-reviewer verify [--flow] [--app] [--a0] [--url <target>] [--report-dir <dir>]\n\n' +
+      'Usage: argus-reviewer verify [--flow] [--app] [--a0] [--url <target>] ' +
+        '[--task "<task>" --expect-text <marker>|--expect-url <re>|--expect-selector <sel>] ' +
+        '[--report-dir <dir>]\n\n' +
         'Runs the selected product lanes and writes run-manifest.json. Code review is selected by default; deeper lanes are explicit.',
     )
     return 0
@@ -2136,11 +2157,33 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
   const envBudget = Number(ctx.env.ARGUS_BUDGET_USD)
   const actionBudget =
     Number.isFinite(envBudget) && envBudget > 0 ? envBudget : undefined
-  const budgets: Partial<Record<'review' | 'flow', BudgetOptions>> = {}
+  const budgets: Partial<Record<'review' | 'flow' | 'app' | 'a0', BudgetOptions>> = {}
   const reviewBudget = actionBudget ?? config.codeReviewBudgetUsd
   const flowBudget = actionBudget ?? config.budgetUsd
   if (reviewBudget !== undefined) budgets.review = { limitUsd: reviewBudget }
   if (flowBudget !== undefined) budgets.flow = { limitUsd: flowBudget }
+  const appBudget = config.app.budgetUsd ?? actionBudget ?? config.budgetUsd
+  budgets.app = {
+    ...(appBudget !== undefined ? { limitUsd: appBudget } : {}),
+    maxDurationMs: config.app.timeoutMs ?? APP_LANE_DEFAULT_TIMEOUT_MS,
+  }
+  budgets.a0 = {
+    maxTasks: config.a0?.maxTasks ?? A0_LANE_MAX_TASKS,
+    maxDurationMs: config.a0?.timeoutMs ?? A0_DEFAULT_TIMEOUT_MS,
+  }
+  // Flag-level expected-state markers compose into the task contract —
+  // they win over config.app.expected so a one-shot verify needs no file.
+  const flagExpected: AppExpectation | undefined = (() => {
+    const e: AppExpectation = {}
+    if (values['expect-text'] !== undefined) e.text = values['expect-text']
+    if (values['expect-url'] !== undefined) e.url = values['expect-url']
+    if (values['expect-selector'] !== undefined) e.selector = values['expect-selector']
+    return e.text !== undefined || e.url !== undefined || e.selector !== undefined
+      ? e
+      : undefined
+  })()
+  const verifyTmp = await mkdtemp(join(tmpdir(), 'argus-verify-'))
+  const logger = createLogger(resolveLogLevel(ctx.env, config.logLevel), ctx)
   const result = await runVerify({
     cwd: ctx.cwd,
     runId: newRunId(),
@@ -2159,6 +2202,53 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
     runners: {
       review: async () => cmdCodeReview(['--report-dir', reportDir], ctx, deps),
       flow: async (url) => cmdRun(['--url', url, '--report-dir', reportDir], ctx, deps),
+      app: async () => {
+        // The lane writes its own detail record — every status path
+        // (blocked/unavailable/inconclusive/failed/passed) lands in the
+        // manifest, none silently no-ops.
+        const report = await runAppLane({
+          config,
+          trusted: trust === 'trusted',
+          url: flowUrl,
+          task: values.task,
+          expected: flagExpected,
+          deps: {
+            ...(deps.launchDriver !== undefined ? { launchDriver: deps.launchDriver } : {}),
+            createClient: (cfg) => createClient(deps, cfg, ctx),
+            applyPageSetup: async (driver) => {
+              await applyPageSetup(config, driver, ctx, verifyTmp)
+            },
+            logger,
+          },
+        })
+        await writeAtomicJson(join(reportDir, APP_LANE_REPORT), report)
+        ctx.out(
+          `app lane: ${report.status} — ${report.summary ?? report.reason ?? 'no detail'}` +
+            (report.visionCalls > 0
+              ? ` (${report.visionCalls} call(s), $${report.visionCostUsd.toFixed(6)})`
+              : ''),
+        )
+        return report.status === 'passed' ? 0 : 1
+      },
+      a0: async () => {
+        // Explicit-selection escalation lane: sanitized payload, allowlisted
+        // child env, honest statuses — never a `passed` while #53 is open.
+        const report = await runA0Lane({
+          a0: config.a0,
+          env: ctx.env,
+          targetUrl: flowUrl,
+          intendedHeadSha: trace?.commit ?? git.commitSha,
+          task: values.task ?? config.app.task,
+          deps: {
+            ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
+            ...(deps.probe !== undefined ? { probe: deps.probe } : {}),
+            note: ctx.out,
+          },
+        })
+        await writeAtomicJson(join(reportDir, A0_LANE_REPORT), report)
+        ctx.out(`a0 lane: ${report.status} — ${report.summary ?? report.reason ?? 'no detail'}`)
+        return report.status === 'passed' ? 0 : 1
+      },
     },
   })
 

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>argus app-lane fixture</title>
+  </head>
+  <body>
+    <h1>app lane fixture</h1>
+    <!--
+      A one-step task target: the "Submit" click reveals a success banner.
+      The a11y tree gains 'Submission received' only after the click, so
+      expected-text verifies real state change, not page load.
+    -->
+    <style>
+      /* Absolutely positioned so stubbed click coordinates are deterministic. */
+      #submit {
+        position: absolute;
+        left: 100px;
+        top: 100px;
+        width: 200px;
+        height: 40px;
+      }
+    </style>
+    <form id="signup">
+      <label for="name">Name</label>
+      <input id="name" name="name" type="text" />
+      <button id="submit" type="submit">Submit</button>
+    </form>
+    <p id="banner" role="status" hidden>Submission received</p>
+    <script>
+      document.getElementById('signup').addEventListener('submit', (e) => {
+        e.preventDefault()
+        document.getElementById('banner').hidden = false
+      })
+      // A seeded console warning keeps anomaly evidence exercised without
+      // becoming verdict input.
+      console.error('seeded app-lane console error')
+    </script>
+  </body>
+</html>

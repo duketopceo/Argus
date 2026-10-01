@@ -29,10 +29,17 @@ export type ExecFn = (
   timeoutMs: number,
   /** Extra env merged over process.env — keeps secrets out of `ps`/`/proc` argv. */
   env?: Record<string, string>,
+  /**
+   * `baseEnv` replaces the inherited process environment wholesale — the
+   * caller's allowlist, not ambient env. Without it the child inherits
+   * process.env as before.
+   */
+  opts?: { baseEnv?: Record<string, string> },
 ) => Promise<ExecResult>
 
-export const defaultExec: ExecFn = (cmd, args, timeoutMs, env) =>
+export const defaultExec: ExecFn = (cmd, args, timeoutMs, env, opts) =>
   new Promise((resolve) => {
+    const baseEnv = opts?.baseEnv ?? process.env
     // 4 MiB headroom — the sandbox caps output itself after capture, and a
     // chatty probe hitting execFile's 1 MiB default would error instead of
     // reaching the harness classifier.
@@ -42,7 +49,7 @@ export const defaultExec: ExecFn = (cmd, args, timeoutMs, env) =>
       {
         timeout: timeoutMs,
         maxBuffer: 4 * 1024 * 1024,
-        ...(env !== undefined ? { env: { ...process.env, ...env } } : {}),
+        env: { ...baseEnv, ...env },
       },
       (err, stdout, stderr) => {
         if (err) {
