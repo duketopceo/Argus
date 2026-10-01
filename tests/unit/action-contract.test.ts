@@ -236,9 +236,15 @@ describe('action input contract', () => {
       join(process.cwd(), '.github/workflows/argus-reviewer.yml'),
       'utf8',
     )
-    expect(workflow).toContain(
-      'uses: duketopceo/Argus/action@75492b8a6b10338d1f141ac9f8544135edc34409 # v0.2.0',
-    )
+    // The trusted pin must be a full SHA in BOTH places and the same one —
+    // a CLI built from one commit run through an action at another is
+    // incoherent. No literal: the pinned SHA is expected to advance as
+    // trusted builds ship, and a literal rots on every bump.
+    const actionSha = /uses: duketopceo\/Argus\/action@([0-9a-f]{40})/.exec(workflow)?.[1]
+    const cliSha = /ref: ([0-9a-f]{40})\n\s+path: trusted-argus/.exec(workflow)?.[1]
+    expect(actionSha).toBeDefined()
+    expect(cliSha).toBeDefined()
+    expect(actionSha).toBe(cliSha)
     expect(workflow).toContain('ref: ${{ github.event.pull_request.head.sha || github.sha }}')
     expect(workflow).toContain('repository: duketopceo/Argus')
     expect(workflow).toContain('run: rm -rf -- trusted-argus')
