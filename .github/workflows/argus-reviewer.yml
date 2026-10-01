@@ -48,7 +48,11 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: duketopceo/Argus
-          ref: 75492b8a6b10338d1f141ac9f8544135edc34409 # v0.2.0
+          # Post-hardening main: carries the 120s OpenRouter request timeout
+          # (#101 — a stalled socket pinned this lane 15min under v0.2.0) and
+          # the run-bound evidence contract (#102/#107). Re-anchor to the next
+          # tag when one is cut.
+          ref: 119cacdce427046d1300da7b1eb386bcc4ed52a5
           path: trusted-argus
           persist-credentials: false
       - name: Install trusted CLI dependencies
@@ -62,13 +66,16 @@ jobs:
 
       - name: Run published Argus action
         id: review
-        uses: duketopceo/Argus/action@75492b8a6b10338d1f141ac9f8544135edc34409 # v0.2.0
+        uses: duketopceo/Argus/action@119cacdce427046d1300da7b1eb386bcc4ed52a5
         with:
           openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           cli: ${{ steps.trusted-cli.outputs.cli }}
           index: 'false'
           run: 'false'
           working-directory: .
+          # The deepseek default stalled on OpenRouter (120s timeout, CI +
+          # local) — pin a working cheap model until the default is revisited.
+          code-model: google/gemini-2.5-flash-lite
 
       - name: Upload Argus review report artifact
         if: always()
