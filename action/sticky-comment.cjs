@@ -830,8 +830,13 @@ async function planInlineComments(pr, codeReview) {
 
   // R9/KTD6 freshness — a planted or stale report must never produce
   // committable suggestions or a blocking review. The sticky still posts;
-  // it renders status text, not code.
-  if (codeReview.headBinding?.intendedSha !== pr.head.sha) {
+  // it renders status text, not code. Head sha is forgeable (public), so
+  // when a run id exists the report must also carry it.
+  const expectedNonce = (process.env.GITHUB_RUN_ID ?? '').trim()
+  if (
+    codeReview.headBinding?.intendedSha !== pr.head.sha ||
+    (expectedNonce !== '' && codeReview.runNonce !== expectedNonce)
+  ) {
     core.warning(
       `code-review.json head binding ` +
         `(${codeReview.headBinding?.intendedSha ?? 'missing'}) does not match ` +
@@ -1020,45 +1025,50 @@ async function main() {
   let report
   let codeReview
   let manifest
-  let manifestStale = false
+  // Every evidence file is run-scoped. GITHUB_RUN_ID is not knowable when a
+  // commit or a planted file is authored (freshness, not secrecy — it is
+  // public once the run exists), so a file that cannot present this run's
+  // id is residue or plant and is ignored. No env → local/dogfood path,
+  // where the gate is off by design.
+  const expectedNonce = (process.env.GITHUB_RUN_ID ?? '').trim()
+  const staleEvidence = []
   if (hasKey) {
     try {
       const raw = fs.readFileSync(path.join(reportDir, 'run.json'), 'utf8')
-      report = JSON.parse(raw)
+      const parsed = JSON.parse(raw)
+      if (expectedNonce !== '' && parsed?.runNonce !== expectedNonce) {
+        staleEvidence.push('run.json')
+      } else {
+        report = parsed
+      }
     } catch {
       report = undefined
     }
     try {
       const raw = fs.readFileSync(path.join(reportDir, 'code-review.json'), 'utf8')
-      codeReview = JSON.parse(raw)
+      const parsed = JSON.parse(raw)
+      if (expectedNonce !== '' && parsed?.runNonce !== expectedNonce) {
+        staleEvidence.push('code-review.json')
+      } else {
+        codeReview = parsed
+      }
     } catch {
       codeReview = undefined
     }
     try {
       const raw = fs.readFileSync(path.join(reportDir, 'run-manifest.json'), 'utf8')
       const parsed = JSON.parse(raw)
-      // A manifest is run-scoped evidence — it decides the status only when
-      // it validates like a real manifest AND its declared head binding
-      // matches the sha this run reports on. Residue (crashed run, stale
-      // workspace) or a planted file falls back to the serialized-review
-      // verdict — the verify step also wipes these files before it runs.
+      // The manifest decides the status only when it validates like a real
+      // manifest AND binds this run's head AND this run's nonce — residue
+      // and plants fall through to whatever serialized evidence survived
+      // the same gate.
       const expectedSha = pr ? pr.head.sha : context.sha
-      // Head sha alone is forgeable — it is public. The run nonce
-      // (RUN_ID[:ATTEMPT]) is only knowable inside this workflow run, so a
-      // manifest that can't present it (planted, residue, older producer)
-      // degrades to the serialized-review verdict the same way residue does.
-      const expectedNonce = [
-        process.env.GITHUB_RUN_ID,
-        process.env.GITHUB_RUN_ATTEMPT,
-      ]
-        .map((v) => (typeof v === 'string' ? v.trim() : v))
-        .filter(Boolean)
-        .join(':')
-      manifestStale =
+      const stale =
         validManifest(parsed) &&
         (parsed.identity?.intendedHeadSha !== expectedSha ||
           (expectedNonce !== '' && parsed.identity?.runNonce !== expectedNonce))
-      manifest = validManifest(parsed) && !manifestStale ? parsed : undefined
+      manifest = validManifest(parsed) && !stale ? parsed : undefined
+      if (stale) staleEvidence.push('run-manifest.json')
     } catch {
       manifest = undefined
     }
@@ -1098,13 +1108,14 @@ async function main() {
           ? renderManifestBody(manifest, codeReview, runUrl)
           : renderNoReportBody(reportDir, runUrl)
         : renderBody(report, codeReview, runUrl, ok, inlinePlan, manifest)
-  // A bound-mismatched manifest is ignored for the verdict — say so in the
-  // comment so residue never reads as a silent downgrade of evidence.
-  const body = manifestStale
-    ? baseBody +
-        '\n\n> ⚠️ A `run-manifest.json` was found but its head/run binding does not ' +
-        'match this run — it was ignored.'
-    : baseBody
+  // Bound-mismatched evidence is ignored for the verdict — name each one in
+  // the comment so residue never reads as a silent downgrade of evidence.
+  let body = baseBody
+  for (const file of staleEvidence) {
+    body +=
+      `\n\n> ⚠️ A \`${file}\` was found but its head/run binding does not ` +
+      'match this run — it was ignored.'
+  }
 
   if (pr) {
     const { data: comments } = await github.rest.issues.listComments({

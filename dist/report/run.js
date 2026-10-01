@@ -12,7 +12,13 @@ extraCalls = [],
  * flows. A configured-but-skipped/errored pass is not evidence: the run
  * fails closed instead of reading a silent no-op as green.
  */
-exploreEvidence = false) {
+exploreEvidence = false, 
+/**
+ * Workflow-run nonce (GITHUB_RUN_ID). The run manifests bind evidence to
+ * a run via `identity.runNonce`; run.json carries the same stamp so the
+ * serialized-verdict fallback in the post step is bound too.
+ */
+runNonce) {
     const failed = tests.filter((t) => !t.ok).length;
     const callsByModel = {};
     const costByModel = {};
@@ -50,6 +56,7 @@ exploreEvidence = false) {
             assertionMisses: tests.reduce((sum, t) => sum + (t.cache?.assertionMisses ?? 0), 0),
         },
         tests,
+        ...(runNonce !== undefined ? { runNonce } : {}),
         artifacts: {
             videos: tests.map((t) => t.videoPath).filter((p) => p !== undefined),
         },

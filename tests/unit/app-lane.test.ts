@@ -763,6 +763,35 @@ describe('verify --app cli surface', () => {
     }
   })
 
+  it('--no-review with --app keeps review off and the app lane selected', async () => {
+    // The negation must compose: review stays dead while the named lane
+    // still runs. A selection that silently re-adds review would re-open
+    // the vacuous-opt-out hole the fallback removal closed.
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-mixed-'))
+    const reportDir = join(cwd, 'reports')
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({ reportDir, app: { task: 'noop' } }),
+    )
+    const { main } = await import('../../src/cli.js')
+    const code = await main(['verify', '--no-review', '--app'], {
+      cwd,
+      env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' },
+      out: () => undefined,
+      err: () => undefined,
+    })
+    expect(code).toBe(1)
+    const manifest = JSON.parse(await readFile(join(reportDir, 'run-manifest.json'), 'utf8')) as {
+      lanes: Record<string, { selected: boolean; status: string }>
+    }
+    expect(manifest.lanes.review.selected).toBe(false)
+    expect(manifest.lanes.review.status).toBe('skipped')
+    expect(manifest.lanes.app.selected).toBe(true)
+    // The lane is selected but cannot run without a reachable target —
+    // blocked/unavailable, never silently re-skipped.
+    expect(['blocked', 'unavailable', 'failed']).toContain(manifest.lanes.app.status)
+  })
+
   it('the manifest identity carries the workflow run nonce when CI env is present', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-nonce-'))
     const reportDir = join(cwd, 'reports')
@@ -774,6 +803,9 @@ describe('verify --app cli surface', () => {
         PATH: process.env.PATH ?? '',
         HOME: process.env.HOME ?? '',
         GITHUB_RUN_ID: '42',
+        // RUN_ATTEMPT is deliberately not part of the nonce — a "re-run
+        // failed jobs" retry bumps it and would invalidate evidence the
+        // same run already produced.
         GITHUB_RUN_ATTEMPT: '3',
       },
       out: () => undefined,
@@ -782,7 +814,7 @@ describe('verify --app cli surface', () => {
     const manifest = JSON.parse(await readFile(join(reportDir, 'run-manifest.json'), 'utf8')) as {
       identity: { runNonce?: string }
     }
-    expect(manifest.identity.runNonce).toBe('42:3')
+    expect(manifest.identity.runNonce).toBe('42')
   })
 
   it('the manifest nonce is absent for local runs — sticky falls back to sha binding alone', async () => {

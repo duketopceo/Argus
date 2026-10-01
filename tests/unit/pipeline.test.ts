@@ -16,6 +16,8 @@ import {
   selectionFromFlags,
 } from '../../src/pipeline/contracts.js'
 import { runVerify } from '../../src/pipeline/verify.js'
+import { buildRunReport } from '../../src/report/run.js'
+import type { TestReport } from '../../src/report/run.js'
 import type { CallCost } from '../../src/vision/cost.js'
 
 function call(costUsd: number, model = 'test/model'): CallCost {
@@ -180,6 +182,40 @@ describe('runVerify', () => {
     // lane and the run aggregate, not just the 10 a test record owned.
     expect(result.manifest.lanes.flow.usage.tokens).toBe(310)
     expect(result.manifest.aggregate.tokens).toBe(310)
+  })
+
+  it('buildRunReport emits visionTokens and the run nonce — the producer side of both contracts', () => {
+    // The consumer tests above only prove the reading path. If the write
+    // side stopped emitting visionTokens, every assertion would silently
+    // fall back to the legacy per-test sum and stay green — this pins the
+    // producer.
+    const test: TestReport = {
+      name: 'login flow',
+      file: 'flows/login.ts',
+      ok: true,
+      durationMs: 1,
+      visionCalls: 1,
+      visionCostUsd: 0.001,
+      calls: [{ provider: 'stub', model: 'm', tokens: 10, costUsd: 0.001, kind: 'vision' }],
+      sandboxSeconds: 0,
+      healEvents: [],
+      asserts: [],
+      captures: [],
+    }
+    const extra: CallCost = {
+      provider: 'stub',
+      model: 'm',
+      tokens: 300,
+      costUsd: 0.002,
+      kind: 'vision',
+    }
+    const started = new Date('2026-09-30T00:00:00Z')
+    const report = buildRunReport([test], started, 5, [extra], false, 'run-7')
+    expect(report.totals.visionTokens).toBe(310)
+    expect(report.totals.visionCalls).toBe(2)
+    expect(report.totals.visionCostUsd).toBeCloseTo(0.003)
+    expect(report.runNonce).toBe('run-7')
+    expect(buildRunReport([test], started, 5).runNonce).toBeUndefined()
   })
 
   it('flow lane falls back to per-test tokens on a pre-visionTokens run.json', async () => {

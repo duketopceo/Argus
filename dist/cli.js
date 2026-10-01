@@ -155,6 +155,16 @@ function resolveCheckoutTrust(ctx) {
         note: (line) => ctx.err(line),
     });
 }
+/**
+ * Run-scoped nonce for evidence files. GITHUB_RUN_ID is not knowable when a
+ * commit or a planted file is authored — that is the property that matters
+ * (freshness, not secrecy: the id is public once the run exists). The sticky
+ * poster and emit-review require evidence written by THIS run whenever the
+ * env is present; local runs carry no nonce and are exempt.
+ */
+function runNonceFrom(env) {
+    return envOr(env.GITHUB_RUN_ID);
+}
 /** Env/flag blank strings normalize to undefined — action inputs default to '' and must not shadow config, and a whitespace-only value must never stand in as a marker. */
 function envOr(v) {
     return v !== undefined && v.trim() !== '' ? v.trim() : undefined;
@@ -801,7 +811,7 @@ async function cmdRun(args, ctx, deps) {
     const report = buildRunReport(reports, startedAt, Date.now() - runStart, exploreOutcome?.calls ?? [], 
     // Explore counts as evidence only when the pass completed — a skipped
     // or errored pass observed nothing and must not green the run.
-    exploreOutcome !== undefined && exploreOutcome.result.stopReason !== 'error');
+    exploreOutcome !== undefined && exploreOutcome.result.stopReason !== 'error', runNonceFrom(ctx.env));
     if (config.explore.enabled) {
         if (exploreOutcome !== undefined) {
             // An errored pass is reported as an explicit skip — 'stopped: error'
@@ -1308,6 +1318,7 @@ async function cmdCodeReview(args, ctx, deps) {
             .filter(isReviewProfile);
     }
     const model = config.code_model ?? config.model;
+    const runNonce = runNonceFrom(ctx.env);
     debug('code-review', `repo=${repo ?? 'none'} pr=${pr ?? 'none'} model=${model} budget=${config.codeReviewBudgetUsd ?? 'unlimited'}`);
     const skip = async (reason) => {
         ctx.out(`code-review: skipping — ${reason}`);
@@ -1329,6 +1340,7 @@ async function cmdCodeReview(args, ctx, deps) {
             model,
             budgetExceeded: false,
             headBinding: classifyHeadBinding(undefined, undefined, fixtureDir !== undefined ? 'fixture' : 'github'),
+            ...(runNonce !== undefined ? { runNonce } : {}),
         };
         await writeAtomicJson(codeReviewPath, skipped);
         return 0;
@@ -1761,6 +1773,7 @@ async function cmdCodeReview(args, ctx, deps) {
             model: lastModel,
             budgetExceeded: ledger.budgetExceeded,
             headBinding,
+            ...(runNonce !== undefined ? { runNonce } : {}),
             ...(persistPayload !== undefined ? { persistPayload } : {}),
         };
         await writeAtomicJson(codeReviewPath, report);
@@ -1891,11 +1904,7 @@ async function cmdVerify(args, ctx, deps) {
         selector: envOr(values['expect-selector']) ?? envOr(ctx.env.ARGUS_VERIFY_EXPECT_SELECTOR),
     });
     const logger = createLogger(resolveLogLevel(ctx.env, config.logLevel), ctx);
-    // RUN_ID[:ATTEMPT] is only knowable inside this workflow run — a planted
-    // or residue manifest can carry the public head sha but not this nonce.
-    const runNonce = [envOr(ctx.env.GITHUB_RUN_ID), envOr(ctx.env.GITHUB_RUN_ATTEMPT)]
-        .filter((v) => v !== undefined)
-        .join(':') || undefined;
+    const runNonce = runNonceFrom(ctx.env);
     const result = await runVerify({
         cwd: ctx.cwd,
         runId: newRunId(),

@@ -68,6 +68,8 @@ export interface RunReport {
   durationMs: number
   ok: boolean
   totals: RunTotals
+  /** Workflow-run nonce (GITHUB_RUN_ID) — freshness binding for post steps. */
+  runNonce?: string
   tests: TestReport[]
   artifacts: { videos: string[] }
   /**
@@ -110,6 +112,12 @@ export function buildRunReport(
    * fails closed instead of reading a silent no-op as green.
    */
   exploreEvidence = false,
+  /**
+   * Workflow-run nonce (GITHUB_RUN_ID). The run manifests bind evidence to
+   * a run via `identity.runNonce`; run.json carries the same stamp so the
+   * serialized-verdict fallback in the post step is bound too.
+   */
+  runNonce?: string,
 ): RunReport {
   const failed = tests.filter((t) => !t.ok).length
   const callsByModel: Record<string, number> = {}
@@ -151,6 +159,7 @@ export function buildRunReport(
       assertionMisses: tests.reduce((sum, t) => sum + (t.cache?.assertionMisses ?? 0), 0),
     },
     tests,
+    ...(runNonce !== undefined ? { runNonce } : {}),
     artifacts: {
       videos: tests.map((t) => t.videoPath).filter((p): p is string => p !== undefined),
     },

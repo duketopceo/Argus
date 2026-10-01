@@ -512,7 +512,6 @@ describe('action review poster (U3)', () => {
     'GITHUB_WORKSPACE',
     'GITHUB_SERVER_URL',
     'GITHUB_RUN_ID',
-    'GITHUB_RUN_ATTEMPT',
     'VISION_E2E_WORKING_DIR',
     'ARGUS_REPORT_DIR',
     'ARGUS_RUN_DISABLED',
@@ -528,7 +527,6 @@ describe('action review poster (U3)', () => {
     process.env.GITHUB_WORKSPACE = workspace
     process.env.GITHUB_SERVER_URL = 'https://github.com'
     process.env.GITHUB_RUN_ID = '1'
-    process.env.GITHUB_RUN_ATTEMPT = '1'
     process.env.ARGUS_RUN_DISABLED = '1'
     delete process.env.VISION_E2E_WORKING_DIR
     delete process.env.ARGUS_REPORT_DIR
@@ -567,6 +565,9 @@ describe('action review poster (U3)', () => {
       reviewComments: [],
       commentsOverflow: 0,
       maxComments: 20,
+      // The poster env pins GITHUB_RUN_ID='1' — a report without this run's
+      // nonce is residue and the new freshness gate drops it.
+      runNonce: '1',
       headBinding: {
         intendedSha: HEAD,
         checkoutSha: HEAD,
@@ -831,6 +832,94 @@ describe('action review poster (U3)', () => {
 
     expect(calls.filter((x) => x.method === 'createReview')).toHaveLength(0)
   })
+
+  it('a code-review.json without this run\'s nonce is dropped — the fallback cannot launder a green status', async () => {
+    // The plant vector the nonce closes: ok:true plus the correct (public)
+    // head sha is forgeable at commit time. GITHUB_RUN_ID is not — so the
+    // report is residue/plant and must be ignored, not trusted.
+    const planted = codeReview()
+    delete (planted as Record<string, unknown>).runNonce
+    await writeReport(planted)
+    const { runtime, calls } = makeRuntime()
+
+    await run(runtime)
+
+    const status = calls.find((x) => x.method === 'createCommitStatus')
+    expect(status!.params.state).toBe('failure')
+    expect(calls.filter((x) => x.method === 'createReview')).toHaveLength(0)
+    const sticky = calls.find((x) => x.method === 'createComment')
+    expect(sticky?.params.body).toContain('`code-review.json`')
+    expect(sticky?.params.body).toContain('head/run binding does not')
+  })
+
+  it('a code-review.json with a foreign run id is dropped the same way', async () => {
+    await writeReport(codeReview({ runNonce: 'foreign-run' }))
+    const { runtime, calls } = makeRuntime()
+
+    await run(runtime)
+
+    const status = calls.find((x) => x.method === 'createCommitStatus')
+    expect(status!.params.state).toBe('failure')
+    expect(calls.filter((x) => x.method === 'createReview')).toHaveLength(0)
+  })
+
+  it('a run.json with a foreign run id is dropped — it cannot green the flow verdict', async () => {
+    // run.json only participates when the run lane wasn't disabled.
+    delete process.env.ARGUS_RUN_DISABLED
+    await writeReport(codeReview())
+    await writeFile(
+      join(workspace, 'argus-reviewer-report', 'run.json'),
+      JSON.stringify({
+        ok: true,
+        runNonce: 'foreign-run',
+        tests: [],
+        totals: { tests: 0, passed: 0, visionCalls: 0, visionCostUsd: 0, sandboxSeconds: 0 },
+        artifacts: { videos: [] },
+      }),
+    )
+    const { runtime, calls } = makeRuntime()
+
+    await run(runtime)
+
+    const status = calls.find((x) => x.method === 'createCommitStatus')
+    expect(status!.params.state).toBe('failure')
+    const sticky = calls.find((x) => x.method === 'createComment')
+    expect(sticky?.params.body).toContain('`run.json`')
+  })
+
+  it('a run.json carrying this run\'s id is trusted — the nonce binds it', async () => {
+    delete process.env.ARGUS_RUN_DISABLED
+    await writeReport(codeReview())
+    await writeFile(
+      join(workspace, 'argus-reviewer-report', 'run.json'),
+      JSON.stringify({
+        ok: true,
+        runNonce: '1',
+        tests: [],
+        totals: { tests: 0, passed: 0, visionCalls: 0, visionCostUsd: 0, sandboxSeconds: 0 },
+        artifacts: { videos: [] },
+      }),
+    )
+    const { runtime, calls } = makeRuntime()
+
+    await run(runtime)
+
+    const status = calls.find((x) => x.method === 'createCommitStatus')
+    expect(status!.params.state).toBe('success')
+  })
+
+  it('no GITHUB_RUN_ID env means no nonce gate — local and dogfood runs still work', async () => {
+    delete process.env.GITHUB_RUN_ID
+    const local = codeReview()
+    delete (local as Record<string, unknown>).runNonce
+    await writeReport(local)
+    const { runtime, calls } = makeRuntime()
+
+    await run(runtime)
+
+    const status = calls.find((x) => x.method === 'createCommitStatus')
+    expect(status!.params.state).toBe('success')
+  })
 })
 
 // U5/AE-C — the PR comment, the TUI, and the dashboard all render the same
@@ -896,7 +985,6 @@ describe('manifest comment parity (U5)', () => {
       GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
       GITHUB_SERVER_URL: process.env.GITHUB_SERVER_URL,
       GITHUB_RUN_ID: process.env.GITHUB_RUN_ID,
-      GITHUB_RUN_ATTEMPT: process.env.GITHUB_RUN_ATTEMPT,
       ARGUS_RUN_DISABLED: process.env.ARGUS_RUN_DISABLED,
       ARGUS_REPORT_DIR: process.env.ARGUS_REPORT_DIR,
     }
@@ -905,20 +993,19 @@ describe('manifest comment parity (U5)', () => {
       process.env.GITHUB_WORKSPACE = workspace
       process.env.GITHUB_SERVER_URL = 'https://github.com'
       process.env.GITHUB_RUN_ID = '1'
-      process.env.GITHUB_RUN_ATTEMPT = '1'
       delete process.env.ARGUS_RUN_DISABLED
       delete process.env.ARGUS_REPORT_DIR
       await mkdir(join(workspace, 'argus-reviewer-report'), { recursive: true })
       const boundManifest = fixtureManifest()
       boundManifest.identity.intendedHeadSha = 'h'.repeat(40)
-      boundManifest.identity.runNonce = '1:1'
+      boundManifest.identity.runNonce = '1'
       await writeFile(
         join(workspace, 'argus-reviewer-report', 'run-manifest.json'),
         JSON.stringify(boundManifest),
       )
       await writeFile(
         join(workspace, 'argus-reviewer-report', 'code-review.json'),
-        JSON.stringify({ ok: true, skipped: false, findings: [], reviewComments: [] }),
+        JSON.stringify({ ok: true, skipped: false, findings: [], reviewComments: [], runNonce: '1' }),
       )
       const calls: { method: string; params: Record<string, unknown> }[] = []
       const record =
@@ -988,7 +1075,6 @@ describe('manifest comment parity (U5)', () => {
       GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
       GITHUB_SERVER_URL: process.env.GITHUB_SERVER_URL,
       GITHUB_RUN_ID: process.env.GITHUB_RUN_ID,
-      GITHUB_RUN_ATTEMPT: process.env.GITHUB_RUN_ATTEMPT,
       ARGUS_RUN_DISABLED: process.env.ARGUS_RUN_DISABLED,
       ARGUS_REPORT_DIR: process.env.ARGUS_REPORT_DIR,
     }
@@ -997,7 +1083,6 @@ describe('manifest comment parity (U5)', () => {
       process.env.GITHUB_WORKSPACE = workspace
       process.env.GITHUB_SERVER_URL = 'https://github.com'
       process.env.GITHUB_RUN_ID = '1'
-      process.env.GITHUB_RUN_ATTEMPT = '1'
       delete process.env.ARGUS_RUN_DISABLED
       delete process.env.ARGUS_REPORT_DIR
       await mkdir(join(workspace, 'argus-reviewer-report'), { recursive: true })
@@ -1007,14 +1092,14 @@ describe('manifest comment parity (U5)', () => {
       stale.aggregate.ok = true
       stale.aggregate.status = 'passed'
       stale.identity.intendedHeadSha = 'f'.repeat(40)
-      stale.identity.runNonce = '1:1'
+      stale.identity.runNonce = '1'
       await writeFile(
         join(workspace, 'argus-reviewer-report', 'run-manifest.json'),
         JSON.stringify(stale),
       )
       await writeFile(
         join(workspace, 'argus-reviewer-report', 'code-review.json'),
-        JSON.stringify({ ok: false, skipped: false, findings: [], reviewComments: [] }),
+        JSON.stringify({ ok: false, skipped: false, findings: [], reviewComments: [], runNonce: '1' }),
       )
       const calls: { method: string; params: Record<string, unknown> }[] = []
       const record =
@@ -1076,7 +1161,6 @@ describe('manifest comment parity (U5)', () => {
       GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
       GITHUB_SERVER_URL: process.env.GITHUB_SERVER_URL,
       GITHUB_RUN_ID: process.env.GITHUB_RUN_ID,
-      GITHUB_RUN_ATTEMPT: process.env.GITHUB_RUN_ATTEMPT,
       ARGUS_RUN_DISABLED: process.env.ARGUS_RUN_DISABLED,
       ARGUS_REPORT_DIR: process.env.ARGUS_REPORT_DIR,
     }
@@ -1085,7 +1169,6 @@ describe('manifest comment parity (U5)', () => {
       process.env.GITHUB_WORKSPACE = workspace
       process.env.GITHUB_SERVER_URL = 'https://github.com'
       process.env.GITHUB_RUN_ID = '1'
-      process.env.GITHUB_RUN_ATTEMPT = '1'
       delete process.env.ARGUS_RUN_DISABLED
       delete process.env.ARGUS_REPORT_DIR
       await mkdir(join(workspace, 'argus-reviewer-report'), { recursive: true })
@@ -1096,14 +1179,14 @@ describe('manifest comment parity (U5)', () => {
       planted.aggregate.ok = true
       planted.aggregate.status = 'passed'
       planted.identity.intendedHeadSha = 'h'.repeat(40)
-      planted.identity.runNonce = '999:1'
+      planted.identity.runNonce = '999'
       await writeFile(
         join(workspace, 'argus-reviewer-report', 'run-manifest.json'),
         JSON.stringify(planted),
       )
       await writeFile(
         join(workspace, 'argus-reviewer-report', 'code-review.json'),
-        JSON.stringify({ ok: false, skipped: false, findings: [], reviewComments: [] }),
+        JSON.stringify({ ok: false, skipped: false, findings: [], reviewComments: [], runNonce: '1' }),
       )
       const calls: { method: string; params: Record<string, unknown> }[] = []
       const record =
@@ -1163,7 +1246,6 @@ describe('manifest comment parity (U5)', () => {
       GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
       GITHUB_SERVER_URL: process.env.GITHUB_SERVER_URL,
       GITHUB_RUN_ID: process.env.GITHUB_RUN_ID,
-      GITHUB_RUN_ATTEMPT: process.env.GITHUB_RUN_ATTEMPT,
       ARGUS_RUN_DISABLED: process.env.ARGUS_RUN_DISABLED,
       ARGUS_REPORT_DIR: process.env.ARGUS_REPORT_DIR,
     }
@@ -1172,7 +1254,6 @@ describe('manifest comment parity (U5)', () => {
       process.env.GITHUB_WORKSPACE = workspace
       process.env.GITHUB_SERVER_URL = 'https://github.com'
       process.env.GITHUB_RUN_ID = '1'
-      process.env.GITHUB_RUN_ATTEMPT = '1'
       delete process.env.ARGUS_RUN_DISABLED
       delete process.env.ARGUS_REPORT_DIR
       await mkdir(join(workspace, 'argus-reviewer-report'), { recursive: true })
@@ -1189,7 +1270,7 @@ describe('manifest comment parity (U5)', () => {
       )
       await writeFile(
         join(workspace, 'argus-reviewer-report', 'code-review.json'),
-        JSON.stringify({ ok: false, skipped: false, findings: [], reviewComments: [] }),
+        JSON.stringify({ ok: false, skipped: false, findings: [], reviewComments: [], runNonce: '1' }),
       )
       const calls: { method: string; params: Record<string, unknown> }[] = []
       const record =
@@ -1245,7 +1326,6 @@ describe('manifest comment parity (U5)', () => {
       GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
       GITHUB_SERVER_URL: process.env.GITHUB_SERVER_URL,
       GITHUB_RUN_ID: process.env.GITHUB_RUN_ID,
-      GITHUB_RUN_ATTEMPT: process.env.GITHUB_RUN_ATTEMPT,
       ARGUS_RUN_DISABLED: process.env.ARGUS_RUN_DISABLED,
       ARGUS_REPORT_DIR: process.env.ARGUS_REPORT_DIR,
     }
@@ -1254,7 +1334,6 @@ describe('manifest comment parity (U5)', () => {
       process.env.GITHUB_WORKSPACE = workspace
       process.env.GITHUB_SERVER_URL = 'https://github.com'
       process.env.GITHUB_RUN_ID = '1'
-      process.env.GITHUB_RUN_ATTEMPT = '1'
       delete process.env.ARGUS_RUN_DISABLED
       delete process.env.ARGUS_REPORT_DIR
       await mkdir(join(workspace, 'argus-reviewer-report'), { recursive: true })
@@ -1271,7 +1350,7 @@ describe('manifest comment parity (U5)', () => {
       skipped.aggregate.tokens = 0
       skipped.aggregate.costUsd = 0
       skipped.identity.intendedHeadSha = 'h'.repeat(40)
-      skipped.identity.runNonce = '1:1'
+      skipped.identity.runNonce = '1'
       await writeFile(
         join(workspace, 'argus-reviewer-report', 'run-manifest.json'),
         JSON.stringify(skipped),
@@ -1328,48 +1407,62 @@ describe('manifest comment parity (U5)', () => {
 // Validator parity — the same manifest reaches three independent validators
 // (viewmodel.isRunManifest, collect.mjs's stale-dist fallback, and the action
 // poster's gate). They are maintained in parallel by design (no shared dep),
-// so this corpus is the lockstep enforcement: every entry must get an
-// identical accept/reject from all three.
+// so this corpus is the lockstep enforcement: every entry carries the
+// expected verdict, not just "all three agree" — synchronized drift in the
+// same wrong direction is the failure mode a bare unanimity check misses.
 describe('manifest validator parity', () => {
   const mut = (fn: (m: ReturnType<typeof fixtureManifest>) => void) => {
     const m = fixtureManifest()
     fn(m)
     return m
   }
-  const corpus: [string, unknown][] = [
-    ['a well-formed manifest is accepted', fixtureManifest()],
-    ['shallow forge — aggregate.ok alone', { aggregate: { ok: true, status: 'passed' }, lanes: {}, identity: {} }],
-    ['top-level array', []],
-    ['schemaVersion drift', mut((m) => ((m as { schemaVersion: number }).schemaVersion = 2))],
-    ['runId is not a string', mut((m) => ((m as { runId: unknown }).runId = 42))],
-    ['missing startedAt', mut((m) => delete (m as { startedAt?: string }).startedAt)],
-    ['identity is an array', mut((m) => ((m as { identity: unknown }).identity = []))],
-    ['identity.runNonce is a number', mut((m) => ((m.identity as { runNonce: unknown }).runNonce = 99))],
-    ['identity.intendedHeadSha is a number', mut((m) => ((m.identity as { intendedHeadSha: unknown }).intendedHeadSha = 42))],
-    ['aggregate is null', mut((m) => ((m as { aggregate: unknown }).aggregate = null))],
-    ['identity is null', mut((m) => ((m as { identity: unknown }).identity = null))],
-    ['aggregate.ok is a string', mut((m) => ((m.aggregate as { ok: unknown }).ok = 'true'))],
-    ['aggregate.status is not a lane status', mut((m) => ((m.aggregate as { status: string }).status = 'green'))],
-    ['aggregate.calls is a string', mut((m) => ((m.aggregate as { calls: unknown }).calls = '4'))],
-    ['aggregate.tokens is NaN', mut((m) => ((m.aggregate as { tokens: number }).tokens = NaN))],
-    ['a canonical lane is missing', mut((m) => delete (m.lanes as { app?: unknown }).app)],
-    ['lane.lane mismatches its key', mut((m) => ((m.lanes.app as { lane: string }).lane = 'review'))],
-    ['lane.status is not a lane status', mut((m) => ((m.lanes.flow as { status: string }).status = 'green'))],
-    ['lane.selected is a string', mut((m) => ((m.lanes.review as { selected: unknown }).selected = 'yes'))],
-    ['lane.usage.calls is a string', mut((m) => ((m.lanes.review.usage as { calls: unknown }).calls = 'x'))],
-    ['lane.budget is null', mut((m) => ((m.lanes.a0 as { budget: unknown }).budget = null))],
-    ['lane.usage is null', mut((m) => ((m.lanes.app as { usage: unknown }).usage = null))],
-    ['lane itself is null', mut((m) => ((m.lanes as { flow: unknown }).flow = null))],
-    ['lanes is null', mut((m) => ((m as { lanes: unknown }).lanes = null))],
+  const corpus: [string, unknown, boolean][] = [
+    ['a well-formed manifest is accepted', fixtureManifest(), true],
+    // Deep enough to reach the lane checks — a forge that fails earlier only
+    // proves the top-level gate works, not the depth underneath it.
+    [
+      'shallow forge — lanes present but stripped of usage/budget',
+      mut((m) => {
+        for (const lane of Object.values(m.lanes)) {
+          delete (lane as { usage?: unknown }).usage
+          delete (lane as { budget?: unknown }).budget
+        }
+      }),
+      false,
+    ],
+    ['top-level array', [], false],
+    ['schemaVersion drift', mut((m) => ((m as { schemaVersion: number }).schemaVersion = 2)), false],
+    ['runId is not a string', mut((m) => ((m as { runId: unknown }).runId = 42)), false],
+    ['missing startedAt', mut((m) => delete (m as { startedAt?: string }).startedAt), false],
+    ['identity is an array', mut((m) => ((m as { identity: unknown }).identity = [])), false],
+    ['identity.runNonce is a number', mut((m) => ((m.identity as { runNonce: unknown }).runNonce = 99)), false],
+    ['identity.intendedHeadSha is a number', mut((m) => ((m.identity as { intendedHeadSha: unknown }).intendedHeadSha = 42)), false],
+    ['aggregate is null', mut((m) => ((m as { aggregate: unknown }).aggregate = null)), false],
+    ['identity is null', mut((m) => ((m as { identity: unknown }).identity = null)), false],
+    ['aggregate.ok is a string', mut((m) => ((m.aggregate as { ok: unknown }).ok = 'true')), false],
+    ['aggregate.status is not a lane status', mut((m) => ((m.aggregate as { status: string }).status = 'green')), false],
+    ['aggregate.calls is a string', mut((m) => ((m.aggregate as { calls: unknown }).calls = '4')), false],
+    ['aggregate.tokens is NaN', mut((m) => ((m.aggregate as { tokens: number }).tokens = NaN)), false],
+    ['a canonical lane is missing', mut((m) => delete (m.lanes as { app?: unknown }).app), false],
+    ['lane.lane mismatches its key', mut((m) => ((m.lanes.app as { lane: string }).lane = 'review')), false],
+    ['lane.status is not a lane status', mut((m) => ((m.lanes.flow as { status: string }).status = 'green')), false],
+    ['lane.selected is a string', mut((m) => ((m.lanes.review as { selected: unknown }).selected = 'yes')), false],
+    ['lane.usage.calls is a string', mut((m) => ((m.lanes.review.usage as { calls: unknown }).calls = 'x')), false],
+    ['lane.budget is null', mut((m) => ((m.lanes.a0 as { budget: unknown }).budget = null)), false],
+    ['lane.usage is null', mut((m) => ((m.lanes.app as { usage: unknown }).usage = null)), false],
+    ['lane itself is null', mut((m) => ((m.lanes as { flow: unknown }).flow = null)), false],
+    ['lanes is null', mut((m) => ((m as { lanes: unknown }).lanes = null)), false],
   ]
 
-  it.each(corpus)('all three validators agree: %s', async (_name, m) => {
+  it.each(corpus)('all three validators agree: %s', async (_name, m, expected) => {
     const { isRunManifest } = await import('../../src/report/viewmodel.js')
     // @ts-expect-error plain-node collector — no type declarations
     const { validManifest: collectValid } = await import('../../scripts/collect.mjs')
     // @ts-expect-error plain-node action helper — no type declarations
     const { validManifest: stickyValid } = await import('../../action/sticky-comment.cjs')
     const verdicts = [isRunManifest(m), collectValid(m), stickyValid(m)]
-    expect(new Set(verdicts).size, `verdicts ${JSON.stringify(verdicts)}`).toBe(1)
+    for (const v of verdicts) {
+      expect(v, `verdicts ${JSON.stringify(verdicts)}`).toBe(expected)
+    }
   })
 })
