@@ -34,4 +34,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build
+      # Committed dist/ is the git-install contract: fail if the build left
+      # drift (stale output) or ignored-untracked files (a new src module
+      # whose dist output was never `git add -f`'d — .gitignore hides it).
+      - run: npm run check:dist
       - run: npm test

@@ -104,6 +104,11 @@ export interface AppTaskInput {
   expected: AppExpectation
   timeoutMs: number
   maxSteps?: number | undefined
+  /**
+   * The lane's own spend bound, forwarded to the explore loop — without it
+   * `explore.budgetUsd` (a different lane's knob) throttles the app lane.
+   */
+  budgetLimitUsd?: number | undefined
   logger?: Logger | undefined
 }
 
@@ -130,6 +135,7 @@ export async function runAppTask(input: AppTaskInput): Promise<{
     deadlineAt: Date.now() + input.timeoutMs,
     expectation: (ctx) => expectation.check(ctx),
     ...(input.maxSteps !== undefined ? { maxSteps: input.maxSteps } : {}),
+    ...(input.budgetLimitUsd !== undefined ? { budgetUsd: input.budgetLimitUsd } : {}),
     ...(input.logger !== undefined ? { logger: input.logger } : {}),
   })
 
@@ -170,12 +176,18 @@ export interface AppLaneInput {
   config: Config
   /** Resolved target URL — `--url` or `config.target.url`. */
   url: string | undefined
-  /** The checkout's trust lane — gates `target.command` execution. */
+  /** The checkout's trust lane — gates the whole executable lane. */
   trusted: boolean
   /** `--task` override wins over `config.app.task`. */
   task: string | undefined
   /** Flag-level expected-state markers win over `config.app.expected`. */
   expected: AppExpectation | undefined
+  /**
+   * Fully-resolved lane cap (`app.budgetUsd ?? ARGUS_BUDGET_USD ??
+   * budgetUsd`) — the caller resolves precedence so the enforced Ledger
+   * bound is exactly the one the manifest reports.
+   */
+  budgetLimitUsd?: number
   deps?: AppLaneDeps
 }
 
@@ -225,9 +237,20 @@ export async function runAppLane(input: AppLaneInput): Promise<AppLaneReport> {
     durationMs: Date.now() - started,
   })
 
+  // Executable lanes are gated on the same trust resolution as config
+  // loading (SECURITY.md): an untrusted checkout never reaches the task,
+  // the browser, or a PR-controlled expectation — blocked before any
+  // preflight, not just before `target.command`.
+  if (!input.trusted) {
+    return done(
+      'blocked',
+      'verify --app is an executable lane — requires a trusted checkout',
+    )
+  }
+
   // Contract preflight — a lane without a task or a verifiable marker
   // blocks before touching the network or the provider (R8).
-  if (task === undefined) {
+  if (task === undefined || task.trim() === '') {
     return done('blocked', 'no task configured — set app.task or pass --task')
   }
   if (expected === undefined) {
@@ -244,13 +267,6 @@ export async function runAppLane(input: AppLaneInput): Promise<AppLaneReport> {
   if (targetUrl === undefined || targetUrl === '') {
     return done('blocked', 'no application target configured; set target.url or pass --url')
   }
-  // A target.command is executable input — only a trusted checkout may run
-  // it (KTD3). Untrusted configs strip `target` entirely, so this guards
-  // injected/direct callers rather than the JSON path.
-  if (config.target?.command !== undefined && config.target.command !== '' && !input.trusted) {
-    return done('blocked', 'target.command is executable input — requires a trusted checkout')
-  }
-
   let target: TargetProcess | undefined
   let driver: BrowserDriver | undefined
   try {
@@ -290,12 +306,14 @@ export async function runAppLane(input: AppLaneInput): Promise<AppLaneReport> {
     if (deps.applyPageSetup !== undefined) await deps.applyPageSetup(driver)
 
     try {
-      await driver.goto(target?.url ?? targetUrl)
+      await driver.goto(targetUrl)
     } catch (e) {
       return done('unavailable', `target navigation failed: ${(e as Error).message}`)
     }
 
-    const ledger = new Ledger(config.app.budgetUsd ?? config.budgetUsd)
+    const ledger = new Ledger(
+      input.budgetLimitUsd ?? config.app.budgetUsd ?? config.budgetUsd,
+    )
     const client = deps.createClient?.(config) ?? missingClient()
     const { result, expectedMet, verifyError } = await runAppTask({
       driver,
@@ -303,11 +321,12 @@ export async function runAppLane(input: AppLaneInput): Promise<AppLaneReport> {
       client,
       ledger,
       config,
-      targetUrl: target?.url ?? targetUrl,
+      targetUrl,
       task,
       expected,
       timeoutMs: config.app.timeoutMs ?? APP_LANE_DEFAULT_TIMEOUT_MS,
       maxSteps: config.app.maxSteps,
+      budgetLimitUsd: input.budgetLimitUsd ?? config.app.budgetUsd ?? config.budgetUsd,
       logger: deps.logger,
     })
 

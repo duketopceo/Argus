@@ -132,6 +132,36 @@ describe('verify --app lane', () => {
     expect(report.steps.length).toBe(1)
   }, 60_000)
 
+  it('enforces the resolved lane cap — budgetLimitUsd stops the loop, not just the manifest', async () => {
+    // The action resolves ARGUS_BUDGET_USD into budgets.app; the lane must
+    // enforce that same cap in its Ledger, and the explore loop must not be
+    // throttled tighter by the unrelated explore.budgetUsd knob.
+    const client = new StubClient([
+      { content: WAIT },
+      { content: WAIT },
+      { content: WAIT },
+      { content: WAIT },
+      { content: WAIT },
+    ])
+    const report = await runAppLane({
+      config: laneConfig({ explore: { budgetUsd: 0.0001 } }),
+      url: APP_URL,
+      trusted: true,
+      task: 'Submit the form',
+      expected: { text: 'never-present-marker' },
+      budgetLimitUsd: 0.002,
+      deps: laneDeps(client),
+    })
+    // Two calls spend the whole $0.002 cap — the third can't start. Without
+    // the lane-budget pass-through, explore.budgetUsd = 0.0001 would stop
+    // the loop after a single call — a different lane's knob throttling
+    // this one. (The stall detector would fire at 3 unchanged signatures,
+    // so the cap must trip at 2.)
+    expect(report.stopReason).toBe('budget')
+    expect(report.visionCalls).toBe(2)
+    expect(report.status).toBe('failed')
+  }, 60_000)
+
   it('sends the task to the model prompt — a directed lane, not free probe', async () => {
     const client = new StubClient([{ content: WAIT }, { content: CLAIM_DONE }])
     const report = await runAppLane({
@@ -163,6 +193,38 @@ describe('verify --app lane', () => {
     })
     expect(report.status).toBe('blocked')
     expect(report.reason).toContain('no task')
+    expect(client.calls.length).toBe(0)
+  })
+
+  it('blocks a whitespace-only task — " " is not a task', async () => {
+    const client = new StubClient([])
+    const report = await runAppLane({
+      config: laneConfig(),
+      url: APP_URL,
+      trusted: true,
+      task: '   ',
+      expected: { text: 'x' },
+      deps: laneDeps(client),
+    })
+    expect(report.status).toBe('blocked')
+    expect(report.reason).toContain('no task')
+    expect(client.calls.length).toBe(0)
+  })
+
+  it('blocks a whitespace-only expectation marker — " " would match every a11y tree', async () => {
+    const client = new StubClient([])
+    const report = await runAppLane({
+      // sanitizeExpectation drops the blank marker, leaving the lane with
+      // no verifiable contract — it must block, not vacuously pass.
+      config: laneConfig({ app: { expected: { text: '   ' } } }),
+      url: APP_URL,
+      trusted: true,
+      task: 'do something',
+      expected: undefined,
+      deps: laneDeps(client),
+    })
+    expect(report.status).toBe('blocked')
+    expect(report.reason).toContain('expected-state')
     expect(client.calls.length).toBe(0)
   })
 
@@ -228,6 +290,32 @@ describe('verify --app lane', () => {
     expect(report.reason).toContain('unreachable')
     expect(client.calls.length).toBe(0)
     expect(report.visionCalls).toBe(0)
+  })
+
+  it('blocks an untrusted checkout outright — flag task, no command, no browser', async () => {
+    // SECURITY.md documents --app as blocked outright on untrusted trees:
+    // even with flag-supplied task/url the lane must not probe, launch a
+    // browser, or spend a provider call.
+    const client = new StubClient([])
+    let launched = false
+    const report = await runAppLane({
+      config: laneConfig({ target: { url: APP_URL, readyTimeoutMs: 100 } }),
+      url: APP_URL,
+      trusted: false,
+      task: 'do something',
+      expected: { text: 'x' },
+      deps: {
+        launchDriver: async () => {
+          launched = true
+          return BrowserDriver.launch({ captureErrors: true })
+        },
+        createClient: () => client,
+      },
+    })
+    expect(report.status).toBe('blocked')
+    expect(report.reason).toContain('trusted checkout')
+    expect(launched).toBe(false)
+    expect(client.calls.length).toBe(0)
   })
 
   it('blocks a target.command on an untrusted checkout before booting', async () => {
@@ -547,4 +635,105 @@ describe('verify --app cli surface', () => {
     expect(detail.status).toBe('passed')
     expect(detail.steps.length).toBeGreaterThanOrEqual(1)
   }, 60_000)
+
+  it('verify --a0 records an honest unavailable lane and writes a0-lane.json', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-a0-'))
+    const reportDir = join(cwd, 'reports')
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({ reportDir, app: { task: 'smoke the checkout' } }),
+    )
+    const { main } = await import('../../src/cli.js')
+    const code = await main(['verify', '--a0'], {
+      cwd,
+      env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' },
+      out: () => undefined,
+      err: () => undefined,
+      // Hermetic: no a0 binary, no answering host — the lane must report
+      // unavailable with zero spend, never crash or silently pass.
+      exec: async () => ({ code: 1, stdout: '', stderr: 'ENOENT: a0 not found' }),
+      probe: async () => false,
+    })
+    expect(code).toBe(1)
+    const manifest = JSON.parse(await readFile(join(reportDir, 'run-manifest.json'), 'utf8')) as {
+      lanes: { a0: { status: string; selected: boolean; usage: { calls: number; metered: boolean } } }
+    }
+    expect(manifest.lanes.a0.status).toBe('unavailable')
+    expect(manifest.lanes.a0.selected).toBe(true)
+    expect(manifest.lanes.a0.usage.calls).toBe(0)
+    expect(manifest.lanes.a0.usage.metered).toBe(false)
+    const detail = JSON.parse(await readFile(join(reportDir, 'a0-lane.json'), 'utf8')) as {
+      status: string
+      tasks: number
+      metered: boolean
+    }
+    expect(detail.status).toBe('unavailable')
+    expect(detail.tasks).toBe(0)
+    expect(detail.metered).toBe(false)
+  })
+
+  it('an explicit --no-app vetoes an ambient ARGUS_VERIFY_APP=1', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-veto-'))
+    const reportDir = join(cwd, 'reports')
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({ reportDir, app: { task: 'should never run' } }),
+    )
+    const { main } = await import('../../src/cli.js')
+    const code = await main(['verify', '--no-app', '--no-a0', '--no-flow'], {
+      cwd,
+      env: {
+        PATH: process.env.PATH ?? '',
+        HOME: process.env.HOME ?? '',
+        ARGUS_VERIFY_APP: '1',
+        ARGUS_VERIFY_A0: '1',
+        ARGUS_VERIFY_FLOW: '1',
+      },
+      out: () => undefined,
+      err: () => undefined,
+    })
+    const manifest = JSON.parse(await readFile(join(reportDir, 'run-manifest.json'), 'utf8')) as {
+      lanes: Record<string, { selected: boolean }>
+    }
+    for (const lane of ['app', 'a0', 'flow']) {
+      expect(manifest.lanes[lane]?.selected).toBe(false)
+    }
+    // Review skipped without a key and no other lane ran — nothing verified.
+    expect(code).toBe(1)
+  })
+
+  it('ARGUS_VERIFY_* env inputs select lanes and never shadow config with empty strings', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-env-'))
+    const reportDir = join(cwd, 'reports')
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({ reportDir, app: { task: 'configured task' } }),
+    )
+    const { main } = await import('../../src/cli.js')
+    // ARGUS_VERIFY_APP selects the lane; an empty ARGUS_VERIFY_TASK must
+    // not shadow config.app.task — the lane blocks on the missing expected
+    // marker, proving the task survived.
+    const code = await main(['verify'], {
+      cwd,
+      env: {
+        PATH: process.env.PATH ?? '',
+        HOME: process.env.HOME ?? '',
+        ARGUS_VERIFY_APP: '1',
+        ARGUS_VERIFY_TASK: '',
+        ARGUS_VERIFY_URL: '',
+      },
+      out: () => undefined,
+      err: () => undefined,
+      createClient: () => new StubClient([]),
+    })
+    expect(code).toBe(1)
+    const manifest = JSON.parse(await readFile(join(reportDir, 'run-manifest.json'), 'utf8')) as {
+      lanes: { app: { status: string; selected: boolean; reason?: string } }
+    }
+    expect(manifest.lanes.app.selected).toBe(true)
+    expect(manifest.lanes.app.status).toBe('blocked')
+    // blocked for the missing expectation marker, not the missing task —
+    // config.app.task won over the '' env input.
+    expect(manifest.lanes.app.reason).toContain('expected-state')
+  })
 })

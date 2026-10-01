@@ -110,7 +110,7 @@ export function laneView(lane: LaneManifest): LaneView {
     summary: lane.summary,
     reason: lane.reason,
     reportPath: lane.reportPath,
-    model: lane.model ?? lane.usage.model,
+    model: lane.model ?? lane.usage?.model,
     usage: lane.usage,
     budget: lane.budget,
     cache: lane.cache,
@@ -151,8 +151,20 @@ export function isRunManifest(value: unknown): value is RunManifest {
   const m = value as Partial<RunManifest>
   if (m.schemaVersion !== 1) return false
   if (typeof m.runId !== 'string' || typeof m.startedAt !== 'string') return false
-  if (m.aggregate === undefined || typeof m.aggregate !== 'object') return false
-  if (typeof m.aggregate.status !== 'string') return false
+  if (m.identity === undefined || typeof m.identity !== 'object' || m.identity === null) {
+    return false
+  }
+  const aggregate = m.aggregate
+  if (aggregate === undefined || typeof aggregate !== 'object') return false
+  // aggregate.status feeds LANE_STATUS_LABEL lookups and ok the verdict —
+  // a type-confused aggregate must degrade to last-valid, not reach a
+  // renderer that throws mid-post.
+  if (typeof aggregate.status !== 'string') return false
+  if (!(LANE_STATUSES as readonly string[]).includes(aggregate.status)) return false
+  if (typeof aggregate.ok !== 'boolean') return false
+  for (const n of [aggregate.calls, aggregate.tokens, aggregate.costUsd]) {
+    if (typeof n !== 'number' || !Number.isFinite(n)) return false
+  }
   if (m.lanes === undefined || typeof m.lanes !== 'object') return false
   for (const id of LANE_IDS) {
     const lane = m.lanes[id]
@@ -160,6 +172,13 @@ export function isRunManifest(value: unknown): value is RunManifest {
     if (typeof lane.lane !== 'string' || typeof lane.status !== 'string') return false
     if (!(LANE_STATUSES as readonly string[]).includes(lane.status)) return false
     if (typeof lane.selected !== 'boolean') return false
+    // usage/budget are dereferenced by laneView — a guard that certifies a
+    // shape it doesn't check is a lying guard.
+    if (lane.usage === undefined || typeof lane.usage !== 'object') return false
+    for (const n of [lane.usage.calls, lane.usage.tokens, lane.usage.costUsd]) {
+      if (typeof n !== 'number' || !Number.isFinite(n)) return false
+    }
+    if (lane.budget === undefined || typeof lane.budget !== 'object') return false
   }
   return true
 }
@@ -177,6 +196,9 @@ const SECRET_PATTERNS: RegExp[] = [
   /xox[baprs]-[A-Za-z0-9-]{8,}/g,
   /AKIA[A-Z0-9]{16}/g,
   /npm_[A-Za-z0-9]{8,}/g,
+  /Bearer\s+[A-Za-z0-9._~+/=-]{10,}/gi,
+  /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/g,
+  /:\/\/[^/\s:@]{1,64}:[^/\s:@]{6,}@/g,
 ]
 
 export function maskSecrets(s: string): string {

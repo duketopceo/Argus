@@ -59,7 +59,14 @@ const state = {
 }
 
 async function fetchData() {
-  Object.assign(state, await collect())
+  try {
+    Object.assign(state, await collect())
+    state.error = undefined
+  } catch (e) {
+    // A rejected poll is a bad tick, not a dead watcher — surface it and
+    // keep the interval alive rather than letting the rejection crash us.
+    state.error = `collect failed: ${e instanceof Error ? e.message : String(e)}`
+  }
   state.updatedAt = new Date()
 }
 
@@ -229,6 +236,13 @@ function runEval() {
   })
   child.stderr.on('data', (d) => {
     state.evalLog.push(...String(d).trim().split('\n').map((l) => bad(l)))
+    render()
+  })
+  // 'error' with no listener throws — a spawn ENOENT (node missing from a
+  // bare PATH) must not crash the TUI.
+  child.on('error', (err) => {
+    state.evalRunning = false
+    state.evalLog.push(bad(`eval spawn failed: ${err.message}`))
     render()
   })
   child.on('close', async (code) => {

@@ -1,5 +1,6 @@
-import { type ExecFn, type ProbeFn } from '../detect.js';
+import { buildA0ChildEnv, type ExecFn, type ProbeFn } from '../detect.js';
 import type { LaneStatus } from '../report/manifest.js';
+export { buildA0ChildEnv };
 /**
  * Agent Zero delegation — the thin seam that hands a natural-language task to
  * an `a0` instance (`a0 headless -p`). The instance runs autonomously inside
@@ -46,8 +47,6 @@ export declare function buildA0Args(prompt: string, host: string | undefined): s
 export declare function runA0Task(prompt: string, opts?: A0TaskOptions): Promise<A0TaskResult>;
 /** Prompt wrapper: bind the task to an app URL when one is known. */
 export declare function a0TaskPrompt(task: string, url: string | undefined): string;
-/** Build the sanitized child env: allowlisted keys that exist in `env`. */
-export declare function buildA0ChildEnv(env: NodeJS.ProcessEnv | Record<string, string | undefined>): Record<string, string>;
 /**
  * The typed delegation payload — allowlisted fields only (KTD4). Nothing
  * outside this record may reach the host: no ambient env, no raw journal
@@ -120,6 +119,8 @@ export interface A0LaneInput {
     task: string | undefined;
     /** Local failure context when the lane escalates one. */
     failureSummary?: string | undefined;
+    /** Checkout trust — the executable lane refuses an untrusted tree. */
+    trusted: boolean;
     deps?: A0LaneDeps;
 }
 /**

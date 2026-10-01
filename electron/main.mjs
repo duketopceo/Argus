@@ -61,7 +61,12 @@ ipcMain.handle('run-logs', (_e, runId) => {
   if (typeof runId !== 'number' || !Number.isInteger(runId)) return { ok: false, msg: 'bad run id' }
   if (logChild) return { ok: false, msg: 'already tailing a run' }
   // `gh run view --log` dumps completed logs; `--log-failed` for failures.
-  logChild = spawn('gh', ['run', 'view', String(runId), '--log'], { cwd: ROOT })
+  // Bound the spawn — a hung gh would hold the logChild latch forever and
+  // every later click would answer 'already tailing a run'.
+  logChild = spawn('gh', ['run', 'view', String(runId), '--log'], {
+    cwd: ROOT,
+    timeout: 120_000,
+  })
   // Buffer per stream — a chunk can split a log line in two.
   const pending = { out: '', err: '' }
   const send = (stream, d) => {
@@ -124,6 +129,12 @@ ipcMain.handle('run-eval', () => {
   }
   evalChild.stdout.on('data', (d) => send('out', d))
   evalChild.stderr.on('data', (d) => send('err', d))
+  // An unhandled 'error' event throws in the main process — a spawn ENOENT
+  // (node missing from a bare launchd/Finder PATH) must not kill the app.
+  evalChild.on('error', (err) => {
+    evalChild = undefined
+    win?.webContents.send('eval-log', { stream: 'done', line: `eval failed to start: ${err.message}` })
+  })
   evalChild.on('close', (code) => {
     evalChild = undefined
     win?.webContents.send('eval-log', { stream: 'done', line: `eval exited ${code}` })

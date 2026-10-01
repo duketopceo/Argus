@@ -34,6 +34,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "check:dist": "test -z \"$(git status --porcelain -- dist/)\" && test -z \"$(git ls-files --others --ignored --exclude-standard -- dist/)\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",

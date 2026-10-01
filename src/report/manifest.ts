@@ -270,7 +270,9 @@ export async function archiveManifest(
 ): Promise<void> {
   if (keep <= 0) return
   const dir = join(reportDir, MANIFEST_HISTORY_DIR)
-  await writeAtomicJson(join(dir, `${manifest.runId}.json`), manifest)
+  // runId becomes a filename — never trust it as a path component.
+  const safeName = manifest.runId.replace(/[^\w.-]/g, '-')
+  await writeAtomicJson(join(dir, `${safeName}.json`), manifest)
   let names: string[]
   try {
     names = (await readdir(dir)).filter((n) => n.endsWith('.json')).sort()

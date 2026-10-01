@@ -94,6 +94,27 @@ describe('isRunManifest', () => {
     partial.lanes.flow = { status: 'passed' } as never
     expect(isRunManifest(partial)).toBe(false)
   })
+
+  it('rejects type-confused aggregate and lane fields renderers dereference', () => {
+    const badStatus = fixtureManifest()
+    badStatus.aggregate.status = 'bogus' as never
+    expect(isRunManifest(badStatus)).toBe(false)
+    const badOk = fixtureManifest()
+    // @ts-expect-error type-confused field
+    badOk.aggregate.ok = 'yes'
+    expect(isRunManifest(badOk)).toBe(false)
+    const badCost = fixtureManifest()
+    badCost.aggregate.costUsd = 'expensive' as never
+    expect(isRunManifest(badCost)).toBe(false)
+    const nanCalls = fixtureManifest()
+    nanCalls.aggregate.calls = NaN
+    expect(isRunManifest(nanCalls)).toBe(false)
+    // @ts-expect-error identity is required
+    expect(isRunManifest({ ...fixtureManifest(), identity: undefined })).toBe(false)
+    const badUsage = fixtureManifest()
+    badUsage.lanes.review.usage.calls = 'many' as never
+    expect(isRunManifest(badUsage)).toBe(false)
+  })
 })
 
 describe('maskSecrets', () => {

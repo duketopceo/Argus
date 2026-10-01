@@ -212,8 +212,13 @@ export function renderComment(
 }
 
 /**
- * Sticky comment for a `verify` run — the manifest is the evidence contract
- * (R15). Lane names, status labels, model/cost, and head identity come from
+ * Reference renderer for a `verify` sticky comment — NOT wired into the
+ * action (`action/sticky-comment.cjs` is self-contained CJS and ships the
+ * live renderer). This exists so the cross-surface parity test can compare
+ * the TS and CJS renderers over the same manifest; keep it honest or the
+ * parity suite guards nothing.
+ *
+ * Lane names, status labels, model/cost, and head identity come from
  * the shared view-model so the comment agrees with the TUI and dashboard
  * under the contract test, not by convention.
  */
@@ -255,7 +260,11 @@ export function renderManifestComment(
     const icon = LANE_STATUS_EMOJI[lane.status]
     const usage = lane.usage
     const cost = usage.metered === true ? formatUsd(usage.costUsd) : 'unmetered'
-    const detail = maskSecrets(lane.reason ?? lane.summary ?? '').replace(/\|/g, '\\|')
+    // Cell semantics mirror action/sticky-comment.cjs: flatten newlines,
+    // escape pipes, mask secrets, cap at 200 chars — the parity suite pins it.
+    const detail = maskSecrets(
+      (lane.reason ?? lane.summary ?? '').replace(/\|/g, '\\|').replace(/[\r\n]+/g, ' '),
+    ).slice(0, 200)
     const model = lane.model !== undefined ? ` (\`${maskSecrets(lane.model)}\`)` : ''
     lines.push(
       `| ${lane.lane} | ${icon} ${LANE_STATUS_LABEL[lane.status]} | ` +

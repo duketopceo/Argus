@@ -57,6 +57,8 @@ export interface ExploreOptions {
     expectation?: (ctx: ExpectationContext) => Promise<boolean>;
     /** Lane step-cap override; defaults to config.explore.maxSteps. */
     maxSteps?: number;
+    /** Lane spend-cap override; defaults to config.explore.budgetUsd. */
+    budgetUsd?: number;
 }
 /**
  * Free-explore act policy (U4b): observe → propose → bound → execute →

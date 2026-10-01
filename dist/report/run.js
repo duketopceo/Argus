@@ -7,12 +7,12 @@ export function buildRunReport(tests, startedAt, durationMs,
  */
 extraCalls = [], 
 /**
- * An enabled explore lane makes a zero-test run a legitimate shape — the
- * act pass is the evidence source for repos with no recorded flows, and
- * its outcome (or explicit skip reason) lands in `report.explore`, so the
- * empty suite is never a silent pass.
+ * An explore lane that actually ran makes a zero-test run a legitimate
+ * shape — the act pass is the evidence source for repos with no recorded
+ * flows. A configured-but-skipped/errored pass is not evidence: the run
+ * fails closed instead of reading a silent no-op as green.
  */
-exploreEnabled = false) {
+exploreEvidence = false) {
     const failed = tests.filter((t) => !t.ok).length;
     const callsByModel = {};
     const costByModel = {};
@@ -27,9 +27,9 @@ exploreEnabled = false) {
         durationMs,
         // Zero executed tests is not a pass — an empty suite produces no evidence,
         // so the report fails closed rather than letting a misconfigured testsDir
-        // or a non-matching pattern read as green. An enabled explore lane is the
-        // exception: its pass (or explicit skip) is the evidence.
-        ok: (tests.length > 0 || exploreEnabled) && failed === 0,
+        // or a non-matching pattern read as green. A completed explore pass is
+        // the exception: its observation is the evidence.
+        ok: (tests.length > 0 || exploreEvidence) && failed === 0,
         totals: {
             tests: tests.length,
             passed: tests.length - failed,

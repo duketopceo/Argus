@@ -37,7 +37,7 @@ const ALLOWED_KEYS = new Set([
 export async function runExplore(opts) {
     const { driver, actions, client, ledger, config, logger } = opts;
     const maxSteps = opts.maxSteps ?? config.explore.maxSteps;
-    const laneBudget = config.explore.budgetUsd ?? config.budgetUsd;
+    const laneBudget = opts.budgetUsd ?? config.explore.budgetUsd ?? config.budgetUsd;
     const costStart = ledger.visionCostUsd;
     // Non-http(s) targets (file:// demos) get a no-navigate policy — 'null'
     // origin cannot be compared, so navigate proposals are always refused.

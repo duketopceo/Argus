@@ -157,9 +157,12 @@ try {
   const inspector2 = await page.locator('#vedetail').textContent()
   check('inspector follows selection', inspector2.includes('flow'))
 
-  // Focus-visible styling exists (outline rendered on a focused row).
-  const outline = await firstRun.evaluate((e) => getComputedStyle(e).outlineStyle)
-  check('focus outline is visible', true, `outline=${outline}`)
+  // Focus-visible styling exists — :focus-visible only matches keyboard
+  // focus, so read the element the ArrowDown actually focused.
+  const outline = await page.evaluate(
+    () => getComputedStyle(document.activeElement).outlineStyle,
+  )
+  check('focus outline is visible', outline !== 'none' && outline !== '', `outline=${outline}`)
 
   await mkdir(SHOT_DIR, { recursive: true })
   await page.screenshot({ path: join(SHOT_DIR, 'dashboard-smoke.png'), fullPage: true })

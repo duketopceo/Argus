@@ -2,7 +2,10 @@ import type { Target } from '../config.js';
 /**
  * Poll `url` until it answers with HTTP 2xx/3xx or the timeout elapses.
  * Non-http(s) schemes (e.g. file://) cannot be fetched, so they are treated
- * as immediately ready — Playwright navigates them directly.
+ * as immediately ready — Playwright navigates them directly. An
+ * absent/non-finite timeout falls back to the default rather than NaN-ing
+ * the deadline into a hang; each fetch is itself time-bounded so a
+ * connect-then-silent endpoint can't park a poll.
  */
 export declare function waitForReady(url: string, timeoutMs: number): Promise<void>;
 /**

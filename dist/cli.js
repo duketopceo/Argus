@@ -155,9 +155,9 @@ function resolveCheckoutTrust(ctx) {
         note: (line) => ctx.err(line),
     });
 }
-/** Env/flag empty strings normalize to undefined — action inputs default to '' and must not shadow config. */
+/** Env/flag blank strings normalize to undefined — action inputs default to '' and must not shadow config, and a whitespace-only value must never stand in as a marker. */
 function envOr(v) {
-    return v !== undefined && v !== '' ? v : undefined;
+    return v !== undefined && v.trim() !== '' ? v.trim() : undefined;
 }
 function parseOpenRouterTrace(env) {
     const raw = env.ARGUS_REVIEWER_TRACE;
@@ -275,17 +275,18 @@ async function cmdRecord(args, ctx, deps) {
     }
     let target;
     let driver;
+    let setupTmp;
     try {
         target = await startTarget(config);
         driver = await launchDriver(config, deps);
-        const setupTmp = await mkdtemp(join(tmpdir(), 'argus-setup-'));
+        setupTmp = await mkdtemp(join(tmpdir(), 'argus-setup-'));
         await applyPageSetup(config, driver, ctx, setupTmp);
         const client = createClient(deps, config, ctx);
         const ledger = new Ledger(config.budgetUsd);
         const actions = new Actions(driver);
         const engine = new Engine({ driver, actions, client, ledger, config });
         ledger.startSandbox();
-        await driver.goto(target?.url ?? url);
+        await driver.goto(url);
         const result = await engine.record(description, actions, {
             flowName,
             ...(maxSteps !== undefined ? { stepCap: maxSteps } : {}),
@@ -318,6 +319,8 @@ async function cmdRecord(args, ctx, deps) {
     finally {
         await driver?.close();
         await target?.stop();
+        if (setupTmp !== undefined)
+            await rm(setupTmp, { recursive: true, force: true }).catch(() => { });
     }
 }
 async function discoverTestFiles(dir) {
@@ -551,7 +554,7 @@ async function cmdRun(args, ctx, deps) {
                 // level (no test() wrapper) still execute as a single named test.
                 const fileSession = await makeSession(fileSlug, driver, client);
                 bindSession(fileSession);
-                await driver.goto(target?.url ?? url);
+                await driver.goto(url);
                 const importStart = Date.now();
                 let importError;
                 try {
@@ -610,7 +613,7 @@ async function cmdRun(args, ctx, deps) {
                         const testStart = Date.now();
                         let error;
                         try {
-                            await driver.goto(target?.url ?? url);
+                            await driver.goto(url);
                             await registeredTest.fn(session.td);
                         }
                         catch (e) {
@@ -694,7 +697,7 @@ async function cmdRun(args, ctx, deps) {
             try {
                 exploreDriver = await launchDriver(config, deps);
                 await applyPageSetup(config, exploreDriver, ctx, tmpDir);
-                const targetUrl = target?.url ?? url;
+                const targetUrl = url;
                 await exploreDriver.goto(targetUrl);
                 const exploreLedger = new Ledger(config.explore.budgetUsd ?? config.budgetUsd);
                 const result = await runExplore({
@@ -782,6 +785,9 @@ async function cmdRun(args, ctx, deps) {
     finally {
         restoreGlobals(patches);
         await target?.stop();
+        // Transpiled modules are pid-tagged per run — remove the whole dir or
+        // stale copies accumulate inside the report directory consumers archive.
+        await rm(tmpDir, { recursive: true, force: true }).catch(() => { });
     }
     for (const report of reports) {
         junitCases.push({
@@ -792,7 +798,10 @@ async function cmdRun(args, ctx, deps) {
             failureMessage: report.failureMessage,
         });
     }
-    const report = buildRunReport(reports, startedAt, Date.now() - runStart, exploreOutcome?.calls ?? [], config.explore.enabled);
+    const report = buildRunReport(reports, startedAt, Date.now() - runStart, exploreOutcome?.calls ?? [], 
+    // Explore counts as evidence only when the pass completed — a skipped
+    // or errored pass observed nothing and must not green the run.
+    exploreOutcome !== undefined && exploreOutcome.result.stopReason !== 'error');
     if (config.explore.enabled) {
         if (exploreOutcome !== undefined) {
             // An errored pass is reported as an explicit skip — 'stopped: error'
@@ -1775,9 +1784,16 @@ async function cmdVerify(args, ctx, deps) {
         options: {
             help: { type: 'boolean', short: 'h', default: false },
             review: { type: 'boolean', default: true },
-            flow: { type: 'boolean', default: false },
-            app: { type: 'boolean', default: false },
-            a0: { type: 'boolean', default: false },
+            // No defaults on the opt-in lanes: `--flow`/`--no-flow` must both be
+            // distinguishable from "flag absent" so an explicit negation vetoes an
+            // ambient ARGUS_VERIFY_*=1. parseArgs doesn't auto-derive negations —
+            // the no-* spellings are declared explicitly.
+            flow: { type: 'boolean' },
+            'no-flow': { type: 'boolean' },
+            app: { type: 'boolean' },
+            'no-app': { type: 'boolean' },
+            a0: { type: 'boolean' },
+            'no-a0': { type: 'boolean' },
             url: { type: 'string' },
             task: { type: 'string' },
             'expect-text': { type: 'string' },
@@ -1787,25 +1803,48 @@ async function cmdVerify(args, ctx, deps) {
         },
     });
     if (values.help) {
-        ctx.out('Usage: argus-reviewer verify [--flow] [--app] [--a0] [--url <target>] ' +
+        ctx.out('Usage: argus-reviewer verify [--flow|--no-flow] [--app|--no-app] [--a0|--no-a0] ' +
+            '[--url <target>] ' +
             '[--task "<task>" --expect-text <marker>|--expect-url <re>|--expect-selector <sel>] ' +
             '[--report-dir <dir>]\n\n' +
-            'Runs the selected product lanes and writes run-manifest.json. Code review is selected by default; deeper lanes are explicit.');
+            'Runs the selected product lanes and writes run-manifest.json. Code review is selected by default; deeper lanes are explicit. --no-* vetoes the ARGUS_VERIFY_* env inputs.');
         return 0;
     }
+    // Flag > env > config for lane booleans: `--no-app`/`--no-a0`/`--no-flow`
+    // are explicit opt-outs that must beat an ambient ARGUS_VERIFY_*=1.
     const selection = selectionFromFlags({
         review: values.review,
-        flow: values.flow || ctx.env.ARGUS_VERIFY_FLOW === '1',
-        app: values.app || ctx.env.ARGUS_VERIFY_APP === '1',
-        a0: values.a0 || ctx.env.ARGUS_VERIFY_A0 === '1',
+        flow: values['no-flow'] === true ? false : (values.flow ?? ctx.env.ARGUS_VERIFY_FLOW === '1'),
+        app: values['no-app'] === true ? false : (values.app ?? ctx.env.ARGUS_VERIFY_APP === '1'),
+        a0: values['no-a0'] === true ? false : (values.a0 ?? ctx.env.ARGUS_VERIFY_A0 === '1'),
     });
     if (!selection.review && !selection.flow && !selection.app && !selection.a0) {
         selection.review = defaultLaneSelection().review;
     }
+    // Wipe run-scoped evidence files BEFORE config resolution: a committed or
+    // leftover run-manifest.json/run.json/lane detail must never outlive the
+    // run that produced it — and a config parse that throws here must still
+    // leave the planted file gone, or the post step's commit status would
+    // render stale (or deliberately forged) evidence as this head's verdict.
+    // The flag/env/default resolution mirrors the post step's; a custom
+    // config.reportDir gets the same wipe once the config loads.
+    const wipeEvidence = async (dir) => {
+        await mkdir(dir, { recursive: true }).catch(() => { });
+        for (const stale of ['run-manifest.json', 'run.json', 'code-review.json', 'junit.xml']) {
+            await rm(join(dir, stale), { force: true }).catch(() => { });
+        }
+        for (const lane of LANE_IDS) {
+            await rm(join(dir, `${lane}-lane.json`), { force: true }).catch(() => { });
+        }
+    };
+    const preConfigDir = resolve(ctx.cwd, values['report-dir'] ?? ctx.env.ARGUS_REPORT_DIR ?? 'argus-reviewer-report');
+    await wipeEvidence(preConfigDir);
     const { trust } = await resolveCheckoutTrust(ctx);
     const config = await loadConfig(ctx.cwd, { trust, note: ctx.err });
     const reportDir = resolve(ctx.cwd, values['report-dir'] ?? config.reportDir ?? 'argus-reviewer-report');
     await mkdir(reportDir, { recursive: true });
+    if (reportDir !== preConfigDir)
+        await wipeEvidence(reportDir);
     // ARGUS_VERIFY_* envs are the action's input bridge — flags win, then
     // env, then config, so a workflow needs no committed CLI invocation.
     // Action inputs default to '', which must not shadow the config — and an
@@ -1878,6 +1917,9 @@ async function cmdVerify(args, ctx, deps) {
                     url: flowUrl,
                     task: verifyTask,
                     expected: flagExpected,
+                    // The lane enforces the same cap the manifest reports —
+                    // app.budgetUsd ?? ARGUS_BUDGET_USD ?? budgetUsd.
+                    ...(appBudget !== undefined ? { budgetLimitUsd: appBudget } : {}),
                     deps: {
                         ...(deps.launchDriver !== undefined ? { launchDriver: deps.launchDriver } : {}),
                         createClient: (cfg) => createClient(deps, cfg, ctx),
@@ -1911,6 +1953,7 @@ async function cmdVerify(args, ctx, deps) {
                 const report = await runA0Lane({
                     a0: config.a0,
                     env: ctx.env,
+                    trusted: trust === 'trusted',
                     targetUrl: flowUrl,
                     intendedHeadSha: trace?.commit ?? git.commitSha,
                     task: verifyTask ?? config.app.task,

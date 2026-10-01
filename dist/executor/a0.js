@@ -1,4 +1,7 @@
-import { defaultExec, defaultProbe, resolveA0Host, } from '../detect.js';
+import { buildA0ChildEnv, defaultExec, defaultProbe, resolveA0Host, } from '../detect.js';
+// The allowlist lives in detect.ts beside the exec seam — re-exported here
+// so `executor/a0` stays the single import site for delegation internals.
+export { buildA0ChildEnv };
 /**
  * Agent Zero delegation — the thin seam that hands a natural-language task to
  * an `a0` instance (`a0 headless -p`). The instance runs autonomously inside
@@ -58,36 +61,6 @@ export function a0TaskPrompt(task, url) {
         ? task
         : `Open ${url} in your browser, then do this task: ${task}`;
 }
-/**
- * The only environment keys a delegated process may inherit. Provider keys,
- * GitHub tokens, `ARGUS_*`, and `npm_*` never propagate (R12) — the child is
- * a remote agent harness, not an extension of this process's trust.
- */
-const A0_CHILD_ENV_KEYS = [
-    'PATH',
-    'HOME',
-    'USER',
-    'LOGNAME',
-    'SHELL',
-    'LANG',
-    'LC_ALL',
-    'TERM',
-    'TMPDIR',
-    'XDG_RUNTIME_DIR',
-    'DOCKER_HOST',
-    // The resolved host pointer — a URL, not a credential.
-    'AGENT_ZERO_HOST',
-];
-/** Build the sanitized child env: allowlisted keys that exist in `env`. */
-export function buildA0ChildEnv(env) {
-    const out = {};
-    for (const key of A0_CHILD_ENV_KEYS) {
-        const value = env[key];
-        if (value !== undefined && value !== '')
-            out[key] = value;
-    }
-    return out;
-}
 /** Render the typed payload into the delegated prompt — sanitized surface. */
 export function buildA0LanePrompt(payload) {
     const lines = [
@@ -109,10 +82,40 @@ export function buildA0LanePrompt(payload) {
     lines.push('Report concisely what you observed and whether the task goal is met.', 'Do not attempt to access provider keys, tokens, or repository secrets.');
     return lines.join('\n');
 }
+/**
+ * Whether `url` names a loopback target — the remote-a0/loopback-target
+ * refusal depends on this being complete: the whole 127.0.0.0/8 range,
+ * wildcard/zero hosts, `*.localhost`, and IPv4-mapped forms, not just the
+ * canonical `127.0.0.1`/`localhost` literals. DNS names that merely
+ * resolve to loopback are not caught (no lookup by design — fail-open on
+ * hostnames is deliberate here).
+ */
 function isLoopback(url) {
     try {
-        const host = new URL(url).hostname;
-        return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
+        const host = new URL(url).hostname.replace(/\.$/, '').toLowerCase();
+        if (host === 'localhost' || host.endsWith('.localhost'))
+            return true;
+        // Node keeps IPv6 brackets in .hostname and normalizes mapped forms:
+        // [::1] stays, [::ffff:127.0.0.1] arrives as [::ffff:7f00:1], and
+        // short/integer IPv4 (127.1, 2130706433) normalizes to dotted-quad.
+        if (host === '[::1]' || host === '[::]')
+            return true;
+        const mapped = host.match(/^\[::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})\]$/i);
+        if (mapped !== null) {
+            const hi = parseInt(mapped[1] ?? 'x', 16);
+            const lo = parseInt(mapped[2] ?? 'x', 16);
+            const first = (hi >> 8) & 0xff;
+            if (first === 127 || (hi === 0 && lo === 0))
+                return true;
+        }
+        const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+        if (v4 !== null) {
+            const octets = v4.slice(1).map((g) => Number(g ?? ''));
+            if (octets.every((n) => Number.isInteger(n) && n <= 255) && (octets[0] === 127 || octets[0] === 0)) {
+                return true;
+            }
+        }
+        return false;
     }
     catch {
         return false;
@@ -143,6 +146,12 @@ export async function runA0Lane(input) {
         metered: false,
         ...extra,
     });
+    // Executable lanes are gated on the same trust resolution as config
+    // loading (SECURITY.md): an untrusted checkout never resolves a host or
+    // spawns the a0 CLI — blocked before any preflight.
+    if (!input.trusted) {
+        return done('blocked', 'verify --a0 is an executable lane — requires a trusted checkout');
+    }
     if (input.task === undefined || input.task.trim() === '') {
         return done('blocked', 'no delegated task configured — set a0 task via config app.task or the app lane');
     }
@@ -158,7 +167,9 @@ export async function runA0Lane(input) {
         });
     const cliVersion = deps.cliVersion ??
         (async () => {
-            const res = await (deps.exec ?? defaultExec)(deps.cli ?? 'a0', ['--version'], 5_000);
+            // The presence probe spawns the a0 binary too — it gets the same
+            // allowlisted env as the delegation or the whole contract is moot.
+            const res = await (deps.exec ?? defaultExec)(deps.cli ?? 'a0', ['--version'], 5_000, undefined, { baseEnv: buildA0ChildEnv(input.env) });
             return res.code === 0 ? res.stdout.trim() : undefined;
         });
     const configured = input.a0?.url !== undefined && input.a0.url !== '';

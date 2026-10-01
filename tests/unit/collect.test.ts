@@ -106,6 +106,44 @@ describe('collect workspace', () => {
     const w = await workspaceOf(dir)
     expect(w.current?.lanes.flow?.reason).toBe('provider key ••• rejected')
   })
+
+  it('masks bearer tokens, JWTs, and userinfo credentials in lane evidence', async () => {
+    const m = fixtureManifest()
+    m.lanes.flow.reason =
+      'auth failed: Bearer abcdefghijklmnop and eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.signaturepart and https://user:passw0rd@host/x'
+    await writeJson(join(dir, 'argus-reviewer-report', 'run-manifest.json'), m)
+    const w = await workspaceOf(dir)
+    const reason = w.current?.lanes.flow?.reason ?? ''
+    expect(reason).not.toContain('abcdefghijklmnop')
+    expect(reason).not.toContain('eyJhbGciOiJIUzI1NiJ9')
+    expect(reason).not.toContain('passw0rd')
+    expect(reason).toContain('•••')
+  })
+
+  it('deduplicates overlapping polls — concurrent collect(root) shares one sweep', async () => {
+    const reports = join(dir, 'argus-reviewer-report')
+    await writeJson(join(reports, 'run-manifest.json'), fixtureManifest({ runId: 'run-x' }))
+    const [a, b, c] = await Promise.all([collect(dir), collect(dir), collect(dir)])
+    // The dedup returns the same in-flight result — identical object.
+    expect(b).toBe(a)
+    expect(c).toBe(a)
+    expect(a.workspace.current?.runId).toBe('run-x')
+  })
+
+  it('re-reads an archive whose mtime changed — the cache must not serve stale content', async () => {
+    const reports = join(dir, 'argus-reviewer-report')
+    const archive = join(reports, 'manifests', '2026-09-30-00.json')
+    await writeJson(archive, fixtureManifest({ runId: 'run-v1' }))
+    const first = await workspaceOf(dir)
+    expect(first.runs[0]?.runId).toBe('run-v1')
+    // Rewrite with a newer mtime — the next poll must reflect it.
+    const { utimes } = await import('node:fs/promises')
+    await writeJson(archive, fixtureManifest({ runId: 'run-v2' }))
+    const now = new Date()
+    await utimes(archive, now, now)
+    const second = await workspaceOf(dir)
+    expect(second.runs[0]?.runId).toBe('run-v2')
+  })
 })
 
 describe('archiveManifest', () => {
@@ -129,5 +167,16 @@ describe('archiveManifest', () => {
     const reports = join(dir, 'reports')
     await archiveManifest(reports, fixtureManifest({ runId: 'x' }), 0)
     expect(existsSync(join(reports, 'manifests'))).toBe(false)
+  })
+
+  it('sanitizes a hostile runId before it becomes an archive filename', async () => {
+    const reports = join(dir, 'reports')
+    const m = fixtureManifest({ runId: '../../escape/../evil' })
+    await archiveManifest(reports, m, 5)
+    const names = await readdir(join(reports, 'manifests'))
+    // Sanitized to a single flat name inside the archive dir — no traversal.
+    expect(names).toEqual(['..-..-escape-..-evil.json'])
+    expect(existsSync(join(dir, 'evil.json'))).toBe(false)
+    expect(existsSync(join(reports, 'evil.json'))).toBe(false)
   })
 })

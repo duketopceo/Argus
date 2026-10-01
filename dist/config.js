@@ -82,18 +82,24 @@ function prob01(v, dflt) {
 function optPosInt(v) {
     return v !== undefined && Number.isInteger(v) && v >= 1 ? v : undefined;
 }
-/** Keep only string expected-state markers; all-dropped means unconfigured. */
+/** Keep only non-blank string expected-state markers; all-dropped means unconfigured. */
 export function sanitizeExpectation(input) {
     if (typeof input !== 'object' || input === null)
         return undefined;
     const raw = input;
+    // Whitespace-only markers are vacuous — a `' '` needle matches every
+    // accessibility tree. Trim at the boundary so they drop like ''.
+    const marker = (v) => typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined;
     const expected = {};
-    if (typeof raw.text === 'string' && raw.text !== '')
-        expected.text = raw.text;
-    if (typeof raw.url === 'string' && raw.url !== '')
-        expected.url = raw.url;
-    if (typeof raw.selector === 'string' && raw.selector !== '')
-        expected.selector = raw.selector;
+    const text = marker(raw.text);
+    if (text !== undefined)
+        expected.text = text;
+    const url = marker(raw.url);
+    if (url !== undefined)
+        expected.url = url;
+    const selector = marker(raw.selector);
+    if (selector !== undefined)
+        expected.selector = selector;
     return expected.text === undefined && expected.url === undefined && expected.selector === undefined
         ? undefined
         : expected;

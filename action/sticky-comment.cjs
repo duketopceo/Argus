@@ -26,6 +26,9 @@ const SECRET_PATTERNS = [
   /xox[baprs]-[A-Za-z0-9-]{8,}/g,
   /AKIA[A-Z0-9]{16}/g,
   /npm_[A-Za-z0-9]{8,}/g,
+  /Bearer\s+[A-Za-z0-9._~+/=-]{10,}/gi,
+  /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/g,
+  /:\/\/[^/\s:@]{1,64}:[^/\s:@]{6,}@/g,
 ]
 
 function maskSecrets(s) {
@@ -80,6 +83,43 @@ const MANIFEST_LANE_ORDER = ['review', 'flow', 'app', 'a0']
 const MANIFEST_STATUS_EMOJI = {
   passed: '✅', failed: '❌', skipped: '⚪',
   blocked: '⛔', unavailable: '⚠️', inconclusive: '🟡',
+}
+
+// The commit-status surface validates at least as strictly as the display
+// surfaces (viewmodel.isRunManifest / collect.validManifest) — this file is
+// what can publish a green check, so it never trusts a shallow sniff.
+function validManifest(m) {
+  const num = (n) => typeof n === 'number' && Number.isFinite(n)
+  if (m === null || typeof m !== 'object' || Array.isArray(m)) return false
+  if (m.schemaVersion !== 1 || typeof m.runId !== 'string') return false
+  if (typeof m.startedAt !== 'string') return false
+  if (m.identity === null || typeof m.identity !== 'object') return false
+  if (m.aggregate === null || typeof m.aggregate !== 'object') return false
+  // aggregate.status must be a real lane status and ok a real boolean —
+  // a type-confused aggregate must fail the gate, not reach the renderer.
+  if (!Object.hasOwn(MANIFEST_STATUS_EMOJI, m.aggregate.status)) return false
+  if (m.aggregate.ok !== true && m.aggregate.ok !== false) return false
+  if (!num(m.aggregate.calls) || !num(m.aggregate.tokens) || !num(m.aggregate.costUsd)) {
+    return false
+  }
+  if (m.lanes === null || typeof m.lanes !== 'object') return false
+  return MANIFEST_LANE_ORDER.every((id) => {
+    const lane = m.lanes[id]
+    return (
+      lane !== null &&
+      typeof lane === 'object' &&
+      typeof lane.lane === 'string' &&
+      typeof lane.selected === 'boolean' &&
+      Object.hasOwn(MANIFEST_STATUS_EMOJI, lane.status) &&
+      lane.usage !== null &&
+      typeof lane.usage === 'object' &&
+      num(lane.usage.calls) &&
+      num(lane.usage.tokens) &&
+      num(lane.usage.costUsd) &&
+      lane.budget !== null &&
+      typeof lane.budget === 'object'
+    )
+  })
 }
 
 function manifestLanes(manifest) {
@@ -968,6 +1008,7 @@ async function main() {
   let report
   let codeReview
   let manifest
+  let manifestStale = false
   if (hasKey) {
     try {
       const raw = fs.readFileSync(path.join(reportDir, 'run.json'), 'utf8')
@@ -984,8 +1025,15 @@ async function main() {
     try {
       const raw = fs.readFileSync(path.join(reportDir, 'run-manifest.json'), 'utf8')
       const parsed = JSON.parse(raw)
-      manifest =
-        parsed && parsed.aggregate && parsed.lanes ? parsed : undefined
+      // A manifest is run-scoped evidence — it decides the status only when
+      // it validates like a real manifest AND its declared head binding
+      // matches the sha this run reports on. Residue (crashed run, stale
+      // workspace) or a planted file falls back to the serialized-review
+      // verdict — the verify step also wipes these files before it runs.
+      const expectedSha = pr ? pr.head.sha : context.sha
+      manifestStale =
+        validManifest(parsed) && parsed.identity?.intendedHeadSha !== expectedSha
+      manifest = validManifest(parsed) && !manifestStale ? parsed : undefined
     } catch {
       manifest = undefined
     }
@@ -999,11 +1047,16 @@ async function main() {
   // reflects the code-review verdict alone.
   const runDisabled = process.env.ARGUS_RUN_DISABLED === '1'
   // A verify manifest is the authoritative lane verdict when it exists —
-  // its aggregate already fails closed on missing lane reports.
+  // its aggregate already fails closed on missing lane reports. An
+  // all-skipped aggregate (e.g. a push event where the review lane has no
+  // PR to inspect) is a legitimate non-verdict — neutral, not failure,
+  // matching the pre-manifest codeReviewOk contract.
+  const aggregateSkipped =
+    manifest !== undefined && manifest.aggregate.status === 'skipped'
   const ok = manifest !== undefined
     ? manifest.aggregate.ok === true
     : (runDisabled || report?.ok === true) && codeReviewOk
-  const conclusion = !hasKey ? 'neutral' : ok ? 'success' : 'failure'
+  const conclusion = !hasKey || aggregateSkipped ? 'neutral' : ok ? 'success' : 'failure'
   // Freshness + dedup + diff validation for the serialized review surface,
   // computed before the sticky body renders so the "+N not posted" note is
   // truthful. The review posts BEFORE the sticky so retry-ladder drops land
@@ -1011,7 +1064,7 @@ async function main() {
   // postInlineComments a no-op with no API calls.
   const inlinePlan = hasKey ? await planInlineComments(pr, codeReview) : undefined
   if (pr) await postInlineComments(pr, inlinePlan)
-  const body = !hasKey
+  const baseBody = !hasKey
     ? renderMissingKeyBody()
     : runDisabled
       ? renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan, manifest)
@@ -1020,6 +1073,13 @@ async function main() {
           ? renderManifestBody(manifest, codeReview, runUrl)
           : renderNoReportBody(reportDir, runUrl)
         : renderBody(report, codeReview, runUrl, ok, inlinePlan, manifest)
+  // A bound-mismatched manifest is ignored for the verdict — say so in the
+  // comment so residue never reads as a silent downgrade of evidence.
+  const body = manifestStale
+    ? baseBody +
+        '\n\n> ⚠️ A `run-manifest.json` was found but its head binding does not match ' +
+        'this commit — it was ignored.'
+    : baseBody
 
   if (pr) {
     const { data: comments } = await github.rest.issues.listComments({
@@ -1052,7 +1112,9 @@ async function main() {
   const state = conclusion === 'failure' ? 'failure' : 'success'
   const description =
     conclusion === 'neutral'
-      ? 'argus-reviewer skipped (no OPENROUTER_API_KEY)'
+      ? !hasKey
+        ? 'argus-reviewer skipped (no OPENROUTER_API_KEY)'
+        : 'argus-reviewer skipped (no lanes ran)'
       : `argus-reviewer ${conclusion}`
   await github.rest.repos.createCommitStatus({
     owner,

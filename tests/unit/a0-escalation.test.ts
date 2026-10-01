@@ -35,6 +35,7 @@ function laneInput(overrides: Partial<Parameters<typeof runA0Lane>[0]> = {}) {
     targetUrl: 'https://app.example.test/',
     intendedHeadSha: 'abc123',
     task: 'Reproduce the flaky checkout failure',
+    trusted: true,
     deps: {
       exec: OK_EXEC,
       probe: REACHABLE,
@@ -46,6 +47,27 @@ function laneInput(overrides: Partial<Parameters<typeof runA0Lane>[0]> = {}) {
 }
 
 describe('runA0Lane preflight', () => {
+  it('is blocked on an untrusted checkout — before any host or spawn work', async () => {
+    let execCalled = false
+    const report = await runA0Lane(
+      laneInput({
+        trusted: false,
+        deps: {
+          exec: async () => {
+            execCalled = true
+            return { code: 0, stdout: '', stderr: '', timedOut: false }
+          },
+          probe: REACHABLE,
+          resolveHost: NO_HOST,
+          cliVersion: CLI_PRESENT,
+        },
+      }),
+    )
+    expect(report.status).toBe('blocked')
+    expect(report.reason).toContain('trusted checkout')
+    expect(execCalled).toBe(false)
+  })
+
   it('is blocked when no task is delegated — before any host work', async () => {
     const report = await runA0Lane(laneInput({ task: undefined }))
     expect(report.status).toBe('blocked')
@@ -104,6 +126,55 @@ describe('runA0Lane preflight', () => {
     expect(report.reason).toContain('cannot reach')
     expect(report.targetReachable).toBe('refused')
     expect(report.tasks).toBe(0)
+  })
+
+  it('blocks non-canonical loopback spellings a remote host cannot reach', async () => {
+    for (const targetUrl of [
+      'http://127.0.0.2:3000/',
+      'http://0.0.0.0:8080/',
+      'http://app.localhost/',
+      'http://localhost./',
+      'http://[::1]:3000/',
+      'http://127.1:3000/',
+      'http://[::ffff:127.0.0.1]/',
+    ]) {
+      const report = await runA0Lane(laneInput({ targetUrl }))
+      expect(report.status).toBe('blocked')
+      expect(report.targetReachable).toBe('refused')
+    }
+  })
+
+  it('a remote host with a remote target still proceeds to preflight', async () => {
+    // Sanity: the widened matcher must not start refusing valid targets.
+    const report = await runA0Lane(laneInput({ targetUrl: 'https://staging.app.test/' }))
+    expect(report.status).not.toBe('blocked')
+    expect(report.targetReachable).not.toBe('refused')
+  })
+
+  it('the --version preflight gets the allowlisted env — ambient secrets never reach the probe', async () => {
+    const calls: { args: string[]; opts?: { baseEnv?: Record<string, string> } }[] = []
+    const exec: ExecFn = async (_bin, args, _timeout, _env, opts) => {
+      calls.push({ args, ...(opts !== undefined ? { opts } : {}) })
+      return args.includes('--version')
+        ? { code: 0, stdout: 'a0 1.2.3', stderr: '', timedOut: false }
+        : { code: 0, stdout: 'done', stderr: '', timedOut: false }
+    }
+    const report = await runA0Lane(
+      laneInput({
+        env: {
+          PATH: '/usr/bin',
+          HOME: '/home/x',
+          OPENROUTER_API_KEY: 'sk-or-should-never-leak',
+          GITHUB_TOKEN: 'ghp_shouldneverleak',
+          ARGUS_BUDGET_USD: '1',
+        },
+        deps: { exec, probe: REACHABLE, resolveHost: NO_HOST },
+      }),
+    )
+    expect(report.status).toBe('inconclusive')
+    const versionCall = calls.find((c) => c.args.includes('--version'))
+    expect(versionCall).toBeDefined()
+    expect(versionCall!.opts?.baseEnv).toEqual({ PATH: '/usr/bin', HOME: '/home/x' })
   })
 })
 

@@ -388,7 +388,9 @@ describe('argus-reviewer CLI', () => {
       err: capture().fn,
       createClient: () => client,
     })
-    expect(code).toBe(0)
+    // An errored pass is recorded and its captures kept, but with zero test
+    // evidence the run fails closed — an explore that errored is not a pass.
+    expect(code).toBe(1)
     const report = JSON.parse(await readFile(join(cwd, 'report', 'run.json'), 'utf8')) as {
       ok: boolean
       explore?: {
@@ -397,7 +399,7 @@ describe('argus-reviewer CLI', () => {
         captures?: { kind: string }[]
       }
     }
-    expect(report.ok).toBe(true)
+    expect(report.ok).toBe(false)
     // 'stopped: error' reports as an explicit skip, not a bare pass summary.
     expect(report.explore?.skipped).toContain('model call threw')
     expect(report.explore?.steps).toBeUndefined()
@@ -463,12 +465,15 @@ describe('argus-reviewer CLI', () => {
       err: capture().fn,
       createClient: () => client,
     })
-    // Exploration must never fail the run (R11).
-    expect(code).toBe(0)
+    // The skip is recorded explicitly, but zero observed evidence means the
+    // run fails closed — enabled is configuration, not a pass (R11 still
+    // holds when real tests carry the evidence).
+    expect(code).toBe(1)
     const report = JSON.parse(await readFile(join(cwd, 'report', 'run.json'), 'utf8')) as {
       ok: boolean
       explore?: { enabled: boolean; skipped?: string }
     }
+    expect(report.ok).toBe(false)
     expect(report.explore?.skipped).toContain('no reachable target')
   }, 60_000)
 

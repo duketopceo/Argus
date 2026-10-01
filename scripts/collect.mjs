@@ -66,16 +66,28 @@ const FALLBACK_SECRET_PATTERNS = [
   /xox[baprs]-[A-Za-z0-9-]{8,}/g,
   /AKIA[A-Z0-9]{16}/g,
   /npm_[A-Za-z0-9]{8,}/g,
+  /Bearer\s+[A-Za-z0-9._~+/=-]{10,}/gi,
+  /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/g,
+  /:\/\/[^/\s:@]{1,64}:[^/\s:@]{6,}@/g,
 ]
 const fallbackMask = (v) =>
   FALLBACK_SECRET_PATTERNS.reduce((s, re) => s.replace(re, '•••'), v)
 
 function validManifest(m, vm) {
   if (vm?.isRunManifest !== undefined) return vm.isRunManifest(m)
+  // Keep lockstep with isRunManifest (viewmodel.ts) — this fallback guards
+  // the stale-dist path and must certify no less than the primary does.
+  const num = (n) => typeof n === 'number' && Number.isFinite(n)
   if (m === null || typeof m !== 'object') return false
   if (m.schemaVersion !== 1 || typeof m.runId !== 'string') return false
   if (typeof m.startedAt !== 'string') return false
+  if (m.identity === null || typeof m.identity !== 'object') return false
   if (m.aggregate === null || typeof m.aggregate !== 'object') return false
+  if (!KNOWN_STATUSES.has(m.aggregate.status)) return false
+  if (m.aggregate.ok !== true && m.aggregate.ok !== false) return false
+  if (!num(m.aggregate.calls) || !num(m.aggregate.tokens) || !num(m.aggregate.costUsd)) {
+    return false
+  }
   if (m.lanes === null || typeof m.lanes !== 'object') return false
   return LANE_IDS.every((id) => {
     const lane = m.lanes[id]
@@ -84,7 +96,14 @@ function validManifest(m, vm) {
       typeof lane === 'object' &&
       typeof lane.lane === 'string' &&
       typeof lane.selected === 'boolean' &&
-      KNOWN_STATUSES.has(lane.status)
+      KNOWN_STATUSES.has(lane.status) &&
+      lane.usage !== null &&
+      typeof lane.usage === 'object' &&
+      num(lane.usage.calls) &&
+      num(lane.usage.tokens) &&
+      num(lane.usage.costUsd) &&
+      lane.budget !== null &&
+      typeof lane.budget === 'object'
     )
   })
 }
@@ -256,6 +275,14 @@ async function collectManifests(root) {
   } catch {
     files = []
   }
+  // Evict cache entries for archives that no longer exist (deleted by
+  // retention or by hand) so a long-lived watcher can't grow it forever.
+  const livePaths = new Set(files.slice(-50).map((f) => join(historyDir, f)))
+  for (const cached of _archiveCache.keys()) {
+    if (cached.startsWith(historyDir) && !livePaths.has(cached)) {
+      _archiveCache.delete(cached)
+    }
+  }
   const archivedRuns = await Promise.all(
     files.slice(-50).map((f) => readArchivedManifest(join(historyDir, f), vm, mask)),
   )
@@ -333,7 +360,16 @@ async function collectNow(root) {
         prs.slice(0, 6).map((p) =>
           gh(['pr', 'checks', String(p.number), '--json', 'name,state,bucket'], root)
             .then((c) => [p.number, c.map((x) => ({ ...x, name: safe(x.name) }))])
-            .catch(() => [p.number, []]),
+            .catch((e) => {
+              // `gh pr checks` exits nonzero on pending/failing checks but
+              // still writes the JSON — a red PR must not render as zero rows.
+              try {
+                const c = JSON.parse(e.stdout)
+                return [p.number, c.map((x) => ({ ...x, name: safe(x.name) }))]
+              } catch {
+                return [p.number, []]
+              }
+            }),
         ),
       )
       state.prChecks = Object.fromEntries(checks)

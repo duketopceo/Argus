@@ -80,7 +80,7 @@ interface FlowReport {
   }
   tests?: { calls?: CallCost[] }[]
   /** Present when the run had the explore lane on — itself the evidence. */
-  explore?: { enabled?: boolean }
+  explore?: { enabled?: boolean; skipped?: string }
 }
 
 /**
@@ -174,10 +174,11 @@ function flowCache(report: FlowReport | undefined): CacheSummary | undefined {
 }
 
 /** A green `ok` is only evidence when a test executed or the explore lane
- * ran as the evidence source (its pass or explicit skip is recorded). */
+ * actually ran as the evidence source — an enabled-but-skipped/errored
+ * explore pass proves nothing, so the lane must still fail closed. */
 function flowEvidenceRan(report: FlowReport | undefined): boolean {
   if (report === undefined) return false
-  if (report.explore?.enabled === true) return true
+  if (report.explore?.enabled === true && report.explore.skipped === undefined) return true
   return (report.totals?.tests ?? report.tests?.length ?? 0) > 0
 }
 
@@ -285,7 +286,13 @@ export async function runVerify(input: VerifyInput): Promise<VerifyResult> {
       runnerError = error instanceof Error ? error.message : String(error)
       ctxError(runnerError)
     }
-    const report = await readJson<ReviewReport>(join(input.reportDir, 'code-review.json'))
+    // A runner that threw before writing leaves a stale report behind —
+    // ignore it or the manifest inherits another run's usage, head binding,
+    // and evidence links (same contract as the <lane>-lane.json guard).
+    const report =
+      runnerError === undefined
+        ? await readJson<ReviewReport>(join(input.reportDir, 'code-review.json'))
+        : undefined
     const inconclusive =
       report !== undefined &&
       report.skipped !== true &&
@@ -337,7 +344,10 @@ export async function runVerify(input: VerifyInput): Promise<VerifyResult> {
         runnerError = error instanceof Error ? error.message : String(error)
         ctxError(runnerError)
       }
-      const report = await readJson<FlowReport>(join(input.reportDir, 'run.json'))
+      const report =
+        runnerError === undefined
+          ? await readJson<FlowReport>(join(input.reportDir, 'run.json'))
+          : undefined
       // A run.json claiming ok with zero executed tests carries no evidence —
       // fail closed instead of letting it pass the lane.
       const noEvidence =
@@ -397,7 +407,12 @@ export async function runVerify(input: VerifyInput): Promise<VerifyResult> {
     // Runners write their own lane detail (`<lane>-lane.json`); a valid
     // status there wins over the exit-code mapping, so preflight outcomes
     // (blocked/unavailable/inconclusive) reach the manifest faithfully.
-    const detail = await readJson<LaneDetail>(join(input.reportDir, `${lane}-lane.json`))
+    // A runner that threw before writing leaves a stale detail file behind
+    // — ignore it or the manifest inherits another run's usage and summary.
+    const detail =
+      runnerError === undefined
+        ? await readJson<LaneDetail>(join(input.reportDir, `${lane}-lane.json`))
+        : undefined
     const detailStatus =
       detail?.status !== undefined && (LANE_STATUSES as readonly string[]).includes(detail.status)
         ? detail.status

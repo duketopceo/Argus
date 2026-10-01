@@ -2,16 +2,19 @@ import { execFile } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readdir, readFile } from 'node:fs/promises';
+/** Grace between a timeout's SIGTERM and the escalation SIGKILL. */
+const EXEC_KILL_GRACE_MS = 2_000;
 export const defaultExec = (cmd, args, timeoutMs, env, opts) => new Promise((resolve) => {
     const baseEnv = opts?.baseEnv ?? process.env;
     // 4 MiB headroom — the sandbox caps output itself after capture, and a
     // chatty probe hitting execFile's 1 MiB default would error instead of
     // reaching the harness classifier.
-    execFile(cmd, args, {
+    const child = execFile(cmd, args, {
         timeout: timeoutMs,
         maxBuffer: 4 * 1024 * 1024,
         env: { ...baseEnv, ...env },
     }, (err, stdout, stderr) => {
+        settled = true;
         if (err) {
             // stderr is '' (not undefined) on spawn ENOENT — fall back to the
             // error message so callers can distinguish "missing" from "failed".
@@ -31,7 +34,63 @@ export const defaultExec = (cmd, args, timeoutMs, env, opts) => new Promise((res
             resolve({ code: 0, stdout: String(stdout), stderr: String(stderr) });
         }
     });
+    let settled = false;
+    // execFile's timeout only delivers SIGTERM — a child that traps it (or a
+    // descendant holding the stdio pipes open) would keep this promise
+    // pending forever. Escalate to SIGKILL after a short grace, and resolve
+    // anyway if even that can't make the callback fire.
+    const escalate = setTimeout(() => {
+        if (settled)
+            return;
+        try {
+            child.kill('SIGKILL');
+        }
+        catch {
+            // already gone
+        }
+        setTimeout(() => {
+            if (!settled) {
+                settled = true;
+                resolve({ code: 1, stdout: '', stderr: 'process killed', timedOut: true });
+            }
+        }, EXEC_KILL_GRACE_MS).unref();
+    }, timeoutMs + EXEC_KILL_GRACE_MS);
+    escalate.unref();
+    child.on('close', () => clearTimeout(escalate));
 });
+/**
+ * The only environment keys an Agent Zero child process may inherit.
+ * Provider keys, GitHub tokens, `ARGUS_*`, and npm auth variables never
+ * propagate (R12) — the child is a remote agent harness, not an extension
+ * of this process's trust. Lives here (not in executor/a0.ts) because every
+ * `a0` spawn — delegation, the lane's `--version` preflight, and init's
+ * environment probe — must use it or the contract leaks.
+ */
+export const A0_CHILD_ENV_KEYS = [
+    'PATH',
+    'HOME',
+    'USER',
+    'LOGNAME',
+    'SHELL',
+    'LANG',
+    'LC_ALL',
+    'TERM',
+    'TMPDIR',
+    'XDG_RUNTIME_DIR',
+    'DOCKER_HOST',
+    // The resolved host pointer — a URL, not a credential.
+    'AGENT_ZERO_HOST',
+];
+/** Build the sanitized child env: allowlisted keys that exist in `env`. */
+export function buildA0ChildEnv(env) {
+    const out = {};
+    for (const key of A0_CHILD_ENV_KEYS) {
+        const value = env[key];
+        if (value !== undefined && value !== '')
+            out[key] = value;
+    }
+    return out;
+}
 /**
  * Any HTTP response — including a login redirect — means *something* is up,
  * but port 5080 could be an unrelated service. Require an Agent Zero marker
@@ -45,7 +104,26 @@ export const defaultProbe = async (url, timeoutMs) => {
         });
         if (res.status >= 500)
             return false;
-        const body = (await res.text()).slice(0, 65_536);
+        // Bound the bytes actually received — a misbehaving host streaming an
+        // unbounded body inside the probe window would otherwise be fully
+        // buffered by res.text() before the slice.
+        const reader = res.body?.getReader();
+        if (reader === undefined)
+            return false;
+        const chunks = [];
+        let received = 0;
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done)
+                break;
+            received += value.byteLength;
+            chunks.push(value);
+            if (received >= 65_536) {
+                await reader.cancel();
+                break;
+            }
+        }
+        const body = new TextDecoder().decode(chunks.length === 1 ? chunks[0] : Buffer.concat(chunks));
         return /agent.?zero/i.test(body);
     }
     catch {
@@ -107,7 +185,9 @@ export async function detectEnvironment(env, opts = {}) {
     const exec = opts.exec ?? defaultExec;
     const home = opts.home ?? homedir();
     const [a0Version, gh, browsers, a0Host] = await Promise.all([
-        exec('a0', ['--version'], 5_000),
+        // Even the presence probe gets the allowlisted env — an `a0` binary is
+        // third-party code and never sees provider/git secrets.
+        exec('a0', ['--version'], 5_000, undefined, { baseEnv: buildA0ChildEnv(env) }),
         exec('gh', ['auth', 'status'], 5_000),
         playwrightBrowsers(home),
         resolveA0Host(env, opts),

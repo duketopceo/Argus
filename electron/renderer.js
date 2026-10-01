@@ -264,7 +264,7 @@ function renderVerify(s) {
     row.append(
       el('span', 'lid', l.lane),
       el('span', STATUS_CLS[l.status] || 'dim', `${laneIcon(l)} ${esc(l.status)}`),
-      el('span', 't', esc(l.summary ?? l.reason ?? '')),
+      el('span', 't', esc(l.reason ?? l.summary ?? '')),
       el('span', 'm', `${u.calls ?? 0}c ${u.metered === true ? fmt$(u.costUsd) : 'unmetered'}`),
     )
     row.onclick = () => selectLane(i)
@@ -284,8 +284,31 @@ function verifyKey(ws) {
   const parts = [ws?.corrupt ?? 0, ws?.degraded ?? '']
   for (const r of verifyRuns(ws ?? { runs: [] })) {
     const a = r.aggregate ?? {}
-    parts.push(r.runId ?? '', a.status ?? '', a.calls ?? 0)
-    for (const l of lanesOf(r)) parts.push(l.status, l.durationMs ?? 0, l.selected ? 1 : 0)
+    // Everything the pane renders must change the key: a same-runId manifest
+    // rewrite that only moves cost/summary/headBinding must still repaint.
+    parts.push(
+      r.runId ?? '',
+      r.finishedAt ?? '',
+      a.status ?? '',
+      a.calls ?? 0,
+      a.costUsd ?? 0,
+      a.tokens ?? 0,
+    )
+    for (const l of lanesOf(r)) {
+      parts.push(
+        l.status,
+        l.durationMs ?? 0,
+        l.selected ? 1 : 0,
+        l.summary ?? '',
+        l.reason ?? '',
+        l.model ?? '',
+        l.reportPath ?? '',
+        l.headBinding ?? '',
+        JSON.stringify(l.usage ?? null),
+        JSON.stringify(l.budget ?? null),
+        JSON.stringify(l.cache ?? null),
+      )
+    }
   }
   return parts.join('|')
 }
@@ -298,8 +321,10 @@ async function refresh() {
   renderPrs(s); renderRuns(s); renderJournals(s); renderJournal(s)
   const key = verifyKey(s.workspace)
   if (key !== lastVerifyKey) {
-    lastVerifyKey = key
+    // Mark only after a successful render — a render throw must not pin the
+    // key and strand the pane on stale data.
     renderVerify(s)
+    lastVerifyKey = key
   }
   $('evalfile').textContent = s.evalFile ? `(${s.evalFile})` : ''
   $('evaldoc').textContent = s.evalDoc || 'no docs/evals/*.md yet — run eval'

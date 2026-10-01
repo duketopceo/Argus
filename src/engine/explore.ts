@@ -103,6 +103,8 @@ export interface ExploreOptions {
   expectation?: (ctx: ExpectationContext) => Promise<boolean>
   /** Lane step-cap override; defaults to config.explore.maxSteps. */
   maxSteps?: number
+  /** Lane spend-cap override; defaults to config.explore.budgetUsd. */
+  budgetUsd?: number
 }
 
 /**
@@ -116,7 +118,7 @@ export interface ExploreOptions {
 export async function runExplore(opts: ExploreOptions): Promise<ExploreResult> {
   const { driver, actions, client, ledger, config, logger } = opts
   const maxSteps = opts.maxSteps ?? config.explore.maxSteps
-  const laneBudget = config.explore.budgetUsd ?? config.budgetUsd
+  const laneBudget = opts.budgetUsd ?? config.explore.budgetUsd ?? config.budgetUsd
   const costStart = ledger.visionCostUsd
 
   // Non-http(s) targets (file:// demos) get a no-navigate policy — 'null'
