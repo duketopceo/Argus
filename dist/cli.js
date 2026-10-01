@@ -29,7 +29,7 @@ import { adjudicateFindings } from './review/adjudicate.js';
 import { runProbeLane } from './probe/queue.js';
 import { decodeProbePayload, encodeProbePayload, persistProbes } from './probe/persist.js';
 import { SENTINEL } from './report/comment.js';
-import { A0_DEFAULT_TIMEOUT_MS, A0_LANE_MAX_TASKS, A0_LANE_REPORT, a0TaskPrompt, runA0Lane, runA0Task, } from './executor/a0.js';
+import { A0_DEFAULT_TIMEOUT_MS, A0_LANE_MAX_TASKS, A0_LANE_REPORT, a0TaskPrompt, isLoopback, runA0Lane, runA0Task, } from './executor/a0.js';
 import { buildJournalEntry } from './journal/build.js';
 import { newRunId, writeJournal } from './journal/store.js';
 import { createLogger, resolveLogLevel } from './log.js';
@@ -105,6 +105,8 @@ Options:
 const TEST_FILE_RE = /\.test\.(ts|mts|mjs|js)$/;
 /** Total wall-clock budget for all heal:'a0' delegations in one run. */
 const A0_HEAL_BUDGET_MS = 15 * 60_000;
+/** Default delegation-count ceiling for heal:'a0' — a0.maxTasks overrides. */
+const A0_HEAL_MAX_DELEGATIONS = 5;
 export async function main(argv, deps = {}) {
     const ctx = {
         cwd: deps.cwd ?? process.cwd(),
@@ -761,9 +763,24 @@ async function cmdRun(args, ctx, deps) {
             if (env.a0.version === undefined && a0Host === undefined) {
                 ctx.err('heal: a0 configured but no Agent Zero found — install the a0 CLI or set a0.url');
             }
+            else if (a0Host !== undefined &&
+                url !== undefined &&
+                isLoopback(url) &&
+                !isLoopback(a0Host)) {
+                ctx.err(`heal: a0 host ${a0Host} is remote but the target ${url} is loopback — delegations skipped`);
+            }
             else {
+                // Two Argus-side ceilings on remote spend (#53): a shared wall-clock
+                // deadline AND a delegation count — N failures can't produce N
+                // unbounded agent runs. Dollar caps live in the A0 gateway config.
                 const deadline = Date.now() + A0_HEAL_BUDGET_MS;
+                const maxDelegations = config.a0?.maxTasks ?? A0_HEAL_MAX_DELEGATIONS;
+                let delegations = 0;
                 for (const r of failedReports) {
+                    if (delegations >= maxDelegations) {
+                        ctx.err(`heal: a0 delegation cap reached (${maxDelegations}) — remaining failures get no diagnosis`);
+                        break;
+                    }
                     const remaining = deadline - Date.now();
                     if (remaining <= 0) {
                         ctx.err('heal: a0 budget exhausted — remaining failures get no diagnosis');
@@ -777,6 +794,7 @@ async function cmdRun(args, ctx, deps) {
                         timeoutMs: Math.min(remaining, A0_DEFAULT_TIMEOUT_MS),
                         ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
                     });
+                    delegations++;
                     if (res.ok) {
                         r.a0Diagnosis = res.output;
                         ctx.out(`a0 diagnosis for "${r.name}": ${res.output}`);
@@ -2268,6 +2286,12 @@ async function cmdDelegate(args, ctx, deps) {
     const config = await loadConfig(ctx.cwd, { trust, note: ctx.err });
     const url = values.url ?? config.target?.url;
     const host = values.host ?? config.a0?.url;
+    // Same reachability refusal as the lane's preflight: a remote host cannot
+    // open a loopback/file target on this machine.
+    if (host !== undefined && url !== undefined && isLoopback(url) && !isLoopback(host)) {
+        ctx.err(`a0 host ${host} is remote but the target ${url} is loopback — the host cannot reach it`);
+        return 1;
+    }
     ctx.out(`delegating to agent zero${host !== undefined ? ` (${host})` : ''}…`);
     const res = await runA0Task(a0TaskPrompt(task, url), {
         host,
@@ -2294,13 +2318,13 @@ Options:
   -h, --help`;
 function initConfig(a0Host) {
     // R19 — a detected Agent Zero host earns a labeled suggestion, never an
-    // enabled lane: `verify --a0` is explicit opt-in per run, and
-    // unverified-live until #53 proves the round-trip.
+    // enabled lane: `verify --a0` is explicit opt-in per run, and completed
+    // delegations cap at inconclusive (self-reported evidence).
     const a0Block = a0Host !== undefined
         ? `
   // Optional: Agent Zero detected at ${a0Host}. Nothing below runs unless
   // you ask for it — both stays commented until you opt in deliberately.
-  //   a0: { url: ${JSON.stringify(a0Host)} },  // enables \`verify --a0\` (unverified-live, unmetered)
+  //   a0: { url: ${JSON.stringify(a0Host)} },  // enables \`verify --a0\` (self-reported, unmetered)
   //   heal: 'a0',                             // escalates a failed heal to the A0 host
 `
         : '';

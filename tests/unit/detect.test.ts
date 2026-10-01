@@ -1,16 +1,76 @@
 import { describe, expect, it } from 'vitest'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { createServer, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import {
   defaultExec,
+  defaultProbe,
   detectEnvironment,
   resolveA0Host,
   type ExecFn,
 } from '../../src/detect.js'
 
 const missing: ExecFn = async () => ({ code: 1, stdout: '', stderr: 'ENOENT: no such file' })
+
+describe('defaultProbe', () => {
+  async function withServer(
+    handler: (req: { url?: string }, res: import('node:http').ServerResponse) => void,
+    run: (base: string) => Promise<void>,
+  ): Promise<void> {
+    const server: Server = createServer(handler)
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    try {
+      const { port } = server.address() as AddressInfo
+      await run(`http://127.0.0.1:${port}`)
+    } finally {
+      server.close()
+    }
+  }
+
+  it('follows a login redirect and finds the marker on the final page', async () => {
+    // Login-gated instances 302 `/` → `/login`; the marker check must apply
+    // to the page the host actually serves, not the redirect stub.
+    await withServer(
+      (req, res) => {
+        if (req.url === '/') {
+          res.writeHead(302, { location: '/login' }).end('<html>Redirecting...</html>')
+          return
+        }
+        res.writeHead(200, { 'content-type': 'text/html' }).end('<html><title>Agent Zero</title></html>')
+      },
+      async (base) => {
+        expect(await defaultProbe(base, 5_000)).toBe(true)
+      },
+    )
+  })
+
+  it('rejects a redirect to a page without the marker', async () => {
+    await withServer(
+      (req, res) => {
+        if (req.url === '/') {
+          res.writeHead(302, { location: '/other' }).end()
+          return
+        }
+        res.writeHead(200).end('<html><title>Grafana</title></html>')
+      },
+      async (base) => {
+        expect(await defaultProbe(base, 5_000)).toBe(false)
+      },
+    )
+  })
+
+  it('rejects a host that serves no marker at all', async () => {
+    await withServer(
+      (_req, res) => res.writeHead(200).end('<html>hello</html>'),
+      async (base) => {
+        expect(await defaultProbe(base, 5_000)).toBe(false)
+      },
+    )
+  })
+})
 
 describe('resolveA0Host', () => {
   it('prefers AGENT_ZERO_HOST env over everything', async () => {

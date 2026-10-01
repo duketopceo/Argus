@@ -137,6 +137,7 @@ describe('runA0Lane preflight', () => {
       'http://[::1]:3000/',
       'http://127.1:3000/',
       'http://[::ffff:127.0.0.1]/',
+      'file:///home/operator/app/index.html',
     ]) {
       const report = await runA0Lane(laneInput({ targetUrl }))
       expect(report.status).toBe('blocked')
@@ -179,7 +180,7 @@ describe('runA0Lane preflight', () => {
 })
 
 describe('runA0Lane delegation', () => {
-  it('delegates through a reachable host and reports unverified-live', async () => {
+  it('delegates through a reachable host and caps at inconclusive (self-reported)', async () => {
     let sawArgs: string[] = []
     let sawBaseEnv: Record<string, string> | undefined
     let sawTimeout: number | undefined
@@ -306,6 +307,9 @@ describe('buildA0ChildEnv', () => {
       PATH: '/usr/bin',
       USER: 'u',
       TERM: 'xterm',
+      AGENT_ZERO_HOST: 'https://a0.example',
+      A0_USERNAME: 'a0-user',
+      A0_PASSWORD: 'a0-pass',
       OPENROUTER_API_KEY: 'sk-or-secret',
       GITHUB_TOKEN: 'ghp_x',
       GH_TOKEN: 'ghp_y',
@@ -321,6 +325,9 @@ describe('buildA0ChildEnv', () => {
       PATH: '/usr/bin',
       USER: 'u',
       TERM: 'xterm',
+      AGENT_ZERO_HOST: 'https://a0.example',
+      A0_USERNAME: 'a0-user',
+      A0_PASSWORD: 'a0-pass',
     })
   })
 })

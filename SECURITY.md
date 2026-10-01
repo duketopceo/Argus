@@ -120,11 +120,13 @@ on the same trust resolution as config loading:
   run with no task is `blocked` before any provider call is made.
 - `verify --a0` delegates the task to a configured Agent Zero host. The
   child process receives an allowlisted environment — provider keys,
-  `GITHUB_TOKEN`, `ARGUS_*`, and npm auth variables are not inherited — and
-  is bounded to one task and a per-task timeout. A remote A0 host is refused
-  when the application target is loopback. Because live host round-trips are
-  not yet verified (#53), a completed delegation reports `inconclusive` —
-  never `passed`.
+  `GITHUB_TOKEN`, `ARGUS_*`, and npm auth variables are not inherited —
+  and is bounded to one task and a per-task timeout. `A0_USERNAME`/
+  `A0_PASSWORD` pass the allowlist only because the `a0` CLI itself
+  consumes them for login-gated hosts. A remote A0 host is refused when
+  the application target is loopback. The live round-trip is verified
+  (#53), but a completed delegation still reports `inconclusive` — never
+  `passed` — because the agent's answer is self-reported evidence.
 - On `pull_request_target`, fork `pull_request`, and `issue_comment` events
   the action's runtime-lane gate refuses app/a0 inputs before the CLI runs.
 

@@ -194,10 +194,12 @@ export interface Config {
      * Agent Zero instance for delegated tasks (`argus-reviewer delegate`,
      * `heal: 'a0'`, `verify --a0`). `url` is the instance base URL — leave
      * unset to let the `a0` CLI resolve it (saved host, AGENT_ZERO_HOST,
-     * Docker discovery). `maxTasks` caps delegations per `verify` run
-     * (default 1); `timeoutMs` is the per-task wall-clock bound. The lane is
-     * an explicit opt-in escalation and reports `unverified-live` until a
-     * live host round-trip is proven (issue #53).
+     * Docker discovery). `maxTasks` caps delegations per `verify`/`run`
+     * invocation (verify lane default 1, heal default 5); `timeoutMs` is the
+     * per-task wall-clock bound for the verify lane. The lane is
+     * an explicit opt-in escalation and caps completed delegations at
+     * `inconclusive` — the agent's answer is self-reported evidence, never a
+     * `passed` verdict (live round-trip proven in #53).
      */
     a0: {
         url: string | undefined;
