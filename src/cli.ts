@@ -87,7 +87,7 @@ import { writeAtomicJson } from './fsutil.js'
 import { CallCost } from './vision/cost.js'
 import { JsonSchema, Message, OpenRouterClient } from './vision/openrouter.js'
 import { Ledger } from './vision/ledger.js'
-import { defaultLaneSelection, selectionFromFlags } from './pipeline/contracts.js'
+import { selectionFromFlags } from './pipeline/contracts.js'
 import {
   MENTION_HELP,
   mayRunMention,
@@ -243,6 +243,17 @@ function resolveCheckoutTrust(ctx: Ctx) {
     fetchMeta: (repo, pr, token) => fetchPrMeta(repo, pr, token, ctx),
     note: (line) => ctx.err(line),
   })
+}
+
+/**
+ * Run-scoped nonce for evidence files. GITHUB_RUN_ID is not knowable when a
+ * commit or a planted file is authored — that is the property that matters
+ * (freshness, not secrecy: the id is public once the run exists). The sticky
+ * poster and emit-review require evidence written by THIS run whenever the
+ * env is present; local runs carry no nonce and are exempt.
+ */
+function runNonceFrom(env: Record<string, string | undefined>): string | undefined {
+  return envOr(env.GITHUB_RUN_ID)
 }
 
 /** Env/flag blank strings normalize to undefined — action inputs default to '' and must not shadow config, and a whitespace-only value must never stand in as a marker. */
@@ -945,6 +956,7 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
     // Explore counts as evidence only when the pass completed — a skipped
     // or errored pass observed nothing and must not green the run.
     exploreOutcome !== undefined && exploreOutcome.result.stopReason !== 'error',
+    runNonceFrom(ctx.env),
   )
   if (config.explore.enabled) {
     if (exploreOutcome !== undefined) {
@@ -1113,6 +1125,8 @@ interface CodeReviewReport {
   budgetExceeded: boolean
   /** Identity relationship between the report source and checkout. */
   headBinding?: HeadBinding
+  /** Workflow-run nonce (GITHUB_RUN_ID) — see runNonceFrom. */
+  runNonce?: string
   /**
    * Base64 HTML-comment payload (`argus-probe-persist`) carrying reproduced
    * probe source — the sticky poster embeds it verbatim so `@argus persist`
@@ -1604,6 +1618,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       .filter(isReviewProfile)
   }
   const model = config.code_model ?? config.model
+  const runNonce = runNonceFrom(ctx.env)
   debug(
     'code-review',
     `repo=${repo ?? 'none'} pr=${pr ?? 'none'} model=${model} budget=${config.codeReviewBudgetUsd ?? 'unlimited'}`,
@@ -1633,6 +1648,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
         undefined,
         fixtureDir !== undefined ? 'fixture' : 'github',
       ),
+      ...(runNonce !== undefined ? { runNonce } : {}),
     }
     await writeAtomicJson(codeReviewPath, skipped)
     return 0
@@ -2101,6 +2117,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       model: lastModel,
       budgetExceeded: ledger.budgetExceeded,
       headBinding,
+      ...(runNonce !== undefined ? { runNonce } : {}),
       ...(persistPayload !== undefined ? { persistPayload } : {}),
     }
     await writeAtomicJson(codeReviewPath, report)
@@ -2128,6 +2145,7 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
     options: {
       help: { type: 'boolean', short: 'h', default: false },
       review: { type: 'boolean', default: true },
+      'no-review': { type: 'boolean' },
       // No defaults on the opt-in lanes: `--flow`/`--no-flow` must both be
       // distinguishable from "flag absent" so an explicit negation vetoes an
       // ambient ARGUS_VERIFY_*=1. parseArgs doesn't auto-derive negations —
@@ -2148,7 +2166,8 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
   })
   if (values.help) {
     ctx.out(
-      'Usage: argus-reviewer verify [--flow|--no-flow] [--app|--no-app] [--a0|--no-a0] ' +
+      'Usage: argus-reviewer verify [--review|--no-review] [--flow|--no-flow] ' +
+        '[--app|--no-app] [--a0|--no-a0] ' +
         '[--url <target>] ' +
         '[--task "<task>" --expect-text <marker>|--expect-url <re>|--expect-selector <sel>] ' +
         '[--report-dir <dir>]\n\n' +
@@ -2160,15 +2179,15 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
   // Flag > env > config for lane booleans: `--no-app`/`--no-a0`/`--no-flow`
   // are explicit opt-outs that must beat an ambient ARGUS_VERIFY_*=1.
   const selection = selectionFromFlags({
-    review: values.review,
+    review: values['no-review'] === true ? false : values.review,
     flow:
       values['no-flow'] === true ? false : (values.flow ?? ctx.env.ARGUS_VERIFY_FLOW === '1'),
     app: values['no-app'] === true ? false : (values.app ?? ctx.env.ARGUS_VERIFY_APP === '1'),
     a0: values['no-a0'] === true ? false : (values.a0 ?? ctx.env.ARGUS_VERIFY_A0 === '1'),
   })
-  if (!selection.review && !selection.flow && !selection.app && !selection.a0) {
-    selection.review = defaultLaneSelection().review
-  }
+  // All lanes explicitly off is a real selection — every lane reports
+  // skipped, the manifest records it, and the run fails closed. Silently
+  // re-adding review here would negate `--no-review`.
 
   // Wipe run-scoped evidence files BEFORE config resolution: a committed or
   // leftover run-manifest.json/run.json/lane detail must never outlive the
@@ -2241,6 +2260,7 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
       envOr(values['expect-selector']) ?? envOr(ctx.env.ARGUS_VERIFY_EXPECT_SELECTOR),
   })
   const logger = createLogger(resolveLogLevel(ctx.env, config.logLevel), ctx)
+  const runNonce = runNonceFrom(ctx.env)
   const result = await runVerify({
     cwd: ctx.cwd,
     runId: newRunId(),
@@ -2251,6 +2271,7 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
       intendedHeadSha: trace?.commit,
       checkoutSha: git.commitSha,
       baseSha: undefined,
+      runNonce,
     },
     selection,
     ...(flowUrl !== undefined ? { flowUrl } : {}),

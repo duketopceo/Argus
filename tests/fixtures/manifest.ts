@@ -148,6 +148,7 @@ export function fixtureManifest(overrides: Partial<RunManifest> = {}): RunManife
       intendedHeadSha: 'abc1234deadbeef',
       checkoutSha: 'abc1234deadbeef',
       baseSha: 'base00',
+      runNonce: undefined,
     },
     lanes,
     aggregate: {

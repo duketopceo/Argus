@@ -320,7 +320,7 @@ describe('emit-review lane', () => {
         head: headAt,
         reviews: listRev,
         list: listGreen,
-        read: async () => ({ verdict: 'pass', findings: [], summary: 'clean' }),
+        read: async () => ({ runNonce: '42', verdict: 'pass', findings: [], summary: 'clean' }),
       },
     )
     expect(submit).toHaveBeenCalledOnce()
@@ -350,7 +350,7 @@ describe('emit-review lane', () => {
         head: headAt,
         reviews: listRev,
         list: async () => [{ ...greenCheck, conclusion: 'failure' }],
-        read: async () => ({ verdict: 'pass', findings: [] }),
+        read: async () => ({ runNonce: '42', verdict: 'pass', findings: [] }),
       },
     )
     expect(submit).not.toHaveBeenCalled()
@@ -368,7 +368,7 @@ describe('emit-review lane', () => {
         head: headAt,
         reviews: listRev,
         list: async () => [{ ...greenCheck, status: 'in_progress', conclusion: null }],
-        read: async () => ({ verdict: 'pass', findings: [] }),
+        read: async () => ({ runNonce: '42', verdict: 'pass', findings: [] }),
       },
     )
     expect(submit).not.toHaveBeenCalled()
@@ -386,7 +386,7 @@ describe('emit-review lane', () => {
         head: headAt,
         reviews: listRev,
         list: async () => [{ ...greenCheck, name: 'smoke' }],
-        read: async () => ({ verdict: 'pass', findings: [] }),
+        read: async () => ({ runNonce: '42', verdict: 'pass', findings: [] }),
       },
     )
     expect(submit).not.toHaveBeenCalled()
@@ -404,7 +404,7 @@ describe('emit-review lane', () => {
         ARGUS_HEAD_SHA: 'a'.repeat(40),
         __event: { pull_request: { number: 101 } },
       },
-      { submit, head: headAt, reviews: listRev, read: async () => ({ verdict: 'pass', findings: [] }) },
+      { submit, head: headAt, reviews: listRev, read: async () => ({ runNonce: '42', verdict: 'pass', findings: [] }) },
     )
     expect(submit).not.toHaveBeenCalled()
     expect(result.reviewState).toBe('unverified-evidence')
@@ -417,7 +417,7 @@ describe('emit-review lane', () => {
     const list = vi.fn()
     const result = await emitApprovalReview(
       { ...baseEnv, ...approved, ARGUS_HEAD_SHA: '', __event: { pull_request: { number: 101 } } },
-      { submit, list, read: async () => ({ verdict: 'pass', findings: [] }) },
+      { submit, list, read: async () => ({ runNonce: '42', verdict: 'pass', findings: [] }) },
     )
     expect(list).not.toHaveBeenCalled()
     expect(submit).not.toHaveBeenCalled()
@@ -435,7 +435,7 @@ describe('emit-review lane', () => {
         list: async () => {
           throw new Error('HTTP 403')
         },
-        read: async () => ({ verdict: 'pass', findings: [] }),
+        read: async () => ({ runNonce: '42', verdict: 'pass', findings: [] }),
       },
     )
     expect(submit).not.toHaveBeenCalled()
@@ -454,7 +454,7 @@ describe('emit-review lane', () => {
         head: headAt,
         reviews: listRev,
         list: async () => [{ ...greenCheck, app: { slug: 'some-fork-app' } }],
-        read: async () => ({ verdict: 'pass', findings: [] }),
+        read: async () => ({ runNonce: '42', verdict: 'pass', findings: [] }),
       },
     )
     expect(submit).not.toHaveBeenCalled()
@@ -473,7 +473,7 @@ describe('emit-review lane', () => {
         head: async () => 'c'.repeat(40),
         reviews: listRev,
         list: listGreen,
-        read: async () => ({ verdict: 'pass', findings: [] }),
+        read: async () => ({ runNonce: '42', verdict: 'pass', findings: [] }),
       },
     )
     expect(submit).not.toHaveBeenCalled()
@@ -493,7 +493,7 @@ describe('emit-review lane', () => {
         },
         reviews: listRev,
         list: listGreen,
-        read: async () => ({ verdict: 'pass', findings: [] }),
+        read: async () => ({ runNonce: '42', verdict: 'pass', findings: [] }),
       },
     )
     expect(submit).not.toHaveBeenCalled()
@@ -519,7 +519,7 @@ describe('emit-review lane', () => {
         reviews,
         dismiss,
         list: listGreen,
-        read: async () => ({ verdict: 'pass', findings: [] }),
+        read: async () => ({ runNonce: '42', verdict: 'pass', findings: [] }),
       },
     )
     expect(result.ok).toBe(true)
@@ -545,7 +545,7 @@ describe('emit-review lane', () => {
         reviews,
         dismiss,
         list: listGreen,
-        read: async () => ({ verdict: 'pass', findings: [] }),
+        read: async () => ({ runNonce: '42', verdict: 'pass', findings: [] }),
       },
     )
     expect(dismiss).not.toHaveBeenCalled()
@@ -569,7 +569,7 @@ describe('emit-review lane', () => {
         reviews,
         dismiss,
         list: listGreen,
-        read: async () => ({ verdict: 'pass', findings: [] }),
+        read: async () => ({ runNonce: '42', verdict: 'pass', findings: [] }),
       },
     )
     expect(result.ok).toBe(true)
@@ -595,7 +595,7 @@ describe('emit-review lane', () => {
         reviews,
         dismiss,
         list: listGreen,
-        read: async () => ({ verdict: 'pass', findings: [] }),
+        read: async () => ({ runNonce: '42', verdict: 'pass', findings: [] }),
       },
     )
     expect(result.ok).toBe(false)
@@ -613,7 +613,7 @@ describe('emit-review lane', () => {
     const list = vi.fn()
     const result = await emitApprovalReview(
       { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
-      { submit, list, head: headAt, reviews: listRev, read: async () => ({ verdict: 'needs_changes', findings: [] }) },
+      { submit, list, head: headAt, reviews: listRev, read: async () => ({ runNonce: '42', verdict: 'needs_changes', findings: [] }) },
     )
     expect(list).not.toHaveBeenCalled()
     expect(submit.mock.calls[0][0].event).toBe('REQUEST_CHANGES')
@@ -625,7 +625,7 @@ describe('emit-review lane', () => {
     const submit = vi.fn()
     const result = await emitApprovalReview(
       { ...baseEnv, ARGUS_APPROVAL_TOKEN: 'ghs_secret', __event: { pull_request: { number: 101 } } },
-      { submit, head: headAt, reviews: listRev, read: async () => ({ verdict: 'pass', findings: [] }) },
+      { submit, head: headAt, reviews: listRev, read: async () => ({ runNonce: '42', verdict: 'pass', findings: [] }) },
     )
     expect(submit).not.toHaveBeenCalled()
     expect(result.ok).toBe(false)
@@ -664,6 +664,46 @@ describe('emit-review lane', () => {
     expect(lines()).toContain('No review was submitted')
   })
 
+  it('refuses a report that cannot prove it belongs to this workflow run', async () => {
+    // Head sha is public — a planted or leftover code-review.json can always
+    // present it. GITHUB_RUN_ID is not knowable at commit/plant time, so a
+    // report without this run's nonce is residue at best. baseEnv carries
+    // RUN_ID=42, so 'foreign-run' and absent nonces both fail closed.
+    for (const stale of [
+      { verdict: 'pass', findings: [] },
+      { runNonce: 'foreign-run', verdict: 'pass', findings: [] },
+    ]) {
+      const submit = vi.fn()
+      const result = await emitApprovalReview(
+        { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
+        { submit, head: headAt, reviews: listRev, read: async () => stale },
+      )
+      expect(submit).not.toHaveBeenCalled()
+      expect(result.ok).toBe(false)
+      expect(result.reviewState).toBe('stale-report')
+      expect(lines()).toContain('No review was submitted')
+      stdout = []
+    }
+  })
+
+  it('accepts a report carrying this run\'s id — the nonce binds it', async () => {
+    const submit = vi.fn().mockResolvedValue({
+      stdout: JSON.stringify({ id: 1, state: 'APPROVED', user: { login: 'argus[bot]' } }),
+    })
+    const result = await emitApprovalReview(
+      { ...baseEnv, ...approved, __event: { pull_request: { number: 101 } } },
+      {
+        submit,
+        head: headAt,
+        reviews: listRev,
+        list: listGreen,
+        read: async () => ({ runNonce: '42', verdict: 'pass', findings: [] }),
+      },
+    )
+    expect(submit).toHaveBeenCalledOnce()
+    expect(result.ok).toBe(true)
+  })
+
   it('surfaces the Actions-token refusal with a remedy instead of a raw 422', async () => {
     const submit = vi.fn().mockRejectedValue(
       Object.assign(new Error(GITHUB_TOKEN_422), { status: 422 }),
@@ -675,7 +715,7 @@ describe('emit-review lane', () => {
         head: headAt,
         reviews: listRev,
         list: listGreen,
-        read: async () => ({ verdict: 'pass', findings: [] }),
+        read: async () => ({ runNonce: '42', verdict: 'pass', findings: [] }),
       },
     )
     expect(result.ok).toBe(false)

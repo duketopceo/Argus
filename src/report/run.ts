@@ -46,6 +46,8 @@ export interface RunTotals {
   failed: number
   visionCalls: number
   visionCostUsd: number
+  /** Token rollup across per-test calls AND lane-level extraCalls. */
+  visionTokens: number
   sandboxSeconds: number
   budgetExceeded: boolean
   /** OpenRouter spend grouped by model id. */
@@ -66,6 +68,8 @@ export interface RunReport {
   durationMs: number
   ok: boolean
   totals: RunTotals
+  /** Workflow-run nonce (GITHUB_RUN_ID) — freshness binding for post steps. */
+  runNonce?: string
   tests: TestReport[]
   artifacts: { videos: string[] }
   /**
@@ -108,6 +112,12 @@ export function buildRunReport(
    * fails closed instead of reading a silent no-op as green.
    */
   exploreEvidence = false,
+  /**
+   * Workflow-run nonce (GITHUB_RUN_ID). The run manifests bind evidence to
+   * a run via `identity.runNonce`; run.json carries the same stamp so the
+   * serialized-verdict fallback in the post step is bound too.
+   */
+  runNonce?: string,
 ): RunReport {
   const failed = tests.filter((t) => !t.ok).length
   const callsByModel: Record<string, number> = {}
@@ -117,6 +127,10 @@ export function buildRunReport(
     costByModel[c.model] = (costByModel[c.model] ?? 0) + c.costUsd
   }
   const extraVisionCost = extraCalls.reduce((s, c) => s + c.costUsd, 0)
+  const visionTokens = [...tests.flatMap((t) => t.calls), ...extraCalls].reduce(
+    (s, c) => s + c.tokens,
+    0,
+  )
   return {
     tool: 'argus-reviewer',
     startedAt: startedAt.toISOString(),
@@ -132,6 +146,7 @@ export function buildRunReport(
       failed,
       visionCalls: tests.reduce((sum, t) => sum + t.visionCalls, 0) + extraCalls.length,
       visionCostUsd: tests.reduce((sum, t) => sum + t.visionCostUsd, 0) + extraVisionCost,
+      visionTokens,
       sandboxSeconds: tests.reduce((sum, t) => sum + t.sandboxSeconds, 0),
       budgetExceeded: tests.some((t) => t.budgetExceeded),
       callsByModel,
@@ -144,6 +159,7 @@ export function buildRunReport(
       assertionMisses: tests.reduce((sum, t) => sum + (t.cache?.assertionMisses ?? 0), 0),
     },
     tests,
+    ...(runNonce !== undefined ? { runNonce } : {}),
     artifacts: {
       videos: tests.map((t) => t.videoPath).filter((p): p is string => p !== undefined),
     },

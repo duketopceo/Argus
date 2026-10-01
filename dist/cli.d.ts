@@ -94,6 +94,8 @@ interface CodeReviewReport {
     budgetExceeded: boolean;
     /** Identity relationship between the report source and checkout. */
     headBinding?: HeadBinding;
+    /** Workflow-run nonce (GITHUB_RUN_ID) — see runNonceFrom. */
+    runNonce?: string;
     /**
      * Base64 HTML-comment payload (`argus-probe-persist`) carrying reproduced
      * probe source — the sticky poster embeds it verbatim so `@argus persist`

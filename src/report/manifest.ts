@@ -83,6 +83,15 @@ export interface RunIdentity {
   intendedHeadSha: string | undefined
   checkoutSha: string | undefined
   baseSha: string | undefined
+  /**
+   * Run-scoped nonce (GITHUB_RUN_ID) — not knowable when a commit or a
+   * planted file is authored, so residue and plants fail the post step's
+   * freshness gate even when their head sha happens to match. A freshness
+   * marker, not a secret: it is public once the run exists. RUN_ATTEMPT is
+   * deliberately excluded — a re-run of failed jobs would otherwise
+   * invalidate evidence the same run produced. Undefined for local runs.
+   */
+  runNonce: string | undefined
 }
 
 export interface RunManifest {

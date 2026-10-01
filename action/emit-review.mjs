@@ -219,6 +219,22 @@ export async function emitApprovalReview(env, deps = {}) {
     return { ok: false, reviewEvent: 'none', reviewState: 'no-report', message }
   }
 
+  // The report must be this run's own before it can drive any review event.
+  // Head sha alone is forgeable (a commit author knows it); GITHUB_RUN_ID is
+  // not knowable when a commit or planted file is authored, so a report that
+  // cannot present it is residue or plant. Local runs have no run id — the
+  // gate is off by design there, same as the sticky post step.
+  const expectedNonce = (env.GITHUB_RUN_ID ?? '').trim()
+  if (expectedNonce !== '' && codeReview?.runNonce !== expectedNonce) {
+    const message =
+      'argus-reviewer: code-review.json does not carry this workflow run\'s id — ' +
+      'it is stale or was not produced by this run. No review was submitted.'
+    fail(message)
+    setActionOutput('review-event', 'none')
+    setActionOutput('review-state', 'stale-report')
+    return { ok: false, reviewEvent: 'none', reviewState: 'stale-report', message }
+  }
+
   const event = reviewEventFor(codeReview.verdict)
 
   // The run reviewed the code at the head SHA its event carried. If the head has

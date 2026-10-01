@@ -151,11 +151,28 @@ export function isRunManifest(value: unknown): value is RunManifest {
   const m = value as Partial<RunManifest>
   if (m.schemaVersion !== 1) return false
   if (typeof m.runId !== 'string' || typeof m.startedAt !== 'string') return false
-  if (m.identity === undefined || typeof m.identity !== 'object' || m.identity === null) {
+  if (
+    m.identity === undefined ||
+    typeof m.identity !== 'object' ||
+    m.identity === null ||
+    Array.isArray(m.identity)
+  ) {
     return false
   }
+  for (const v of [
+    m.identity.repo,
+    m.identity.pr,
+    m.identity.intendedHeadSha,
+    m.identity.checkoutSha,
+    m.identity.baseSha,
+    m.identity.runNonce,
+  ]) {
+    if (v !== undefined && typeof v !== 'string') return false
+  }
   const aggregate = m.aggregate
-  if (aggregate === undefined || typeof aggregate !== 'object') return false
+  if (aggregate === undefined || aggregate === null || typeof aggregate !== 'object') {
+    return false
+  }
   // aggregate.status feeds LANE_STATUS_LABEL lookups and ok the verdict —
   // a type-confused aggregate must degrade to last-valid, not reach a
   // renderer that throws mid-post.
@@ -165,20 +182,26 @@ export function isRunManifest(value: unknown): value is RunManifest {
   for (const n of [aggregate.calls, aggregate.tokens, aggregate.costUsd]) {
     if (typeof n !== 'number' || !Number.isFinite(n)) return false
   }
-  if (m.lanes === undefined || typeof m.lanes !== 'object') return false
+  if (m.lanes === undefined || m.lanes === null || typeof m.lanes !== 'object') return false
   for (const id of LANE_IDS) {
     const lane = m.lanes[id]
-    if (lane === undefined || typeof lane !== 'object') return false
-    if (typeof lane.lane !== 'string' || typeof lane.status !== 'string') return false
+    if (lane === undefined || lane === null || typeof lane !== 'object') return false
+    if (lane.lane !== id || typeof lane.status !== 'string') return false
     if (!(LANE_STATUSES as readonly string[]).includes(lane.status)) return false
     if (typeof lane.selected !== 'boolean') return false
     // usage/budget are dereferenced by laneView — a guard that certifies a
-    // shape it doesn't check is a lying guard.
-    if (lane.usage === undefined || typeof lane.usage !== 'object') return false
+    // shape it doesn't check is a lying guard. `typeof null === 'object'`,
+    // so a null here must be rejected before the field reads, not crash
+    // inside the guard.
+    if (lane.usage === null || lane.usage === undefined || typeof lane.usage !== 'object') {
+      return false
+    }
     for (const n of [lane.usage.calls, lane.usage.tokens, lane.usage.costUsd]) {
       if (typeof n !== 'number' || !Number.isFinite(n)) return false
     }
-    if (lane.budget === undefined || typeof lane.budget !== 'object') return false
+    if (lane.budget === null || lane.budget === undefined || typeof lane.budget !== 'object') {
+      return false
+    }
   }
   return true
 }

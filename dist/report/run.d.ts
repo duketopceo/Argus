@@ -41,6 +41,8 @@ export interface RunTotals {
     failed: number;
     visionCalls: number;
     visionCostUsd: number;
+    /** Token rollup across per-test calls AND lane-level extraCalls. */
+    visionTokens: number;
     sandboxSeconds: number;
     budgetExceeded: boolean;
     /** OpenRouter spend grouped by model id. */
@@ -60,6 +62,8 @@ export interface RunReport {
     durationMs: number;
     ok: boolean;
     totals: RunTotals;
+    /** Workflow-run nonce (GITHUB_RUN_ID) — freshness binding for post steps. */
+    runNonce?: string;
     tests: TestReport[];
     artifacts: {
         videos: string[];
@@ -99,5 +103,11 @@ extraCalls?: CallCost[],
  * flows. A configured-but-skipped/errored pass is not evidence: the run
  * fails closed instead of reading a silent no-op as green.
  */
-exploreEvidence?: boolean): RunReport;
+exploreEvidence?: boolean, 
+/**
+ * Workflow-run nonce (GITHUB_RUN_ID). The run manifests bind evidence to
+ * a run via `identity.runNonce`; run.json carries the same stamp so the
+ * serialized-verdict fallback in the post step is bound too.
+ */
+runNonce?: string): RunReport;
 export declare function writeRunReport(path: string, report: RunReport): Promise<void>;

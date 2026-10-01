@@ -16,6 +16,8 @@ import {
   selectionFromFlags,
 } from '../../src/pipeline/contracts.js'
 import { runVerify } from '../../src/pipeline/verify.js'
+import { buildRunReport } from '../../src/report/run.js'
+import type { TestReport } from '../../src/report/run.js'
 import type { CallCost } from '../../src/vision/cost.js'
 
 function call(costUsd: number, model = 'test/model'): CallCost {
@@ -117,6 +119,7 @@ describe('runVerify', () => {
         intendedHeadSha: 'abc',
         checkoutSha: 'abc',
         baseSha: 'def',
+        runNonce: undefined,
       },
       selection: { review: true, flow: true, app: false, a0: false },
       flowUrl: 'http://localhost:3000',
@@ -152,7 +155,7 @@ describe('runVerify', () => {
       join(reportDir, 'run.json'),
       JSON.stringify({
         ok: true,
-        totals: { tests: 1, visionCalls: 3, visionCostUsd: 0.003 },
+        totals: { tests: 1, visionCalls: 3, visionCostUsd: 0.003, visionTokens: 310 },
         tests: [{ calls: [{ model: 'm', provider: 'openrouter', tokens: 10, costUsd: 0.001 }] }],
       }),
     )
@@ -166,6 +169,7 @@ describe('runVerify', () => {
         intendedHeadSha: 'abc',
         checkoutSha: 'abc',
         baseSha: 'def',
+        runNonce: undefined,
       },
       selection: { review: false, flow: true, app: false, a0: false },
       flowUrl: 'http://localhost:3000',
@@ -174,6 +178,75 @@ describe('runVerify', () => {
     expect(result.manifest.lanes.flow.status).toBe('passed')
     expect(result.manifest.lanes.flow.usage.calls).toBe(3)
     expect(result.manifest.lanes.flow.usage.costUsd).toBeCloseTo(0.003)
+    // tokens roll up the same way — the explore pass's 300 must reach the
+    // lane and the run aggregate, not just the 10 a test record owned.
+    expect(result.manifest.lanes.flow.usage.tokens).toBe(310)
+    expect(result.manifest.aggregate.tokens).toBe(310)
+  })
+
+  it('buildRunReport emits visionTokens and the run nonce — the producer side of both contracts', () => {
+    // The consumer tests above only prove the reading path. If the write
+    // side stopped emitting visionTokens, every assertion would silently
+    // fall back to the legacy per-test sum and stay green — this pins the
+    // producer.
+    const test: TestReport = {
+      name: 'login flow',
+      file: 'flows/login.ts',
+      ok: true,
+      durationMs: 1,
+      visionCalls: 1,
+      visionCostUsd: 0.001,
+      calls: [{ provider: 'stub', model: 'm', tokens: 10, costUsd: 0.001, kind: 'vision' }],
+      sandboxSeconds: 0,
+      healEvents: [],
+      asserts: [],
+      captures: [],
+    }
+    const extra: CallCost = {
+      provider: 'stub',
+      model: 'm',
+      tokens: 300,
+      costUsd: 0.002,
+      kind: 'vision',
+    }
+    const started = new Date('2026-09-30T00:00:00Z')
+    const report = buildRunReport([test], started, 5, [extra], false, 'run-7')
+    expect(report.totals.visionTokens).toBe(310)
+    expect(report.totals.visionCalls).toBe(2)
+    expect(report.totals.visionCostUsd).toBeCloseTo(0.003)
+    expect(report.runNonce).toBe('run-7')
+    expect(buildRunReport([test], started, 5).runNonce).toBeUndefined()
+  })
+
+  it('flow lane falls back to per-test tokens on a pre-visionTokens run.json', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-'))
+    const reportDir = join(cwd, 'reports')
+    await mkdir(reportDir, { recursive: true })
+    await writeFile(
+      join(reportDir, 'run.json'),
+      JSON.stringify({
+        ok: true,
+        totals: { tests: 1, visionCalls: 1, visionCostUsd: 0.001 },
+        tests: [{ calls: [{ model: 'm', provider: 'openrouter', tokens: 10, costUsd: 0.001 }] }],
+      }),
+    )
+    const result = await runVerify({
+      cwd,
+      runId: 'run-legacy-tokens',
+      reportDir,
+      identity: {
+        repo: 'o/r',
+        pr: '1',
+        intendedHeadSha: 'abc',
+        checkoutSha: 'abc',
+        baseSha: 'def',
+        runNonce: undefined,
+      },
+      selection: { review: false, flow: true, app: false, a0: false },
+      flowUrl: 'http://localhost:3000',
+      runners: { flow: async () => 0 },
+    })
+    expect(result.manifest.lanes.flow.usage.tokens).toBe(10)
   })
 
   it('marks the flow lane failed when run.json claims ok with zero tests', async () => {
@@ -194,6 +267,7 @@ describe('runVerify', () => {
         intendedHeadSha: undefined,
         checkoutSha: undefined,
         baseSha: undefined,
+        runNonce: undefined,
       },
       selection: { review: false, flow: true, app: false, a0: false },
       flowUrl: 'http://localhost:3000',
@@ -230,6 +304,7 @@ describe('runVerify', () => {
         intendedHeadSha: undefined,
         checkoutSha: undefined,
         baseSha: undefined,
+        runNonce: undefined,
       },
       selection: { review: false, flow: true, app: false, a0: false },
       flowUrl: 'http://localhost:3000',
@@ -265,6 +340,7 @@ describe('runVerify', () => {
         intendedHeadSha: 'abc',
         checkoutSha: 'abc',
         baseSha: 'def',
+        runNonce: undefined,
       },
       selection: { review: true, flow: true, app: false, a0: false },
       runners: {
@@ -313,6 +389,7 @@ describe('runVerify', () => {
         intendedHeadSha: 'abc',
         checkoutSha: 'abc',
         baseSha: 'def',
+        runNonce: undefined,
       },
       selection: { review: false, flow: false, app: true, a0: false },
       runners: {
@@ -354,6 +431,7 @@ describe('runVerify', () => {
         intendedHeadSha: 'abc',
         checkoutSha: 'abc',
         baseSha: 'def',
+        runNonce: undefined,
       },
       selection: { review: true, flow: false, app: false, a0: false },
       runners: {
@@ -397,6 +475,7 @@ describe('runVerify', () => {
         intendedHeadSha: 'abc',
         checkoutSha: 'abc',
         baseSha: 'def',
+        runNonce: undefined,
       },
       selection: { review: false, flow: true, app: false, a0: false },
       flowUrl: 'http://localhost:3000',
@@ -428,6 +507,7 @@ describe('runVerify', () => {
         intendedHeadSha: undefined,
         checkoutSha: undefined,
         baseSha: undefined,
+        runNonce: undefined,
       },
       selection: { review: false, flow: true, app: true, a0: false },
       runners: { review: async () => 0, flow: async () => 0 },
@@ -452,6 +532,7 @@ describe('runVerify', () => {
         intendedHeadSha: 'head',
         checkoutSha: 'head',
         baseSha: 'def',
+        runNonce: undefined,
       },
       selection: { review: true, flow: false, app: false, a0: false },
       runners: { review: async () => 0 },
@@ -492,6 +573,7 @@ describe('runVerify', () => {
           intendedHeadSha: 'head',
           checkoutSha: 'merge',
           baseSha: 'def',
+        runNonce: undefined,
         },
         selection: { review: true, flow: false, app: false, a0: false },
         runners: { review: async () => 0 },

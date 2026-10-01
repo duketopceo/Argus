@@ -12,7 +12,13 @@ extraCalls = [],
  * flows. A configured-but-skipped/errored pass is not evidence: the run
  * fails closed instead of reading a silent no-op as green.
  */
-exploreEvidence = false) {
+exploreEvidence = false, 
+/**
+ * Workflow-run nonce (GITHUB_RUN_ID). The run manifests bind evidence to
+ * a run via `identity.runNonce`; run.json carries the same stamp so the
+ * serialized-verdict fallback in the post step is bound too.
+ */
+runNonce) {
     const failed = tests.filter((t) => !t.ok).length;
     const callsByModel = {};
     const costByModel = {};
@@ -21,6 +27,7 @@ exploreEvidence = false) {
         costByModel[c.model] = (costByModel[c.model] ?? 0) + c.costUsd;
     }
     const extraVisionCost = extraCalls.reduce((s, c) => s + c.costUsd, 0);
+    const visionTokens = [...tests.flatMap((t) => t.calls), ...extraCalls].reduce((s, c) => s + c.tokens, 0);
     return {
         tool: 'argus-reviewer',
         startedAt: startedAt.toISOString(),
@@ -36,6 +43,7 @@ exploreEvidence = false) {
             failed,
             visionCalls: tests.reduce((sum, t) => sum + t.visionCalls, 0) + extraCalls.length,
             visionCostUsd: tests.reduce((sum, t) => sum + t.visionCostUsd, 0) + extraVisionCost,
+            visionTokens,
             sandboxSeconds: tests.reduce((sum, t) => sum + t.sandboxSeconds, 0),
             budgetExceeded: tests.some((t) => t.budgetExceeded),
             callsByModel,
@@ -48,6 +56,7 @@ exploreEvidence = false) {
             assertionMisses: tests.reduce((sum, t) => sum + (t.cache?.assertionMisses ?? 0), 0),
         },
         tests,
+        ...(runNonce !== undefined ? { runNonce } : {}),
         artifacts: {
             videos: tests.map((t) => t.videoPath).filter((p) => p !== undefined),
         },
