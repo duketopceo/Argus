@@ -89,6 +89,8 @@ interface CodeReviewReport {
     findingAdjudication?: FindingAdjudicationAudit;
     /** Findings dropped for citing a file/line the diff never shows. */
     droppedUnanchored?: number;
+    /** nit/q findings dropped for asking to revert text the diff added. */
+    droppedReverted?: number;
     calls: CallCost[];
     visionCostUsd: number;
     tokens: number;
@@ -148,6 +150,26 @@ export declare function diffLineRanges(files: readonly {
     filename: string;
     patch?: string | undefined;
 }[]): Map<string, [number, number][]>;
+/**
+ * New-side line number -> line text for every line the diff shows
+ * (added and context). Lets post-parse checks compare a finding's claim
+ * against what the cited line actually says.
+ */
+export declare function diffLineTexts(files: readonly {
+    filename: string;
+    patch?: string | undefined;
+}[]): Map<string, Map<number, string>>;
+/**
+ * Drop nit/q findings that ask to remove or revert text the cited diff
+ * line itself contains — i.e. findings that would undo wording the PR
+ * deliberately added ("remove `inconclusive`", "replace 'self-reported'
+ * with 'self-reported'"). bug/risk findings are never touched: if the
+ * claim is real, severity stays the reviewer's call.
+ */
+export declare function filterRevertNits(findings: readonly ReviewFinding[], textsByFile: Map<string, Map<number, string>>): {
+    kept: ReviewFinding[];
+    dropped: ReviewFinding[];
+};
 /**
  * Drop findings whose line isn't visible in the file's diff. A finding on
  * a file the diff doesn't touch, or at a line outside every hunk, is

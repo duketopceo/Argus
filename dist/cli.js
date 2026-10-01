@@ -1185,6 +1185,63 @@ export function diffLineRanges(files) {
     return byFile;
 }
 /**
+ * New-side line number -> line text for every line the diff shows
+ * (added and context). Lets post-parse checks compare a finding's claim
+ * against what the cited line actually says.
+ */
+export function diffLineTexts(files) {
+    const byFile = new Map();
+    for (const f of files) {
+        const lines = new Map();
+        let newLine = 0;
+        for (const raw of (f.patch ?? '').split('\n')) {
+            const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw);
+            if (hunk !== null) {
+                newLine = Number(hunk[1]);
+                continue;
+            }
+            if (newLine === 0)
+                continue;
+            const tag = raw[0];
+            if (tag === '+' || tag === ' ') {
+                lines.set(newLine, raw.slice(1));
+                newLine++;
+            }
+        }
+        byFile.set(f.filename, lines);
+    }
+    return byFile;
+}
+const REVERT_VERB = /\b(?:remove|delete|drop|strip|revert)\s+[`'"]([^`'"]{2,80})[`'"]/i;
+const REPLACE_VERB = /\b(?:replace|rename|reword|swap)\s+[`'"][^`'"]{2,80}[`'"]\s+(?:with|to|by)\s+[`'"]([^`'"]{2,80})[`'"]/i;
+/**
+ * Drop nit/q findings that ask to remove or revert text the cited diff
+ * line itself contains — i.e. findings that would undo wording the PR
+ * deliberately added ("remove `inconclusive`", "replace 'self-reported'
+ * with 'self-reported'"). bug/risk findings are never touched: if the
+ * claim is real, severity stays the reviewer's call.
+ */
+export function filterRevertNits(findings, textsByFile) {
+    const kept = [];
+    const dropped = [];
+    for (const f of findings) {
+        if ((f.severity === 'nit' || f.severity === 'q') && f.line !== undefined) {
+            const lineText = textsByFile.get(f.file)?.get(f.line);
+            if (lineText !== undefined) {
+                const remove = REVERT_VERB.exec(f.message);
+                const replace = REPLACE_VERB.exec(f.message);
+                if ((remove !== null && lineText.includes(remove[1] ?? '')) ||
+                    (replace !== null && lineText.includes(replace[1] ?? ''))) {
+                    dropped.push(f);
+                    continue;
+                }
+            }
+        }
+        kept.push(f);
+    }
+    return { kept, dropped };
+}
+/**
  * Drop findings whose line isn't visible in the file's diff. A finding on
  * a file the diff doesn't touch, or at a line outside every hunk, is
  * unverifiable and unpostable — misnumbered and fabricated citations land
@@ -1542,7 +1599,9 @@ async function cmdCodeReview(args, ctx, deps) {
         // hunk (or in a file the diff doesn't touch) is unverifiable and
         // unpostable. Filter at parse and again after synthesis.
         const diffRanges = diffLineRanges(files);
+        const diffTexts = diffLineTexts(files);
         let droppedUnanchored = 0;
+        let droppedReverted = 0;
         for (let i = 0; i < chunks.length; i++) {
             if (ledger.budgetExceeded)
                 break;
@@ -1562,10 +1621,12 @@ async function cmdCodeReview(args, ctx, deps) {
             const parsed = parseCodeReview(response.content);
             const anchored = filterToDiffLines(parsed.findings, diffRanges);
             droppedUnanchored += anchored.dropped.length;
-            if (anchored.dropped.length > 0) {
-                debug('code-review', `chunk ${i + 1}: dropped ${anchored.dropped.length} finding(s) citing lines outside the diff`);
+            const vetted = filterRevertNits(anchored.kept, diffTexts);
+            droppedReverted += vetted.dropped.length;
+            if (anchored.dropped.length + vetted.dropped.length > 0) {
+                debug('code-review', `chunk ${i + 1}: dropped ${anchored.dropped.length} outside-diff, ${vetted.dropped.length} revert-nit finding(s)`);
             }
-            allFindings.push(...anchored.kept);
+            allFindings.push(...vetted.kept);
             stage(`chunk ${i + 1}/${chunks.length} — ${parsed.findings.length} finding(s)`);
             if (ledger.budgetExceeded) {
                 ctx.err(`code-review: budget exceeded after chunk ${i + 1}; stopping early`);
@@ -1597,7 +1658,9 @@ async function cmdCodeReview(args, ctx, deps) {
                         : allFindings;
                 const anchored = filterToDiffLines(finalFindings, diffRanges);
                 droppedUnanchored += anchored.dropped.length;
-                finalFindings = anchored.kept;
+                const vetted = filterRevertNits(anchored.kept, diffTexts);
+                droppedReverted += vetted.dropped.length;
+                finalFindings = vetted.kept;
                 if (ledger.budgetExceeded) {
                     ctx.err('code-review: budget exceeded after synthesis; stopping early');
                 }
@@ -1842,6 +1905,7 @@ async function cmdCodeReview(args, ctx, deps) {
             ...(triage !== undefined ? { triage } : {}),
             ...(findingAdjudication !== undefined ? { findingAdjudication } : {}),
             ...(droppedUnanchored > 0 ? { droppedUnanchored } : {}),
+            ...(droppedReverted > 0 ? { droppedReverted } : {}),
             maxComments,
             calls: allCalls,
             visionCostUsd: totalCost,

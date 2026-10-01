@@ -1,0 +1,663 @@
+{
+  "label": "exp4",
+  "at": "2026-10-01T21:34:23.332Z",
+  "metrics": {
+    "reports_produced": 1,
+    "planted_recall": 0.8571,
+    "corpus_cost_usd": 0.0136,
+    "finding_count": 35,
+    "verdict_correct_count": 5,
+    "verdict_total": 6,
+    "secrets_correct_count": 4,
+    "secrets_total": 5,
+    "suppressed_count": 5,
+    "tokens": 99075,
+    "items_reviewed": 8
+  },
+  "items": [
+    {
+      "name": "clean-refactor",
+      "kind": "trees",
+      "precisionOnly": false,
+      "verdict": "approve",
+      "expectedVerdictIn": [
+        "pass",
+        "approve"
+      ],
+      "verdictCorrect": true,
+      "findings": [
+        {
+          "file": "src/format.ts",
+          "line": 3,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L3: 🔵 nit: Use a constant for default currency symbol. Extract '$' to `CURRENCY_SYMBOLS`.",
+          "suggestion": "const CURRENCY_SYMBOLS: Record<string, string> = { EUR: '€', GBP: '£', USD: '$' }\n\nfunction pad2(n: number): string {\n  return String(n).padStart(2, '0')\n}\n\nfunction symbolFor(currency: string): string {\n  return CURRENCY_SYMBOLS[currency] ?? '$'\n}\n\nexport function formatPrice(cents: number, currency: string): string {\n  const whole = Math.floor(cents / 100)\n  const frac = pad2(cents % 100)\n  return `${symbolFor(currency)}${whole}.${frac}`\n}\n\nexport function formatDate(iso: string): string {\n  const d = new Date(iso)\n  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`\n}\n\nexport function summarize(label: string, cents: number, currency: string, iso: string): string {\n",
+          "p": 0.17
+        },
+        {
+          "file": "src/format.ts",
+          "line": 5,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L5: 🔵 nit: Consider extracting padding logic to a reusable function. Move `pad2` function definition before `symbolFor`.",
+          "suggestion": null,
+          "p": 0.17
+        },
+        {
+          "file": "src/format.ts",
+          "line": 7,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L7: 🔵 nit: Extract currency symbol lookup to a dedicated function. Make `symbolFor` return `CURRENCY_SYMBOLS[currency] ?? '$'`.",
+          "suggestion": null,
+          "p": 0.17
+        },
+        {
+          "file": "src/format.ts",
+          "line": 11,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L11: 🔵 nit: Use the `pad2` function for fractional part of the price. Use `pad2(cents % 100)`.",
+          "suggestion": null,
+          "p": 0.21
+        },
+        {
+          "file": "src/format.ts",
+          "line": 11,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L11: 🔵 nit: Use the `symbolFor` function to get the currency symbol. Use `${symbolFor(currency)}`.",
+          "suggestion": null,
+          "p": 0.17
+        },
+        {
+          "file": "src/format.ts",
+          "line": 15,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L15: 🔵 nit: Use the `pad2` function for month and day. Use `pad2(d.getUTCMonth() + 1)` and `pad2(d.getUTCDate())`.",
+          "suggestion": null,
+          "p": 0.19
+        }
+      ],
+      "secretsRecords": [],
+      "planted": [],
+      "secretsExpect": [],
+      "costUsd": 0.0005205780000000001,
+      "tokens": 4568,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-clean-refactor-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "demo-pr",
+      "kind": "source",
+      "precisionOnly": false,
+      "verdict": "needs_changes",
+      "expectedVerdictIn": [
+        "needs_changes"
+      ],
+      "verdictCorrect": true,
+      "findings": [
+        {
+          "file": "src/discount.ts",
+          "line": 5,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "L5: 🔴 bug: `applyDiscount` applies the discount percentage twice. Remove the second multiplication.",
+          "suggestion": "  return price * (1 - pct / 100);\n",
+          "p": 0.52
+        },
+        {
+          "file": "docs/setup.md",
+          "line": 7,
+          "severity": "q",
+          "category": "usability",
+          "message": "L7: ❓ q: AWS credentials setup is unclear. Provide specific environment variable names and example values.",
+          "suggestion": null,
+          "p": 0.53
+        }
+      ],
+      "secretsRecords": [
+        {
+          "file": ".env.example",
+          "line": 2,
+          "patternClass": "stripe-live",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.08
+        },
+        {
+          "file": "docs/setup.md",
+          "line": 8,
+          "patternClass": "aws-access-key",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.07
+        }
+      ],
+      "planted": [
+        {
+          "file": "src/discount.ts",
+          "line": 6,
+          "severity": "bug",
+          "category": "correctness",
+          "note": "discount applied a second time",
+          "found": true
+        }
+      ],
+      "secretsExpect": [
+        {
+          "file": "docs/setup.md",
+          "line": 8,
+          "expect": "quiet",
+          "note": "AWS docs example key — should be suppressed or never flagged",
+          "suppressed": true,
+          "flagged": false,
+          "adjudicated": true,
+          "correct": true
+        },
+        {
+          "file": ".env.example",
+          "line": 2,
+          "expect": "quiet",
+          "note": "key content says fake/DEMO — suppression is correct adjudication",
+          "suppressed": true,
+          "flagged": false,
+          "adjudicated": true,
+          "correct": true
+        }
+      ],
+      "costUsd": 0.000340248,
+      "tokens": 4070,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-demo-pr-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "fp-traps",
+      "kind": "trees",
+      "precisionOnly": false,
+      "verdict": "approve",
+      "expectedVerdictIn": [
+        "pass",
+        "approve"
+      ],
+      "verdictCorrect": true,
+      "findings": [
+        {
+          "file": "src/cache.ts",
+          "line": 6,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L6: 🔵 nit: `Cache` should expose a way to stop the sweeper. Add a `stopSweeper` method.",
+          "suggestion": null,
+          "p": 0.41
+        },
+        {
+          "file": "src/cache.ts",
+          "line": 12,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L12: 🔵 nit: `dispose` should also stop the sweeper. Clear `this.sweeper` after `clearInterval`.",
+          "suggestion": null,
+          "p": 0.35
+        },
+        {
+          "file": "src/users.ts",
+          "line": 11,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L11: 🔵 nit: `userEmail` function should be documented. Add a JSDoc comment explaining its purpose and parameters.",
+          "suggestion": null,
+          "p": 0.35
+        },
+        {
+          "file": "src/users.ts",
+          "line": 17,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L17: 🔵 nit: `daysSince` function should be documented. Add a JSDoc comment explaining its purpose and parameters.",
+          "suggestion": null,
+          "p": 0.33
+        }
+      ],
+      "secretsRecords": [],
+      "planted": [],
+      "secretsExpect": [],
+      "costUsd": 0.00033924,
+      "tokens": 3826,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-fp-traps-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "planted-security",
+      "kind": "trees",
+      "precisionOnly": false,
+      "verdict": "needs_changes",
+      "expectedVerdictIn": [
+        "needs_changes"
+      ],
+      "verdictCorrect": true,
+      "findings": [
+        {
+          "file": "src/api.ts",
+          "line": 21,
+          "severity": "risk",
+          "category": "security",
+          "message": "L21: 🟡 risk: SQL injection vulnerability. Sanitize or use parameterized queries for `id`.",
+          "suggestion": null,
+          "p": 0.92
+        },
+        {
+          "file": "src/api.ts",
+          "line": 21,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "L21: 🔴 bug: `id` can be an empty string. Add check before querying DB.",
+          "suggestion": null,
+          "p": 0.75
+        },
+        {
+          "file": "src/api.ts",
+          "line": 25,
+          "severity": "risk",
+          "category": "security",
+          "message": "L25: 🟡 risk: Unauthenticated admin check. `x-admin` header can be easily spoofed. Implement proper authentication/authorization.",
+          "suggestion": null,
+          "p": 0.92
+        }
+      ],
+      "secretsRecords": [],
+      "planted": [
+        {
+          "file": "src/api.ts",
+          "line": 25,
+          "severity": "bug",
+          "category": "security",
+          "note": "string-interpolated SQL — injection",
+          "found": true
+        },
+        {
+          "file": "src/api.ts",
+          "line": 30,
+          "severity": "risk",
+          "category": "security",
+          "note": "x-admin header trusted — authz bypass",
+          "found": true
+        }
+      ],
+      "secretsExpect": [],
+      "costUsd": 0.00030976500000000004,
+      "tokens": 3057,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-planted-security-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "planted-trio",
+      "kind": "trees",
+      "precisionOnly": false,
+      "verdict": "needs_changes",
+      "expectedVerdictIn": [
+        "needs_changes"
+      ],
+      "verdictCorrect": true,
+      "findings": [
+        {
+          "file": "src/cart.ts",
+          "line": 15,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "L15: 🔴 bug: `cartTotal` sums item prices instead of `lineTotal`. Fix: use `sum + lineTotal(item)`.",
+          "suggestion": null,
+          "p": 0.62
+        },
+        {
+          "file": "src/cart.ts",
+          "line": 18,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "L18: 🔴 bug: `cartTotal` does not use `lineTotal`. Fix: change loop to `sum += lineTotal(item)`.",
+          "suggestion": null,
+          "p": 0.44
+        },
+        {
+          "file": "src/cart.ts",
+          "line": 22,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "L22: 🔴 bug: validation for `pct` in `applyCoupon` is removed. Fix: add back `if (!Number.isFinite(pct) || pct < 0 || pct > 100) { throw new RangeError('invalid coupon pct') }`.",
+          "suggestion": null,
+          "p": 0.87
+        },
+        {
+          "file": "src/cart.ts",
+          "line": 26,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "L26: 🔴 bug: `persistCart` does not await `writeFile`. Fix: add `await` before `writeFile`.",
+          "suggestion": null,
+          "p": 0.8
+        }
+      ],
+      "secretsRecords": [],
+      "planted": [
+        {
+          "file": "src/cart.ts",
+          "line": 17,
+          "severity": "bug",
+          "category": "correctness",
+          "note": "cartTotal drops qty — sum += item.price",
+          "found": true
+        },
+        {
+          "file": "src/cart.ts",
+          "line": 24,
+          "severity": "bug",
+          "category": "correctness",
+          "note": "applyCoupon lost its range/NaN guard — NaN propagates",
+          "found": true
+        },
+        {
+          "file": "src/cart.ts",
+          "line": 29,
+          "severity": "risk",
+          "category": "correctness",
+          "note": "persistCart no longer awaits writeFile — fire-and-forget",
+          "found": true
+        }
+      ],
+      "secretsExpect": [],
+      "costUsd": 0.00033118800000000006,
+      "tokens": 3492,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-planted-trio-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "pr-107-snapshot",
+      "kind": "revisions",
+      "precisionOnly": true,
+      "verdict": "needs_changes",
+      "expectedVerdictIn": null,
+      "verdictCorrect": null,
+      "findings": [
+        {
+          "file": "src/report/viewmodel.ts",
+          "line": 184,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "`lane.usage` and `lane.budget` can be null, causing a crash. Add null checks before accessing their properties.",
+          "suggestion": null,
+          "p": 0.45
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 631,
+          "severity": "risk",
+          "category": "correctness",
+          "message": "Mock `read` result is missing `runNonce`. Run identity validation requires this field to match `baseEnv.RUN_ID`.",
+          "suggestion": null,
+          "p": 0.75
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 670,
+          "severity": "risk",
+          "category": "correctness",
+          "message": "Mock `read` result is missing `runNonce`. Run identity validation requires this field to match `baseEnv.RUN_ID`.",
+          "suggestion": null,
+          "p": 0.66
+        }
+      ],
+      "secretsRecords": [
+        {
+          "file": "tests/unit/action-contract.test.ts",
+          "line": 1160,
+          "patternClass": "generic-assignment",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.11
+        }
+      ],
+      "planted": [],
+      "secretsExpect": [],
+      "costUsd": 0.007390622999999999,
+      "tokens": 45920,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-pr-107-snapshot-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "pr-109-snapshot",
+      "kind": "revisions",
+      "precisionOnly": true,
+      "verdict": "approve",
+      "expectedVerdictIn": null,
+      "verdictCorrect": null,
+      "findings": [
+        {
+          "file": "src/cli.ts",
+          "line": 905,
+          "severity": "nit",
+          "category": "convention",
+          "message": "heal: a0 delegation cap reached (${maxDelegations}) — remaining failures get no diagnosis",
+          "suggestion": null,
+          "p": 0.23
+        },
+        {
+          "file": "src/cli.ts",
+          "line": 908,
+          "severity": "nit",
+          "category": "convention",
+          "message": "heal: a0 budget exhausted — remaining failures get no diagnosis",
+          "suggestion": null,
+          "p": 0.27
+        },
+        {
+          "file": "src/cli.ts",
+          "line": 2684,
+          "severity": "nit",
+          "category": "convention",
+          "message": "a0 host ${host} is remote but the target ${url} is loopback — the host cannot reach it",
+          "suggestion": null,
+          "p": 0.37
+        },
+        {
+          "file": "src/executor/a0.ts",
+          "line": 35,
+          "severity": "nit",
+          "category": "convention",
+          "message": "The verify --a0 lane reports unverified-live — no live host round-trip has been proven yet (issue #53), so a completed delegation is inconclusive evidence, never a passed verdict.",
+          "suggestion": null,
+          "p": 0.29
+        },
+        {
+          "file": "src/executor/a0.ts",
+          "line": 392,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Every completed delegation — success or reported failure — is evidence whose truth is unverified until the live-host round-trip lands (#53).",
+          "suggestion": null,
+          "p": 0.28
+        },
+        {
+          "file": "tests/unit/a0-escalation.test.ts",
+          "line": 303,
+          "severity": "nit",
+          "category": "convention",
+          "message": "No literal under a password-named key — GitGuardian's generic-password scan can't tell a fixture from a leak; build it so nothing flags.",
+          "suggestion": null,
+          "p": 0.43
+        },
+        {
+          "file": "tests/unit/cli.test.ts",
+          "line": 540,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Test `run with heal:a0 delegates each failed test to Agent Zero` has a comment that doesn't match the code. Remove the comment or update the config.",
+          "suggestion": null,
+          "p": 0.45
+        },
+        {
+          "file": "tests/unit/detect.test.ts",
+          "line": 13,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Missing `defaultProbe` import. Add `defaultProbe` to the import statement.",
+          "suggestion": null,
+          "p": 0.59
+        },
+        {
+          "file": "tests/unit/detect.test.ts",
+          "line": 16,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Missing `defaultProbe` import from `node:http`. Add `Server` to the import.",
+          "suggestion": null,
+          "p": 0.52
+        },
+        {
+          "file": "tests/unit/detect.test.ts",
+          "line": 17,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Missing `AddressInfo` import from `node:net`. Add `AddressInfo` to the import.",
+          "suggestion": null,
+          "p": 0.39
+        }
+      ],
+      "secretsRecords": [],
+      "planted": [],
+      "secretsExpect": [],
+      "costUsd": 0.00401487,
+      "tokens": 30102,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-pr-109-snapshot-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "secrets-mix",
+      "kind": "trees",
+      "precisionOnly": false,
+      "verdict": "approve",
+      "expectedVerdictIn": [
+        "needs_changes"
+      ],
+      "verdictCorrect": false,
+      "findings": [
+        {
+          "file": ".env.example",
+          "line": 2,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L2: 🔵 nit: Add `WEBHOOK_URL` to `.env.example`. Use a placeholder value like `https://hooks.slack.com/services/T000/B000/XXXX`.",
+          "suggestion": null,
+          "p": 0.37
+        },
+        {
+          "file": ".env.example",
+          "line": 3,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L3: 🔵 nit: Add `STRIPE_SECRET_KEY` to `.env.example`. Use a placeholder value like `sk_test_...`.",
+          "suggestion": null,
+          "p": 0.46
+        },
+        {
+          "file": "README.md",
+          "line": 6,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L6: 🔵 nit: Document `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in `README.md` using example values.",
+          "suggestion": null,
+          "p": 0.43
+        }
+      ],
+      "secretsRecords": [
+        {
+          "file": ".env.example",
+          "line": 3,
+          "patternClass": "stripe-live",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.12
+        },
+        {
+          "file": "README.md",
+          "line": 8,
+          "patternClass": "aws-access-key",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.11
+        }
+      ],
+      "planted": [
+        {
+          "file": ".env.example",
+          "line": 3,
+          "severity": "bug",
+          "category": "security",
+          "note": "live-format Stripe key committed to .env.example",
+          "found": false
+        }
+      ],
+      "secretsExpect": [
+        {
+          "file": "README.md",
+          "line": 8,
+          "expect": "quiet",
+          "note": "AWS docs example — suppress or never flag",
+          "suppressed": true,
+          "flagged": false,
+          "adjudicated": true,
+          "correct": true
+        },
+        {
+          "file": ".env.example",
+          "line": 3,
+          "expect": "flagged",
+          "note": "live-shaped sk_live_ key",
+          "suppressed": true,
+          "flagged": false,
+          "adjudicated": true,
+          "correct": false
+        },
+        {
+          "file": "src/config.ts",
+          "line": 13,
+          "expect": "quiet",
+          "note": "labeled test id — suppress or never flag",
+          "suppressed": false,
+          "flagged": false,
+          "adjudicated": false,
+          "correct": true
+        }
+      ],
+      "costUsd": 0.000351051,
+      "tokens": 4040,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-secrets-mix-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    }
+  ]
+}

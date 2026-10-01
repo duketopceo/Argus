@@ -1,0 +1,1052 @@
+{
+  "label": "exp4b",
+  "at": "2026-10-01T21:36:17.730Z",
+  "metrics": {
+    "reports_produced": 1,
+    "planted_recall": 0.8571,
+    "corpus_cost_usd": 0.0121,
+    "finding_count": 79,
+    "verdict_correct_count": 4,
+    "verdict_total": 6,
+    "secrets_correct_count": 2,
+    "secrets_total": 5,
+    "suppressed_count": 5,
+    "tokens": 104217,
+    "items_reviewed": 8
+  },
+  "items": [
+    {
+      "name": "clean-refactor",
+      "kind": "trees",
+      "precisionOnly": false,
+      "verdict": "approve",
+      "expectedVerdictIn": [
+        "pass",
+        "approve"
+      ],
+      "verdictCorrect": true,
+      "findings": [
+        {
+          "file": "src/format.ts",
+          "line": 3,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L3: 🔵 nit: Constant `CURRENCY_SYMBOLS` should be uppercase snake case. Rename to `CURRENCY_SYMBOLS`.",
+          "suggestion": null,
+          "p": 0.16
+        },
+        {
+          "file": "src/format.ts",
+          "line": 3,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L3: 🔵 nit: Constant `CURRENCY_SYMBOLS` should be uppercase snake case. Rename to `CURRENCY_SYMBOLS`.",
+          "suggestion": null,
+          "p": 0.15
+        },
+        {
+          "file": "src/format.ts",
+          "line": 3,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L3: 🔵 nit: Constant `CURRENCY_SYMBOLS` should be uppercase snake case. Rename to `CURRENCY_SYMBOLS`.",
+          "suggestion": null,
+          "p": 0.16
+        },
+        {
+          "file": "src/format.ts",
+          "line": 3,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L3: 🔵 nit: Constant `CURRENCY_SYMBOLS` should be uppercase snake case. Rename to `CURRENCY_SYMBOLS`.",
+          "suggestion": null,
+          "p": 0.17
+        },
+        {
+          "file": "src/format.ts",
+          "line": 3,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L3: 🔵 nit: Constant `CURRENCY_SYMBOLS` should be uppercase snake case. Rename to `CURRENCY_SYMBOLS`.",
+          "suggestion": null,
+          "p": 0.16
+        }
+      ],
+      "secretsRecords": [],
+      "planted": [],
+      "secretsExpect": [],
+      "costUsd": 0.000377244,
+      "tokens": 4062,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-clean-refactor-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "demo-pr",
+      "kind": "source",
+      "precisionOnly": false,
+      "verdict": "needs_changes",
+      "expectedVerdictIn": [
+        "needs_changes"
+      ],
+      "verdictCorrect": true,
+      "findings": [
+        {
+          "file": "src/discount.ts",
+          "line": 5,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "L5: 🔴 bug: The discount is applied twice, reducing the price by `pct * 2` instead of `pct`. Remove the second multiplication.",
+          "suggestion": null,
+          "p": 0.44
+        },
+        {
+          "file": ".env.example",
+          "line": 2,
+          "severity": "risk",
+          "category": "security",
+          "message": "L2: 🟡 risk: `STRIPE_SECRET_KEY` is hardcoded in the example. Use a placeholder like `sk_test_...`.",
+          "suggestion": null,
+          "p": 0.7
+        },
+        {
+          "file": "docs/setup.md",
+          "line": 6,
+          "severity": "risk",
+          "category": "security",
+          "message": "L6: 🟡 risk: `AWS_ACCESS_KEY_ID` is hardcoded in the example. Use a placeholder like `AKIA...EXAMPLE`.",
+          "suggestion": null,
+          "p": 0.64
+        },
+        {
+          "file": "docs/setup.md",
+          "line": 7,
+          "severity": "risk",
+          "category": "security",
+          "message": "L7: 🟡 risk: `AWS_SECRET_ACCESS_KEY` is hardcoded in the example. Use a placeholder like `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE`.",
+          "suggestion": null,
+          "p": 0.71
+        }
+      ],
+      "secretsRecords": [
+        {
+          "file": ".env.example",
+          "line": 2,
+          "patternClass": "stripe-live",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.06
+        },
+        {
+          "file": "docs/setup.md",
+          "line": 8,
+          "patternClass": "aws-access-key",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.08
+        }
+      ],
+      "planted": [
+        {
+          "file": "src/discount.ts",
+          "line": 6,
+          "severity": "bug",
+          "category": "correctness",
+          "note": "discount applied a second time",
+          "found": true
+        }
+      ],
+      "secretsExpect": [
+        {
+          "file": "docs/setup.md",
+          "line": 8,
+          "expect": "quiet",
+          "note": "AWS docs example key — should be suppressed or never flagged",
+          "suppressed": true,
+          "flagged": true,
+          "adjudicated": true,
+          "correct": false
+        },
+        {
+          "file": ".env.example",
+          "line": 2,
+          "expect": "quiet",
+          "note": "key content says fake/DEMO — suppression is correct adjudication",
+          "suppressed": true,
+          "flagged": true,
+          "adjudicated": true,
+          "correct": false
+        }
+      ],
+      "costUsd": 0.000386232,
+      "tokens": 4594,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-demo-pr-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "fp-traps",
+      "kind": "trees",
+      "precisionOnly": false,
+      "verdict": "needs_changes",
+      "expectedVerdictIn": [
+        "pass",
+        "approve"
+      ],
+      "verdictCorrect": false,
+      "findings": [
+        {
+          "file": "src/cache.ts",
+          "line": 7,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L7: 🔵 nit: `sweeper` is not disposed in the Cache constructor. Initialize `sweeper` to null in the constructor.",
+          "suggestion": null,
+          "p": 0.34
+        },
+        {
+          "file": "src/cache.ts",
+          "line": 11,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L11: 🔵 nit: `dispose` should be called on the `Cache` instance to prevent memory leaks. Add a clear comment or documentation about its usage.",
+          "suggestion": null,
+          "p": 0.31
+        },
+        {
+          "file": "src/users.ts",
+          "line": 18,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "L18: 🔴 bug: `userEmail` can throw an error if `u` or `u.email` is falsy. Consider returning undefined or an empty string instead of throwing an error.",
+          "suggestion": null,
+          "p": 0.45
+        }
+      ],
+      "secretsRecords": [],
+      "planted": [],
+      "secretsExpect": [],
+      "costUsd": 0.00031188,
+      "tokens": 3637,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-fp-traps-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "planted-security",
+      "kind": "trees",
+      "precisionOnly": false,
+      "verdict": "needs_changes",
+      "expectedVerdictIn": [
+        "needs_changes"
+      ],
+      "verdictCorrect": true,
+      "findings": [
+        {
+          "file": "src/api.ts",
+          "line": 21,
+          "severity": "risk",
+          "category": "security",
+          "message": "L21: 🟡 risk: direct string interpolation in SQL query allows SQL injection. Sanitize `id` or use parameterized queries.",
+          "suggestion": null,
+          "p": 0.93
+        },
+        {
+          "file": "src/api.ts",
+          "line": 26,
+          "severity": "risk",
+          "category": "security",
+          "message": "L26: 🟡 risk: `x-admin` header can be easily spoofed. Use a more secure authentication mechanism for admin checks.",
+          "suggestion": null,
+          "p": 0.89
+        }
+      ],
+      "secretsRecords": [],
+      "planted": [
+        {
+          "file": "src/api.ts",
+          "line": 25,
+          "severity": "bug",
+          "category": "security",
+          "note": "string-interpolated SQL — injection",
+          "found": true
+        },
+        {
+          "file": "src/api.ts",
+          "line": 30,
+          "severity": "risk",
+          "category": "security",
+          "note": "x-admin header trusted — authz bypass",
+          "found": true
+        }
+      ],
+      "secretsExpect": [],
+      "costUsd": 0.000265353,
+      "tokens": 2816,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-planted-security-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "planted-trio",
+      "kind": "trees",
+      "precisionOnly": false,
+      "verdict": "needs_changes",
+      "expectedVerdictIn": [
+        "needs_changes"
+      ],
+      "verdictCorrect": true,
+      "findings": [
+        {
+          "file": "src/cart.ts",
+          "line": 15,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "L15: 🔴 bug: `cartTotal` incorrectly sums `item.price` instead of using `lineTotal`. Use `lineTotal(item)`.",
+          "suggestion": null,
+          "p": 0.64
+        },
+        {
+          "file": "src/cart.ts",
+          "line": 23,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "L23: 🔴 bug: `applyCoupon` has no validation for `pct`. Add validation: `if (!Number.isFinite(pct) || pct < 0 || pct > 100) { throw new RangeError('invalid coupon pct'); }`.",
+          "suggestion": null,
+          "p": 0.7
+        },
+        {
+          "file": "src/cart.ts",
+          "line": 26,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "L26: 🔴 bug: `persistCart` does not await `writeFile`. Add await.",
+          "suggestion": null,
+          "p": 0.82
+        }
+      ],
+      "secretsRecords": [],
+      "planted": [
+        {
+          "file": "src/cart.ts",
+          "line": 17,
+          "severity": "bug",
+          "category": "correctness",
+          "note": "cartTotal drops qty — sum += item.price",
+          "found": true
+        },
+        {
+          "file": "src/cart.ts",
+          "line": 24,
+          "severity": "bug",
+          "category": "correctness",
+          "note": "applyCoupon lost its range/NaN guard — NaN propagates",
+          "found": true
+        },
+        {
+          "file": "src/cart.ts",
+          "line": 29,
+          "severity": "risk",
+          "category": "correctness",
+          "note": "persistCart no longer awaits writeFile — fire-and-forget",
+          "found": true
+        }
+      ],
+      "secretsExpect": [],
+      "costUsd": 0.000286914,
+      "tokens": 3229,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-planted-trio-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "pr-107-snapshot",
+      "kind": "revisions",
+      "precisionOnly": true,
+      "verdict": "approve",
+      "expectedVerdictIn": null,
+      "verdictCorrect": null,
+      "findings": [
+        {
+          "file": ".github/workflows/ci.yml",
+          "line": 43,
+          "severity": "nit",
+          "category": "other",
+          "message": "L43: 🔵 nit: Add `npm run smoke:dashboard` to the CI workflow. Consider if this test should run on every commit or only on release branches.",
+          "suggestion": null,
+          "p": 0.25
+        },
+        {
+          "file": "action/emit-review.mjs",
+          "line": 226,
+          "severity": "nit",
+          "category": "other",
+          "message": "L226: 🔵 nit: The nonce check is important for preventing stale reports. Consider adding a specific check or warning if GITHUB_RUN_ID is not set in the action environment, as this implies a local run where the check is intentionally bypassed.",
+          "suggestion": null,
+          "p": 0.24
+        },
+        {
+          "file": "action/sticky-comment.cjs",
+          "line": 94,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "L94: 🔵 nit: The `validManifest` function now checks for `identity.runNonce` as a string. Ensure this field is always present and correctly formatted in manifests generated by `argus-reviewer`.",
+          "suggestion": null,
+          "p": 0.25
+        },
+        {
+          "file": "action/sticky-comment.cjs",
+          "line": 104,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "L104: 🔵 nit: The loop iterating over `m.identity` fields can be simplified. Instead of checking `v !== undefined && typeof v !== 'string'`, consider using `typeof v !== 'string'` directly, as `undefined` values are implicitly handled by `typeof`.",
+          "suggestion": null,
+          "p": 0.22
+        },
+        {
+          "file": "action/sticky-comment.cjs",
+          "line": 111,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "L111: 🔵 nit: The validation `lane.lane === id` ensures the lane name matches the key. This is a good check for structural integrity.",
+          "suggestion": null,
+          "p": 0.11
+        },
+        {
+          "file": "package.json",
+          "line": 46,
+          "severity": "nit",
+          "category": "other",
+          "message": "L46: 🔵 nit: Added `smoke:dashboard` script. Consider documenting this new script in the README.",
+          "suggestion": null,
+          "p": 0.24
+        },
+        {
+          "file": "scripts/collect.mjs",
+          "line": 75,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "L75: 🔵 nit: The `validManifest` function now includes checks for `identity.runNonce`. This aligns with the nonce validation introduced elsewhere.",
+          "suggestion": null,
+          "p": 0.11
+        },
+        {
+          "file": "scripts/collect.mjs",
+          "line": 85,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "L85: 🔵 nit: Similar to `action/sticky-comment.cjs`, the loop checking `m.identity` fields could be slightly simplified. Using `typeof v !== 'string'` directly is sufficient.",
+          "suggestion": null,
+          "p": 0.19
+        },
+        {
+          "file": "scripts/collect.mjs",
+          "line": 92,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "L92: 🔵 nit: The validation `lane.lane === id` is a good check for data integrity.",
+          "suggestion": null,
+          "p": 0.11
+        },
+        {
+          "file": "src/cli.ts",
+          "line": 87,
+          "severity": "nit",
+          "category": "other",
+          "message": "L87: 🔵 nit: The `runNonceFrom` function correctly extracts `GITHUB_RUN_ID`. Consider adding a comment explaining why `RUN_ATTEMPT` is excluded from the nonce, as mentioned in `src/report/manifest.ts`.",
+          "suggestion": null,
+          "p": 0.3
+        },
+        {
+          "file": "src/cli.ts",
+          "line": 2150,
+          "severity": "nit",
+          "category": "usability",
+          "message": "L2150: 🔵 nit: The `--no-review` flag is introduced. Consider updating the help text to explicitly mention how this flag interacts with existing flags like `--review`.",
+          "suggestion": null,
+          "p": 0.28
+        },
+        {
+          "file": "src/pipeline/verify.ts",
+          "line": 75,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "L75: 🔵 nit: Added `visionTokens` to `FlowReport`. Ensure that `run.json` files generated by older versions of `argus-reviewer` are handled gracefully (e.g., fallback to existing `usage.tokens`).",
+          "suggestion": null,
+          "p": 0.34
+        },
+        {
+          "file": "src/report/manifest.ts",
+          "line": 83,
+          "severity": "nit",
+          "category": "other",
+          "message": "L83: 🔵 nit: Added `runNonce` to `RunIdentity`. The JSDoc clearly explains its purpose and exclusion of `RUN_ATTEMPT`.",
+          "suggestion": null,
+          "p": 0.11
+        },
+        {
+          "file": "src/report/viewmodel.ts",
+          "line": 153,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L153: 🔵 nit: Added Array.isArray check for `m.identity`. This check is redundant since `typeof m.identity !== 'object'` already fails for arrays.",
+          "suggestion": "if (m.identity === undefined || typeof m.identity !== 'object' || m.identity === null) {",
+          "p": 0.26
+        },
+        {
+          "file": "src/report/viewmodel.ts",
+          "line": 169,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L169: 🔵 nit: Added null check for `aggregate`. Redundant because `typeof aggregate !== 'object'` already handles null.",
+          "suggestion": "if (aggregate === undefined || typeof aggregate !== 'object') {",
+          "p": 0.25
+        },
+        {
+          "file": "src/report/viewmodel.ts",
+          "line": 177,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L177: 🔵 nit: Added null check for `m.lanes`. Redundant because `typeof m.lanes !== 'object'` already handles null.",
+          "suggestion": "if (m.lanes === undefined || typeof m.lanes !== 'object') {",
+          "p": 0.24
+        },
+        {
+          "file": "src/report/viewmodel.ts",
+          "line": 187,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L187: 🔵 nit: Added null check for `lane.usage`. Redundant because `typeof lane.usage !== 'object'` already handles null.",
+          "suggestion": "if (lane.usage === undefined || typeof lane.usage !== 'object') {",
+          "p": 0.24
+        },
+        {
+          "file": "src/report/viewmodel.ts",
+          "line": 192,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L192: 🔵 nit: Added null check for `lane.budget`. Redundant because `typeof lane.budget !== 'object'` already handles null.",
+          "suggestion": "if (lane.budget === undefined || typeof lane.budget !== 'object') {",
+          "p": 0.26
+        },
+        {
+          "file": "tests/unit/action-contract.test.ts",
+          "line": 568,
+          "severity": "nit",
+          "category": "other",
+          "message": "L568: 🔵 nit: Add comment explaining the purpose of `runNonce` in the test fixture.",
+          "suggestion": null,
+          "p": 0.22
+        },
+        {
+          "file": "tests/unit/action-contract.test.ts",
+          "line": 834,
+          "severity": "nit",
+          "category": "other",
+          "message": "L834: 🔵 nit: Improve clarity of test case name for better understanding of the failure scenario.",
+          "suggestion": null,
+          "p": 0.21
+        },
+        {
+          "file": "tests/unit/action-contract.test.ts",
+          "line": 886,
+          "severity": "nit",
+          "category": "other",
+          "message": "L886: 🔵 nit: Add comment to clarify why `run.json` is dropped when its `runNonce` is foreign.",
+          "suggestion": null,
+          "p": 0.23
+        },
+        {
+          "file": "tests/unit/action-contract.test.ts",
+          "line": 1095,
+          "severity": "nit",
+          "category": "other",
+          "message": "L1095: 🔵 nit: Add comment explaining the 'plant vector' concept for manifests with foreign nonces.",
+          "suggestion": null,
+          "p": 0.25
+        },
+        {
+          "file": "tests/unit/action-contract.test.ts",
+          "line": 1156,
+          "severity": "nit",
+          "category": "other",
+          "message": "L1156: 🔵 nit: Add comment explaining why a manifest bound to the correct head but wrong run is ignored.",
+          "suggestion": null,
+          "p": 0.2
+        },
+        {
+          "file": "tests/unit/app-lane.test.ts",
+          "line": 483,
+          "severity": "nit",
+          "category": "other",
+          "message": "L483: 🔵 nit: Initialize `runNonce` to `undefined` in test fixture for explicit clarity.",
+          "suggestion": null,
+          "p": 0.22
+        },
+        {
+          "file": "tests/unit/app-lane.test.ts",
+          "line": 540,
+          "severity": "nit",
+          "category": "other",
+          "message": "L540: 🔵 nit: Initialize `runNonce` to `undefined` in test fixture for explicit clarity.",
+          "suggestion": null,
+          "p": 0.2
+        },
+        {
+          "file": "tests/unit/app-lane.test.ts",
+          "line": 581,
+          "severity": "nit",
+          "category": "other",
+          "message": "L581: 🔵 nit: Initialize `runNonce` to `undefined` in test fixture for explicit clarity.",
+          "suggestion": null,
+          "p": 0.22
+        },
+        {
+          "file": "tests/unit/app-lane.test.ts",
+          "line": 740,
+          "severity": "nit",
+          "category": "usability",
+          "message": "L740: 🔵 nit: Add comment explaining that `--no-review` alone selects nothing and fails the run.",
+          "suggestion": null,
+          "p": 0.22
+        },
+        {
+          "file": "tests/unit/app-lane.test.ts",
+          "line": 782,
+          "severity": "nit",
+          "category": "usability",
+          "message": "L782: 🔵 nit: Add comment explaining the composition of `--no-review` and `--app` to maintain review negation.",
+          "suggestion": null,
+          "p": 0.23
+        },
+        {
+          "file": "tests/unit/app-lane.test.ts",
+          "line": 825,
+          "severity": "nit",
+          "category": "other",
+          "message": "L825: 🔵 nit: Add comment explaining the nonce binding in CI environments and the exclusion of `GITHUB_RUN_ATTEMPT`.",
+          "suggestion": null,
+          "p": 0.22
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 323,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L323: 🔵 nit: Add `runNonce` to stubbed `read` response for better test coverage. This aligns the test with the new `runNonce` requirement.",
+          "suggestion": null,
+          "p": 0.25
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 353,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L353: 🔵 nit: Add `runNonce` to stubbed `read` response for better test coverage. This aligns the test with the new `runNonce` requirement.",
+          "suggestion": null,
+          "p": 0.23
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 371,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L371: 🔵 nit: Add `runNonce` to stubbed `read` response for better test coverage. This aligns the test with the new `runNonce` requirement.",
+          "suggestion": null,
+          "p": 0.23
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 389,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L389: 🔵 nit: Add `runNonce` to stubbed `read` response for better test coverage. This aligns the test with the new `runNonce` requirement.",
+          "suggestion": null,
+          "p": 0.23
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 407,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L407: 🔵 nit: Add `runNonce` to stubbed `read` response for better test coverage. This aligns the test with the new `runNonce` requirement.",
+          "suggestion": null,
+          "p": 0.22
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 419,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L419: 🔵 nit: Add `runNonce` to stubbed `read` response for better test coverage. This aligns the test with the new `runNonce` requirement.",
+          "suggestion": null,
+          "p": 0.21
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 438,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L438: 🔵 nit: Add `runNonce` to stubbed `read` response for better test coverage. This aligns the test with the new `runNonce` requirement.",
+          "suggestion": null,
+          "p": 0.22
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 457,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L457: 🔵 nit: Add `runNonce` to stubbed `read` response for better test coverage. This aligns the test with the new `runNonce` requirement.",
+          "suggestion": null,
+          "p": 0.2
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 476,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L476: 🔵 nit: Add `runNonce` to stubbed `read` response for better test coverage. This aligns the test with the new `runNonce` requirement.",
+          "suggestion": null,
+          "p": 0.21
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 496,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L496: 🔵 nit: Add `runNonce` to stubbed `read` response for better test coverage. This aligns the test with the new `runNonce` requirement.",
+          "suggestion": null,
+          "p": 0.21
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 522,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L522: 🔵 nit: Add `runNonce` to stubbed `read` response for better test coverage. This aligns the test with the new `runNonce` requirement.",
+          "suggestion": null,
+          "p": 0.21
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 548,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L548: 🔵 nit: Add `runNonce` to stubbed `read` response for better test coverage. This aligns the test with the new `runNonce` requirement.",
+          "suggestion": null,
+          "p": 0.18
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 574,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L574: 🔵 nit: Add `runNonce` to stubbed `read` response for better test coverage. This aligns the test with the new `runNonce` requirement.",
+          "suggestion": null,
+          "p": 0.2
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 600,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L600: 🔵 nit: Add `runNonce` to stubbed `read` response for better test coverage. This aligns the test with the new `runNonce` requirement.",
+          "suggestion": null,
+          "p": 0.21
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 616,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L616: 🔵 nit: Add `runNonce` to stubbed `read` response for better test coverage. This aligns the test with the new `runNonce` requirement.",
+          "suggestion": null,
+          "p": 0.22
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 628,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L628: 🔵 nit: Add `runNonce` to stubbed `read` response for better test coverage. This aligns the test with the new `runNonce` requirement.",
+          "suggestion": null,
+          "p": 0.22
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 667,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L667: 🔵 nit: Add `runNonce` to stubbed `read` response for better test coverage. This aligns the test with the new `runNonce` requirement.",
+          "suggestion": null,
+          "p": 0.21
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 680,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L680: 🔵 nit: Add `runNonce` to stubbed `read` response for better test coverage. This aligns the test with the new `runNonce` requirement.",
+          "suggestion": null,
+          "p": 0.21
+        },
+        {
+          "file": "tests/unit/pipeline.test.ts",
+          "line": 120,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L120: 🔵 nit: Initialize `runNonce` to undefined in the test identity object. This is the correct default state before a nonce is assigned or used.",
+          "suggestion": null,
+          "p": 0.21
+        },
+        {
+          "file": "tests/unit/pipeline.test.ts",
+          "line": 157,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L157: 🔵 nit: Add `visionTokens` to the stubbed `run.json`. This ensures the test reflects the new metric being reported.",
+          "suggestion": null,
+          "p": 0.21
+        },
+        {
+          "file": "tests/unit/pipeline.test.ts",
+          "line": 175,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L175: 🔵 nit: Add `runNonce` to stubbed identity. This ensures the test verifies the correct propagation of the run nonce.",
+          "suggestion": null,
+          "p": 0.21
+        },
+        {
+          "file": "tests/unit/pipeline.test.ts",
+          "line": 178,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L178: 🔵 nit: Assert that `visionTokens` are correctly rolled up to the flow lane and the aggregate. This verifies the new metric's rollup logic.",
+          "suggestion": null
+        },
+        {
+          "file": "tests/unit/pipeline.test.ts",
+          "line": 180,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L180: 🔵 nit: Assert that `visionTokens` are correctly rolled up to the flow lane and the aggregate. This verifies the new metric's rollup logic.",
+          "suggestion": null
+        },
+        {
+          "file": "tests/unit/pipeline.test.ts",
+          "line": 190,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L190: 🔵 nit: Add `buildRunReport` test for `visionTokens` and `runNonce`. This pins the producer side of the contract, ensuring these new fields are emitted.",
+          "suggestion": null
+        },
+        {
+          "file": "tests/unit/pipeline.test.ts",
+          "line": 217,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L217: 🔵 nit: Test that the flow lane correctly falls back to per-test tokens when `run.json` predates `visionTokens`. This ensures backward compatibility.",
+          "suggestion": null
+        },
+        {
+          "file": "tests/unit/pipeline.test.ts",
+          "line": 233,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L233: 🔵 nit: Initialize `runNonce` to undefined in the test identity object. This is the correct default state before a nonce is assigned or used.",
+          "suggestion": null
+        },
+        {
+          "file": "tests/unit/pipeline.test.ts",
+          "line": 271,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L271: 🔵 nit: Initialize `runNonce` to undefined in the test identity object. This is the correct default state before a nonce is assigned or used.",
+          "suggestion": null
+        },
+        {
+          "file": "tests/unit/pipeline.test.ts",
+          "line": 433,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L433: 🔵 nit: Initialize `runNonce` to undefined in the test identity object. This is the correct default state before a nonce is assigned or used.",
+          "suggestion": null
+        }
+      ],
+      "secretsRecords": [
+        {
+          "file": "tests/unit/action-contract.test.ts",
+          "line": 1160,
+          "patternClass": "generic-assignment",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.1
+        }
+      ],
+      "planted": [],
+      "secretsExpect": [],
+      "costUsd": 0.0081410826,
+      "tokens": 61461,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-pr-107-snapshot-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "pr-109-snapshot",
+      "kind": "revisions",
+      "precisionOnly": true,
+      "verdict": "needs_changes",
+      "expectedVerdictIn": null,
+      "verdictCorrect": null,
+      "findings": [
+        {
+          "file": "src/cli.ts",
+          "line": 905,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "L905: 🔴 bug: loopback URL check is incomplete. `file:` URLs should also be considered loopback.",
+          "suggestion": null,
+          "p": 0.68
+        },
+        {
+          "file": "src/cli.ts",
+          "line": 915,
+          "severity": "risk",
+          "category": "correctness",
+          "message": "L915: 🟡 risk: a0 delegation cap is not respected. Delegations continue even after cap is reached, potentially incurring unexpected costs.",
+          "suggestion": null,
+          "p": 0.42
+        }
+      ],
+      "secretsRecords": [],
+      "planted": [],
+      "secretsExpect": [],
+      "costUsd": 0.0018520233000000003,
+      "tokens": 20117,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-pr-109-snapshot-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "secrets-mix",
+      "kind": "trees",
+      "precisionOnly": false,
+      "verdict": "approve",
+      "expectedVerdictIn": [
+        "needs_changes"
+      ],
+      "verdictCorrect": false,
+      "findings": [
+        {
+          "file": ".env.example",
+          "line": 3,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L3: 🔵 nit: Use a placeholder for `WEBHOOK_URL` that looks like a real URL but isn't functional. For example, `https://hooks.example.com/services/T000/B000/XXXX`.",
+          "suggestion": null,
+          "p": 0.27
+        },
+        {
+          "file": "README.md",
+          "line": 6,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L6: 🔵 nit: Use a placeholder for `AWS_ACCESS_KEY_ID` that looks like a real AWS key but isn't functional. For example, `AKIAIOSFODNN7EXAMPLE`.",
+          "suggestion": null,
+          "p": 0.35
+        },
+        {
+          "file": "README.md",
+          "line": 7,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L7: 🔵 nit: Use a placeholder for `AWS_SECRET_ACCESS_KEY` that looks like a real AWS secret key but isn't functional. For example, `wJalrXUtnFEMI/K7MDENG/bPxRfiCYzEXAMPLEKEY`.",
+          "suggestion": null,
+          "p": 0.31
+        }
+      ],
+      "secretsRecords": [
+        {
+          "file": ".env.example",
+          "line": 3,
+          "patternClass": "stripe-live",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.12
+        },
+        {
+          "file": "README.md",
+          "line": 8,
+          "patternClass": "aws-access-key",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.11
+        }
+      ],
+      "planted": [
+        {
+          "file": ".env.example",
+          "line": 3,
+          "severity": "bug",
+          "category": "security",
+          "note": "live-format Stripe key committed to .env.example",
+          "found": false
+        }
+      ],
+      "secretsExpect": [
+        {
+          "file": "README.md",
+          "line": 8,
+          "expect": "quiet",
+          "note": "AWS docs example — suppress or never flag",
+          "suppressed": true,
+          "flagged": false,
+          "adjudicated": true,
+          "correct": true
+        },
+        {
+          "file": ".env.example",
+          "line": 3,
+          "expect": "flagged",
+          "note": "live-shaped sk_live_ key",
+          "suppressed": true,
+          "flagged": false,
+          "adjudicated": true,
+          "correct": false
+        },
+        {
+          "file": "src/config.ts",
+          "line": 13,
+          "expect": "quiet",
+          "note": "labeled test id — suppress or never flag",
+          "suppressed": false,
+          "flagged": false,
+          "adjudicated": false,
+          "correct": true
+        }
+      ],
+      "costUsd": 0.000437061,
+      "tokens": 4301,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-secrets-mix-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    }
+  ]
+}
