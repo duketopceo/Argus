@@ -104,7 +104,6 @@ describe('BrowserDriver + Actions (fixture page)', () => {
 })
 
 describe('exploratory capture (U4a)', () => {
-  const EXPLORE_URL = fileURLToPath(new URL('../fixtures/explore.html', import.meta.url))
   let port: number
   let target: TargetProcess | undefined
 
@@ -129,7 +128,7 @@ describe('exploratory capture (U4a)', () => {
   it('is off by default — no taps, no captures', async () => {
     const driver = await BrowserDriver.launch({ browserTimeoutMs: 8_000 })
     try {
-      await driver.goto(`file://${EXPLORE_URL}`)
+      await driver.goto(`http://127.0.0.1:${port}/explore.html`)
       await new Promise((r) => setTimeout(r, 250))
       expect(driver.pageCaptures()).toEqual([])
     } finally {
@@ -140,7 +139,7 @@ describe('exploratory capture (U4a)', () => {
   it('captures console errors and page errors, collapsing repeats', async () => {
     const driver = await BrowserDriver.launch({ captureErrors: true, browserTimeoutMs: 8_000 })
     try {
-      await driver.goto(`file://${EXPLORE_URL}`)
+      await driver.goto(`http://127.0.0.1:${port}/explore.html`)
       const caps = await settle(driver)
       const consoleErr = caps.find(
         (c) => c.kind === 'console-error' && c.text.includes('seeded console boom'),

@@ -142,6 +142,40 @@ describe('runVerify', () => {
     })
   })
 
+  it('flow lane usage counts run-total calls no test report owns (explore spend)', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-'))
+    const reportDir = join(cwd, 'reports')
+    await mkdir(reportDir, { recursive: true })
+    // One test-owned call plus two explore-lane calls folded into totals —
+    // usage must reflect the billed total, not just the per-test calls.
+    await writeFile(
+      join(reportDir, 'run.json'),
+      JSON.stringify({
+        ok: true,
+        totals: { tests: 1, visionCalls: 3, visionCostUsd: 0.003 },
+        tests: [{ calls: [{ model: 'm', provider: 'openrouter', tokens: 10, costUsd: 0.001 }] }],
+      }),
+    )
+    const result = await runVerify({
+      cwd,
+      runId: 'run-usage',
+      reportDir,
+      identity: {
+        repo: 'o/r',
+        pr: '1',
+        intendedHeadSha: 'abc',
+        checkoutSha: 'abc',
+        baseSha: 'def',
+      },
+      selection: { review: false, flow: true, app: false, a0: false },
+      flowUrl: 'http://localhost:3000',
+      runners: { flow: async () => 0 },
+    })
+    expect(result.manifest.lanes.flow.status).toBe('passed')
+    expect(result.manifest.lanes.flow.usage.calls).toBe(3)
+    expect(result.manifest.lanes.flow.usage.costUsd).toBeCloseTo(0.003)
+  })
+
   it('marks the flow lane failed when run.json claims ok with zero tests', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-'))
     const reportDir = join(cwd, 'reports')

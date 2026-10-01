@@ -234,6 +234,37 @@ describe('argus-reviewer CLI', () => {
     expect(report.totals.tests).toBe(0)
   }, 60_000)
 
+  it('fails closed when a test file registers nothing and records no evidence', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-cli-empty-file-'))
+    const testsDir = join(cwd, 'tests')
+    const reportDir = join(cwd, 'report')
+    await mkdir(testsDir, { recursive: true })
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({ testsDir, reportDir, budgetUsd: 1 }),
+    )
+    // Imports cleanly, but registers no test() and calls no td.* — the file
+    // produces zero evidence and must not read as a pass.
+    await writeFile(join(testsDir, 'empty.test.mjs'), `// intentionally empty\n`)
+    const out = capture()
+    const err = capture()
+    const code = await main(['run', '--url', FIXTURE_URL], {
+      cwd,
+      out: out.fn,
+      err: err.fn,
+      createClient: () => new StubClient([]),
+    })
+    expect(code).toBe(1)
+    expect(out.lines.join('\n')).toContain('FAIL empty')
+    const report = JSON.parse(await readFile(join(reportDir, 'run.json'), 'utf8')) as {
+      ok: boolean
+      tests: { name: string; ok: boolean; failureMessage?: string }[]
+    }
+    expect(report.ok).toBe(false)
+    expect(report.tests[0]?.ok).toBe(false)
+    expect(report.tests[0]?.failureMessage).toContain('no evidence')
+  }, 60_000)
+
   it('invokes config pageSetup with the page before navigation', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'argus-setup-'))
     const testsDir = join(cwd, 'tests')

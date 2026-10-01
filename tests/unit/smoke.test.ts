@@ -151,6 +151,14 @@ describe('argus-reviewer end-to-end smoke', () => {
     expect(code).toBe(0)
     expect(out.lines.join('\n')).toContain('PASS smoke-flow')
     expect(runClient.calls.length).toBeLessThanOrEqual(1)
+
+    // Replay economics are explainable: run.json carries the cache outcome
+    // and the provider-call count matches what the client actually spent.
+    const report = JSON.parse(await readFile(join(reportDir, 'run.json'), 'utf8')) as {
+      totals: { visionCalls: number; cacheHits: number; cacheHeals: number }
+    }
+    expect(report.totals.visionCalls).toBe(runClient.calls.length)
+    expect(report.totals.cacheHits + report.totals.cacheHeals).toBeGreaterThanOrEqual(1)
   }, 60_000)
 
   it('fails to run when no target URL is provided', async () => {

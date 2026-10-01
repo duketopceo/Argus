@@ -678,9 +678,17 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
         const registered = takeTests()
         if (registered.length === 0) {
           const state = fileSession.ledgerState
-          const ok = importError === undefined && !fileSession.failed
+          // Fail closed on zero evidence: a file that registers no tests and
+          // records no steps/asserts produced nothing a reviewer can trust.
+          const noEvidence =
+            fileSession.steps.length === 0 && fileSession.asserts.length === 0
+          const ok = importError === undefined && !fileSession.failed && !noEvidence
           const failureMessage =
-            importError?.message ?? (fileSession.failed ? fileSession.failureReason : undefined)
+            importError?.message ??
+            (fileSession.failed ? fileSession.failureReason : undefined) ??
+            (noEvidence
+              ? 'no evidence — file registered no tests and recorded no steps or assertions'
+              : undefined)
           reports.push({
             name: fileSlug,
             file,
@@ -704,11 +712,15 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
           if (!ok && failureMessage !== undefined) ctx.err(`  reason: ${failureMessage}`)
         } else {
           for (const registeredTest of registered) {
-            const session = await makeSession(
-              `${fileSlug}__${slugify(registeredTest.name)}`,
-              driver,
-              client,
-            )
+            // Generated tests name their single test after the flow and the
+            // file alike (`smoke-flow` inside `smoke-flow.test.ts`); binding
+            // the file-level flow lets a recorded flow replay cache-first on
+            // its very first run instead of missing on `<file>__<test>`.
+            const sessionFlowName =
+              slugify(registeredTest.name) === fileSlug
+                ? fileSlug
+                : `${fileSlug}__${slugify(registeredTest.name)}`
+            const session = await makeSession(sessionFlowName, driver, client)
             bindSession(session)
             session.ledger.startSandbox()
             const testStart = Date.now()

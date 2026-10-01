@@ -118,15 +118,17 @@ function flowCalls(report: FlowReport | undefined) {
 function flowUsage(report: FlowReport | undefined) {
   const calls = flowCalls(report)
   const usage = providerUsageFromCalls(calls)
-  if (report?.totals !== undefined && calls.length === 0) {
-    return {
-      ...usage,
-      calls: report.totals.visionCalls ?? 0,
-      tokens: 0,
-      costUsd: report.totals.visionCostUsd ?? 0,
-    }
+  const totals = report?.totals
+  if (totals === undefined) return usage
+  // totals are the authoritative rollup — they fold in lane-level calls the
+  // per-test reports never own (e.g. the explore pass). Per-call records
+  // still supply tokens and the model tag, which totals don't carry.
+  return {
+    ...usage,
+    calls: totals.visionCalls ?? usage.calls,
+    tokens: usage.tokens,
+    costUsd: totals.visionCostUsd ?? usage.costUsd,
   }
-  return usage
 }
 
 function flowCache(report: FlowReport | undefined): CacheSummary | undefined {
