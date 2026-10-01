@@ -87,6 +87,8 @@ interface CodeReviewReport {
     triage?: TriageRecord;
     /** U8 adjudication audit — per-finding p + suppressed records. */
     findingAdjudication?: FindingAdjudicationAudit;
+    /** Findings dropped for citing a file/line the diff never shows. */
+    droppedUnanchored?: number;
     calls: CallCost[];
     visionCostUsd: number;
     tokens: number;
@@ -137,6 +139,25 @@ export declare function parseCodeReview(content: string): {
  * synthesis output is ungrounded model text, never committable code.
  */
 export declare function carryForwardSuggestions(findings: CodeReviewReport['findings'], originals: CodeReviewReport['findings']): CodeReviewReport['findings'];
+/**
+ * New-side (RIGHT) line ranges covered by each file's diff hunks — the
+ * only lines a finding can anchor to (and the only ones it could have
+ * seen).
+ */
+export declare function diffLineRanges(files: readonly {
+    filename: string;
+    patch?: string | undefined;
+}[]): Map<string, [number, number][]>;
+/**
+ * Drop findings whose line isn't visible in the file's diff. A finding on
+ * a file the diff doesn't touch, or at a line outside every hunk, is
+ * unverifiable and unpostable — misnumbered and fabricated citations land
+ * here. Line-less (file-level) findings always survive.
+ */
+export declare function filterToDiffLines(findings: readonly ReviewFinding[], rangesByFile: Map<string, [number, number][]>): {
+    kept: ReviewFinding[];
+    dropped: ReviewFinding[];
+};
 /**
  * R3/KTD2 — Jev P(true-positive) at/above which a blocker-severity finding
  * counts as proven for the REQUEST_CHANGES gate. This is a different axis

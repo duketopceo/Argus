@@ -1166,6 +1166,50 @@ export function carryForwardSuggestions(findings, originals) {
     });
 }
 /**
+ * New-side (RIGHT) line ranges covered by each file's diff hunks — the
+ * only lines a finding can anchor to (and the only ones it could have
+ * seen).
+ */
+export function diffLineRanges(files) {
+    const byFile = new Map();
+    for (const f of files) {
+        const ranges = [];
+        for (const m of (f.patch ?? '').matchAll(/@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/g)) {
+            const start = Number(m[1]);
+            const len = m[2] === undefined ? 1 : Number(m[2]);
+            if (len > 0)
+                ranges.push([start, start + len - 1]);
+        }
+        byFile.set(f.filename, ranges);
+    }
+    return byFile;
+}
+/**
+ * Drop findings whose line isn't visible in the file's diff. A finding on
+ * a file the diff doesn't touch, or at a line outside every hunk, is
+ * unverifiable and unpostable — misnumbered and fabricated citations land
+ * here. Line-less (file-level) findings always survive.
+ */
+export function filterToDiffLines(findings, rangesByFile) {
+    const kept = [];
+    const dropped = [];
+    for (const f of findings) {
+        const line = f.line;
+        if (line === undefined) {
+            kept.push(f);
+            continue;
+        }
+        const ranges = rangesByFile.get(f.file);
+        if (ranges !== undefined && ranges.some(([a, b]) => line >= a && line <= b)) {
+            kept.push(f);
+        }
+        else {
+            dropped.push(f);
+        }
+    }
+    return { kept, dropped };
+}
+/**
  * R3/KTD2 — Jev P(true-positive) at/above which a blocker-severity finding
  * counts as proven for the REQUEST_CHANGES gate. This is a different axis
  * from `review.findingThreshold` (P(false-positive) for nit/q suppression)
@@ -1494,6 +1538,11 @@ async function cmdCodeReview(args, ctx, deps) {
                 stage(`${triageLine(triage)} — ${routed.reason}`);
         }
         stage(`reviewing ${chunks.length} chunk(s) — model ${reviewModel}`);
+        // Findings must anchor to lines the diff shows — a cite outside every
+        // hunk (or in a file the diff doesn't touch) is unverifiable and
+        // unpostable. Filter at parse and again after synthesis.
+        const diffRanges = diffLineRanges(files);
+        let droppedUnanchored = 0;
         for (let i = 0; i < chunks.length; i++) {
             if (ledger.budgetExceeded)
                 break;
@@ -1511,7 +1560,12 @@ async function cmdCodeReview(args, ctx, deps) {
             recordSpend(response.cost);
             lastModel = response.model;
             const parsed = parseCodeReview(response.content);
-            allFindings.push(...parsed.findings);
+            const anchored = filterToDiffLines(parsed.findings, diffRanges);
+            droppedUnanchored += anchored.dropped.length;
+            if (anchored.dropped.length > 0) {
+                debug('code-review', `chunk ${i + 1}: dropped ${anchored.dropped.length} finding(s) citing lines outside the diff`);
+            }
+            allFindings.push(...anchored.kept);
             stage(`chunk ${i + 1}/${chunks.length} — ${parsed.findings.length} finding(s)`);
             if (ledger.budgetExceeded) {
                 ctx.err(`code-review: budget exceeded after chunk ${i + 1}; stopping early`);
@@ -1541,6 +1595,9 @@ async function cmdCodeReview(args, ctx, deps) {
                     parsed.findings.length > 0
                         ? carryForwardSuggestions(parsed.findings, allFindings)
                         : allFindings;
+                const anchored = filterToDiffLines(finalFindings, diffRanges);
+                droppedUnanchored += anchored.dropped.length;
+                finalFindings = anchored.kept;
                 if (ledger.budgetExceeded) {
                     ctx.err('code-review: budget exceeded after synthesis; stopping early');
                 }
@@ -1551,16 +1608,16 @@ async function cmdCodeReview(args, ctx, deps) {
             }
         }
         if (summary === undefined || verdict === undefined) {
-            if (allFindings.length === 0) {
+            if (finalFindings.length === 0) {
                 summary = 'No issues found';
                 verdict = 'pass';
             }
-            else if (allFindings.some((f) => ['bug', 'risk'].includes(f.severity))) {
-                summary = `${allFindings.length} finding(s) include bug or risk`;
+            else if (finalFindings.some((f) => ['bug', 'risk'].includes(f.severity))) {
+                summary = `${finalFindings.length} finding(s) include bug or risk`;
                 verdict = 'needs_changes';
             }
             else {
-                summary = `${allFindings.length} low-severity finding(s)`;
+                summary = `${finalFindings.length} low-severity finding(s)`;
                 verdict = 'approve';
             }
         }
@@ -1784,6 +1841,7 @@ async function cmdCodeReview(args, ctx, deps) {
             ...(secretsScan !== undefined ? { secretsScan } : {}),
             ...(triage !== undefined ? { triage } : {}),
             ...(findingAdjudication !== undefined ? { findingAdjudication } : {}),
+            ...(droppedUnanchored > 0 ? { droppedUnanchored } : {}),
             maxComments,
             calls: allCalls,
             visionCostUsd: totalCost,
