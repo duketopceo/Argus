@@ -25,7 +25,6 @@
 
 import { execFileSync, spawnSync } from 'node:child_process'
 import {
-  cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -121,7 +120,6 @@ function basename(p) {
   return p.replace(/\/+$/, '').split('/').pop()
 }
 
-const SEV_RANK = { bug: 3, risk: 2, nit: 1, q: 0 }
 const HIGH = new Set(['bug', 'risk'])
 
 function findingMatches(f, planted) {
@@ -290,7 +288,7 @@ function main() {
     items_reviewed: out.length,
   }
 
-  const slim = out.map(({ diff, ...rest }) => rest)
+  const slim = out.map(({ diff: _diff, ...rest }) => rest)
   writeFileSync(
     join(RESULTS, `${label}.json`),
     JSON.stringify({ label, at: new Date().toISOString(), metrics, items: slim }, null, 2),
