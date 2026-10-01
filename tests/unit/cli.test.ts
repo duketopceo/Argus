@@ -522,6 +522,28 @@ describe('argus-reviewer CLI', () => {
     expect(await main(['delegate', 'task'], { cwd, out: capture().fn, err: capture().fn, exec })).toBe(1)
   })
 
+  it('delegate refuses an env-resolved remote host with a loopback target (#53)', async () => {
+    // AGENT_ZERO_HOST reaches the child env even without --host/a0.url —
+    // the refusal must resolve the effective host, not just the flag.
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-delegate-remote-'))
+    let spawned = false
+    const err = capture()
+    const code = await main(['delegate', 'check the page', '--url', 'http://localhost:3000'], {
+      cwd,
+      out: capture().fn,
+      err: err.fn,
+      env: { ...process.env, AGENT_ZERO_HOST: 'https://a0.remote.test' },
+      exec: async () => {
+        spawned = true
+        return { code: 0, stdout: '', stderr: '' }
+      },
+      probe: async () => false,
+    })
+    expect(code).toBe(1)
+    expect(spawned).toBe(false)
+    expect(err.lines.join('\n')).toContain('is remote but the target')
+  })
+
   it('run with heal:a0 delegates each failed test to Agent Zero', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'argus-heal-'))
     const testsDir = join(cwd, 'tests')

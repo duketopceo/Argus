@@ -8,7 +8,7 @@ import { parseArgs } from 'node:util';
 import { bindSession, renderTestFile, takeTests, td, test as registerTest, TdSession, } from './api.js';
 import { DEFAULT_RECORD_STEP_CAP, loadConfig, resolveBlockSeverities, resolveConfig, resolveMaxComments, sanitizeExpectation, unknownProviderSlugs, } from './config.js';
 import { debug, setLiveDir } from './debug.js';
-import { defaultExec, detectEnvironment } from './detect.js';
+import { defaultExec, detectEnvironment, resolveA0Host } from './detect.js';
 import { BrowserDriver } from './driver/browser.js';
 import { TargetProcess, waitForReady } from './driver/target.js';
 import { Engine } from './engine/loop.js';
@@ -2285,9 +2285,18 @@ async function cmdDelegate(args, ctx, deps) {
     const { trust } = await resolveCheckoutTrust(ctx);
     const config = await loadConfig(ctx.cwd, { trust, note: ctx.err });
     const url = values.url ?? config.target?.url;
-    const host = values.host ?? config.a0?.url;
     // Same reachability refusal as the lane's preflight: a remote host cannot
-    // open a loopback/file target on this machine.
+    // open a loopback/file target on this machine. Resolve the effective host
+    // first — AGENT_ZERO_HOST or the dotfile can name a remote instance even
+    // when no flag/config sets one, and the child env forwards AGENT_ZERO_HOST,
+    // so an unresolved host here would bypass the refusal entirely.
+    let host = values.host ?? config.a0?.url;
+    if (host === undefined) {
+        host = (await resolveA0Host(ctx.env, {
+            ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
+            ...(deps.probe !== undefined ? { probe: deps.probe } : {}),
+        })).host;
+    }
     if (host !== undefined && url !== undefined && isLoopback(url) && !isLoopback(host)) {
         ctx.err(`a0 host ${host} is remote but the target ${url} is loopback — the host cannot reach it`);
         return 1;

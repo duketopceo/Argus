@@ -25,7 +25,7 @@ import {
   unknownProviderSlugs,
 } from './config.js'
 import { debug, setLiveDir } from './debug.js'
-import { defaultExec, detectEnvironment, type ExecFn, type ProbeFn } from './detect.js'
+import { defaultExec, detectEnvironment, resolveA0Host, type ExecFn, type ProbeFn } from './detect.js'
 import { BrowserDriver, PageCapture } from './driver/browser.js'
 import { TargetProcess, waitForReady } from './driver/target.js'
 import { Engine, VisionClient } from './engine/loop.js'
@@ -2676,9 +2676,20 @@ async function cmdDelegate(args: string[], ctx: Ctx, deps: CliDeps): Promise<num
   const { trust } = await resolveCheckoutTrust(ctx)
   const config = await loadConfig(ctx.cwd, { trust, note: ctx.err })
   const url = values.url ?? config.target?.url
-  const host = values.host ?? config.a0?.url
   // Same reachability refusal as the lane's preflight: a remote host cannot
-  // open a loopback/file target on this machine.
+  // open a loopback/file target on this machine. Resolve the effective host
+  // first — AGENT_ZERO_HOST or the dotfile can name a remote instance even
+  // when no flag/config sets one, and the child env forwards AGENT_ZERO_HOST,
+  // so an unresolved host here would bypass the refusal entirely.
+  let host = values.host ?? config.a0?.url
+  if (host === undefined) {
+    host = (
+      await resolveA0Host(ctx.env, {
+        ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
+        ...(deps.probe !== undefined ? { probe: deps.probe } : {}),
+      })
+    ).host
+  }
   if (host !== undefined && url !== undefined && isLoopback(url) && !isLoopback(host)) {
     ctx.err(`a0 host ${host} is remote but the target ${url} is loopback — the host cannot reach it`)
     return 1
