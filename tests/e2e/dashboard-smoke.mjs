@@ -48,7 +48,7 @@ const seededManifest = {
     }),
     app: lane('app', 'passed', { summary: 'expected state verified' }),
     a0: lane('a0', 'inconclusive', {
-      summary: 'delegation returned — unverified-live (#53)',
+      summary: 'delegation returned — self-reported',
       usage: { provider: 'a0', model: undefined, calls: 0, tokens: 0, costUsd: 0, metered: false },
       budget: { limitUsd: undefined, spentUsd: 0, exceeded: false, maxDurationMs: 600000, elapsedMs: 40000, maxTasks: 1, tasks: 1 },
     }),

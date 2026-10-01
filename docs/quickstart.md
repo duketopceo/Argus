@@ -233,9 +233,15 @@ allowlisted child environment (provider keys, `GITHUB_TOKEN`, `ARGUS_*`, and
 npm auth never reach the child), bounded to `a0.maxTasks` (default 1) and
 `a0.timeoutMs` (default 10 min). A remote A0 host is refused against loopback
 targets. **The lane reports `inconclusive` even on agent-reported success** —
-live round-trip verification is open as issue #53 — and `unavailable` when
-the host or CLI is missing. Hosts without usage reporting are `unmetered`
-rather than fabricated dollars.
+the round-trip is verified (#53), but the agent's answer is self-reported
+evidence, not a verdict — and `unavailable` when the host or CLI is missing.
+Hosts without usage reporting are `unmetered` rather than fabricated dollars.
+
+Login-gated instances authenticate headless via `A0_USERNAME`/`A0_PASSWORD`
+(the `a0` CLI consumes them; they pass the allowlist only when you export
+them). Interactively, `a0 --connect` with remember-host stores a session
+instead. `heal: 'a0'` reuses the same host and caps delegations per run at
+`a0.maxTasks` (default 5) inside a shared 15-minute wall-clock budget.
 
 ### Manifest history
 

@@ -224,7 +224,7 @@ describe('renderManifestComment', () => {
     expect(body).toContain('| review | ✅ passed | 4 | $0.004200 | 2 findings (`deepseek/deepseek-v4.1-flash`) |')
     expect(body).toContain('| flow | ❌ failed | 3 | $0.001500 | landing.test.ts: assertion failed (`google/gemini-2.5-flash-lite`) |')
     expect(body).toContain('| app | ✅ passed | 1 | $0.000500 | expected state verified (`google/gemini-2.5-flash-lite`) |')
-    expect(body).toContain('| a0 | 🟡 inconclusive | 0 | unmetered | delegation returned — unverified-live (#53) |')
+    expect(body).toContain('| a0 | 🟡 inconclusive | 0 | unmetered | delegation returned — self-reported |')
     // Head binding surfaces the match contract.
     expect(body).toContain('head `abc1234`')
     expect(body).toContain('match — checkout matches the intended PR head')

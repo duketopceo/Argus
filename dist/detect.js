@@ -80,6 +80,12 @@ export const A0_CHILD_ENV_KEYS = [
     'DOCKER_HOST',
     // The resolved host pointer — a URL, not a credential.
     'AGENT_ZERO_HOST',
+    // Headless auth for login-gated instances: the a0 CLI itself consumes
+    // these (headless has no other auth path — session cookies only persist
+    // via the interactive TUI's remember-host flow). Operator-set only; they
+    // scope to the a0 host, not to any provider.
+    'A0_USERNAME',
+    'A0_PASSWORD',
 ];
 /** Build the sanitized child env: allowlisted keys that exist in `env`. */
 export function buildA0ChildEnv(env) {
@@ -94,13 +100,16 @@ export function buildA0ChildEnv(env) {
 /**
  * Any HTTP response — including a login redirect — means *something* is up,
  * but port 5080 could be an unrelated service. Require an Agent Zero marker
- * in the served HTML before trusting the probe result.
+ * in the served HTML before trusting the probe result. Redirects are
+ * followed: a login-gated instance 302s `/` to `/login`, and the marker
+ * check must apply to the page the host actually serves, not the redirect
+ * stub — a hop to a non-Zero page still fails the marker check.
  */
 export const defaultProbe = async (url, timeoutMs) => {
     try {
         const res = await fetch(url, {
             signal: AbortSignal.timeout(timeoutMs),
-            redirect: 'manual',
+            redirect: 'follow',
         });
         if (res.status >= 500)
             return false;

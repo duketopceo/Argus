@@ -42,13 +42,16 @@ export type ProbeFn = (url: string, timeoutMs: number) => Promise<boolean>;
  * `a0` spawn — delegation, the lane's `--version` preflight, and init's
  * environment probe — must use it or the contract leaks.
  */
-export declare const A0_CHILD_ENV_KEYS: readonly ["PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "LC_ALL", "TERM", "TMPDIR", "XDG_RUNTIME_DIR", "DOCKER_HOST", "AGENT_ZERO_HOST"];
+export declare const A0_CHILD_ENV_KEYS: readonly ["PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "LC_ALL", "TERM", "TMPDIR", "XDG_RUNTIME_DIR", "DOCKER_HOST", "AGENT_ZERO_HOST", "A0_USERNAME", "A0_PASSWORD"];
 /** Build the sanitized child env: allowlisted keys that exist in `env`. */
 export declare function buildA0ChildEnv(env: NodeJS.ProcessEnv | Record<string, string | undefined>): Record<string, string>;
 /**
  * Any HTTP response — including a login redirect — means *something* is up,
  * but port 5080 could be an unrelated service. Require an Agent Zero marker
- * in the served HTML before trusting the probe result.
+ * in the served HTML before trusting the probe result. Redirects are
+ * followed: a login-gated instance 302s `/` to `/login`, and the marker
+ * check must apply to the page the host actually serves, not the redirect
+ * stub — a hop to a non-Zero page still fails the marker check.
  */
 export declare const defaultProbe: ProbeFn;
 export interface A0Info {

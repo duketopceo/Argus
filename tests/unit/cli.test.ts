@@ -522,6 +522,28 @@ describe('argus-reviewer CLI', () => {
     expect(await main(['delegate', 'task'], { cwd, out: capture().fn, err: capture().fn, exec })).toBe(1)
   })
 
+  it('delegate refuses an env-resolved remote host with a loopback target (#53)', async () => {
+    // AGENT_ZERO_HOST reaches the child env even without --host/a0.url —
+    // the refusal must resolve the effective host, not just the flag.
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-delegate-remote-'))
+    let spawned = false
+    const err = capture()
+    const code = await main(['delegate', 'check the page', '--url', 'http://localhost:3000'], {
+      cwd,
+      out: capture().fn,
+      err: err.fn,
+      env: { ...process.env, AGENT_ZERO_HOST: 'https://a0.remote.test' },
+      exec: async () => {
+        spawned = true
+        return { code: 0, stdout: '', stderr: '' }
+      },
+      probe: async () => false,
+    })
+    expect(code).toBe(1)
+    expect(spawned).toBe(false)
+    expect(err.lines.join('\n')).toContain('is remote but the target')
+  })
+
   it('run with heal:a0 delegates each failed test to Agent Zero', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'argus-heal-'))
     const testsDir = join(cwd, 'tests')
@@ -533,7 +555,9 @@ describe('argus-reviewer CLI', () => {
         reportDir: join(cwd, 'report'),
         budgetUsd: 1,
         heal: 'a0',
-        a0: { url: 'https://a0.example.com' },
+        // Loopback host matches the loopback fixture target — a remote host
+        // would be refused before any delegation.
+        a0: { url: 'http://localhost:5080' },
       }),
     )
     await writeFile(
@@ -570,6 +594,90 @@ describe('argus-reviewer CLI', () => {
       await readFile(join(cwd, 'report', 'run.json'), 'utf8'),
     ) as { tests: { a0Diagnosis?: string }[] }
     expect(report.tests[0]!.a0Diagnosis).toBe('the app is broken: no marker rendered')
+  }, 60_000)
+
+  it('heal:a0 stops at the delegation cap — a0.maxTasks (#53)', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-heal-cap-'))
+    const testsDir = join(cwd, 'tests')
+    await mkdir(testsDir, { recursive: true })
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({
+        testsDir,
+        reportDir: join(cwd, 'report'),
+        budgetUsd: 1,
+        heal: 'a0',
+        a0: { url: 'http://localhost:5080', maxTasks: 2 },
+      }),
+    )
+    for (const name of ['fail-a', 'fail-b', 'fail-c']) {
+      await writeFile(
+        join(testsDir, `${name}.test.mjs`),
+        `test('${name}', async (td) => {\n  await td.assert('an element that does not exist is visible')\n})\n`,
+      )
+    }
+    const client = new StubClient([
+      { content: JSON.stringify({ verdict: 'fail', reasoning: 'missing' }) },
+      { content: JSON.stringify({ verdict: 'fail', reasoning: 'missing' }) },
+      { content: JSON.stringify({ verdict: 'fail', reasoning: 'missing' }) },
+    ])
+    const delegated: string[] = []
+    const err = capture()
+    const code = await main(['run', '--url', FIXTURE_URL], {
+      cwd,
+      out: capture().fn,
+      err: err.fn,
+      createClient: () => client,
+      exec: async (_cmd, args) => {
+        if (args[0] === 'headless') {
+          delegated.push(args.at(-1) ?? '')
+          return { code: 0, stdout: 'diagnosis', stderr: '' }
+        }
+        return { code: 1, stdout: '', stderr: 'unauthenticated' }
+      },
+    })
+    expect(code).toBe(1)
+    // Three failures, cap 2 — the third test gets no delegation.
+    expect(delegated.length).toBe(2)
+    expect(err.lines.join('\n')).toContain('delegation cap reached (2)')
+  }, 60_000)
+
+  it('heal:a0 refuses when the host is remote but the target is loopback (#53)', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-heal-remote-'))
+    const testsDir = join(cwd, 'tests')
+    await mkdir(testsDir, { recursive: true })
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({
+        testsDir,
+        reportDir: join(cwd, 'report'),
+        budgetUsd: 1,
+        heal: 'a0',
+        a0: { url: 'https://a0.example.com' },
+      }),
+    )
+    await writeFile(
+      join(testsDir, 'failing.test.mjs'),
+      `test('failing', async (td) => {\n  await td.assert('an element that does not exist is visible')\n})\n`,
+    )
+    const client = new StubClient([
+      { content: JSON.stringify({ verdict: 'fail', reasoning: 'missing' }) },
+    ])
+    let delegations = 0
+    const err = capture()
+    const code = await main(['run', '--url', FIXTURE_URL], {
+      cwd,
+      out: capture().fn,
+      err: err.fn,
+      createClient: () => client,
+      exec: async (_cmd, args) => {
+        if (args[0] === 'headless') delegations++
+        return { code: 1, stdout: '', stderr: 'unauthenticated' }
+      },
+    })
+    expect(code).toBe(1)
+    expect(delegations).toBe(0)
+    expect(err.lines.join('\n')).toContain('is remote but the target')
   }, 60_000)
 
   it('init suggests (never enables) A0 when a host resolves — R19', async () => {

@@ -117,7 +117,7 @@ export function fixtureManifest(overrides: Partial<RunManifest> = {}): RunManife
       startedAt: '2026-09-30T20:01:20.000Z',
       finishedAt: '2026-09-30T20:02:00.000Z',
       reportPath: 'reports/a0-lane.json',
-      summary: 'delegation returned — unverified-live (#53)',
+      summary: 'delegation returned — self-reported',
       usage: {
         provider: 'a0',
         model: undefined,

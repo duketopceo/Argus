@@ -38,7 +38,7 @@ That's it. `init` drops a ready-to-run GitHub workflow; every PR from then on ge
 | **review** | default | Diff review → inline findings + verdict |
 | **flow** | `--flow` (action input `run`) | Cache-first replay of recorded journeys |
 | **app** | `--app` + `--task` (action inputs `app`/`app-task`) | Directed task against your live app with an expected-state check (`--expect-text`/`--expect-url`/`--expect-selector`) |
-| **a0** | `--a0` (action input `a0`) | Escalates the task to your Agent Zero host — sandboxed child env, bounded, and deliberately honest: it reports `inconclusive`/`unavailable`, never `passed`, while live verification is unproven ([#53](https://github.com/duketopceo/Argus/issues/53)) |
+| **a0** | `--a0` (action input `a0`) | Escalates the task to your Agent Zero host — sandboxed child env, bounded, and deliberately honest: a completed delegation reports `inconclusive`, never `passed`, because the agent's answer is self-reported evidence |
 
 Every lane reports an honest status (`passed`/`failed`/`skipped`/`blocked`/`unavailable`/`inconclusive`) with usage, budget, and head binding in the manifest — a lane that couldn't run says so instead of silently no-opping. Completed manifests archive to `<reportDir>/manifests/` (bounded by `reportRetention`, default 20; `0` disables), and the dashboards keep the last valid run even if a write is interrupted.
 
@@ -100,7 +100,7 @@ Argus does more as you grant it more access — each rung is opt-in:
 3. **Browser flows** — Playwright drives your real app through recorded journeys (`verify --flow`).
 4. **App task lane** — `verify --app --task "submit the signup form" --expect-url /welcome` runs a directed task against your live app and checks the expected state.
 5. **Sandbox probes** — suspected findings get authored regression tests, executed in a hardened container (no network, no secrets, read-only FS). Fork PRs stay behind an `argus-probe` label gate.
-6. **Agent Zero delegation** — `argus-reviewer delegate "find the checkout bug"` or the opt-in `verify --a0` lane hands work to your own A0 instance over a sanitized child environment. The lane reports `inconclusive`, not `passed`, until live round-trips are proven ([#53](https://github.com/duketopceo/Argus/issues/53)).
+6. **Agent Zero delegation** — `argus-reviewer delegate "find the checkout bug"` or the opt-in `verify --a0` lane hands work to your own A0 instance over a sanitized child environment. The lane reports `inconclusive`, not `passed`: the round-trip is verified, but the agent's report of what it saw is self-reported.
 
 ## Cost attribution
 

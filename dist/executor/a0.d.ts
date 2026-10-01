@@ -11,8 +11,8 @@ export { buildA0ChildEnv };
  * for healing, second opinions on failures, and exploratory tasks that were
  * never recorded.
  *
- * The `verify --a0` lane reports `unverified-live` — no live host round-trip
- * has been proven yet (issue #53), so a completed delegation is `inconclusive`
+ * The `verify --a0` lane caps completed delegations at `inconclusive`: the
+ * host round-trip is proven (#53), but the agent's answer is self-reported
  * evidence, never a `passed` verdict.
  */
 export declare const A0_DEFAULT_TIMEOUT_MS = 600000;
@@ -20,8 +20,8 @@ export declare const A0_DEFAULT_TIMEOUT_MS = 600000;
 export declare const A0_LANE_MAX_TASKS = 1;
 /** Lane detail file the a0 runner writes and `runVerify` reads back. */
 export declare const A0_LANE_REPORT = "a0-lane.json";
-/** Reported posture until a live host round-trip is proven (issue #53). */
-export declare const A0_LIVE_LABEL = "unverified-live (#53)";
+/** Reported posture: the round-trip is verified (#53); the answer is not. */
+export declare const A0_LIVE_LABEL = "self-reported";
 export interface A0TaskOptions {
     /** Instance base URL. Omit to let the `a0` CLI resolve it itself. */
     host?: string | undefined;
@@ -124,9 +124,19 @@ export interface A0LaneInput {
     deps?: A0LaneDeps;
 }
 /**
+ * Whether `url` names a loopback target — the remote-a0/loopback-target
+ * refusal depends on this being complete: the whole 127.0.0.0/8 range,
+ * wildcard/zero hosts, `*.localhost`, and IPv4-mapped forms, not just the
+ * canonical `127.0.0.1`/`localhost` literals. `file:` URLs count too — a
+ * remote host's filesystem is not this machine's. DNS names that merely
+ * resolve to loopback are not caught (no lookup by design — fail-open on
+ * hostnames is deliberate here).
+ */
+export declare function isLoopback(url: string): boolean;
+/**
  * `verify --a0` lane: explicit selection only, every preflight outcome
  * recorded, zero spend before the host is proven reachable, and a hard
- * `unverified-live` posture — a completed delegation is `inconclusive`
- * evidence until issue #53 lands real host verification.
+ * `inconclusive` ceiling — a completed delegation is evidence, and the
+ * agent's report of what it saw is self-reported, not a verdict.
  */
 export declare function runA0Lane(input: A0LaneInput): Promise<A0LaneReport>;
