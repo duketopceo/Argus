@@ -29,6 +29,19 @@ npx argus-reviewer run           # replays + asserts — free on cache hit
 
 That's it. `init` drops a ready-to-run GitHub workflow; every PR from then on gets a review comment with findings, flow results, video evidence, and spend.
 
+## `verify` — four lanes, one manifest
+
+`argus-reviewer verify` runs the product lanes and writes one `run-manifest.json` — the shared evidence contract the sticky comment, the `npm run watch` TUI, and the Electron dashboard (`npm run app`) all render:
+
+| Lane | Selected by | What it does |
+|---|---|---|
+| **review** | default | Diff review → inline findings + verdict |
+| **flow** | `--flow` (action input `run`) | Cache-first replay of recorded journeys |
+| **app** | `--app` + `--task` (action inputs `app`/`app-task`) | Directed task against your live app with an expected-state check (`--expect-text`/`--expect-url`/`--expect-selector`) |
+| **a0** | `--a0` (action input `a0`) | Escalates the task to your Agent Zero host — sandboxed child env, bounded, and deliberately honest: it reports `inconclusive`/`unavailable`, never `passed`, while live verification is unproven ([#53](https://github.com/duketopceo/Argus/issues/53)) |
+
+Every lane reports an honest status (`passed`/`failed`/`skipped`/`blocked`/`unavailable`/`inconclusive`) with usage, budget, and head binding in the manifest — a lane that couldn't run says so instead of silently no-opping. Completed manifests archive to `<reportDir>/manifests/` (bounded by `reportRetention`, default 20; `0` disables), and the dashboards keep the last valid run even if a write is interrupted.
+
 ## What lands on your PR
 
 A sticky comment that updates on every push:
@@ -70,6 +83,9 @@ export default defineConfig({
   budgetUsd: 1.0,
   target: { url: 'https://your-app.example.com' },
   testsDir: 'e2e',
+  // How many verify manifests stay under <reportDir>/manifests/ for the
+  // dashboard/TUI run history (default 20; 0 disables archival).
+  reportRetention: 20,
 })
 ```
 
@@ -81,9 +97,10 @@ Argus does more as you grant it more access — each rung is opt-in:
 
 1. **API review** — GitHub token only. Reviews the PR diff and posts the verdict.
 2. **Trusted checkout** — findings get verified against the full source tree.
-3. **Browser flows** — Playwright drives your real app through recorded journeys.
-4. **Sandbox probes** — suspected findings get authored regression tests, executed in a hardened container (no network, no secrets, read-only FS). Fork PRs stay behind an `argus-probe` label gate.
-5. **Agent Zero delegation** — `argus-reviewer delegate "find the checkout bug"` hands exploratory work to your own A0 instance.
+3. **Browser flows** — Playwright drives your real app through recorded journeys (`verify --flow`).
+4. **App task lane** — `verify --app --task "submit the signup form" --expect-url /welcome` runs a directed task against your live app and checks the expected state.
+5. **Sandbox probes** — suspected findings get authored regression tests, executed in a hardened container (no network, no secrets, read-only FS). Fork PRs stay behind an `argus-probe` label gate.
+6. **Agent Zero delegation** — `argus-reviewer delegate "find the checkout bug"` or the opt-in `verify --a0` lane hands work to your own A0 instance over a sanitized child environment. The lane reports `inconclusive`, not `passed`, until live round-trips are proven ([#53](https://github.com/duketopceo/Argus/issues/53)).
 
 ## Cost attribution
 
@@ -102,7 +119,7 @@ argus-reviewer/
 ├── electron/                # Local observability dashboard (`npm run app`)
 ├── src/
 │   ├── api.ts               # Test-facing `test`/`td` API + generated test renderer
-│   ├── cli.ts               # record · run · code-review · delegate · cache · index · init
+│   ├── cli.ts               # verify · record · run · code-review · delegate · cache · index · init
 │   ├── config.ts            # `argus-reviewer.config.*` loader
 │   ├── cache/               # Per-step fingerprint + flow store
 │   ├── driver/              # Playwright browser + dev-server target
@@ -110,7 +127,7 @@ argus-reviewer/
 │   ├── evidence/            # PR/CI context, fork trust gate, finding linkage
 │   ├── executor/            # Agent Zero delegation + hardened probe sandbox
 │   ├── probe/               # Model-authored regression probes
-│   ├── report/              # PR comment, JUnit XML, run.json
+│   ├── report/              # PR comment, JUnit XML, run.json, run-manifest.json
 │   └── vision/              # OpenRouter client, cost parsing, budget ledger
 └── tests/                   # Unit tests + Playwright fixture page
 ```

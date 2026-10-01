@@ -1,16 +1,35 @@
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { main } from '../../src/cli.js'
+import { TargetProcess } from '../../src/driver/target.js'
 import { VisionClient } from '../../src/engine/loop.js'
 import { CallCost, CallKind } from '../../src/vision/cost.js'
 import { JsonSchema, Message } from '../../src/vision/openrouter.js'
 import { ProviderRules } from '../../src/config.js'
 
-const FIXTURE_URL = `file://${fileURLToPath(new URL('../fixtures/index.html', import.meta.url))}`
+const SERVE_SCRIPT = fileURLToPath(new URL('../fixtures/serve.mjs', import.meta.url))
+const FIXTURE_DIR = fileURLToPath(new URL('../fixtures/', import.meta.url))
+
+let FIXTURE_URL = ''
+let fixtureServer: TargetProcess | undefined
+
+beforeAll(async () => {
+  const port = 5400 + Math.floor(Math.random() * 400)
+  fixtureServer = await TargetProcess.start({
+    command: `${JSON.stringify(process.execPath)} ${JSON.stringify(SERVE_SCRIPT)} ${port} ${JSON.stringify(FIXTURE_DIR)}`,
+    url: `http://127.0.0.1:${port}/`,
+    readyTimeoutMs: 10_000,
+  })
+  FIXTURE_URL = fixtureServer.url
+})
+
+afterAll(async () => {
+  await fixtureServer?.stop()
+})
 
 class StubClient implements VisionClient {
   calls: { kind: CallKind; model: string }[] = []
@@ -189,6 +208,63 @@ describe('argus-reviewer CLI', () => {
     expect(junit).toContain('failing assert')
   }, 60_000)
 
+  it('run reports a failure rather than a pass when no test files exist', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-cli-empty-'))
+    const testsDir = join(cwd, 'tests')
+    const reportDir = join(cwd, 'report')
+    await mkdir(testsDir, { recursive: true })
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({ testsDir, reportDir, budgetUsd: 1 }),
+    )
+    const err = capture()
+    const code = await main(['run', '--url', FIXTURE_URL], {
+      cwd,
+      out: capture().fn,
+      err: err.fn,
+      createClient: () => new StubClient([]),
+    })
+    expect(code).toBe(1)
+    expect(err.lines.join('\n')).toContain('no test files found')
+    const report = JSON.parse(await readFile(join(reportDir, 'run.json'), 'utf8')) as {
+      ok: boolean
+      totals: { tests: number }
+    }
+    expect(report.ok).toBe(false)
+    expect(report.totals.tests).toBe(0)
+  }, 60_000)
+
+  it('fails closed when a test file registers nothing and records no evidence', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-cli-empty-file-'))
+    const testsDir = join(cwd, 'tests')
+    const reportDir = join(cwd, 'report')
+    await mkdir(testsDir, { recursive: true })
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({ testsDir, reportDir, budgetUsd: 1 }),
+    )
+    // Imports cleanly, but registers no test() and calls no td.* — the file
+    // produces zero evidence and must not read as a pass.
+    await writeFile(join(testsDir, 'empty.test.mjs'), `// intentionally empty\n`)
+    const out = capture()
+    const err = capture()
+    const code = await main(['run', '--url', FIXTURE_URL], {
+      cwd,
+      out: out.fn,
+      err: err.fn,
+      createClient: () => new StubClient([]),
+    })
+    expect(code).toBe(1)
+    expect(out.lines.join('\n')).toContain('FAIL empty')
+    const report = JSON.parse(await readFile(join(reportDir, 'run.json'), 'utf8')) as {
+      ok: boolean
+      tests: { name: string; ok: boolean; failureMessage?: string }[]
+    }
+    expect(report.ok).toBe(false)
+    expect(report.tests[0]?.ok).toBe(false)
+    expect(report.tests[0]?.failureMessage).toContain('no evidence')
+  }, 60_000)
+
   it('invokes config pageSetup with the page before navigation', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'argus-setup-'))
     const testsDir = join(cwd, 'tests')
@@ -312,7 +388,9 @@ describe('argus-reviewer CLI', () => {
       err: capture().fn,
       createClient: () => client,
     })
-    expect(code).toBe(0)
+    // An errored pass is recorded and its captures kept, but with zero test
+    // evidence the run fails closed — an explore that errored is not a pass.
+    expect(code).toBe(1)
     const report = JSON.parse(await readFile(join(cwd, 'report', 'run.json'), 'utf8')) as {
       ok: boolean
       explore?: {
@@ -321,7 +399,7 @@ describe('argus-reviewer CLI', () => {
         captures?: { kind: string }[]
       }
     }
-    expect(report.ok).toBe(true)
+    expect(report.ok).toBe(false)
     // 'stopped: error' reports as an explicit skip, not a bare pass summary.
     expect(report.explore?.skipped).toContain('model call threw')
     expect(report.explore?.steps).toBeUndefined()
@@ -387,12 +465,15 @@ describe('argus-reviewer CLI', () => {
       err: capture().fn,
       createClient: () => client,
     })
-    // Exploration must never fail the run (R11).
-    expect(code).toBe(0)
+    // The skip is recorded explicitly, but zero observed evidence means the
+    // run fails closed — enabled is configuration, not a pass (R11 still
+    // holds when real tests carry the evidence).
+    expect(code).toBe(1)
     const report = JSON.parse(await readFile(join(cwd, 'report', 'run.json'), 'utf8')) as {
       ok: boolean
       explore?: { enabled: boolean; skipped?: string }
     }
+    expect(report.ok).toBe(false)
     expect(report.explore?.skipped).toContain('no reachable target')
   }, 60_000)
 
@@ -491,7 +572,7 @@ describe('argus-reviewer CLI', () => {
     expect(report.tests[0]!.a0Diagnosis).toBe('the app is broken: no marker rendered')
   }, 60_000)
 
-  it('init reports the environment and enables heal:a0 when Agent Zero resolves', async () => {
+  it('init suggests (never enables) A0 when a host resolves — R19', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'argus-init-'))
     const out = capture()
     const code = await main(['init'], {
@@ -508,9 +589,45 @@ describe('argus-reviewer CLI', () => {
     const text = out.lines.join('\n')
     expect(text).toContain('argus-reviewer environment')
     expect(text).toContain('a0 2.12 → https://a0.example.com')
+    expect(text).toContain('opt-in')
     const config = await readFile(join(cwd, 'argus-reviewer.config.ts'), 'utf8')
-    expect(config).toContain("heal: 'a0'")
-    expect(config).toContain("https://a0.example.com")
+    expect(config).toContain('https://a0.example.com')
+    // Labeled suggestion lives in comments — no enabled a0/heal lane lines.
+    expect(config).not.toMatch(/^\s+a0:/m)
+    expect(config).not.toMatch(/^\s+heal:/m)
+  })
+
+  it('init names provider data flow, budget posture, and the stop path — R19', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-init-'))
+    const out = capture()
+    const code = await main(['init'], {
+      cwd,
+      out: out.fn,
+      err: capture().fn,
+      // No key — the named setup failure must be visible, not a silent pass.
+      env: { ...process.env, OPENROUTER_API_KEY: '' },
+      exec: async () => ({ code: 1, stdout: '', stderr: 'unauthenticated' }),
+    })
+    expect(code).toBe(0)
+    const text = out.lines.join('\n')
+    expect(text).toContain('✗ export OPENROUTER_API_KEY')
+    expect(text).toContain('sent to provider')
+    expect(text).toContain('default budget')
+    expect(text).toContain('how to stop')
+    expect(text).toContain('verify')
+  })
+
+  it('the generated workflow is code-review-only with the permissions it needs', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-init-'))
+    await main(['init'], { cwd, out: capture().fn, err: capture().fn })
+    const workflow = await readFile(join(cwd, '.github/workflows/argus-reviewer.yml'), 'utf8')
+    // Review-only: the action's `run` input stays at its 'false' default —
+    // no executable lanes are enabled by the scaffold.
+    expect(workflow).not.toMatch(/run:\s*['"]?true/)
+    expect(workflow).toContain('contents: read')
+    expect(workflow).toContain('issues: write')
+    expect(workflow).toContain('pull-requests: write')
+    expect(workflow).not.toContain('contents: write')
   })
 
   it('init scaffolds config, smoke test, and workflow; skips existing files', async () => {

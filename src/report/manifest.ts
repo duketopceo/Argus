@@ -1,5 +1,9 @@
+import { readdir, unlink } from 'node:fs/promises'
+import { join } from 'node:path'
+
 import { defaultExec, type ExecFn } from '../detect.js'
 import type { CallCost } from '../vision/cost.js'
+import { writeAtomicJson } from '../fsutil.js'
 
 /** Whether a report's source can be tied to the intended PR head. */
 export type HeadBindingStatus = 'match' | 'mismatch' | 'unknown' | 'not_applicable'
@@ -47,6 +51,15 @@ export interface BudgetSummary {
   tasks: number
 }
 
+export interface CacheSummary {
+  hits: number
+  misses: number
+  heals: number
+  staleEntries: number
+  assertionHits: number
+  assertionMisses: number
+}
+
 export interface LaneManifest {
   lane: LaneId
   selected: boolean
@@ -60,6 +73,8 @@ export interface LaneManifest {
   usage: UsageSummary
   budget: BudgetSummary
   headBinding: HeadBinding | undefined
+  /** Flow-lane replay economics — defined only when the lane produced a run.json. */
+  cache: CacheSummary | undefined
 }
 
 export interface RunIdentity {
@@ -190,6 +205,7 @@ export function emptyLane(lane: LaneId, selected: boolean): LaneManifest {
     usage: emptyUsage(),
     budget: emptyBudget(),
     headBinding: undefined,
+    cache: undefined,
   }
 }
 
@@ -234,5 +250,41 @@ export function addProviderUsage(usage: UsageSummary, calls: CallCost[] | undefi
     tokens: usage.tokens + tokens,
     costUsd: usage.costUsd + costUsd,
     metered: true,
+  }
+}
+
+/** Run manifests are archived under `<reportDir>/manifests/<runId>.json`. */
+export const MANIFEST_HISTORY_DIR = 'manifests'
+
+/**
+ * Archive a completed verify manifest into local history and prune to the
+ * retention bound — the dashboard/TUI run list reads this directory.
+ * runIds are timestamp-prefixed, so name sort is chronological; pruning
+ * drops the oldest names beyond `keep`. `keep <= 0` writes nothing and
+ * clears nothing existing (retention governs new archives, not deletes).
+ */
+export async function archiveManifest(
+  reportDir: string,
+  manifest: RunManifest,
+  keep: number,
+): Promise<void> {
+  if (keep <= 0) return
+  const dir = join(reportDir, MANIFEST_HISTORY_DIR)
+  // runId becomes a filename — never trust it as a path component.
+  const safeName = manifest.runId.replace(/[^\w.-]/g, '-')
+  await writeAtomicJson(join(dir, `${safeName}.json`), manifest)
+  let names: string[]
+  try {
+    names = (await readdir(dir)).filter((n) => n.endsWith('.json')).sort()
+  } catch {
+    return
+  }
+  const excess = names.length - keep
+  for (const name of names.slice(0, Math.max(0, excess))) {
+    try {
+      await unlink(join(dir, name))
+    } catch {
+      // already gone — pruning is best-effort
+    }
   }
 }

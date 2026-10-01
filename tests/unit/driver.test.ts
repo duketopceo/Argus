@@ -10,7 +10,6 @@ import { BrowserDriver } from '../../src/driver/browser.js'
 import { TargetProcess } from '../../src/driver/target.js'
 import { Actions } from '../../src/engine/actions.js'
 
-const FIXTURE_URL = fileURLToPath(new URL('../fixtures/index.html', import.meta.url))
 const SERVE_SCRIPT = fileURLToPath(new URL('../fixtures/serve.mjs', import.meta.url))
 const FIXTURE_DIR = fileURLToPath(new URL('../fixtures/', import.meta.url))
 
@@ -22,8 +21,15 @@ describe('BrowserDriver + Actions (fixture page)', () => {
   let actions: Actions
   let videoDir: string
   let videoPath: string | undefined
+  let target: TargetProcess | undefined
 
   beforeAll(async () => {
+    const port = 3800 + Math.floor(Math.random() * 200)
+    target = await TargetProcess.start({
+      command: `${JSON.stringify(process.execPath)} ${JSON.stringify(SERVE_SCRIPT)} ${port} ${JSON.stringify(FIXTURE_DIR)}`,
+      url: `http://127.0.0.1:${port}/`,
+      readyTimeoutMs: 10_000,
+    })
     videoDir = await mkdtemp(join(tmpdir(), 'argus-test-video-'))
     driver = await BrowserDriver.launch({
       viewport: { width: 1280, height: 720 },
@@ -31,11 +37,12 @@ describe('BrowserDriver + Actions (fixture page)', () => {
       browserTimeoutMs: 8_000,
     })
     actions = new Actions(driver)
-    await driver.goto(`file://${FIXTURE_URL}`)
+    await driver.goto(target.url)
   })
 
   afterAll(async () => {
     videoPath = await driver.close()
+    await target?.stop()
   })
 
   it('a click at known viewport coords lands on the intended element', async () => {
@@ -97,7 +104,6 @@ describe('BrowserDriver + Actions (fixture page)', () => {
 })
 
 describe('exploratory capture (U4a)', () => {
-  const EXPLORE_URL = fileURLToPath(new URL('../fixtures/explore.html', import.meta.url))
   let port: number
   let target: TargetProcess | undefined
 
@@ -122,7 +128,7 @@ describe('exploratory capture (U4a)', () => {
   it('is off by default — no taps, no captures', async () => {
     const driver = await BrowserDriver.launch({ browserTimeoutMs: 8_000 })
     try {
-      await driver.goto(`file://${EXPLORE_URL}`)
+      await driver.goto(`http://127.0.0.1:${port}/explore.html`)
       await new Promise((r) => setTimeout(r, 250))
       expect(driver.pageCaptures()).toEqual([])
     } finally {
@@ -133,7 +139,7 @@ describe('exploratory capture (U4a)', () => {
   it('captures console errors and page errors, collapsing repeats', async () => {
     const driver = await BrowserDriver.launch({ captureErrors: true, browserTimeoutMs: 8_000 })
     try {
-      await driver.goto(`file://${EXPLORE_URL}`)
+      await driver.goto(`http://127.0.0.1:${port}/explore.html`)
       const caps = await settle(driver)
       const consoleErr = caps.find(
         (c) => c.kind === 'console-error' && c.text.includes('seeded console boom'),

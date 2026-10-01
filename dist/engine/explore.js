@@ -36,8 +36,8 @@ const ALLOWED_KEYS = new Set([
  */
 export async function runExplore(opts) {
     const { driver, actions, client, ledger, config, logger } = opts;
-    const maxSteps = config.explore.maxSteps;
-    const laneBudget = config.explore.budgetUsd ?? config.budgetUsd;
+    const maxSteps = opts.maxSteps ?? config.explore.maxSteps;
+    const laneBudget = opts.budgetUsd ?? config.explore.budgetUsd ?? config.budgetUsd;
     const costStart = ledger.visionCostUsd;
     // Non-http(s) targets (file:// demos) get a no-navigate policy — 'null'
     // origin cannot be compared, so navigate proposals are always refused.
@@ -52,14 +52,24 @@ export async function runExplore(opts) {
         notes.push({ stage: 'explore', message, ...(context !== undefined ? { context } : {}) });
         logger?.debug(`explore: ${message}${context !== undefined ? ` (${context})` : ''}`);
     };
-    const finish = (stopReason) => ({
-        steps,
-        visited: visited.size,
-        stopReason,
-        visionCalls,
-        visionCostUsd: ledger.visionCostUsd - costStart,
-        notes,
-    });
+    const finish = (stopReason) => {
+        let finalUrl;
+        try {
+            finalUrl = driver.rawPage.url();
+        }
+        catch {
+            // A dead page leaves no final URL — evidence, not a crash.
+        }
+        return {
+            steps,
+            visited: visited.size,
+            stopReason,
+            visionCalls,
+            visionCostUsd: ledger.visionCostUsd - costStart,
+            notes,
+            finalUrl,
+        };
+    };
     const budgetExhausted = () => ledger.replayOnly ||
         !ledger.canSpend(0.001) ||
         (laneBudget !== undefined && ledger.visionCostUsd - costStart >= laneBudget);
@@ -67,6 +77,9 @@ export async function runExplore(opts) {
     for (let i = 0; i < maxSteps; i++) {
         if (budgetExhausted())
             return finish('budget');
+        if (opts.deadlineAt !== undefined && Date.now() >= opts.deadlineAt) {
+            return finish('timeout');
+        }
         try {
             observation = observation ?? (await driver.observe({ grid: true }));
         }
@@ -83,11 +96,23 @@ export async function runExplore(opts) {
             note('page state unchanged — stopping');
             return finish('stalled');
         }
+        // Lane-side expected state is checked on the fresh observation *before*
+        // spending a model call — a satisfied marker ends the loop for free.
+        if (opts.expectation !== undefined) {
+            try {
+                if (await opts.expectation({ observation, url, page: driver.rawPage })) {
+                    return finish('expectation');
+                }
+            }
+            catch (e) {
+                note('expectation check failed', e.message);
+            }
+        }
         let response;
         try {
             response = await client.complete({
                 model: config.model,
-                messages: buildExploreMessages(observation, priorActs),
+                messages: buildExploreMessages(observation, priorActs, opts.task),
                 schema: exploreActionSchema,
                 provider: config.provider,
                 kind: 'explore',

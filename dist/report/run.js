@@ -5,7 +5,14 @@ export function buildRunReport(tests, startedAt, durationMs,
  * its own ledger). Folded into the run totals so `run.json` spend is
  * complete even though no TestReport owns these calls.
  */
-extraCalls = []) {
+extraCalls = [], 
+/**
+ * An explore lane that actually ran makes a zero-test run a legitimate
+ * shape — the act pass is the evidence source for repos with no recorded
+ * flows. A configured-but-skipped/errored pass is not evidence: the run
+ * fails closed instead of reading a silent no-op as green.
+ */
+exploreEvidence = false) {
     const failed = tests.filter((t) => !t.ok).length;
     const callsByModel = {};
     const costByModel = {};
@@ -18,7 +25,11 @@ extraCalls = []) {
         tool: 'argus-reviewer',
         startedAt: startedAt.toISOString(),
         durationMs,
-        ok: failed === 0,
+        // Zero executed tests is not a pass — an empty suite produces no evidence,
+        // so the report fails closed rather than letting a misconfigured testsDir
+        // or a non-matching pattern read as green. A completed explore pass is
+        // the exception: its observation is the evidence.
+        ok: (tests.length > 0 || exploreEvidence) && failed === 0,
         totals: {
             tests: tests.length,
             passed: tests.length - failed,

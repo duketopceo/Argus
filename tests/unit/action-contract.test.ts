@@ -22,10 +22,15 @@ import {
 // @ts-expect-error plain-node action helper — no type declarations
 import {
   renderBody as renderStickyBody,
+  renderManifestBody,
+  renderManifestLanes,
   renderReviewOnlyBody,
   run,
   shortHash,
 } from '../../action/sticky-comment.cjs'
+
+import { renderManifestComment } from '../../src/report/comment.js'
+import { fixtureLane, fixtureManifest } from '../fixtures/manifest.js'
 
 const execFileAsync = promisify(execFile)
 const ACTION = join(process.cwd(), 'action')
@@ -204,6 +209,18 @@ describe('action input contract', () => {
     expect(action).toContain("if: inputs.install-consumer-dependencies == 'true'")
     expect(action).toContain('node "$ARGUS_ACTION_PATH/cli.mjs" verify')
     expect(action).toContain('ARGUS_VERIFY_FLOW:')
+    // U5/U6 — app + a0 lanes surface as opt-in action inputs bridged to
+    // the verify env contract; expect markers ride along.
+    expect(action).toContain('app-task:')
+    expect(action).toContain('app-url:')
+    expect(action).toContain('app-expect-text:')
+    expect(action).toContain('ARGUS_VERIFY_APP:')
+    expect(action).toContain('ARGUS_VERIFY_A0:')
+    expect(action).toContain('ARGUS_VERIFY_TASK:')
+    expect(action).toContain('ARGUS_VERIFY_EXPECT_TEXT:')
+    // Both lanes are executable — they must ride the fork gate.
+    expect(action).toContain("inputs.app == 'true'")
+    expect(action).toContain("inputs.a0 == 'true'")
     expect(action).not.toContain('code-review --report-dir')
     expect(action).not.toContain('run --report-dir')
     expect(action).not.toContain('new Function')
@@ -811,5 +828,399 @@ describe('action review poster (U3)', () => {
     await run(runtime)
 
     expect(calls.filter((x) => x.method === 'createReview')).toHaveLength(0)
+  })
+})
+
+// U5/AE-C — the PR comment, the TUI, and the dashboard all render the same
+// manifest contract. The TS renderer (comment.ts → viewmodel.ts) and the
+// action's plain-node block (sticky-comment.cjs) must produce identical lane
+// rows from identical input; this test is the agreement enforcement.
+describe('manifest comment parity (U5)', () => {
+  const manifest = fixtureManifest()
+
+  function laneRows(body: string): string[] {
+    return body
+      .split('\n')
+      .filter((l) => /^\| (review|flow|app|a0) \|/.test(l))
+  }
+
+  it('the action lane block and the shared view-model render identical rows', () => {
+    const cjsBody = renderManifestLanes(manifest).join('\n')
+    const tsBody = renderManifestComment(manifest)
+    const cjsRows = laneRows(cjsBody)
+    const tsRows = laneRows(tsBody)
+    expect(cjsRows).toHaveLength(4)
+    expect(cjsRows).toEqual(tsRows)
+    // Status is always a word, never color-only.
+    expect(tsRows.join('\n')).toContain('inconclusive')
+    expect(tsRows.join('\n')).toContain('unmetered')
+  })
+
+  it('the header and cache line agree across renderers', () => {
+    const cjsBody = renderManifestLanes(manifest).join('\n')
+    const tsBody = renderManifestComment(manifest)
+    for (const text of [
+      '| Lane | Status | Calls | Cost | Detail |',
+      '**Fingerprint cache:** 2 hit(s) · 1 miss(es) · 1 heal(s)',
+    ]) {
+      expect(cjsBody).toContain(text)
+      expect(tsBody).toContain(text)
+    }
+  })
+
+  it('hostile detail strings — pipes, newlines, and 200+ chars — render identically', () => {
+    const hostile = fixtureManifest()
+    hostile.lanes.app.reason =
+      'line one\nline two | pipe-break ' + 'x'.repeat(250)
+    hostile.lanes.flow.reason = 'secret sk-or-v1-leak-here inside'
+    const cjsRows = laneRows(renderManifestLanes(hostile).join('\n'))
+    const tsRows = laneRows(renderManifestComment(hostile))
+    expect(cjsRows).toEqual(tsRows)
+    // The token is masked and the pipe is escaped — the raw two-line
+    // reason must not break the table row.
+    for (const row of tsRows) {
+      expect(row).not.toContain('sk-or-v1-leak-here')
+    }
+    const appRow = tsRows.find((r) => r.startsWith('| app |')) ?? ''
+    expect(appRow).toContain('line one line two \\| pipe-break')
+    // Five column delimiters; every other pipe must be backslash-escaped.
+    expect(appRow.match(/(?<!\\)\|/g)).toHaveLength(6)
+  })
+
+  it('a verify run with only a manifest renders the lane block in the sticky', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'argus-manifest-sticky-'))
+    const saved = {
+      OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+      GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
+      GITHUB_SERVER_URL: process.env.GITHUB_SERVER_URL,
+      GITHUB_RUN_ID: process.env.GITHUB_RUN_ID,
+      ARGUS_RUN_DISABLED: process.env.ARGUS_RUN_DISABLED,
+      ARGUS_REPORT_DIR: process.env.ARGUS_REPORT_DIR,
+    }
+    try {
+      process.env.OPENROUTER_API_KEY = 'test-key'
+      process.env.GITHUB_WORKSPACE = workspace
+      process.env.GITHUB_SERVER_URL = 'https://github.com'
+      process.env.GITHUB_RUN_ID = '1'
+      delete process.env.ARGUS_RUN_DISABLED
+      delete process.env.ARGUS_REPORT_DIR
+      await mkdir(join(workspace, 'argus-reviewer-report'), { recursive: true })
+      const boundManifest = fixtureManifest()
+      boundManifest.identity.intendedHeadSha = 'h'.repeat(40)
+      await writeFile(
+        join(workspace, 'argus-reviewer-report', 'run-manifest.json'),
+        JSON.stringify(boundManifest),
+      )
+      await writeFile(
+        join(workspace, 'argus-reviewer-report', 'code-review.json'),
+        JSON.stringify({ ok: true, skipped: false, findings: [], reviewComments: [] }),
+      )
+      const calls: { method: string; params: Record<string, unknown> }[] = []
+      const record =
+        (method: string, impl?: (params: Record<string, unknown>) => Promise<unknown>) =>
+        async (params: Record<string, unknown>) => {
+          calls.push({ method, params })
+          if (impl !== undefined) return impl(params)
+          return { data: {} }
+        }
+      const runtime = {
+        github: {
+          rest: {
+            pulls: {
+              listReviewComments: async () => ({ data: [] }),
+              listFiles: async () => ({ data: [] }),
+              listReviews: async () => ({ data: [] }),
+              createReview: record('createReview'),
+              dismissReview: record('dismissReview'),
+            },
+            issues: {
+              listComments: record('listComments', async () => ({ data: [] })),
+              createComment: record('createComment'),
+              updateComment: record('updateComment'),
+            },
+            repos: { createCommitStatus: record('createCommitStatus') },
+          },
+        },
+        context: {
+          actor: 'github-actions[bot]',
+          repo: { owner: 'o', repo: 'r' },
+          sha: 'h'.repeat(40),
+          payload: { pull_request: { number: 7, head: { sha: 'h'.repeat(40) } } },
+        },
+        core: { warning: () => {}, setOutput: () => {} },
+      }
+
+      await run(runtime)
+
+      const sticky = calls.find((c) => c.method === 'createComment')
+      expect(sticky).toBeDefined()
+      const body = sticky!.params.body as string
+      expect(body).toContain('## argus-reviewer ❌ FAILED')
+      expect(body).toContain('| a0 | 🟡 inconclusive | 0 | unmetered |')
+      // The manifest aggregate is the verdict — no run.json exists.
+      const status = calls.find((c) => c.method === 'createCommitStatus')
+      expect(status!.params.state).toBe('failure')
+    } finally {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) Reflect.deleteProperty(process.env, k)
+        else process.env[k] = v
+      }
+    }
+  })
+
+  it('the manifest body masks secret-shaped lane evidence', () => {
+    const m = fixtureManifest()
+    m.lanes.flow.reason = 'provider rejected sk-or-v1-abcdef12345'
+    const body = renderManifestBody(m, undefined, undefined)
+    expect(body).not.toContain('sk-or-v1-abcdef12345')
+    expect(body).toContain('•••')
+  })
+
+  it('a manifest bound to another head is ignored for the verdict and the comment says so', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'argus-stale-manifest-'))
+    const saved = {
+      OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+      GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
+      GITHUB_SERVER_URL: process.env.GITHUB_SERVER_URL,
+      GITHUB_RUN_ID: process.env.GITHUB_RUN_ID,
+      ARGUS_RUN_DISABLED: process.env.ARGUS_RUN_DISABLED,
+      ARGUS_REPORT_DIR: process.env.ARGUS_REPORT_DIR,
+    }
+    try {
+      process.env.OPENROUTER_API_KEY = 'test-key'
+      process.env.GITHUB_WORKSPACE = workspace
+      process.env.GITHUB_SERVER_URL = 'https://github.com'
+      process.env.GITHUB_RUN_ID = '1'
+      delete process.env.ARGUS_RUN_DISABLED
+      delete process.env.ARGUS_REPORT_DIR
+      await mkdir(join(workspace, 'argus-reviewer-report'), { recursive: true })
+      // A passing manifest whose identity binds a DIFFERENT head — residue
+      // or plant must never launder a verdict for this commit.
+      const stale = fixtureManifest()
+      stale.aggregate.ok = true
+      stale.aggregate.status = 'passed'
+      stale.identity.intendedHeadSha = 'f'.repeat(40)
+      await writeFile(
+        join(workspace, 'argus-reviewer-report', 'run-manifest.json'),
+        JSON.stringify(stale),
+      )
+      await writeFile(
+        join(workspace, 'argus-reviewer-report', 'code-review.json'),
+        JSON.stringify({ ok: false, skipped: false, findings: [], reviewComments: [] }),
+      )
+      const calls: { method: string; params: Record<string, unknown> }[] = []
+      const record =
+        (method: string, impl?: (params: Record<string, unknown>) => Promise<unknown>) =>
+        async (params: Record<string, unknown>) => {
+          calls.push({ method, params })
+          if (impl !== undefined) return impl(params)
+          return { data: {} }
+        }
+      const runtime = {
+        github: {
+          rest: {
+            pulls: {
+              listReviewComments: async () => ({ data: [] }),
+              listFiles: async () => ({ data: [] }),
+              listReviews: async () => ({ data: [] }),
+              createReview: record('createReview'),
+              dismissReview: record('dismissReview'),
+            },
+            issues: {
+              listComments: record('listComments', async () => ({ data: [] })),
+              createComment: record('createComment'),
+              updateComment: record('updateComment'),
+            },
+            repos: { createCommitStatus: record('createCommitStatus') },
+          },
+        },
+        context: {
+          actor: 'github-actions[bot]',
+          repo: { owner: 'o', repo: 'r' },
+          sha: 'h'.repeat(40),
+          payload: { pull_request: { number: 7, head: { sha: 'h'.repeat(40) } } },
+        },
+        core: { warning: () => {}, setOutput: () => {} },
+      }
+
+      await run(runtime)
+
+      // code-review.json failed → verdict must stay failure even though a
+      // "passing" manifest exists on disk.
+      const status = calls.find((c) => c.method === 'createCommitStatus')
+      expect(status!.params.state).toBe('failure')
+      const sticky = calls.find((c) => c.method === 'createComment')
+      const body = sticky!.params.body as string
+      expect(body).toContain('head binding does not match')
+      expect(body).not.toContain('| a0 |')
+    } finally {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) Reflect.deleteProperty(process.env, k)
+        else process.env[k] = v
+      }
+    }
+  })
+
+  it('a shallow manifest-shaped file fails validation — aggregate.ok alone is not evidence', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'argus-forge-manifest-'))
+    const saved = {
+      OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+      GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
+      GITHUB_SERVER_URL: process.env.GITHUB_SERVER_URL,
+      GITHUB_RUN_ID: process.env.GITHUB_RUN_ID,
+      ARGUS_RUN_DISABLED: process.env.ARGUS_RUN_DISABLED,
+      ARGUS_REPORT_DIR: process.env.ARGUS_REPORT_DIR,
+    }
+    try {
+      process.env.OPENROUTER_API_KEY = 'test-key'
+      process.env.GITHUB_WORKSPACE = workspace
+      process.env.GITHUB_SERVER_URL = 'https://github.com'
+      process.env.GITHUB_RUN_ID = '1'
+      delete process.env.ARGUS_RUN_DISABLED
+      delete process.env.ARGUS_REPORT_DIR
+      await mkdir(join(workspace, 'argus-reviewer-report'), { recursive: true })
+      // The minimal forge: aggregate.ok + lanes + correct head binding —
+      // rejected because it lacks the manifest's full shape (schemaVersion,
+      // per-lane usage/budget, known statuses).
+      await writeFile(
+        join(workspace, 'argus-reviewer-report', 'run-manifest.json'),
+        JSON.stringify({
+          aggregate: { ok: true, status: 'passed' },
+          lanes: {},
+          identity: { intendedHeadSha: 'h'.repeat(40) },
+        }),
+      )
+      await writeFile(
+        join(workspace, 'argus-reviewer-report', 'code-review.json'),
+        JSON.stringify({ ok: false, skipped: false, findings: [], reviewComments: [] }),
+      )
+      const calls: { method: string; params: Record<string, unknown> }[] = []
+      const record =
+        (method: string, impl?: (params: Record<string, unknown>) => Promise<unknown>) =>
+        async (params: Record<string, unknown>) => {
+          calls.push({ method, params })
+          if (impl !== undefined) return impl(params)
+          return { data: {} }
+        }
+      const runtime = {
+        github: {
+          rest: {
+            pulls: {
+              listReviewComments: async () => ({ data: [] }),
+              listFiles: async () => ({ data: [] }),
+              listReviews: async () => ({ data: [] }),
+              createReview: record('createReview'),
+              dismissReview: record('dismissReview'),
+            },
+            issues: {
+              listComments: record('listComments', async () => ({ data: [] })),
+              createComment: record('createComment'),
+              updateComment: record('updateComment'),
+            },
+            repos: { createCommitStatus: record('createCommitStatus') },
+          },
+        },
+        context: {
+          actor: 'github-actions[bot]',
+          repo: { owner: 'o', repo: 'r' },
+          sha: 'h'.repeat(40),
+          payload: { pull_request: { number: 7, head: { sha: 'h'.repeat(40) } } },
+        },
+        core: { warning: () => {}, setOutput: () => {} },
+      }
+
+      await run(runtime)
+
+      const status = calls.find((c) => c.method === 'createCommitStatus')
+      expect(status!.params.state).toBe('failure')
+    } finally {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) Reflect.deleteProperty(process.env, k)
+        else process.env[k] = v
+      }
+    }
+  })
+
+  it('an all-skipped manifest resolves neutral, not failure — the push-event contract', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'argus-skipped-manifest-'))
+    const saved = {
+      OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+      GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
+      GITHUB_SERVER_URL: process.env.GITHUB_SERVER_URL,
+      GITHUB_RUN_ID: process.env.GITHUB_RUN_ID,
+      ARGUS_RUN_DISABLED: process.env.ARGUS_RUN_DISABLED,
+      ARGUS_REPORT_DIR: process.env.ARGUS_REPORT_DIR,
+    }
+    try {
+      process.env.OPENROUTER_API_KEY = 'test-key'
+      process.env.GITHUB_WORKSPACE = workspace
+      process.env.GITHUB_SERVER_URL = 'https://github.com'
+      process.env.GITHUB_RUN_ID = '1'
+      delete process.env.ARGUS_RUN_DISABLED
+      delete process.env.ARGUS_REPORT_DIR
+      await mkdir(join(workspace, 'argus-reviewer-report'), { recursive: true })
+      // Push event shape: no pull_request in the payload; the review lane
+      // legitimately skipped. A 'failure' status here punishes a lane that
+      // could never run.
+      const skipped = fixtureManifest()
+      for (const id of ['review', 'flow', 'app', 'a0'] as const) {
+        skipped.lanes[id] = fixtureLane(id, { selected: true, status: 'skipped' })
+      }
+      skipped.aggregate.status = 'skipped'
+      skipped.aggregate.ok = false
+      skipped.aggregate.calls = 0
+      skipped.aggregate.tokens = 0
+      skipped.aggregate.costUsd = 0
+      skipped.identity.intendedHeadSha = 'h'.repeat(40)
+      await writeFile(
+        join(workspace, 'argus-reviewer-report', 'run-manifest.json'),
+        JSON.stringify(skipped),
+      )
+      const calls: { method: string; params: Record<string, unknown> }[] = []
+      const record =
+        (method: string, impl?: (params: Record<string, unknown>) => Promise<unknown>) =>
+        async (params: Record<string, unknown>) => {
+          calls.push({ method, params })
+          if (impl !== undefined) return impl(params)
+          return { data: {} }
+        }
+      const runtime = {
+        github: {
+          rest: {
+            pulls: {
+              listReviewComments: async () => ({ data: [] }),
+              listFiles: async () => ({ data: [] }),
+              listReviews: async () => ({ data: [] }),
+              createReview: record('createReview'),
+              dismissReview: record('dismissReview'),
+            },
+            issues: {
+              listComments: record('listComments', async () => ({ data: [] })),
+              createComment: record('createComment'),
+              updateComment: record('updateComment'),
+            },
+            repos: { createCommitStatus: record('createCommitStatus') },
+          },
+        },
+        context: {
+          actor: 'github-actions[bot]',
+          repo: { owner: 'o', repo: 'r' },
+          sha: 'h'.repeat(40),
+          payload: {},
+        },
+        core: { warning: () => {}, setOutput: () => {} },
+      }
+
+      await run(runtime)
+
+      const status = calls.find((c) => c.method === 'createCommitStatus')
+      expect(status!.params.state).toBe('success')
+      expect(status!.params.description).toBe('argus-reviewer skipped (no lanes ran)')
+    } finally {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) Reflect.deleteProperty(process.env, k)
+        else process.env[k] = v
+      }
+    }
   })
 })

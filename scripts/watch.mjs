@@ -25,6 +25,17 @@ const ok = (s) => paint(s, C.green)
 const bad = (s) => paint(s, C.red)
 const warn = (s) => paint(s, C.yellow)
 
+// Every lane status gets an explicit paint — a missing key used to render
+// a literal "undefined" prefix for inconclusive/skipped lanes.
+const STATUS_PAINT = {
+  passed: ok,
+  failed: bad,
+  blocked: warn,
+  unavailable: warn,
+  inconclusive: warn,
+  skipped: (s) => paint(s, C.dim),
+}
+
 const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '')
 const trunc = (s, w = MAX_W - 4) => (strip(s).length > w ? `${strip(s).slice(0, w - 1)}…` : s)
 
@@ -48,7 +59,14 @@ const state = {
 }
 
 async function fetchData() {
-  Object.assign(state, await collect())
+  try {
+    Object.assign(state, await collect())
+    state.error = undefined
+  } catch (e) {
+    // A rejected poll is a bad tick, not a dead watcher — surface it and
+    // keep the interval alive rather than letting the rejection crash us.
+    state.error = `collect failed: ${e instanceof Error ? e.message : String(e)}`
+  }
   state.updatedAt = new Date()
 }
 
@@ -118,6 +136,61 @@ function render() {
   }
   out.push('')
 
+  // Verify workspace — the same run-manifest.json the comment and
+  // dashboard render (R18): aggregate + lane status words, never
+  // color-only, compact fallback rather than a second contract. When the
+  // collector projected the shared RunView we render it directly.
+  out.push(hr('Verify'))
+  const ws = state.workspace ?? { runs: [], corrupt: 0 }
+  if (ws.degraded) out.push(warn(`  ${ws.degraded}`))
+  if (ws.corrupt > 0 && !ws.degraded) {
+    out.push(warn(`  ${ws.corrupt} manifest file(s) unreadable — skipped`))
+  }
+  const cur = ws.current
+  if (!cur) {
+    out.push(paint(`  no runs yet — argus-reviewer verify writes run-manifest.json`, C.dim))
+  } else {
+    const agg = cur.aggregate ?? {}
+    const aggPaint = STATUS_PAINT[agg.status] ?? warn
+    const aggLabel = cur.view?.statusIcon !== undefined
+      ? `${cur.view.statusIcon} ${agg.status}`
+      : (agg.status ?? '?')
+    out.push(
+      `  ${aggPaint(aggLabel)}  ${paint(cur.runId ?? '', C.cyan)}  ` +
+        `${agg.calls ?? 0} call(s)  $${(agg.costUsd ?? 0).toFixed(6)}`,
+    )
+    // LaneViews arrive in canonical order (skipped included); raw records
+    // fall back to the same explicit LANE_IDS order.
+    const lanes = cur.view?.lanes ??
+      ['review', 'flow', 'app', 'a0'].map((id) => cur.lanes?.[id]).filter(Boolean)
+    const skipped = []
+    for (const lane of lanes) {
+      if (!lane.selected) {
+        skipped.push(lane.lane)
+        continue
+      }
+      const paintFn = STATUS_PAINT[lane.status] ?? ((s) => paint(s, C.dim))
+      const usage = lane.usage ?? {}
+      const cost = usage.metered === true ? `$${(usage.costUsd ?? 0).toFixed(6)}` : 'unmetered'
+      const label =
+        lane.statusIcon !== undefined ? `${lane.statusIcon} ${lane.status}` : lane.status
+      const detail = lane.reason ?? lane.summary ?? ''
+      const head = lane.headBinding
+        ? `  head ${lane.headBinding.status === 'match' ? ok('match') : warn(lane.headBinding.status)}`
+        : ''
+      out.push(
+        `    ${paintFn(label)}  ${String(lane.lane).padEnd(6)}  ` +
+          `${usage.calls ?? 0} call(s) ${cost} ${paint(lane.model ?? '', C.dim)}${head}` +
+          `${detail ? `  ${trunc(detail, 48)}` : ''}`,
+      )
+    }
+    if (skipped.length > 0) out.push(paint(`    skipped: ${skipped.join(', ')}`, C.dim))
+    if (ws.runs.length > 1) {
+      out.push(paint(`    ${ws.runs.length} run(s) in history`, C.dim))
+    }
+  }
+  out.push('')
+
   out.push(hr('Code Review'))
   const rv = state.review
   if (rv) {
@@ -163,6 +236,13 @@ function runEval() {
   })
   child.stderr.on('data', (d) => {
     state.evalLog.push(...String(d).trim().split('\n').map((l) => bad(l)))
+    render()
+  })
+  // 'error' with no listener throws — a spawn ENOENT (node missing from a
+  // bare PATH) must not crash the TUI.
+  child.on('error', (err) => {
+    state.evalRunning = false
+    state.evalLog.push(bad(`eval spawn failed: ${err.message}`))
     render()
   })
   child.on('close', async (code) => {

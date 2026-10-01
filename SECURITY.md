@@ -19,8 +19,11 @@ You should receive an acknowledgement within a few days.
   or personal data you are not willing to share with that provider.
 - Values in `secrets` are interpolated into test steps and sent to the target
   app — keep them out of committed config and out of test files.
-- `delegate` and `heal: 'a0'` hand control to your own Agent Zero instance;
-  review that instance's trust settings separately.
+- `delegate`, `heal: 'a0'`, and `verify --a0` hand control to your own Agent
+  Zero instance; review that instance's trust settings separately.
+- `verify --app` executes the configured `target.command` and drives your app
+  with a real browser — run it only against targets you are willing to have
+  an agent click through.
 
 ## GitHub Action boundary
 
@@ -103,6 +106,27 @@ a trust value at every call site.
   design.
 - `node:vm` is deliberately **not** used as a boundary — Node's own docs
   warn it cannot run untrusted code safely.
+
+## Executable verify lanes (`--app`, `--a0`)
+
+Both lanes are explicit opt-ins that execute real work, and both are gated
+on the same trust resolution as config loading:
+
+- `verify --app` is `blocked` outright on untrusted checkouts — the lane
+  never starts `target.command`, opens a browser, or reads an expected-state
+  contract from a PR-controlled tree. On trusted checkouts it starts the
+  configured target (or connects to `target.url`), runs a **directed** task,
+  and reports `passed`/`failed`/`blocked`/`unavailable`/`inconclusive` — a
+  run with no task is `blocked` before any provider call is made.
+- `verify --a0` delegates the task to a configured Agent Zero host. The
+  child process receives an allowlisted environment — provider keys,
+  `GITHUB_TOKEN`, `ARGUS_*`, and npm auth variables are not inherited — and
+  is bounded to one task and a per-task timeout. A remote A0 host is refused
+  when the application target is loopback. Because live host round-trips are
+  not yet verified (#53), a completed delegation reports `inconclusive` —
+  never `passed`.
+- On `pull_request_target`, fork `pull_request`, and `issue_comment` events
+  the action's runtime-lane gate refuses app/a0 inputs before the CLI runs.
 
 **Residual surface (documented, not yet closed):**
 

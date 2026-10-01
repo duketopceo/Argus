@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { renderComment, conclusionFromReport, SENTINEL } from '../../src/report/comment.js'
+import {
+  renderComment,
+  renderManifestComment,
+  conclusionFromReport,
+  SENTINEL,
+} from '../../src/report/comment.js'
 import { RunReport, TestReport } from '../../src/report/run.js'
+import { fixtureManifest } from '../fixtures/manifest.js'
 
 function stubReport(overrides: Partial<RunReport> = {}): RunReport {
   const tests: TestReport[] = [
@@ -198,6 +204,54 @@ describe('renderComment', () => {
       }),
     )
     expect(body).toContain('explore skipped — no reachable target')
+  })
+})
+
+// U5/R15 — the verify-run sticky renders straight from the shared manifest
+// view-model: all four lanes, statuses as text, costs, head binding.
+describe('renderManifestComment', () => {
+  it('renders every selected lane with status, calls, cost, and detail', () => {
+    const body = renderManifestComment(fixtureManifest(), {
+      runUrl: 'https://github.com/run/1',
+    })
+
+    expect(body).toContain(SENTINEL)
+    expect(body).toContain('## argus-reviewer ❌ FAILED')
+    expect(body).toContain('run-fixture-1')
+    expect(body).toContain('8 provider call(s)')
+    expect(body).toContain('$0.006200 spend')
+    // All four lanes in canonical order.
+    expect(body).toContain('| review | ✅ passed | 4 | $0.004200 | 2 findings (`deepseek/deepseek-v4.1-flash`) |')
+    expect(body).toContain('| flow | ❌ failed | 3 | $0.001500 | landing.test.ts: assertion failed (`google/gemini-2.5-flash-lite`) |')
+    expect(body).toContain('| app | ✅ passed | 1 | $0.000500 | expected state verified (`google/gemini-2.5-flash-lite`) |')
+    expect(body).toContain('| a0 | 🟡 inconclusive | 0 | unmetered | delegation returned — unverified-live (#53) |')
+    // Head binding surfaces the match contract.
+    expect(body).toContain('head `abc1234`')
+    expect(body).toContain('match — checkout matches the intended PR head')
+    // Cache economics and per-lane evidence paths ride along.
+    expect(body).toContain('**Fingerprint cache:** 2 hit(s) · 1 miss(es) · 1 heal(s)')
+    expect(body).toContain('- review: `reports/code-review.json`')
+    expect(body).toContain('- a0: `reports/a0-lane.json`')
+    expect(body).toContain('[workflow run / artifacts](https://github.com/run/1)')
+  })
+
+  it('renders unselected lanes as explicitly skipped rows', () => {
+    const manifest = fixtureManifest()
+    manifest.lanes.app.selected = false
+    manifest.lanes.app.status = 'skipped'
+    const body = renderManifestComment(manifest)
+    expect(body).toContain('| app | ⚪ skipped | 0 | — | not selected |')
+    // and after the selected rows — lane order is canonical regardless.
+    const reviewIdx = body.indexOf('| review |')
+    const appIdx = body.indexOf('| app |')
+    expect(appIdx).toBeGreaterThan(reviewIdx)
+  })
+
+  it('masks secret-shaped tokens in lane detail before they reach a PR', () => {
+    const manifest = fixtureManifest()
+    manifest.lanes.flow.reason = 'auth failed: sk-or-v1-abcdef12345'
+    const body = renderManifestComment(manifest)
+    expect(body).not.toContain('sk-or-v1-abcdef12345')
   })
 })
 

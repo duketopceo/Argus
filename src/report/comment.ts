@@ -1,14 +1,19 @@
+import type { RunManifest } from './manifest.js'
 import { RunReport, TestReport } from './run.js'
+import {
+  formatUsd,
+  LANE_STATUS_EMOJI,
+  LANE_STATUS_LABEL,
+  manifestToRunView,
+  maskSecrets,
+  shortSha,
+} from './viewmodel.js'
 
 export const SENTINEL = '<!-- argus-reviewer -->'
 
 export interface CommentOptions {
   /** Link to the workflow run or artifact index. */
   runUrl?: string
-}
-
-function formatUsd(n: number): string {
-  return `$${(n ?? 0).toFixed(6)}`
 }
 
 function statusLine(report: RunReport | undefined, missingKey: boolean): string {
@@ -203,6 +208,97 @@ export function renderComment(
     lines.push(...evidenceRows(report.artifacts.videos, opts.runUrl))
   }
 
+  return lines.join('\n')
+}
+
+/**
+ * Reference renderer for a `verify` sticky comment — NOT wired into the
+ * action (`action/sticky-comment.cjs` is self-contained CJS and ships the
+ * live renderer). This exists so the cross-surface parity test can compare
+ * the TS and CJS renderers over the same manifest; keep it honest or the
+ * parity suite guards nothing.
+ *
+ * Lane names, status labels, model/cost, and head identity come from
+ * the shared view-model so the comment agrees with the TUI and dashboard
+ * under the contract test, not by convention.
+ */
+export function renderManifestComment(
+  manifest: RunManifest,
+  opts: CommentOptions = {},
+): string {
+  const view = manifestToRunView(manifest)
+  const emoji = LANE_STATUS_EMOJI[view.status]
+  const lines = [SENTINEL, '']
+  lines.push(`## argus-reviewer ${emoji} ${view.statusLabel.toUpperCase()}`)
+  lines.push('')
+
+  const headBits: string[] = []
+  const headSha = shortSha(view.intendedHeadSha)
+  if (headSha !== undefined) {
+    headBits.push(`head \`${headSha}\``)
+  }
+  if (view.headBinding !== undefined) {
+    headBits.push(
+      `${maskSecrets(view.headBinding.status)} — ${maskSecrets(view.headBinding.detail ?? '')}`,
+    )
+  }
+  lines.push(
+    `**Run:** ${maskSecrets(view.runId)} · ${view.calls} provider call(s) · ` +
+      `${formatUsd(view.costUsd)} spend${headBits.length > 0 ? ` · ${headBits.join(' · ')}` : ''}`,
+  )
+  lines.push('')
+
+  lines.push('| Lane | Status | Calls | Cost | Detail |')
+  lines.push('| --- | --- | ---: | ---: | --- |')
+  // Canonical lane order — skipped rows interleave in place so the comment
+  // matches the TUI and dashboard ordering under the parity contract.
+  for (const lane of view.lanes) {
+    if (!lane.selected) {
+      lines.push(`| ${lane.lane} | ⚪ skipped | 0 | — | not selected |`)
+      continue
+    }
+    const icon = LANE_STATUS_EMOJI[lane.status]
+    const usage = lane.usage
+    const cost = usage.metered === true ? formatUsd(usage.costUsd) : 'unmetered'
+    // Cell semantics mirror action/sticky-comment.cjs: flatten newlines,
+    // escape pipes, mask secrets, cap at 200 chars — the parity suite pins it.
+    const detail = maskSecrets(
+      (lane.reason ?? lane.summary ?? '').replace(/\|/g, '\\|').replace(/[\r\n]+/g, ' '),
+    ).slice(0, 200)
+    const model = lane.model !== undefined ? ` (\`${maskSecrets(lane.model)}\`)` : ''
+    lines.push(
+      `| ${lane.lane} | ${icon} ${LANE_STATUS_LABEL[lane.status]} | ` +
+        `${usage.calls} | ${cost} | ${detail}${model} |`,
+    )
+  }
+  lines.push('')
+
+  const flowLane = view.lanes.find((l) => l.lane === 'flow')
+  if (flowLane?.cache !== undefined) {
+    const c = flowLane.cache
+    lines.push(
+      `**Fingerprint cache:** ${c.hits} hit(s) · ${c.misses} miss(es) · ${c.heals} heal(s)`,
+    )
+    lines.push('')
+  }
+
+  const evidence = view.selectedLanes.filter((l) => l.reportPath !== undefined)
+  if (evidence.length > 0 || opts.runUrl !== undefined) {
+    lines.push('### Evidence')
+    lines.push('')
+    for (const lane of evidence) {
+      lines.push(`- ${lane.lane}: \`${lane.reportPath}\``)
+    }
+    if (opts.runUrl !== undefined) {
+      lines.push(`- [workflow run / artifacts](${opts.runUrl})`)
+    }
+    lines.push('')
+  }
+
+  lines.push('---')
+  lines.push('')
+  lines.push('<sub>`argus-reviewer` — self-hosted, BYOK review. Lane detail lives in the run manifest.</sub>')
+  lines.push('')
   return lines.join('\n')
 }
 

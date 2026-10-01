@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Config } from './config.js';
-import { type ExecFn } from './detect.js';
+import { type ExecFn, type ProbeFn } from './detect.js';
 import { BrowserDriver } from './driver/browser.js';
 import { VisionClient } from './engine/loop.js';
 import { type PrMeta } from './evidence/ci.js';
@@ -23,6 +23,8 @@ export interface CliDeps {
     launchDriver?: (config: Config) => Promise<BrowserDriver>;
     /** Inject a subprocess runner (tests stub `a0`/`gh` detection + delegation). */
     exec?: ExecFn;
+    /** Inject the host reachability probe (tests stub a0 detection). */
+    probe?: ProbeFn;
 }
 export declare function main(argv: string[], deps?: CliDeps): Promise<number>;
 interface PrFile {

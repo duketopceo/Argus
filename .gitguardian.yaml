@@ -1,0 +1,12 @@
+version: 2
+
+secret:
+  # Deliberate non-secrets: test fixtures that exercise the secret-masking
+  # grammar. Listed by occurrence SHA256 so the literals never sit in this
+  # file — they are also constructed at test time (string concat) so no
+  # literal remains in the working tree either.
+  ignored_matches:
+    - name: AWS docs example key — deliberate fake fixture (tests/unit/dashboard-view-model.test.ts)
+      match: 1a5d44a2dca19669d72edf4c4f1c27c4c1ca4b4408fbb17f6ce4ad452d78ddb3
+    - name: Fake three-segment JWT — masking-regex fixture (tests/unit/collect.test.ts)
+      match: 5de63170398b09c14bde061a996e940a58b416066b59593fbcf14d32c51460fc

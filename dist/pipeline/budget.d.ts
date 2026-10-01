@@ -6,6 +6,7 @@ export interface BudgetOptions {
     maxTasks?: number;
 }
 export declare function createBudget(lane: LaneId, options?: BudgetOptions): BudgetSummary;
+export declare function overLimit(spentUsd: number, limitUsd: number): boolean;
 export declare function addProviderCalls(budget: BudgetSummary, calls: CallCost[] | undefined): BudgetSummary;
 export declare function addA0Task(budget: BudgetSummary, elapsedMs: number, metered: boolean): BudgetSummary;
 export declare function budgetCanSpend(budget: BudgetSummary, nextCostUsd: number): boolean;

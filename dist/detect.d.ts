@@ -15,12 +15,36 @@ export interface ExecResult {
     timedOut?: boolean;
     /** Signal the process was terminated by, when killed (e.g. 'SIGTERM'). */
     signal?: string | undefined;
+    /**
+     * The process never started (ENOENT — binary missing) — set by the real
+     * executor so callers don't sniff stderr text for the distinction.
+     */
+    spawnError?: boolean | undefined;
 }
 export type ExecFn = (cmd: string, args: string[], timeoutMs: number, 
 /** Extra env merged over process.env — keeps secrets out of `ps`/`/proc` argv. */
-env?: Record<string, string>) => Promise<ExecResult>;
+env?: Record<string, string>, 
+/**
+ * `baseEnv` replaces the inherited process environment wholesale — the
+ * caller's allowlist, not ambient env. Without it the child inherits
+ * process.env as before.
+ */
+opts?: {
+    baseEnv?: Record<string, string>;
+}) => Promise<ExecResult>;
 export declare const defaultExec: ExecFn;
 export type ProbeFn = (url: string, timeoutMs: number) => Promise<boolean>;
+/**
+ * The only environment keys an Agent Zero child process may inherit.
+ * Provider keys, GitHub tokens, `ARGUS_*`, and npm auth variables never
+ * propagate (R12) — the child is a remote agent harness, not an extension
+ * of this process's trust. Lives here (not in executor/a0.ts) because every
+ * `a0` spawn — delegation, the lane's `--version` preflight, and init's
+ * environment probe — must use it or the contract leaks.
+ */
+export declare const A0_CHILD_ENV_KEYS: readonly ["PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "LC_ALL", "TERM", "TMPDIR", "XDG_RUNTIME_DIR", "DOCKER_HOST", "AGENT_ZERO_HOST"];
+/** Build the sanitized child env: allowlisted keys that exist in `env`. */
+export declare function buildA0ChildEnv(env: NodeJS.ProcessEnv | Record<string, string | undefined>): Record<string, string>;
 /**
  * Any HTTP response — including a login redirect — means *something* is up,
  * but port 5080 could be an unrelated service. Require an Agent Zero marker

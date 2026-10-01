@@ -32,6 +32,14 @@ export interface BudgetSummary {
     maxTasks: number | undefined;
     tasks: number;
 }
+export interface CacheSummary {
+    hits: number;
+    misses: number;
+    heals: number;
+    staleEntries: number;
+    assertionHits: number;
+    assertionMisses: number;
+}
 export interface LaneManifest {
     lane: LaneId;
     selected: boolean;
@@ -45,6 +53,8 @@ export interface LaneManifest {
     usage: UsageSummary;
     budget: BudgetSummary;
     headBinding: HeadBinding | undefined;
+    /** Flow-lane replay economics — defined only when the lane produced a run.json. */
+    cache: CacheSummary | undefined;
 }
 export interface RunIdentity {
     repo: string | undefined;
@@ -85,3 +95,13 @@ export declare function aggregateLanes(lanes: Record<LaneId, LaneManifest>): {
     tokens: number;
 };
 export declare function addProviderUsage(usage: UsageSummary, calls: CallCost[] | undefined): UsageSummary;
+/** Run manifests are archived under `<reportDir>/manifests/<runId>.json`. */
+export declare const MANIFEST_HISTORY_DIR = "manifests";
+/**
+ * Archive a completed verify manifest into local history and prune to the
+ * retention bound — the dashboard/TUI run list reads this directory.
+ * runIds are timestamp-prefixed, so name sort is chronological; pruning
+ * drops the oldest names beyond `keep`. `keep <= 0` writes nothing and
+ * clears nothing existing (retention governs new archives, not deletes).
+ */
+export declare function archiveManifest(reportDir: string, manifest: RunManifest, keep: number): Promise<void>;

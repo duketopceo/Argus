@@ -93,8 +93,18 @@ describe('runVerify', () => {
       join(reportDir, 'run.json'),
       JSON.stringify({
         ok: true,
-        totals: { visionCalls: 0, visionCostUsd: 0 },
-        tests: [],
+        totals: {
+          tests: 1,
+          visionCalls: 1,
+          visionCostUsd: 0.001,
+          cacheHits: 4,
+          cacheMisses: 1,
+          cacheHeals: 1,
+          staleEntries: 0,
+          assertionHits: 2,
+          assertionMisses: 0,
+        },
+        tests: [{ calls: [] }],
       }),
     )
     const result = await runVerify({
@@ -117,11 +127,291 @@ describe('runVerify', () => {
       budgets: { review: { limitUsd: 0.01 } },
     })
     expect(result.exitCode).toBe(0)
-    expect(result.manifest.aggregate).toMatchObject({ status: 'passed', ok: true, costUsd: 0.002 })
+    expect(result.manifest.aggregate).toMatchObject({ status: 'passed', ok: true, costUsd: 0.003 })
     expect(result.manifest.lanes.review.status).toBe('passed')
     expect(result.manifest.lanes.flow.status).toBe('passed')
     expect(result.manifest.lanes.app.status).toBe('skipped')
     expect(result.manifest.lanes.review.reportPath).toBe('reports/code-review.json')
+    expect(result.manifest.lanes.flow.cache).toMatchObject({
+      hits: 4,
+      misses: 1,
+      heals: 1,
+      staleEntries: 0,
+      assertionHits: 2,
+      assertionMisses: 0,
+    })
+  })
+
+  it('flow lane usage counts run-total calls no test report owns (explore spend)', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-'))
+    const reportDir = join(cwd, 'reports')
+    await mkdir(reportDir, { recursive: true })
+    // One test-owned call plus two explore-lane calls folded into totals —
+    // usage must reflect the billed total, not just the per-test calls.
+    await writeFile(
+      join(reportDir, 'run.json'),
+      JSON.stringify({
+        ok: true,
+        totals: { tests: 1, visionCalls: 3, visionCostUsd: 0.003 },
+        tests: [{ calls: [{ model: 'm', provider: 'openrouter', tokens: 10, costUsd: 0.001 }] }],
+      }),
+    )
+    const result = await runVerify({
+      cwd,
+      runId: 'run-usage',
+      reportDir,
+      identity: {
+        repo: 'o/r',
+        pr: '1',
+        intendedHeadSha: 'abc',
+        checkoutSha: 'abc',
+        baseSha: 'def',
+      },
+      selection: { review: false, flow: true, app: false, a0: false },
+      flowUrl: 'http://localhost:3000',
+      runners: { flow: async () => 0 },
+    })
+    expect(result.manifest.lanes.flow.status).toBe('passed')
+    expect(result.manifest.lanes.flow.usage.calls).toBe(3)
+    expect(result.manifest.lanes.flow.usage.costUsd).toBeCloseTo(0.003)
+  })
+
+  it('marks the flow lane failed when run.json claims ok with zero tests', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-'))
+    const reportDir = join(cwd, 'reports')
+    await mkdir(reportDir, { recursive: true })
+    await writeFile(
+      join(reportDir, 'run.json'),
+      JSON.stringify({ ok: true, totals: { tests: 0, visionCalls: 0 }, tests: [] }),
+    )
+    const result = await runVerify({
+      cwd,
+      runId: 'run-zero',
+      reportDir,
+      identity: {
+        repo: 'o/r',
+        pr: '1',
+        intendedHeadSha: undefined,
+        checkoutSha: undefined,
+        baseSha: undefined,
+      },
+      selection: { review: false, flow: true, app: false, a0: false },
+      flowUrl: 'http://localhost:3000',
+      runners: { flow: async () => 0 },
+    })
+    expect(result.manifest.lanes.flow.status).toBe('failed')
+    expect(result.manifest.lanes.flow.reason).toContain('zero tests')
+    expect(result.exitCode).not.toBe(0)
+  })
+
+  it('fails closed when explore.enabled but the explore pass skipped — config is not evidence', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-'))
+    const reportDir = join(cwd, 'reports')
+    await mkdir(reportDir, { recursive: true })
+    // cmdRun writes ok:true for explore-enabled zero-test runs; when the
+    // explore pass never observed anything (skipped), the enabled flag is
+    // configuration, not evidence — the lane must not read it as a pass.
+    await writeFile(
+      join(reportDir, 'run.json'),
+      JSON.stringify({
+        ok: true,
+        totals: { tests: 0, visionCalls: 0 },
+        tests: [],
+        explore: { enabled: true, skipped: 'no reachable target — ECONNREFUSED' },
+      }),
+    )
+    const result = await runVerify({
+      cwd,
+      runId: 'run-explore-skipped',
+      reportDir,
+      identity: {
+        repo: 'o/r',
+        pr: '1',
+        intendedHeadSha: undefined,
+        checkoutSha: undefined,
+        baseSha: undefined,
+      },
+      selection: { review: false, flow: true, app: false, a0: false },
+      flowUrl: 'http://localhost:3000',
+      runners: { flow: async () => 0 },
+    })
+    expect(result.manifest.lanes.flow.status).toBe('failed')
+    expect(result.exitCode).not.toBe(0)
+  })
+
+  it('stamps per-lane startedAt/finishedAt — unselected lanes carry no timing', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-'))
+    const reportDir = join(cwd, 'reports')
+    await mkdir(reportDir, { recursive: true })
+    await writeFile(
+      join(reportDir, 'code-review.json'),
+      JSON.stringify({ ok: true, model: 'm', calls: [call(0.001)] }),
+    )
+    await writeFile(
+      join(reportDir, 'run.json'),
+      JSON.stringify({
+        ok: true,
+        totals: { tests: 1, visionCalls: 0, visionCostUsd: 0 },
+        tests: [{ calls: [] }],
+      }),
+    )
+    const result = await runVerify({
+      cwd,
+      runId: 'run-timing',
+      reportDir,
+      identity: {
+        repo: 'o/r',
+        pr: '1',
+        intendedHeadSha: 'abc',
+        checkoutSha: 'abc',
+        baseSha: 'def',
+      },
+      selection: { review: true, flow: true, app: false, a0: false },
+      runners: {
+        review: async () => 0,
+        flow: async () => {
+          // Real delay so the second lane's start provably follows the first's.
+          await new Promise((r) => setTimeout(r, 5))
+          return 0
+        },
+      },
+    })
+    const { review, flow, app, a0 } = result.manifest.lanes
+    expect(Date.parse(review.startedAt ?? '')).not.toBeNaN()
+    expect(Date.parse(review.finishedAt ?? '')).not.toBeNaN()
+    expect(Date.parse(flow.startedAt ?? '')).not.toBeNaN()
+    // Lanes run sequentially — flow starts no earlier than review.
+    expect(Date.parse(flow.startedAt!)).toBeGreaterThanOrEqual(Date.parse(review.startedAt!))
+    expect(app.startedAt).toBeUndefined()
+    expect(a0.startedAt).toBeUndefined()
+  })
+
+  it('a throwing runner does not inherit a previous run\'s stale lane detail', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-'))
+    const reportDir = join(cwd, 'reports')
+    await mkdir(reportDir, { recursive: true })
+    // A previous run's detail file sits in the report dir; this run's runner
+    // throws before writing — the stale usage/summary must not merge in.
+    await writeFile(
+      join(reportDir, 'app-lane.json'),
+      JSON.stringify({
+        lane: 'app',
+        status: 'passed',
+        summary: 'previous run passed',
+        visionCalls: 7,
+        visionCostUsd: 0.5,
+        calls: [{ model: 'm', provider: 'openrouter', tokens: 10, costUsd: 0.5 }],
+      }),
+    )
+    const result = await runVerify({
+      cwd,
+      runId: 'run-stale-detail',
+      reportDir,
+      identity: {
+        repo: 'o/r',
+        pr: '1',
+        intendedHeadSha: 'abc',
+        checkoutSha: 'abc',
+        baseSha: 'def',
+      },
+      selection: { review: false, flow: false, app: true, a0: false },
+      runners: {
+        app: async () => {
+          throw new Error('browser exploded pre-write')
+        },
+      },
+    })
+    const app = result.manifest.lanes.app
+    expect(app.status).toBe('failed')
+    expect(app.reason).toContain('browser exploded')
+    expect(app.usage.calls).toBe(0)
+    expect(app.summary).not.toBe('previous run passed')
+    expect(app.reportPath).toBeUndefined()
+  })
+
+  it('a throwing review runner does not inherit a previous run\'s stale code-review.json', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-'))
+    const reportDir = join(cwd, 'reports')
+    await mkdir(reportDir, { recursive: true })
+    // Leftover from a prior run — the same leak class as <lane>-lane.json.
+    await writeFile(
+      join(reportDir, 'code-review.json'),
+      JSON.stringify({
+        ok: true,
+        model: 'old/model',
+        summary: 'stale review passed',
+        calls: [call(0.5)],
+        headBinding: { intendedSha: 'zzz', checkoutSha: 'zzz', status: 'match', source: 'github', detail: 'match' },
+      }),
+    )
+    const result = await runVerify({
+      cwd,
+      runId: 'run-stale-review',
+      reportDir,
+      identity: {
+        repo: 'o/r',
+        pr: '1',
+        intendedHeadSha: 'abc',
+        checkoutSha: 'abc',
+        baseSha: 'def',
+      },
+      selection: { review: true, flow: false, app: false, a0: false },
+      runners: {
+        review: async () => {
+          throw new Error('review crashed before writing')
+        },
+      },
+    })
+    const review = result.manifest.lanes.review
+    expect(review.status).toBe('failed')
+    expect(review.reason).toContain('review crashed')
+    expect(review.usage.calls).toBe(0)
+    expect(review.usage.costUsd).toBe(0)
+    expect(review.model).toBeUndefined()
+    expect(review.summary).not.toBe('stale review passed')
+    expect(review.reportPath).toBeUndefined()
+    expect(review.headBinding).toBeUndefined()
+    // And the aggregate must not bill the stale spend.
+    expect(result.manifest.aggregate.costUsd).toBe(0)
+  })
+
+  it('a throwing flow runner does not inherit a previous run\'s stale run.json', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-'))
+    const reportDir = join(cwd, 'reports')
+    await mkdir(reportDir, { recursive: true })
+    await writeFile(
+      join(reportDir, 'run.json'),
+      JSON.stringify({
+        ok: true,
+        totals: { tests: 3, visionCalls: 9, visionCostUsd: 0.7 },
+        tests: [{ calls: [{ model: 'm', provider: 'openrouter', tokens: 1, costUsd: 0.7 }] }],
+      }),
+    )
+    const result = await runVerify({
+      cwd,
+      runId: 'run-stale-flow',
+      reportDir,
+      identity: {
+        repo: 'o/r',
+        pr: '1',
+        intendedHeadSha: 'abc',
+        checkoutSha: 'abc',
+        baseSha: 'def',
+      },
+      selection: { review: false, flow: true, app: false, a0: false },
+      flowUrl: 'http://localhost:3000',
+      runners: {
+        flow: async () => {
+          throw new Error('flow exploded mid-run')
+        },
+      },
+    })
+    const flow = result.manifest.lanes.flow
+    expect(flow.status).toBe('failed')
+    expect(flow.reason).toContain('flow exploded')
+    expect(flow.usage.calls).toBe(0)
+    expect(flow.cache).toBeUndefined()
+    expect(flow.reportPath).toBeUndefined()
   })
 
   it('marks an unavailable deep lane and a missing flow target without spending', async () => {

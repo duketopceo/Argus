@@ -1,16 +1,35 @@
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { main } from '../../src/cli.js'
+import { TargetProcess } from '../../src/driver/target.js'
 import { VisionClient } from '../../src/engine/loop.js'
 import { CallCost, CallKind } from '../../src/vision/cost.js'
 import { JsonSchema, Message } from '../../src/vision/openrouter.js'
 import { ProviderRules } from '../../src/config.js'
 
-const FIXTURE_URL = `file://${fileURLToPath(new URL('../fixtures/index.html', import.meta.url))}`
+const SERVE_SCRIPT = fileURLToPath(new URL('../fixtures/serve.mjs', import.meta.url))
+const FIXTURE_DIR = fileURLToPath(new URL('../fixtures/', import.meta.url))
+
+let FIXTURE_URL = ''
+let fixtureServer: TargetProcess | undefined
+
+beforeAll(async () => {
+  const port = 5000 + Math.floor(Math.random() * 400)
+  fixtureServer = await TargetProcess.start({
+    command: `${JSON.stringify(process.execPath)} ${JSON.stringify(SERVE_SCRIPT)} ${port} ${JSON.stringify(FIXTURE_DIR)}`,
+    url: `http://127.0.0.1:${port}/`,
+    readyTimeoutMs: 10_000,
+  })
+  FIXTURE_URL = fixtureServer.url
+})
+
+afterAll(async () => {
+  await fixtureServer?.stop()
+})
 
 class StubClient implements VisionClient {
   calls: { kind: CallKind; model: string }[] = []
@@ -132,6 +151,14 @@ describe('argus-reviewer end-to-end smoke', () => {
     expect(code).toBe(0)
     expect(out.lines.join('\n')).toContain('PASS smoke-flow')
     expect(runClient.calls.length).toBeLessThanOrEqual(1)
+
+    // Replay economics are explainable: run.json carries the cache outcome
+    // and the provider-call count matches what the client actually spent.
+    const report = JSON.parse(await readFile(join(reportDir, 'run.json'), 'utf8')) as {
+      totals: { visionCalls: number; cacheHits: number; cacheHeals: number }
+    }
+    expect(report.totals.visionCalls).toBe(runClient.calls.length)
+    expect(report.totals.cacheHits + report.totals.cacheHeals).toBeGreaterThanOrEqual(1)
   }, 60_000)
 
   it('fails to run when no target URL is provided', async () => {

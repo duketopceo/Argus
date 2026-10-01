@@ -17,7 +17,7 @@ export function createBudget(lane, options = {}) {
  * far below the 1e-6 precision reports render, and far above double noise here.
  */
 const USD_EPSILON = 1e-9;
-function overLimit(spentUsd, limitUsd) {
+export function overLimit(spentUsd, limitUsd) {
     return spentUsd > limitUsd + USD_EPSILON;
 }
 export function addProviderCalls(budget, calls) {

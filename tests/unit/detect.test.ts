@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import {
+  defaultExec,
   detectEnvironment,
   resolveA0Host,
   type ExecFn,
@@ -87,5 +88,62 @@ describe('detectEnvironment', () => {
         : { code: 1, stdout: '', stderr: 'ENOENT' }
     const report = await detectEnvironment({}, { exec: unauthenticated, home, probe: async () => false })
     expect(report.ghAuth).toBe(false)
+  })
+
+  it('spawns the a0 --version probe under the child allowlist — secrets never reach detection', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'argus-detect-'))
+    const calls: { cmd: string; opts?: { baseEnv?: Record<string, string> } }[] = []
+    const exec: ExecFn = async (cmd, _args, _timeout, _env, opts) => {
+      calls.push({ cmd, ...(opts !== undefined ? { opts } : {}) })
+      return { code: 1, stdout: '', stderr: 'ENOENT' }
+    }
+    await detectEnvironment(
+      {
+        PATH: '/usr/bin',
+        HOME: '/home/x',
+        OPENROUTER_API_KEY: 'sk-or-secret',
+        GITHUB_TOKEN: 'ghp_secret',
+      },
+      { exec, home, probe: async () => false },
+    )
+    const a0Call = calls.find((c) => c.cmd === 'a0')
+    expect(a0Call?.opts?.baseEnv).toEqual({ PATH: '/usr/bin', HOME: '/home/x' })
+    // gh is first-party tooling — it keeps ambient env (no baseEnv override).
+    const ghCall = calls.find((c) => c.cmd === 'gh')
+    expect(ghCall?.opts).toBeUndefined()
+  })
+})
+
+describe('defaultExec', () => {
+  it('honors baseEnv as the complete base — ambient secrets never reach the child', async () => {
+    // Run the real executor (no stub) with the sentinel live in ambient env:
+    // a regression that merges process.env over baseEnv would print it.
+    const saved = process.env.ARGUS_SENTINEL
+    process.env.ARGUS_SENTINEL = 'ambient-secret'
+    try {
+      const res = await defaultExec(
+        process.execPath,
+        ['-p', 'process.env.ARGUS_SENTINEL ?? "absent"'],
+        5_000,
+        undefined,
+        { baseEnv: { PATH: process.env.PATH ?? '' } },
+      )
+      expect(res.code).toBe(0)
+      expect(res.stdout.trim()).toBe('absent')
+    } finally {
+      if (saved === undefined) delete process.env.ARGUS_SENTINEL
+      else process.env.ARGUS_SENTINEL = saved
+    }
+  })
+
+  it('opts env still overlays on top of baseEnv', async () => {
+    const res = await defaultExec(
+      process.execPath,
+      ['-p', 'process.env.ARGUS_SENTINEL ?? "absent"'],
+      5_000,
+      { ARGUS_SENTINEL: 'from-opts' },
+      { baseEnv: { PATH: process.env.PATH ?? '' } },
+    )
+    expect(res.stdout.trim()).toBe('from-opts')
   })
 })

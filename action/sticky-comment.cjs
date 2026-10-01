@@ -16,12 +16,33 @@ function formatUsd(n) {
   return `$${(n || 0).toFixed(6)}`
 }
 
-/** Escape a report string for one markdown table cell. */
+/** Escape a report string for one markdown table cell — and mask
+ *  secret-shaped tokens so a leaked credential never reaches a PR comment. */
+const SECRET_PATTERNS = [
+  /sk-or-[A-Za-z0-9_-]{4,}/g,
+  /sk-[A-Za-z0-9_-]{8,}/g,
+  /gh[pousr]_[A-Za-z0-9_]{8,}/g,
+  /github_pat_[A-Za-z0-9_]{8,}/g,
+  /xox[baprs]-[A-Za-z0-9-]{8,}/g,
+  /AKIA[A-Z0-9]{16}/g,
+  /npm_[A-Za-z0-9]{8,}/g,
+  /Bearer\s+[A-Za-z0-9._~+/=-]{10,}/gi,
+  /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/g,
+  /:\/\/[^/\s:@]{1,64}:[^/\s:@]{6,}@/g,
+]
+
+function maskSecrets(s) {
+  let out = s
+  for (const re of SECRET_PATTERNS) out = out.replace(re, '•••')
+  return out
+}
+
 function cell(s) {
-  return String(s ?? '')
-    .replace(/\|/g, '\\|')
-    .replace(/[\r\n]+/g, ' ')
-    .slice(0, 200)
+  return maskSecrets(
+    String(s ?? '')
+      .replace(/\|/g, '\\|')
+      .replace(/[\r\n]+/g, ' '),
+  ).slice(0, 200)
 }
 
 function renderMissingKeyBody() {
@@ -54,7 +75,133 @@ function renderNoReportBody(reportDir, runUrl) {
   return lines.join('\n')
 }
 
-function renderBody(report, codeReview, runUrl, ok, inlinePlan) {
+// --- run-manifest lane block ------------------------------------------------
+// The manifest is the shared evidence contract (R15): these labels/statuses/
+// costs/head fields must stay identical to the TUI and dashboard rendering —
+// the parity contract test enforces it.
+const MANIFEST_LANE_ORDER = ['review', 'flow', 'app', 'a0']
+const MANIFEST_STATUS_EMOJI = {
+  passed: '✅', failed: '❌', skipped: '⚪',
+  blocked: '⛔', unavailable: '⚠️', inconclusive: '🟡',
+}
+
+// The commit-status surface validates at least as strictly as the display
+// surfaces (viewmodel.isRunManifest / collect.validManifest) — this file is
+// what can publish a green check, so it never trusts a shallow sniff.
+function validManifest(m) {
+  const num = (n) => typeof n === 'number' && Number.isFinite(n)
+  if (m === null || typeof m !== 'object' || Array.isArray(m)) return false
+  if (m.schemaVersion !== 1 || typeof m.runId !== 'string') return false
+  if (typeof m.startedAt !== 'string') return false
+  if (m.identity === null || typeof m.identity !== 'object') return false
+  if (m.aggregate === null || typeof m.aggregate !== 'object') return false
+  // aggregate.status must be a real lane status and ok a real boolean —
+  // a type-confused aggregate must fail the gate, not reach the renderer.
+  if (!Object.hasOwn(MANIFEST_STATUS_EMOJI, m.aggregate.status)) return false
+  if (m.aggregate.ok !== true && m.aggregate.ok !== false) return false
+  if (!num(m.aggregate.calls) || !num(m.aggregate.tokens) || !num(m.aggregate.costUsd)) {
+    return false
+  }
+  if (m.lanes === null || typeof m.lanes !== 'object') return false
+  return MANIFEST_LANE_ORDER.every((id) => {
+    const lane = m.lanes[id]
+    return (
+      lane !== null &&
+      typeof lane === 'object' &&
+      typeof lane.lane === 'string' &&
+      typeof lane.selected === 'boolean' &&
+      Object.hasOwn(MANIFEST_STATUS_EMOJI, lane.status) &&
+      lane.usage !== null &&
+      typeof lane.usage === 'object' &&
+      num(lane.usage.calls) &&
+      num(lane.usage.tokens) &&
+      num(lane.usage.costUsd) &&
+      lane.budget !== null &&
+      typeof lane.budget === 'object'
+    )
+  })
+}
+
+function manifestLanes(manifest) {
+  const lanes = manifest && manifest.lanes ? manifest.lanes : {}
+  return MANIFEST_LANE_ORDER.map((id) => lanes[id]).filter(
+    (l) => l !== null && typeof l === 'object' && typeof l.status === 'string',
+  )
+}
+
+/** Lane table + head binding lines rendered from a parsed run-manifest.json. */
+function renderManifestLanes(manifest) {
+  const lines = []
+  const identity = manifest.identity || {}
+  const headBinding = (manifest.lanes || {}).review?.headBinding
+  if (identity.intendedHeadSha || headBinding) {
+    const bits = []
+    if (identity.intendedHeadSha) {
+      bits.push(`head \`${cell(String(identity.intendedHeadSha).slice(0, 7))}\``)
+    }
+    if (headBinding) {
+      bits.push(`${cell(headBinding.status)} — ${cell(headBinding.detail)}`)
+    }
+    lines.push(`**Head binding:** ${bits.join(' · ')}`)
+    lines.push('')
+  }
+  lines.push('| Lane | Status | Calls | Cost | Detail |')
+  lines.push('| --- | --- | ---: | ---: | --- |')
+  for (const lane of manifestLanes(manifest)) {
+    if (lane.selected !== true) {
+      lines.push(`| ${cell(lane.lane)} | ⚪ skipped | 0 | — | not selected |`)
+      continue
+    }
+    const icon = MANIFEST_STATUS_EMOJI[lane.status] ?? '❔'
+    const usage = lane.usage || {}
+    const cost = usage.metered === true ? formatUsd(usage.costUsd) : 'unmetered'
+    const detail = cell(lane.reason ?? lane.summary ?? '')
+    const model = lane.model || usage.model ? ` (\`${cell(lane.model ?? usage.model)}\`)` : ''
+    lines.push(
+      `| ${cell(lane.lane)} | ${icon} ${cell(lane.status)} | ` +
+        `${usage.calls ?? 0} | ${cost} | ${detail}${model} |`,
+    )
+  }
+  const cache = (manifest.lanes || {}).flow?.cache
+  if (cache && typeof cache === 'object') {
+    lines.push('')
+    lines.push(
+      `**Fingerprint cache:** ${cache.hits ?? 0} hit(s) · ${cache.misses ?? 0} miss(es) · ${cache.heals ?? 0} heal(s)`,
+    )
+  }
+  lines.push('')
+  return lines
+}
+
+/**
+ * Manifest-only body — a verify run whose lanes produced no run.json
+ * (review-only, or a flow lane that never reached the browser). The
+ * aggregate status is the verdict; lane detail lives in the manifest.
+ */
+function renderManifestBody(manifest, codeReview, runUrl) {
+  const aggregate = (manifest && manifest.aggregate) || {}
+  const status = typeof aggregate.status === 'string' ? aggregate.status : 'failed'
+  const lines = []
+  lines.push(SENTINEL)
+  lines.push('')
+  lines.push(`## argus-reviewer ${MANIFEST_STATUS_EMOJI[status] ?? '⚠️'} ${cell(status).toUpperCase()}`)
+  lines.push('')
+  lines.push(
+    `**Summary:** ${aggregate.calls ?? 0} provider call(s) · ${formatUsd(aggregate.costUsd)} spend`,
+  )
+  lines.push('')
+  lines.push(...renderManifestLanes(manifest))
+  if (runUrl) lines.push(`[View run](${runUrl})`)
+  lines.push('')
+  pushCodeReviewDetails(lines, codeReview, undefined)
+  lines.push('---')
+  lines.push('')
+  lines.push('<sub>`argus-reviewer` — self-hosted, BYOK review. Lane detail lives in the run manifest.</sub>')
+  lines.push('')
+  return lines.join('\n')
+}
+
+function renderBody(report, codeReview, runUrl, ok, inlinePlan, manifest) {
   if (!report) return renderMissingKeyBody()
 
   const lines = []
@@ -83,6 +230,9 @@ function renderBody(report, codeReview, runUrl, ok, inlinePlan) {
       `${report.totals.cacheMisses ?? 0} miss(es) · ${report.totals.cacheHeals ?? 0} heal(s)`,
   )
   lines.push('')
+  // The verify manifest is the lane contract — when present, the lane table
+  // rides above the run.json detail sections so all four lanes surface.
+  if (manifest !== undefined) lines.push(...renderManifestLanes(manifest))
 
   lines.push('<details>')
   lines.push('<summary>📝 Summary</summary>')
@@ -515,13 +665,14 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
 
 // Sticky body for `run: 'false'` consumers — no run.json exists by
 // design, so the body and conclusion reflect code-review alone.
-function renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan) {
+function renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan, manifest) {
   const lines = []
   lines.push(SENTINEL)
   lines.push('')
   lines.push(`## argus-reviewer ${ok ? '✅ PASS' : '❌ FAIL'}`)
   lines.push('')
   pushReviewTop(lines, codeReview)
+  if (manifest !== undefined) lines.push(...renderManifestLanes(manifest))
   if (!codeReview) {
     lines.push(
       '**Summary:** code-review only (run lane disabled) — no `code-review.json` found. The review step crashed or produced no report; the commit status fails closed — check the action logs before merging.',
@@ -856,6 +1007,8 @@ async function main() {
 
   let report
   let codeReview
+  let manifest
+  let manifestStale = false
   if (hasKey) {
     try {
       const raw = fs.readFileSync(path.join(reportDir, 'run.json'), 'utf8')
@@ -869,6 +1022,21 @@ async function main() {
     } catch {
       codeReview = undefined
     }
+    try {
+      const raw = fs.readFileSync(path.join(reportDir, 'run-manifest.json'), 'utf8')
+      const parsed = JSON.parse(raw)
+      // A manifest is run-scoped evidence — it decides the status only when
+      // it validates like a real manifest AND its declared head binding
+      // matches the sha this run reports on. Residue (crashed run, stale
+      // workspace) or a planted file falls back to the serialized-review
+      // verdict — the verify step also wipes these files before it runs.
+      const expectedSha = pr ? pr.head.sha : context.sha
+      manifestStale =
+        validManifest(parsed) && parsed.identity?.intendedHeadSha !== expectedSha
+      manifest = validManifest(parsed) && !manifestStale ? parsed : undefined
+    } catch {
+      manifest = undefined
+    }
   }
 
   // Missing code-review.json after a continue-on-error step means the review
@@ -878,8 +1046,17 @@ async function main() {
   // run: 'false' consumers have no run.json by design — the conclusion then
   // reflects the code-review verdict alone.
   const runDisabled = process.env.ARGUS_RUN_DISABLED === '1'
-  const ok = (runDisabled || report?.ok === true) && codeReviewOk
-  const conclusion = !hasKey ? 'neutral' : ok ? 'success' : 'failure'
+  // A verify manifest is the authoritative lane verdict when it exists —
+  // its aggregate already fails closed on missing lane reports. An
+  // all-skipped aggregate (e.g. a push event where the review lane has no
+  // PR to inspect) is a legitimate non-verdict — neutral, not failure,
+  // matching the pre-manifest codeReviewOk contract.
+  const aggregateSkipped =
+    manifest !== undefined && manifest.aggregate.status === 'skipped'
+  const ok = manifest !== undefined
+    ? manifest.aggregate.ok === true
+    : (runDisabled || report?.ok === true) && codeReviewOk
+  const conclusion = !hasKey || aggregateSkipped ? 'neutral' : ok ? 'success' : 'failure'
   // Freshness + dedup + diff validation for the serialized review surface,
   // computed before the sticky body renders so the "+N not posted" note is
   // truthful. The review posts BEFORE the sticky so retry-ladder drops land
@@ -887,13 +1064,22 @@ async function main() {
   // postInlineComments a no-op with no API calls.
   const inlinePlan = hasKey ? await planInlineComments(pr, codeReview) : undefined
   if (pr) await postInlineComments(pr, inlinePlan)
-  const body = !hasKey
+  const baseBody = !hasKey
     ? renderMissingKeyBody()
     : runDisabled
-      ? renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan)
+      ? renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan, manifest)
       : report === undefined
-        ? renderNoReportBody(reportDir, runUrl)
-        : renderBody(report, codeReview, runUrl, ok, inlinePlan)
+        ? manifest !== undefined
+          ? renderManifestBody(manifest, codeReview, runUrl)
+          : renderNoReportBody(reportDir, runUrl)
+        : renderBody(report, codeReview, runUrl, ok, inlinePlan, manifest)
+  // A bound-mismatched manifest is ignored for the verdict — say so in the
+  // comment so residue never reads as a silent downgrade of evidence.
+  const body = manifestStale
+    ? baseBody +
+        '\n\n> ⚠️ A `run-manifest.json` was found but its head binding does not match ' +
+        'this commit — it was ignored.'
+    : baseBody
 
   if (pr) {
     const { data: comments } = await github.rest.issues.listComments({
@@ -926,7 +1112,9 @@ async function main() {
   const state = conclusion === 'failure' ? 'failure' : 'success'
   const description =
     conclusion === 'neutral'
-      ? 'argus-reviewer skipped (no OPENROUTER_API_KEY)'
+      ? !hasKey
+        ? 'argus-reviewer skipped (no OPENROUTER_API_KEY)'
+        : 'argus-reviewer skipped (no lanes ran)'
       : `argus-reviewer ${conclusion}`
   await github.rest.repos.createCommitStatus({
     owner,
@@ -952,6 +1140,8 @@ module.exports = {
   run,
   renderBody,
   renderReviewOnlyBody,
+  renderManifestBody,
+  renderManifestLanes,
   renderMissingKeyBody,
   renderNoReportBody,
   planInlineComments,

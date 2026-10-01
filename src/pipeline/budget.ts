@@ -28,7 +28,7 @@ export function createBudget(lane: LaneId, options: BudgetOptions = {}): BudgetS
  */
 const USD_EPSILON = 1e-9
 
-function overLimit(spentUsd: number, limitUsd: number): boolean {
+export function overLimit(spentUsd: number, limitUsd: number): boolean {
   return spentUsd > limitUsd + USD_EPSILON
 }
 

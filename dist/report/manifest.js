@@ -1,4 +1,7 @@
+import { readdir, unlink } from 'node:fs/promises';
+import { join } from 'node:path';
 import { defaultExec } from '../detect.js';
+import { writeAtomicJson } from '../fsutil.js';
 export const LANE_IDS = ['review', 'flow', 'app', 'a0'];
 export const LANE_STATUSES = [
     'passed',
@@ -102,6 +105,7 @@ export function emptyLane(lane, selected) {
         usage: emptyUsage(),
         budget: emptyBudget(),
         headBinding: undefined,
+        cache: undefined,
     };
 }
 export function aggregateLanes(lanes) {
@@ -140,4 +144,37 @@ export function addProviderUsage(usage, calls) {
         costUsd: usage.costUsd + costUsd,
         metered: true,
     };
+}
+/** Run manifests are archived under `<reportDir>/manifests/<runId>.json`. */
+export const MANIFEST_HISTORY_DIR = 'manifests';
+/**
+ * Archive a completed verify manifest into local history and prune to the
+ * retention bound — the dashboard/TUI run list reads this directory.
+ * runIds are timestamp-prefixed, so name sort is chronological; pruning
+ * drops the oldest names beyond `keep`. `keep <= 0` writes nothing and
+ * clears nothing existing (retention governs new archives, not deletes).
+ */
+export async function archiveManifest(reportDir, manifest, keep) {
+    if (keep <= 0)
+        return;
+    const dir = join(reportDir, MANIFEST_HISTORY_DIR);
+    // runId becomes a filename — never trust it as a path component.
+    const safeName = manifest.runId.replace(/[^\w.-]/g, '-');
+    await writeAtomicJson(join(dir, `${safeName}.json`), manifest);
+    let names;
+    try {
+        names = (await readdir(dir)).filter((n) => n.endsWith('.json')).sort();
+    }
+    catch {
+        return;
+    }
+    const excess = names.length - keep;
+    for (const name of names.slice(0, Math.max(0, excess))) {
+        try {
+            await unlink(join(dir, name));
+        }
+        catch {
+            // already gone — pruning is best-effort
+        }
+    }
 }

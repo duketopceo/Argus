@@ -21,6 +21,11 @@ export interface ExecResult {
   timedOut?: boolean
   /** Signal the process was terminated by, when killed (e.g. 'SIGTERM'). */
   signal?: string | undefined
+  /**
+   * The process never started (ENOENT — binary missing) — set by the real
+   * executor so callers don't sniff stderr text for the distinction.
+   */
+  spawnError?: boolean | undefined
 }
 
 export type ExecFn = (
@@ -29,22 +34,33 @@ export type ExecFn = (
   timeoutMs: number,
   /** Extra env merged over process.env — keeps secrets out of `ps`/`/proc` argv. */
   env?: Record<string, string>,
+  /**
+   * `baseEnv` replaces the inherited process environment wholesale — the
+   * caller's allowlist, not ambient env. Without it the child inherits
+   * process.env as before.
+   */
+  opts?: { baseEnv?: Record<string, string> },
 ) => Promise<ExecResult>
 
-export const defaultExec: ExecFn = (cmd, args, timeoutMs, env) =>
+/** Grace between a timeout's SIGTERM and the escalation SIGKILL. */
+const EXEC_KILL_GRACE_MS = 2_000
+
+export const defaultExec: ExecFn = (cmd, args, timeoutMs, env, opts) =>
   new Promise((resolve) => {
+    const baseEnv = opts?.baseEnv ?? process.env
     // 4 MiB headroom — the sandbox caps output itself after capture, and a
     // chatty probe hitting execFile's 1 MiB default would error instead of
     // reaching the harness classifier.
-    execFile(
+    const child = execFile(
       cmd,
       args,
       {
         timeout: timeoutMs,
         maxBuffer: 4 * 1024 * 1024,
-        ...(env !== undefined ? { env: { ...process.env, ...env } } : {}),
+        env: { ...baseEnv, ...env },
       },
       (err, stdout, stderr) => {
+        settled = true
         if (err) {
           // stderr is '' (not undefined) on spawn ENOENT — fall back to the
           // error message so callers can distinguish "missing" from "failed".
@@ -58,15 +74,74 @@ export const defaultExec: ExecFn = (cmd, args, timeoutMs, env) =>
               err.killed === true &&
               (err as { code?: unknown }).code !== 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',
             signal: typeof err.signal === 'string' ? err.signal : undefined,
+            spawnError: (err as { code?: unknown }).code === 'ENOENT',
           })
         } else {
           resolve({ code: 0, stdout: String(stdout), stderr: String(stderr) })
         }
       },
     )
+    let settled = false
+    // execFile's timeout only delivers SIGTERM — a child that traps it (or a
+    // descendant holding the stdio pipes open) would keep this promise
+    // pending forever. Escalate to SIGKILL after a short grace, and resolve
+    // anyway if even that can't make the callback fire.
+    const escalate = setTimeout(() => {
+      if (settled) return
+      try {
+        child.kill('SIGKILL')
+      } catch {
+        // already gone
+      }
+      setTimeout(() => {
+        if (!settled) {
+          settled = true
+          resolve({ code: 1, stdout: '', stderr: 'process killed', timedOut: true })
+        }
+      }, EXEC_KILL_GRACE_MS).unref()
+    }, timeoutMs + EXEC_KILL_GRACE_MS)
+    escalate.unref()
+    child.on('close', () => clearTimeout(escalate))
   })
 
 export type ProbeFn = (url: string, timeoutMs: number) => Promise<boolean>
+
+/**
+ * The only environment keys an Agent Zero child process may inherit.
+ * Provider keys, GitHub tokens, `ARGUS_*`, and npm auth variables never
+ * propagate (R12) — the child is a remote agent harness, not an extension
+ * of this process's trust. Lives here (not in executor/a0.ts) because every
+ * `a0` spawn — delegation, the lane's `--version` preflight, and init's
+ * environment probe — must use it or the contract leaks.
+ */
+export const A0_CHILD_ENV_KEYS = [
+  'PATH',
+  'HOME',
+  'USER',
+  'LOGNAME',
+  'SHELL',
+  'LANG',
+  'LC_ALL',
+  'TERM',
+  'TMPDIR',
+  'XDG_RUNTIME_DIR',
+  'DOCKER_HOST',
+  // The resolved host pointer — a URL, not a credential.
+  'AGENT_ZERO_HOST',
+] as const
+
+/** Build the sanitized child env: allowlisted keys that exist in `env`. */
+export function buildA0ChildEnv(
+  env: NodeJS.ProcessEnv | Record<string, string | undefined>,
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const key of A0_CHILD_ENV_KEYS) {
+    const value = env[key]
+    if (value !== undefined && value !== '') out[key] = value
+  }
+  return out
+}
+
 
 /**
  * Any HTTP response — including a login redirect — means *something* is up,
@@ -80,7 +155,26 @@ export const defaultProbe: ProbeFn = async (url, timeoutMs) => {
       redirect: 'manual',
     })
     if (res.status >= 500) return false
-    const body = (await res.text()).slice(0, 65_536)
+    // Bound the bytes actually received — a misbehaving host streaming an
+    // unbounded body inside the probe window would otherwise be fully
+    // buffered by res.text() before the slice.
+    const reader = res.body?.getReader()
+    if (reader === undefined) return false
+    const chunks: Uint8Array[] = []
+    let received = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      received += value.byteLength
+      chunks.push(value)
+      if (received >= 65_536) {
+        await reader.cancel()
+        break
+      }
+    }
+    const body = new TextDecoder().decode(
+      chunks.length === 1 ? chunks[0] : Buffer.concat(chunks),
+    )
     return /agent.?zero/i.test(body)
   } catch {
     return false
@@ -173,7 +267,9 @@ export async function detectEnvironment(
   const home = opts.home ?? homedir()
 
   const [a0Version, gh, browsers, a0Host] = await Promise.all([
-    exec('a0', ['--version'], 5_000),
+    // Even the presence probe gets the allowlisted env — an `a0` binary is
+    // third-party code and never sees provider/git secrets.
+    exec('a0', ['--version'], 5_000, undefined, { baseEnv: buildA0ChildEnv(env) }),
     exec('gh', ['auth', 'status'], 5_000),
     playwrightBrowsers(home),
     resolveA0Host(env, opts),

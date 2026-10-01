@@ -160,8 +160,9 @@ provider served the call.
 If you run an [Agent Zero](https://agent-zero.ai) instance — the launcher, a
 Docker container, or a remote host — Argus can hand it autonomous tasks. `init`
 detects it automatically (via the `a0` CLI, `AGENT_ZERO_HOST`,
-`~/.agent-zero/.env`, or a local probe) and writes `heal: 'a0'` into the
-generated config. Zero extra config is needed when the `a0` CLI already knows
+`~/.agent-zero/.env`, or a local probe) and writes a **commented suggestion**
+into the generated config — A0 lanes are always opt-in, never enabled by
+scaffolding. Zero extra config is needed when the `a0` CLI already knows
 your instance.
 
 ```ts
@@ -187,6 +188,61 @@ Delegation is a full-cost, non-deterministic agent run — it complements the
 (browser-only vs full `computer_use`) is configured on the instance's gateway,
 not in this config. `heal: 'a0'` is capped at 15 minutes total per run so a
 failing suite cannot block CI indefinitely.
+
+## The `verify` lanes — review · flow · app · a0
+
+`argus-reviewer verify` is the product surface: it runs the selected lanes and
+writes `run-manifest.json` into `reportDir` — one evidence contract consumed
+by the PR sticky comment, the `npm run watch` TUI, and the Electron dashboard
+(`npm run app`). Every lane reports an honest status
+(`passed`/`failed`/`skipped`/`blocked`/`unavailable`/`inconclusive`), usage,
+budget, and head binding; a lane that could not run says so rather than
+silently no-opping.
+
+| Lane | How to select | Notes |
+|---|---|---|
+| `review` | selected by default | Diff review — the code-review-only path `init` scaffolds |
+| `flow` | `--flow` or action input `run: 'true'` | Cache-first replay of recorded journeys |
+| `app` | `--app --task "..."` or action inputs `app`/`app-task` | Directed task + expected-state check |
+| `a0` | `--a0` or action input `a0: 'true'` | Delegation to your A0 host — always `inconclusive`/`unavailable`, never `passed` |
+
+### `verify --app` — directed task lane
+
+```bash
+npx argus-reviewer verify --app \
+  --url http://localhost:3000 \
+  --task "sign in and open the dashboard" \
+  --expect-text "Welcome back"        # or --expect-url '/dashboard' --expect-selector '#nav'
+```
+
+The lane starts `target.command` if the app is not already running, drives a
+real browser through the task, and checks the expected state. It is `blocked`
+on untrusted checkouts and when no task is configured (no provider call is
+made). Action inputs: `app`, `app-task`, `app-url`, `app-expect-text`,
+`app-expect-url`, `app-expect-selector`. Budget: `app.budgetUsd` +
+`app.timeoutMs` in config.
+
+### `verify --a0` — escalation seam
+
+```bash
+npx argus-reviewer verify --a0 --task "find the checkout bug"
+```
+
+Delegates the task to your configured Agent Zero host inside a sanitized,
+allowlisted child environment (provider keys, `GITHUB_TOKEN`, `ARGUS_*`, and
+npm auth never reach the child), bounded to `a0.maxTasks` (default 1) and
+`a0.timeoutMs` (default 10 min). A remote A0 host is refused against loopback
+targets. **The lane reports `inconclusive` even on agent-reported success** —
+live round-trip verification is open as issue #53 — and `unavailable` when
+the host or CLI is missing. Hosts without usage reporting are `unmetered`
+rather than fabricated dollars.
+
+### Manifest history
+
+Each `verify` run also archives to `<reportDir>/manifests/<runId>.json`,
+bounded by `reportRetention` (default 20, `0` disables). The TUI and
+dashboard render current + archived runs and keep showing the last valid
+manifest if a run is interrupted mid-write.
 
 ## 6. Register a self-hosted runner
 
