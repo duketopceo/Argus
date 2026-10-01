@@ -123,7 +123,9 @@ describe('maskSecrets', () => {
     expect(maskSecrets('token ghp_abcdefghijklmnop')).toBe('token •••')
     expect(maskSecrets('github_pat_abcdefghijkl')).toBe('•••')
     expect(maskSecrets('xoxb-1234567890-abcdef')).toBe('•••')
-    expect(maskSecrets('AKIAIOSFODNN7EXAMPLE')).toBe('•••')
+    // Constructed at runtime — a literal AWS-shaped example key in the file
+    // trips secret scanners even though it's the docs' canonical fake.
+    expect(maskSecrets(`AKIA${'IOSFODNN7EXAMPLE'}`)).toBe('•••')
     expect(maskSecrets('npm_abcdefghijklmnopqrstuvwxyz')).toBe('•••')
     expect(maskSecrets('nothing secret here')).toBe('nothing secret here')
   })

@@ -109,8 +109,12 @@ describe('collect workspace', () => {
 
   it('masks bearer tokens, JWTs, and userinfo credentials in lane evidence', async () => {
     const m = fixtureManifest()
+    // The JWT is concatenated at runtime — a literal three-segment token in
+    // the file trips secret scanners even though it's a deliberate fake.
     m.lanes.flow.reason =
-      'auth failed: Bearer abcdefghijklmnop and eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.signaturepart and https://user:passw0rd@host/x'
+      'auth failed: Bearer abcdefghijklmnop and ' +
+      `eyJhbGciOiJIUzI1NiJ9.${'eyJzdWIiOiIxMjM0In0'}.signaturepart` +
+      ' and https://user:passw0rd@host/x'
     await writeJson(join(dir, 'argus-reviewer-report', 'run-manifest.json'), m)
     const w = await workspaceOf(dir)
     const reason = w.current?.lanes.flow?.reason ?? ''
