@@ -480,6 +480,7 @@ describe('app lane manifest merge', () => {
         intendedHeadSha: 'abc',
         checkoutSha: 'abc',
         baseSha: 'def',
+        runNonce: undefined,
       },
       selection: { review: false, flow: false, app: true, a0: false },
       runners: {
@@ -537,6 +538,7 @@ describe('app lane manifest merge', () => {
         intendedHeadSha: undefined,
         checkoutSha: undefined,
         baseSha: undefined,
+        runNonce: undefined,
       },
       selection: { review: false, flow: false, app: true, a0: false },
       runners: {
@@ -576,6 +578,7 @@ describe('app lane manifest merge', () => {
         intendedHeadSha: undefined,
         checkoutSha: undefined,
         baseSha: undefined,
+        runNonce: undefined,
       },
       selection: { review: false, flow: false, app: true, a0: false },
       runners: {
@@ -735,5 +738,67 @@ describe('verify --app cli surface', () => {
     // blocked for the missing expectation marker, not the missing task —
     // config.app.task won over the '' env input.
     expect(manifest.lanes.app.reason).toContain('expected-state')
+  })
+
+  it('--no-review alone selects nothing — all lanes skipped, run fails closed', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-none-'))
+    const reportDir = join(cwd, 'reports')
+    await writeFile(join(cwd, 'argus-reviewer.config.json'), JSON.stringify({ reportDir }))
+    const { main } = await import('../../src/cli.js')
+    const code = await main(['verify', '--no-review'], {
+      cwd,
+      env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' },
+      out: () => undefined,
+      err: () => undefined,
+    })
+    expect(code).toBe(1)
+    const manifest = JSON.parse(await readFile(join(reportDir, 'run-manifest.json'), 'utf8')) as {
+      aggregate: { status: string }
+      lanes: Record<string, { selected: boolean; status: string }>
+    }
+    expect(manifest.aggregate.status).toBe('skipped')
+    for (const lane of Object.values(manifest.lanes)) {
+      expect(lane.selected).toBe(false)
+      expect(lane.status).toBe('skipped')
+    }
+  })
+
+  it('the manifest identity carries the workflow run nonce when CI env is present', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-nonce-'))
+    const reportDir = join(cwd, 'reports')
+    await writeFile(join(cwd, 'argus-reviewer.config.json'), JSON.stringify({ reportDir }))
+    const { main } = await import('../../src/cli.js')
+    await main(['verify', '--no-review', '--no-flow', '--no-app', '--no-a0'], {
+      cwd,
+      env: {
+        PATH: process.env.PATH ?? '',
+        HOME: process.env.HOME ?? '',
+        GITHUB_RUN_ID: '42',
+        GITHUB_RUN_ATTEMPT: '3',
+      },
+      out: () => undefined,
+      err: () => undefined,
+    })
+    const manifest = JSON.parse(await readFile(join(reportDir, 'run-manifest.json'), 'utf8')) as {
+      identity: { runNonce?: string }
+    }
+    expect(manifest.identity.runNonce).toBe('42:3')
+  })
+
+  it('the manifest nonce is absent for local runs — sticky falls back to sha binding alone', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-nolocal-'))
+    const reportDir = join(cwd, 'reports')
+    await writeFile(join(cwd, 'argus-reviewer.config.json'), JSON.stringify({ reportDir }))
+    const { main } = await import('../../src/cli.js')
+    await main(['verify', '--no-review', '--no-flow', '--no-app', '--no-a0'], {
+      cwd,
+      env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' },
+      out: () => undefined,
+      err: () => undefined,
+    })
+    const manifest = JSON.parse(await readFile(join(reportDir, 'run-manifest.json'), 'utf8')) as {
+      identity: { runNonce?: string }
+    }
+    expect(manifest.identity.runNonce).toBeUndefined()
   })
 })

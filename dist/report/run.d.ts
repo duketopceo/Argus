@@ -41,6 +41,8 @@ export interface RunTotals {
     failed: number;
     visionCalls: number;
     visionCostUsd: number;
+    /** Token rollup across per-test calls AND lane-level extraCalls. */
+    visionTokens: number;
     sandboxSeconds: number;
     budgetExceeded: boolean;
     /** OpenRouter spend grouped by model id. */

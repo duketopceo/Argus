@@ -62,6 +62,13 @@ export interface RunIdentity {
     intendedHeadSha: string | undefined;
     checkoutSha: string | undefined;
     baseSha: string | undefined;
+    /**
+     * Run-scoped nonce (GITHUB_RUN_ID[:GITHUB_RUN_ATTEMPT]) — only knowable
+     * inside the workflow run, so a planted or residue manifest fails the
+     * sticky comment's freshness gate even when its head sha happens to
+     * match. Undefined for local runs.
+     */
+    runNonce: string | undefined;
 }
 export interface RunManifest {
     schemaVersion: typeof MANIFEST_SCHEMA_VERSION;

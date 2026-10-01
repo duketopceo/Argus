@@ -431,6 +431,7 @@ describe('a0 lane manifest merge', () => {
         intendedHeadSha: 'abc',
         checkoutSha: 'abc',
         baseSha: 'def',
+        runNonce: undefined,
       },
       selection: { review: false, flow: false, app: false, a0: true },
       runners: {
@@ -485,6 +486,7 @@ describe('a0 lane manifest merge', () => {
         intendedHeadSha: undefined,
         checkoutSha: undefined,
         baseSha: undefined,
+        runNonce: undefined,
       },
       selection: { review: false, flow: false, app: false, a0: true },
       runners: {

@@ -35,7 +35,7 @@ const seededManifest = {
   runId: 'smoke-run-1',
   startedAt: '2026-09-30T20:00:00.000Z',
   finishedAt: '2026-09-30T20:02:00.000Z',
-  identity: { repo: 'o/r', pr: '7', intendedHeadSha: 'abc1234deadbeef', checkoutSha: 'abc1234deadbeef', baseSha: 'base00' },
+  identity: { repo: 'o/r', pr: '7', intendedHeadSha: 'abc1234deadbeef', checkoutSha: 'abc1234deadbeef', baseSha: 'base00', runNonce: 'smoke:1' },
   lanes: {
     review: lane('review', 'passed', {
       summary: '2 findings',

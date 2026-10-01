@@ -93,7 +93,19 @@ function validManifest(m) {
   if (m === null || typeof m !== 'object' || Array.isArray(m)) return false
   if (m.schemaVersion !== 1 || typeof m.runId !== 'string') return false
   if (typeof m.startedAt !== 'string') return false
-  if (m.identity === null || typeof m.identity !== 'object') return false
+  if (m.identity === null || typeof m.identity !== 'object' || Array.isArray(m.identity)) {
+    return false
+  }
+  for (const v of [
+    m.identity.repo,
+    m.identity.pr,
+    m.identity.intendedHeadSha,
+    m.identity.checkoutSha,
+    m.identity.baseSha,
+    m.identity.runNonce,
+  ]) {
+    if (v !== undefined && typeof v !== 'string') return false
+  }
   if (m.aggregate === null || typeof m.aggregate !== 'object') return false
   // aggregate.status must be a real lane status and ok a real boolean —
   // a type-confused aggregate must fail the gate, not reach the renderer.
@@ -108,7 +120,7 @@ function validManifest(m) {
     return (
       lane !== null &&
       typeof lane === 'object' &&
-      typeof lane.lane === 'string' &&
+      lane.lane === id &&
       typeof lane.selected === 'boolean' &&
       Object.hasOwn(MANIFEST_STATUS_EMOJI, lane.status) &&
       lane.usage !== null &&
@@ -1031,8 +1043,21 @@ async function main() {
       // workspace) or a planted file falls back to the serialized-review
       // verdict — the verify step also wipes these files before it runs.
       const expectedSha = pr ? pr.head.sha : context.sha
+      // Head sha alone is forgeable — it is public. The run nonce
+      // (RUN_ID[:ATTEMPT]) is only knowable inside this workflow run, so a
+      // manifest that can't present it (planted, residue, older producer)
+      // degrades to the serialized-review verdict the same way residue does.
+      const expectedNonce = [
+        process.env.GITHUB_RUN_ID,
+        process.env.GITHUB_RUN_ATTEMPT,
+      ]
+        .map((v) => (typeof v === 'string' ? v.trim() : v))
+        .filter(Boolean)
+        .join(':')
       manifestStale =
-        validManifest(parsed) && parsed.identity?.intendedHeadSha !== expectedSha
+        validManifest(parsed) &&
+        (parsed.identity?.intendedHeadSha !== expectedSha ||
+          (expectedNonce !== '' && parsed.identity?.runNonce !== expectedNonce))
       manifest = validManifest(parsed) && !manifestStale ? parsed : undefined
     } catch {
       manifest = undefined
@@ -1077,8 +1102,8 @@ async function main() {
   // comment so residue never reads as a silent downgrade of evidence.
   const body = manifestStale
     ? baseBody +
-        '\n\n> ⚠️ A `run-manifest.json` was found but its head binding does not match ' +
-        'this commit — it was ignored.'
+        '\n\n> ⚠️ A `run-manifest.json` was found but its head/run binding does not ' +
+        'match this run — it was ignored.'
     : baseBody
 
   if (pr) {
@@ -1138,6 +1163,7 @@ async function run(runtime) {
 
 module.exports = {
   run,
+  validManifest,
   renderBody,
   renderReviewOnlyBody,
   renderManifestBody,

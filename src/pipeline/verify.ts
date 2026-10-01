@@ -69,6 +69,7 @@ interface FlowReport {
     tests?: number
     visionCalls?: number
     visionCostUsd?: number
+    visionTokens?: number
     callsByModel?: Record<string, number>
     costByModel?: Record<string, number>
     cacheHits?: number
@@ -151,12 +152,14 @@ function flowUsage(report: FlowReport | undefined) {
   const totals = report?.totals
   if (totals === undefined) return usage
   // totals are the authoritative rollup — they fold in lane-level calls the
-  // per-test reports never own (e.g. the explore pass). Per-call records
-  // still supply tokens and the model tag, which totals don't carry.
+  // per-test reports never own (e.g. the explore pass). visionTokens is the
+  // same rollup for tokens; older run.json files lack it and fall back to
+  // the per-test call records.
   return {
     ...usage,
     calls: totals.visionCalls ?? usage.calls,
     costUsd: totals.visionCostUsd ?? usage.costUsd,
+    tokens: totals.visionTokens ?? usage.tokens,
   }
 }
 

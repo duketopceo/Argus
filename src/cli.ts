@@ -87,7 +87,7 @@ import { writeAtomicJson } from './fsutil.js'
 import { CallCost } from './vision/cost.js'
 import { JsonSchema, Message, OpenRouterClient } from './vision/openrouter.js'
 import { Ledger } from './vision/ledger.js'
-import { defaultLaneSelection, selectionFromFlags } from './pipeline/contracts.js'
+import { selectionFromFlags } from './pipeline/contracts.js'
 import {
   MENTION_HELP,
   mayRunMention,
@@ -2128,6 +2128,7 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
     options: {
       help: { type: 'boolean', short: 'h', default: false },
       review: { type: 'boolean', default: true },
+      'no-review': { type: 'boolean' },
       // No defaults on the opt-in lanes: `--flow`/`--no-flow` must both be
       // distinguishable from "flag absent" so an explicit negation vetoes an
       // ambient ARGUS_VERIFY_*=1. parseArgs doesn't auto-derive negations —
@@ -2148,7 +2149,8 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
   })
   if (values.help) {
     ctx.out(
-      'Usage: argus-reviewer verify [--flow|--no-flow] [--app|--no-app] [--a0|--no-a0] ' +
+      'Usage: argus-reviewer verify [--review|--no-review] [--flow|--no-flow] ' +
+        '[--app|--no-app] [--a0|--no-a0] ' +
         '[--url <target>] ' +
         '[--task "<task>" --expect-text <marker>|--expect-url <re>|--expect-selector <sel>] ' +
         '[--report-dir <dir>]\n\n' +
@@ -2160,15 +2162,15 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
   // Flag > env > config for lane booleans: `--no-app`/`--no-a0`/`--no-flow`
   // are explicit opt-outs that must beat an ambient ARGUS_VERIFY_*=1.
   const selection = selectionFromFlags({
-    review: values.review,
+    review: values['no-review'] === true ? false : values.review,
     flow:
       values['no-flow'] === true ? false : (values.flow ?? ctx.env.ARGUS_VERIFY_FLOW === '1'),
     app: values['no-app'] === true ? false : (values.app ?? ctx.env.ARGUS_VERIFY_APP === '1'),
     a0: values['no-a0'] === true ? false : (values.a0 ?? ctx.env.ARGUS_VERIFY_A0 === '1'),
   })
-  if (!selection.review && !selection.flow && !selection.app && !selection.a0) {
-    selection.review = defaultLaneSelection().review
-  }
+  // All lanes explicitly off is a real selection — every lane reports
+  // skipped, the manifest records it, and the run fails closed. Silently
+  // re-adding review here would negate `--no-review`.
 
   // Wipe run-scoped evidence files BEFORE config resolution: a committed or
   // leftover run-manifest.json/run.json/lane detail must never outlive the
@@ -2241,6 +2243,12 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
       envOr(values['expect-selector']) ?? envOr(ctx.env.ARGUS_VERIFY_EXPECT_SELECTOR),
   })
   const logger = createLogger(resolveLogLevel(ctx.env, config.logLevel), ctx)
+  // RUN_ID[:ATTEMPT] is only knowable inside this workflow run — a planted
+  // or residue manifest can carry the public head sha but not this nonce.
+  const runNonce =
+    [envOr(ctx.env.GITHUB_RUN_ID), envOr(ctx.env.GITHUB_RUN_ATTEMPT)]
+      .filter((v) => v !== undefined)
+      .join(':') || undefined
   const result = await runVerify({
     cwd: ctx.cwd,
     runId: newRunId(),
@@ -2251,6 +2259,7 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
       intendedHeadSha: trace?.commit,
       checkoutSha: git.commitSha,
       baseSha: undefined,
+      runNonce,
     },
     selection,
     ...(flowUrl !== undefined ? { flowUrl } : {}),

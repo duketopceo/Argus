@@ -117,6 +117,7 @@ describe('runVerify', () => {
         intendedHeadSha: 'abc',
         checkoutSha: 'abc',
         baseSha: 'def',
+        runNonce: undefined,
       },
       selection: { review: true, flow: true, app: false, a0: false },
       flowUrl: 'http://localhost:3000',
@@ -152,7 +153,7 @@ describe('runVerify', () => {
       join(reportDir, 'run.json'),
       JSON.stringify({
         ok: true,
-        totals: { tests: 1, visionCalls: 3, visionCostUsd: 0.003 },
+        totals: { tests: 1, visionCalls: 3, visionCostUsd: 0.003, visionTokens: 310 },
         tests: [{ calls: [{ model: 'm', provider: 'openrouter', tokens: 10, costUsd: 0.001 }] }],
       }),
     )
@@ -166,6 +167,7 @@ describe('runVerify', () => {
         intendedHeadSha: 'abc',
         checkoutSha: 'abc',
         baseSha: 'def',
+        runNonce: undefined,
       },
       selection: { review: false, flow: true, app: false, a0: false },
       flowUrl: 'http://localhost:3000',
@@ -174,6 +176,41 @@ describe('runVerify', () => {
     expect(result.manifest.lanes.flow.status).toBe('passed')
     expect(result.manifest.lanes.flow.usage.calls).toBe(3)
     expect(result.manifest.lanes.flow.usage.costUsd).toBeCloseTo(0.003)
+    // tokens roll up the same way — the explore pass's 300 must reach the
+    // lane and the run aggregate, not just the 10 a test record owned.
+    expect(result.manifest.lanes.flow.usage.tokens).toBe(310)
+    expect(result.manifest.aggregate.tokens).toBe(310)
+  })
+
+  it('flow lane falls back to per-test tokens on a pre-visionTokens run.json', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-verify-'))
+    const reportDir = join(cwd, 'reports')
+    await mkdir(reportDir, { recursive: true })
+    await writeFile(
+      join(reportDir, 'run.json'),
+      JSON.stringify({
+        ok: true,
+        totals: { tests: 1, visionCalls: 1, visionCostUsd: 0.001 },
+        tests: [{ calls: [{ model: 'm', provider: 'openrouter', tokens: 10, costUsd: 0.001 }] }],
+      }),
+    )
+    const result = await runVerify({
+      cwd,
+      runId: 'run-legacy-tokens',
+      reportDir,
+      identity: {
+        repo: 'o/r',
+        pr: '1',
+        intendedHeadSha: 'abc',
+        checkoutSha: 'abc',
+        baseSha: 'def',
+        runNonce: undefined,
+      },
+      selection: { review: false, flow: true, app: false, a0: false },
+      flowUrl: 'http://localhost:3000',
+      runners: { flow: async () => 0 },
+    })
+    expect(result.manifest.lanes.flow.usage.tokens).toBe(10)
   })
 
   it('marks the flow lane failed when run.json claims ok with zero tests', async () => {
@@ -194,6 +231,7 @@ describe('runVerify', () => {
         intendedHeadSha: undefined,
         checkoutSha: undefined,
         baseSha: undefined,
+        runNonce: undefined,
       },
       selection: { review: false, flow: true, app: false, a0: false },
       flowUrl: 'http://localhost:3000',
@@ -230,6 +268,7 @@ describe('runVerify', () => {
         intendedHeadSha: undefined,
         checkoutSha: undefined,
         baseSha: undefined,
+        runNonce: undefined,
       },
       selection: { review: false, flow: true, app: false, a0: false },
       flowUrl: 'http://localhost:3000',
@@ -265,6 +304,7 @@ describe('runVerify', () => {
         intendedHeadSha: 'abc',
         checkoutSha: 'abc',
         baseSha: 'def',
+        runNonce: undefined,
       },
       selection: { review: true, flow: true, app: false, a0: false },
       runners: {
@@ -313,6 +353,7 @@ describe('runVerify', () => {
         intendedHeadSha: 'abc',
         checkoutSha: 'abc',
         baseSha: 'def',
+        runNonce: undefined,
       },
       selection: { review: false, flow: false, app: true, a0: false },
       runners: {
@@ -354,6 +395,7 @@ describe('runVerify', () => {
         intendedHeadSha: 'abc',
         checkoutSha: 'abc',
         baseSha: 'def',
+        runNonce: undefined,
       },
       selection: { review: true, flow: false, app: false, a0: false },
       runners: {
@@ -397,6 +439,7 @@ describe('runVerify', () => {
         intendedHeadSha: 'abc',
         checkoutSha: 'abc',
         baseSha: 'def',
+        runNonce: undefined,
       },
       selection: { review: false, flow: true, app: false, a0: false },
       flowUrl: 'http://localhost:3000',
@@ -428,6 +471,7 @@ describe('runVerify', () => {
         intendedHeadSha: undefined,
         checkoutSha: undefined,
         baseSha: undefined,
+        runNonce: undefined,
       },
       selection: { review: false, flow: true, app: true, a0: false },
       runners: { review: async () => 0, flow: async () => 0 },
@@ -452,6 +496,7 @@ describe('runVerify', () => {
         intendedHeadSha: 'head',
         checkoutSha: 'head',
         baseSha: 'def',
+        runNonce: undefined,
       },
       selection: { review: true, flow: false, app: false, a0: false },
       runners: { review: async () => 0 },
@@ -492,6 +537,7 @@ describe('runVerify', () => {
           intendedHeadSha: 'head',
           checkoutSha: 'merge',
           baseSha: 'def',
+        runNonce: undefined,
         },
         selection: { review: true, flow: false, app: false, a0: false },
         runners: { review: async () => 0 },

@@ -73,15 +73,27 @@ const FALLBACK_SECRET_PATTERNS = [
 const fallbackMask = (v) =>
   FALLBACK_SECRET_PATTERNS.reduce((s, re) => s.replace(re, '•••'), v)
 
-function validManifest(m, vm) {
+export function validManifest(m, vm) {
   if (vm?.isRunManifest !== undefined) return vm.isRunManifest(m)
   // Keep lockstep with isRunManifest (viewmodel.ts) — this fallback guards
   // the stale-dist path and must certify no less than the primary does.
   const num = (n) => typeof n === 'number' && Number.isFinite(n)
-  if (m === null || typeof m !== 'object') return false
+  if (m === null || typeof m !== 'object' || Array.isArray(m)) return false
   if (m.schemaVersion !== 1 || typeof m.runId !== 'string') return false
   if (typeof m.startedAt !== 'string') return false
-  if (m.identity === null || typeof m.identity !== 'object') return false
+  if (m.identity === null || typeof m.identity !== 'object' || Array.isArray(m.identity)) {
+    return false
+  }
+  for (const v of [
+    m.identity.repo,
+    m.identity.pr,
+    m.identity.intendedHeadSha,
+    m.identity.checkoutSha,
+    m.identity.baseSha,
+    m.identity.runNonce,
+  ]) {
+    if (v !== undefined && typeof v !== 'string') return false
+  }
   if (m.aggregate === null || typeof m.aggregate !== 'object') return false
   if (!KNOWN_STATUSES.has(m.aggregate.status)) return false
   if (m.aggregate.ok !== true && m.aggregate.ok !== false) return false
@@ -94,7 +106,7 @@ function validManifest(m, vm) {
     return (
       lane !== null &&
       typeof lane === 'object' &&
-      typeof lane.lane === 'string' &&
+      lane.lane === id &&
       typeof lane.selected === 'boolean' &&
       KNOWN_STATUSES.has(lane.status) &&
       lane.usage !== null &&
@@ -157,6 +169,7 @@ function sanitizeManifest(m, mask) {
       intendedHeadSha: s(identity.intendedHeadSha),
       checkoutSha: s(identity.checkoutSha),
       baseSha: s(identity.baseSha),
+      runNonce: s(identity.runNonce),
     },
     lanes,
     aggregate: {

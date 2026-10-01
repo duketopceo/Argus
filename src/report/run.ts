@@ -46,6 +46,8 @@ export interface RunTotals {
   failed: number
   visionCalls: number
   visionCostUsd: number
+  /** Token rollup across per-test calls AND lane-level extraCalls. */
+  visionTokens: number
   sandboxSeconds: number
   budgetExceeded: boolean
   /** OpenRouter spend grouped by model id. */
@@ -117,6 +119,10 @@ export function buildRunReport(
     costByModel[c.model] = (costByModel[c.model] ?? 0) + c.costUsd
   }
   const extraVisionCost = extraCalls.reduce((s, c) => s + c.costUsd, 0)
+  const visionTokens = [...tests.flatMap((t) => t.calls), ...extraCalls].reduce(
+    (s, c) => s + c.tokens,
+    0,
+  )
   return {
     tool: 'argus-reviewer',
     startedAt: startedAt.toISOString(),
@@ -132,6 +138,7 @@ export function buildRunReport(
       failed,
       visionCalls: tests.reduce((sum, t) => sum + t.visionCalls, 0) + extraCalls.length,
       visionCostUsd: tests.reduce((sum, t) => sum + t.visionCostUsd, 0) + extraVisionCost,
+      visionTokens,
       sandboxSeconds: tests.reduce((sum, t) => sum + t.sandboxSeconds, 0),
       budgetExceeded: tests.some((t) => t.budgetExceeded),
       callsByModel,

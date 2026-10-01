@@ -39,3 +39,6 @@ jobs:
       # whose dist output was never `git add -f`'d — .gitignore hides it).
       - run: npm run check:dist
       - run: npm test
+      # The dashboard is a release surface — render it headless against a
+      # seeded manifest so a renderer break can't ship green unit tests.
+      - run: npm run smoke:dashboard

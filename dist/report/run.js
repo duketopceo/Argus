@@ -21,6 +21,7 @@ exploreEvidence = false) {
         costByModel[c.model] = (costByModel[c.model] ?? 0) + c.costUsd;
     }
     const extraVisionCost = extraCalls.reduce((s, c) => s + c.costUsd, 0);
+    const visionTokens = [...tests.flatMap((t) => t.calls), ...extraCalls].reduce((s, c) => s + c.tokens, 0);
     return {
         tool: 'argus-reviewer',
         startedAt: startedAt.toISOString(),
@@ -36,6 +37,7 @@ exploreEvidence = false) {
             failed,
             visionCalls: tests.reduce((sum, t) => sum + t.visionCalls, 0) + extraCalls.length,
             visionCostUsd: tests.reduce((sum, t) => sum + t.visionCostUsd, 0) + extraVisionCost,
+            visionTokens,
             sandboxSeconds: tests.reduce((sum, t) => sum + t.sandboxSeconds, 0),
             budgetExceeded: tests.some((t) => t.budgetExceeded),
             callsByModel,
