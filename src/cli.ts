@@ -2152,7 +2152,13 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
     values['report-dir'] ?? config.reportDir ?? 'argus-reviewer-report',
   )
   await mkdir(reportDir, { recursive: true })
-  const flowUrl = values.url ?? config.target?.url
+  // ARGUS_VERIFY_* envs are the action's input bridge — flags win, then
+  // env, then config, so a workflow needs no committed CLI invocation.
+  // Action inputs default to '', which must not shadow the config.
+  const envOr = (v: string | undefined): string | undefined =>
+    v !== undefined && v !== '' ? v : undefined
+  const flowUrl = values.url ?? envOr(ctx.env.ARGUS_VERIFY_URL) ?? config.target?.url
+  const verifyTask = values.task ?? envOr(ctx.env.ARGUS_VERIFY_TASK)
   const trace = parseOpenRouterTrace(ctx.env)
   const git = await gitInfo(ctx.cwd)
   const envBudget = Number(ctx.env.ARGUS_BUDGET_USD)
@@ -2176,9 +2182,12 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
   // they win over config.app.expected so a one-shot verify needs no file.
   const flagExpected: AppExpectation | undefined = (() => {
     const e: AppExpectation = {}
-    if (values['expect-text'] !== undefined) e.text = values['expect-text']
-    if (values['expect-url'] !== undefined) e.url = values['expect-url']
-    if (values['expect-selector'] !== undefined) e.selector = values['expect-selector']
+    const text = values['expect-text'] ?? envOr(ctx.env.ARGUS_VERIFY_EXPECT_TEXT)
+    const url = values['expect-url'] ?? envOr(ctx.env.ARGUS_VERIFY_EXPECT_URL)
+    const selector = values['expect-selector'] ?? envOr(ctx.env.ARGUS_VERIFY_EXPECT_SELECTOR)
+    if (text !== undefined) e.text = text
+    if (url !== undefined) e.url = url
+    if (selector !== undefined) e.selector = selector
     return e.text !== undefined || e.url !== undefined || e.selector !== undefined
       ? e
       : undefined
@@ -2211,7 +2220,7 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
           config,
           trusted: trust === 'trusted',
           url: flowUrl,
-          task: values.task,
+          task: verifyTask,
           expected: flagExpected,
           deps: {
             ...(deps.launchDriver !== undefined ? { launchDriver: deps.launchDriver } : {}),
@@ -2239,7 +2248,7 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
           env: ctx.env,
           targetUrl: flowUrl,
           intendedHeadSha: trace?.commit ?? git.commitSha,
-          task: values.task ?? config.app.task,
+          task: verifyTask ?? config.app.task,
           deps: {
             ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
             ...(deps.probe !== undefined ? { probe: deps.probe } : {}),
@@ -2594,13 +2603,16 @@ Options:
   -h, --help`
 
 function initConfig(a0Host: string | undefined): string {
+  // R19 — a detected Agent Zero host earns a labeled suggestion, never an
+  // enabled lane: `verify --a0` is explicit opt-in per run, and
+  // unverified-live until #53 proves the round-trip.
   const a0Block =
     a0Host !== undefined
       ? `
-  // Agent Zero detected — delegated tasks (argus-reviewer delegate) and
-  // failure escalation (heal) go to this instance.
-  a0: { url: ${JSON.stringify(a0Host)} },
-  heal: 'a0',
+  // Optional: Agent Zero detected at ${a0Host}. Nothing below runs unless
+  // you ask for it — both stays commented until you opt in deliberately.
+  //   a0: { url: ${JSON.stringify(a0Host)} },  // enables \`verify --a0\` (unverified-live, unmetered)
+  //   heal: 'a0',                             // escalates a failed heal to the A0 host
 `
       : ''
   return `import { defineConfig } from 'argus-reviewer-e2e'
@@ -2783,8 +2795,8 @@ async function cmdInit(args: string[], ctx: Ctx, deps: CliDeps): Promise<number>
   ctx.out(
     env.a0.version !== undefined || env.a0.host !== undefined
       ? `  agent zero      ✓ ${env.a0.version !== undefined ? `a0 ${env.a0.version}` : 'CLI not on PATH'}` +
-          `${env.a0.host !== undefined ? ` → ${env.a0.host}` : ''} (delegation + heal: 'a0')`
-      : "  agent zero      - not found (optional — enables `delegate` and heal: 'a0')",
+          `${env.a0.host !== undefined ? ` → ${env.a0.host}` : ''} (opt-in only — see config comments)`
+      : '  agent zero      - not found (optional — enables `verify --a0` delegation)',
   )
   // Pulled from resolveConfig so the shortlist can't drift from defaults.
   const dm = resolveConfig({})
@@ -2793,14 +2805,24 @@ async function cmdInit(args: string[], ctx: Ctx, deps: CliDeps): Promise<number>
       ' — docs/models.md',
   )
 
+  // R19 — name what leaves the machine, the default spend posture, and
+  // the stop path before the user runs anything.
+  ctx.out('')
+  ctx.out('What runs and what it costs:')
+  ctx.out('  sent to provider  PR diffs, page screenshots/DOM snapshots, and')
+  ctx.out('                    review prompts — via your OpenRouter key (BYOK)')
+  ctx.out(`  default budget    $${dm.budgetUsd ?? 1}/run cap (budgetUsd); cached replay costs $0`)
+  ctx.out('  how to stop       Ctrl+C locally; in CI remove the workflow file')
+  ctx.out('                    or delete the OPENROUTER_API_KEY secret')
+
   ctx.out('')
   ctx.out('Next steps:')
-  ctx.out('  1. Edit target.url (or pass --url) to point at your app')
-  ctx.out('  2. argus-reviewer run            # replay-or-ground the smoke test')
-  ctx.out('  3. argus-reviewer record "..."   # record a real flow')
+  ctx.out('  1. argus-reviewer verify           # code review — the default lane')
+  ctx.out('  2. Edit target.url to point at your app (flow/app lanes only)')
+  ctx.out('  3. argus-reviewer record "..."      # record a real flow')
   ctx.out('  4. Add OPENROUTER_API_KEY to repo secrets to enable the PR workflow')
   if (env.a0.version !== undefined || env.a0.host !== undefined) {
-    ctx.out('  5. argus-reviewer delegate "..." # hand a task to Agent Zero')
+    ctx.out('  5. verify --a0 / heal: a0 are opt-in — commented suggestions are in the config')
   }
   return 0
 }

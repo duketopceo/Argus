@@ -67,6 +67,45 @@ inputs:
     description: Run the browser-flow lane (`argus-reviewer run`). Disabled by default for public code-review-only repositories. Requires an explicit target and a trusted runtime path.
     default: 'false'
     required: false
+  app:
+    description: >-
+      Enable the application task lane (`verify --app`): a directed task
+      plus an expected-state check against your running app — never free
+      exploration. Requires `app-task`; `app-url` wins over the config's
+      target.url. Executable lane — refused on fork PRs and
+      pull_request_target by the runtime-lane gate.
+    default: 'false'
+    required: false
+  app-task:
+    description: Directed task for the app lane (and the a0 lane), e.g. 'submit the signup form and land on /welcome'. Required when app is true.
+    default: ''
+    required: false
+  app-url:
+    description: URL the flow/app/a0 lanes target — wins over the config's target.url. Passed as --url.
+    default: ''
+    required: false
+  app-expect-text:
+    description: Text that must appear for the app task to pass (maps to --expect-text).
+    default: ''
+    required: false
+  app-expect-url:
+    description: Regular expression the page URL must match after the task (maps to --expect-url).
+    default: ''
+    required: false
+  app-expect-selector:
+    description: CSS selector that must be present after the task (maps to --expect-selector).
+    default: ''
+    required: false
+  a0:
+    description: >-
+      Opt-in Agent Zero escalation lane (`verify --a0`): delegates the
+      configured task to your self-hosted A0 host inside a sanitized,
+      allowlisted child environment. The lane reports `inconclusive` even
+      on agent-reported success — live verification is not proven (#53) —
+      and `unavailable` when the host/CLI is missing. Bounded to 1 task
+      and the configured timeout.
+    default: 'false'
+    required: false
   approval-token:
     description: >-
       Optional token that lets Argus submit a *formal* pull request review, which
@@ -151,7 +190,9 @@ runs:
       run: node "$ARGUS_ACTION_PATH/bootstrap.mjs"
 
     - name: Reject executable lanes on untrusted pull requests
-      if: inputs.run != 'false' || inputs.install-consumer-dependencies == 'true'
+      if: >-
+        inputs.run != 'false' || inputs.app == 'true' || inputs.a0 == 'true'
+        || inputs.install-consumer-dependencies == 'true'
       shell: bash
       env:
         EVENT_NAME: ${{ github.event_name }}
@@ -174,6 +215,10 @@ runs:
             echo "Argus run lane is disabled on issue_comment — use '@argus record'." >&2
             exit 1
           fi
+          if [ "${{ inputs.app }}" = "true" ] || [ "${{ inputs.a0 }}" = "true" ]; then
+            echo "Argus app/a0 lanes are disabled on issue_comment — they verify a head checkout." >&2
+            exit 1
+          fi
           exit 0
         fi
         if [ "$EVENT_NAME" != "pull_request" ] && [ "$EVENT_NAME" != "" ]; then
@@ -188,7 +233,7 @@ runs:
       run: npm ci
 
     - name: Install Playwright browser for explicit runtime lanes
-      if: inputs.run != 'false' || (github.event_name == 'issue_comment' && contains(github.event.comment.body, 'record'))
+      if: inputs.run != 'false' || inputs.app == 'true' || (github.event_name == 'issue_comment' && contains(github.event.comment.body, 'record'))
       shell: bash
       working-directory: ${{ inputs.working-directory || '.' }}
       env:
@@ -251,6 +296,13 @@ runs:
         ARGUS_WORKING_DIRECTORY: ${{ steps.bootstrap.outputs.working-directory }}
         ARGUS_REPORT_DIR: ${{ inputs.report-dir }}
         ARGUS_VERIFY_FLOW: ${{ inputs.run != 'false' && '1' || '' }}
+        ARGUS_VERIFY_APP: ${{ inputs.app == 'true' && '1' || '' }}
+        ARGUS_VERIFY_A0: ${{ inputs.a0 == 'true' && '1' || '' }}
+        ARGUS_VERIFY_URL: ${{ inputs.app-url }}
+        ARGUS_VERIFY_TASK: ${{ inputs.app-task }}
+        ARGUS_VERIFY_EXPECT_TEXT: ${{ inputs.app-expect-text }}
+        ARGUS_VERIFY_EXPECT_URL: ${{ inputs.app-expect-url }}
+        ARGUS_VERIFY_EXPECT_SELECTOR: ${{ inputs.app-expect-selector }}
         ARGUS_SANDBOX: ${{ inputs.sandbox == 'true' && '1' || '' }}
         ARGUS_MAX_COMMENTS: ${{ inputs.max-comments }}
         ARGUS_DEBUG: '1'

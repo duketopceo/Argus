@@ -209,6 +209,18 @@ describe('action input contract', () => {
     expect(action).toContain("if: inputs.install-consumer-dependencies == 'true'")
     expect(action).toContain('node "$ARGUS_ACTION_PATH/cli.mjs" verify')
     expect(action).toContain('ARGUS_VERIFY_FLOW:')
+    // U5/U6 — app + a0 lanes surface as opt-in action inputs bridged to
+    // the verify env contract; expect markers ride along.
+    expect(action).toContain('app-task:')
+    expect(action).toContain('app-url:')
+    expect(action).toContain('app-expect-text:')
+    expect(action).toContain('ARGUS_VERIFY_APP:')
+    expect(action).toContain('ARGUS_VERIFY_A0:')
+    expect(action).toContain('ARGUS_VERIFY_TASK:')
+    expect(action).toContain('ARGUS_VERIFY_EXPECT_TEXT:')
+    // Both lanes are executable — they must ride the fork gate.
+    expect(action).toContain("inputs.app == 'true'")
+    expect(action).toContain("inputs.a0 == 'true'")
     expect(action).not.toContain('code-review --report-dir')
     expect(action).not.toContain('run --report-dir')
     expect(action).not.toContain('new Function')

@@ -567,7 +567,7 @@ describe('argus-reviewer CLI', () => {
     expect(report.tests[0]!.a0Diagnosis).toBe('the app is broken: no marker rendered')
   }, 60_000)
 
-  it('init reports the environment and enables heal:a0 when Agent Zero resolves', async () => {
+  it('init suggests (never enables) A0 when a host resolves — R19', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'argus-init-'))
     const out = capture()
     const code = await main(['init'], {
@@ -584,9 +584,45 @@ describe('argus-reviewer CLI', () => {
     const text = out.lines.join('\n')
     expect(text).toContain('argus-reviewer environment')
     expect(text).toContain('a0 2.12 → https://a0.example.com')
+    expect(text).toContain('opt-in')
     const config = await readFile(join(cwd, 'argus-reviewer.config.ts'), 'utf8')
-    expect(config).toContain("heal: 'a0'")
-    expect(config).toContain("https://a0.example.com")
+    expect(config).toContain('https://a0.example.com')
+    // Labeled suggestion lives in comments — no enabled a0/heal lane lines.
+    expect(config).not.toMatch(/^\s+a0:/m)
+    expect(config).not.toMatch(/^\s+heal:/m)
+  })
+
+  it('init names provider data flow, budget posture, and the stop path — R19', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-init-'))
+    const out = capture()
+    const code = await main(['init'], {
+      cwd,
+      out: out.fn,
+      err: capture().fn,
+      // No key — the named setup failure must be visible, not a silent pass.
+      env: { ...process.env, OPENROUTER_API_KEY: '' },
+      exec: async () => ({ code: 1, stdout: '', stderr: 'unauthenticated' }),
+    })
+    expect(code).toBe(0)
+    const text = out.lines.join('\n')
+    expect(text).toContain('✗ export OPENROUTER_API_KEY')
+    expect(text).toContain('sent to provider')
+    expect(text).toContain('default budget')
+    expect(text).toContain('how to stop')
+    expect(text).toContain('verify')
+  })
+
+  it('the generated workflow is code-review-only with the permissions it needs', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-init-'))
+    await main(['init'], { cwd, out: capture().fn, err: capture().fn })
+    const workflow = await readFile(join(cwd, '.github/workflows/argus-reviewer.yml'), 'utf8')
+    // Review-only: the action's `run` input stays at its 'false' default —
+    // no executable lanes are enabled by the scaffold.
+    expect(workflow).not.toMatch(/run:\s*['"]?true/)
+    expect(workflow).toContain('contents: read')
+    expect(workflow).toContain('issues: write')
+    expect(workflow).toContain('pull-requests: write')
+    expect(workflow).not.toContain('contents: write')
   })
 
   it('init scaffolds config, smoke test, and workflow; skips existing files', async () => {
