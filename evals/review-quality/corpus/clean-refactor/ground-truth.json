@@ -1,0 +1,6 @@
+{
+  "title": "Pure refactor — helper extraction + lookup table, no defects",
+  "kind": "trees",
+  "planted": [],
+  "expectVerdictIn": ["pass", "approve"]
+}

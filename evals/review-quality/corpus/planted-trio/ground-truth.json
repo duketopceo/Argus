@@ -1,0 +1,10 @@
+{
+  "title": "Cart module — three planted defects",
+  "kind": "trees",
+  "planted": [
+    { "file": "src/cart.ts", "line": 17, "severity": "bug", "category": "correctness", "note": "cartTotal drops qty — sum += item.price" },
+    { "file": "src/cart.ts", "line": 24, "severity": "bug", "category": "correctness", "note": "applyCoupon lost its range/NaN guard — NaN propagates" },
+    { "file": "src/cart.ts", "line": 29, "severity": "risk", "category": "correctness", "note": "persistCart no longer awaits writeFile — fire-and-forget" }
+  ],
+  "expectVerdictIn": ["needs_changes"]
+}

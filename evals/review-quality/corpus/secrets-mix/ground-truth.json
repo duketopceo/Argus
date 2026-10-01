@@ -1,0 +1,13 @@
+{
+  "title": "Credential adjudication — doc key + live-shaped key + benign test id",
+  "kind": "trees",
+  "planted": [
+    { "file": ".env.example", "line": 3, "severity": "bug", "category": "security", "note": "live-format Stripe key committed to .env.example" }
+  ],
+  "secretsExpect": [
+    { "file": "README.md", "line": 8, "expect": "quiet", "note": "AWS docs example — suppress or never flag" },
+    { "file": ".env.example", "line": 3, "expect": "flagged", "note": "live-shaped sk_live_ key" },
+    { "file": "src/config.ts", "line": 13, "expect": "quiet", "note": "labeled test id — suppress or never flag" }
+  ],
+  "expectVerdictIn": ["needs_changes"]
+}
