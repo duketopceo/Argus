@@ -33,7 +33,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -165,7 +165,9 @@ function reviewItem(itemDir) {
     parseError = String(e)
   }
 
-  const diff = execFileSync('git', ['-C', repo, 'diff', 'argus-fixture-base..HEAD'], {
+  // core.quotePath=false matches loadFixture's diff — otherwise non-ASCII
+  // filenames come back C-quoted and judge.mjs's fileDiff lookup misses.
+  const diff = execFileSync('git', ['-c', 'core.quotePath=false', '-C', repo, 'diff', 'argus-fixture-base..HEAD'], {
     encoding: 'utf8',
     maxBuffer: 16 << 20,
   })
@@ -232,7 +234,7 @@ function reviewItem(itemDir) {
     tokens: report?.tokens ?? 0,
     model: report?.model ?? null,
     exitCode: run.status,
-    reportPath: report ? reportPath : null,
+    reportPath: report ? relative(ROOT, reportPath) : null,
     parseError,
     stderrTail: (run.stderr ?? '').split('\n').slice(-8).join('\n'),
     diff,

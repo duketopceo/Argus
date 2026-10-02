@@ -104,7 +104,7 @@
       "tokens": 4340,
       "model": "google/gemini-2.5-flash-lite",
       "exitCode": 0,
-      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-demo-pr-report/code-review.json",
+      "reportPath": "evals/work/rq-demo-pr-report/code-review.json",
       "parseError": null,
       "stderrTail": "trust: trusted — local run — no CI event context\n"
     }

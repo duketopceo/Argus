@@ -1708,6 +1708,11 @@ async function cmdCodeReview(args, ctx, deps) {
                 droppedReverted += vetted.dropped.length;
                 recordDrops(vetted.dropped, 'revert-nit');
                 finalFindings = vetted.kept;
+                // The model's summary describes the set it emitted — reuse it only
+                // when this pass dropped nothing, else its prose can cite findings
+                // that were filtered out.
+                if (anchored.dropped.length + vetted.dropped.length > 0)
+                    modelSummary = undefined;
                 if (ledger.budgetExceeded) {
                     ctx.err('code-review: budget exceeded after synthesis; stopping early');
                 }
@@ -1717,11 +1722,14 @@ async function cmdCodeReview(args, ctx, deps) {
                 ctx.err(`code-review synthesis failed: ${e.message}`);
             }
         }
-        // Verdict describes the emitted findings — it is derived from the
-        // post-filter set on every path, so a filtered-out finding can never
-        // flip the gate open (dropped bug -> 'pass') nor leave an inconsistent
-        // 'needs_changes' over an empty findings list. The model's own verdict
-        // is recorded when it diverges, never trusted.
+        // Verdict describes the emitted findings against the operator's gate —
+        // derived from the post-filter set on every path, so a filtered-out
+        // finding can never flip the gate open (dropped bug -> 'pass') nor
+        // leave an inconsistent 'needs_changes' over an empty findings list.
+        // needs_changes means "a blocking severity is present" — same set the
+        // ok flag and reviewEvent are computed from, so verdict, ok, and
+        // reviewEvent can never disagree. The model's own verdict is recorded
+        // when it diverges, never trusted.
         let verdict;
         let summary;
         if (finalFindings.length === 0) {
@@ -1732,8 +1740,8 @@ async function cmdCodeReview(args, ctx, deps) {
                     : 'No issues found';
             verdict = 'pass';
         }
-        else if (finalFindings.some((f) => ['bug', 'risk'].includes(f.severity))) {
-            summary = `${finalFindings.length} finding(s) include bug or risk`;
+        else if (finalFindings.some((f) => blockSeverities.includes(f.severity))) {
+            summary = `${finalFindings.length} finding(s) include a blocking severity`;
             verdict = 'needs_changes';
         }
         else {

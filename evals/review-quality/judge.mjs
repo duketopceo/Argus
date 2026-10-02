@@ -114,6 +114,42 @@ ${f.diff}
   return { findings: parsed.findings ?? [], cost }
 }
 
+/**
+ * A batch must return exactly one score per sampled id — an omitted id
+ * silently shrinks the aggregate denominators, an invented id injects a
+ * score with no source finding. Retry once on missing ids; fail the run
+ * if still incomplete. Extra ids are dropped and counted, never scored.
+ */
+async function judgeBatchChecked(batch, rubric, model) {
+  const want = new Set(batch.map((f) => f.id))
+  let lastErr
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let r
+    try {
+      r = await judgeBatch(batch, rubric, model)
+    } catch (e) {
+      lastErr = e
+      continue
+    }
+    const seen = new Set()
+    const unknown = []
+    for (const jf of r.findings) {
+      if (want.has(jf.id)) seen.add(jf.id)
+      else unknown.push(jf.id)
+    }
+    const missing = [...want].filter((id) => !seen.has(id))
+    if (missing.length === 0) {
+      return {
+        findings: r.findings.filter((jf) => want.has(jf.id)),
+        cost: r.cost,
+        unknownIds: unknown,
+      }
+    }
+    lastErr = new Error(`judge batch incomplete: missing ${missing.join(',')}`)
+  }
+  throw lastErr
+}
+
 async function main() {
   const label = arg('label')
   if (!label) {
@@ -126,10 +162,14 @@ async function main() {
   }
   const model = process.env.JUDGE_MODEL ?? 'google/gemini-2.5-flash-lite'
   const rubric = readFileSync(RUBRIC_PATH, 'utf8')
-  const results = JSON.parse(readFileSync(join(RESULTS, `${label}.json`), 'utf8'))
-  const diffs = existsSync(join(RESULTS, `${label}.diffs.json`))
-    ? JSON.parse(readFileSync(join(RESULTS, `${label}.diffs.json`), 'utf8')).diffs
-    : {}
+  const resultsPath = join(RESULTS, `${label}.json`)
+  const diffsPath = join(RESULTS, `${label}.diffs.json`)
+  if (!existsSync(resultsPath) || !existsSync(diffsPath)) {
+    console.error(`missing results for label '${label}' — run run.mjs --label ${label} first`)
+    process.exit(2)
+  }
+  const results = JSON.parse(readFileSync(resultsPath, 'utf8'))
+  const diffs = JSON.parse(readFileSync(diffsPath, 'utf8')).diffs
 
   // Flatten findings with stable ids.
   let seq = 0
@@ -167,13 +207,15 @@ async function main() {
 
   const judged = []
   let judgeCost = 0
+  let unmatchedIds = 0
   for (const [i, batch] of batches.entries()) {
     console.error(`[judge] batch ${i + 1}/${batches.length} (${batch.map((f) => f.id).join(',')})`)
-    const r = await judgeBatch(batch, rubric, model)
+    const r = await judgeBatchChecked(batch, rubric, model)
     judgeCost += r.cost
+    unmatchedIds += r.unknownIds.length
     for (const jf of r.findings) {
       const src = batch.find((f) => f.id === jf.id)
-      judged.push({ ...(src ?? {}), score: jf.score, tags: jf.tags ?? [], reason: jf.reason ?? '' })
+      judged.push({ ...src, score: jf.score, tags: jf.tags ?? [], reason: jf.reason ?? '' })
     }
   }
 
@@ -193,6 +235,8 @@ async function main() {
     judged: scored.length,
     sampled: sampled.length,
     total_findings: all.length,
+    unmatched_judge_ids: unmatchedIds,
+    no_diff_count: all.filter((f) => f.diff === '(file diff not found)').length,
     sample_seed: SEED,
     judge_model: model,
   }

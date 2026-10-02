@@ -79,7 +79,7 @@
       "tokens": 4535,
       "model": "google/gemini-2.5-flash-lite",
       "exitCode": 0,
-      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-clean-refactor-report/code-review.json",
+      "reportPath": "evals/work/rq-clean-refactor-report/code-review.json",
       "parseError": null,
       "stderrTail": "trust: trusted — local run — no CI event context\n"
     },
@@ -166,7 +166,7 @@
       "tokens": 4333,
       "model": "google/gemini-2.5-flash-lite",
       "exitCode": 0,
-      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-demo-pr-report/code-review.json",
+      "reportPath": "evals/work/rq-demo-pr-report/code-review.json",
       "parseError": null,
       "stderrTail": "trust: trusted — local run — no CI event context\n"
     },
@@ -225,7 +225,7 @@
       "tokens": 4173,
       "model": "google/gemini-2.5-flash-lite",
       "exitCode": 0,
-      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-fp-traps-report/code-review.json",
+      "reportPath": "evals/work/rq-fp-traps-report/code-review.json",
       "parseError": null,
       "stderrTail": "trust: trusted — local run — no CI event context\n"
     },
@@ -282,7 +282,7 @@
       "tokens": 3075,
       "model": "google/gemini-2.5-flash-lite",
       "exitCode": 0,
-      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-planted-security-report/code-review.json",
+      "reportPath": "evals/work/rq-planted-security-report/code-review.json",
       "parseError": null,
       "stderrTail": "trust: trusted — local run — no CI event context\n"
     },
@@ -356,7 +356,7 @@
       "tokens": 3442,
       "model": "google/gemini-2.5-flash-lite",
       "exitCode": 0,
-      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-planted-trio-report/code-review.json",
+      "reportPath": "evals/work/rq-planted-trio-report/code-review.json",
       "parseError": null,
       "stderrTail": "trust: trusted — local run — no CI event context\n"
     },
@@ -394,7 +394,7 @@
       "tokens": 39041,
       "model": "google/gemini-2.5-flash-lite",
       "exitCode": 0,
-      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-pr-107-snapshot-report/code-review.json",
+      "reportPath": "evals/work/rq-pr-107-snapshot-report/code-review.json",
       "parseError": null,
       "stderrTail": "trust: trusted — local run — no CI event context\n"
     },
@@ -603,7 +603,7 @@
       "tokens": 35011,
       "model": "google/gemini-2.5-flash-lite",
       "exitCode": 0,
-      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-pr-109-snapshot-report/code-review.json",
+      "reportPath": "evals/work/rq-pr-109-snapshot-report/code-review.json",
       "parseError": null,
       "stderrTail": "trust: trusted — local run — no CI event context\n"
     },
@@ -681,7 +681,7 @@
       "tokens": 2933,
       "model": "google/gemini-2.5-flash-lite",
       "exitCode": 0,
-      "reportPath": "/home/lukekimball/Documents/github/personal/argus-opt-review-quality/evals/work/rq-secrets-mix-report/code-review.json",
+      "reportPath": "evals/work/rq-secrets-mix-report/code-review.json",
       "parseError": null,
       "stderrTail": "trust: trusted — local run — no CI event context\n"
     }
