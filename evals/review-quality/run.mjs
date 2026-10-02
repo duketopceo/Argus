@@ -181,12 +181,13 @@ function reviewItem(itemDir) {
     const rec = records.find(
       (r) => r.file === s.file && Math.abs((r.line ?? -999) - s.line) <= LINE_TOLERANCE,
     )
-    // "flagged" = the secrets pipeline emitted an unsuppressed finding at the
-    // site (secrets findings carry adjudicated pLive in `p`). Findings the
-    // review model wrote independently don't count — those are judge-scored.
-    const flagged = findings.some(
-      (f) => f.file === s.file && typeof f.line === 'number' && Math.abs(f.line - s.line) <= LINE_TOLERANCE && HIGH.has(f.severity) && f.p !== undefined,
-    )
+    // "flagged" = the secrets pipeline emitted an unsuppressed finding at
+    // the site. Read from secretsScan.records — every scanned candidate
+    // produces a record, emitted or suppressed. Findings the review model
+    // wrote independently never count: adjudicated model findings also
+    // carry `p` (adjudicate.ts stamps it on every Jev'd finding), and
+    // unadjudicated secrets findings carry none.
+    const flagged = rec !== undefined && !rec.suppressed
     const suppressed = Boolean(rec?.suppressed)
     // "flagged" requires an unsuppressed secrets finding at the site;
     // "quiet" is satisfied by suppression or by never flagging at all.
@@ -224,6 +225,9 @@ function reviewItem(itemDir) {
     })),
     planted,
     secretsExpect,
+    droppedUnanchored: report?.droppedUnanchored ?? 0,
+    droppedReverted: report?.droppedReverted ?? 0,
+    droppedFindings: report?.droppedFindings ?? [],
     costUsd: report?.visionCostUsd ?? 0,
     tokens: report?.tokens ?? 0,
     model: report?.model ?? null,
@@ -284,6 +288,8 @@ function main() {
     secrets_correct_count: secretsCorrect,
     secrets_total: secretsTotal,
     suppressed_count: out.reduce((s, i) => s + i.secretsRecords.filter((r) => r.suppressed).length, 0),
+    dropped_unanchored_total: out.reduce((s, i) => s + i.droppedUnanchored, 0),
+    dropped_reverted_total: out.reduce((s, i) => s + i.droppedReverted, 0),
     tokens: out.reduce((s, i) => s + (i.tokens ?? 0), 0),
     items_reviewed: out.length,
   }
