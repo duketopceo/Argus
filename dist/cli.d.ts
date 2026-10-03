@@ -74,6 +74,14 @@ export interface ReviewScope {
     excludedFiles: number;
     /** Up to 5 excluded paths, for the Diagnostics line. */
     excludedSample: string[];
+    /** Review chunks planned, run to completion, and failed (the rest were skipped on budget). */
+    chunks: number;
+    reviewedChunks: number;
+    failedChunks: number;
+    /** Files split by hunk because one patch exceeded a chunk. */
+    splitFiles: number;
+    /** The PR file list hit the pagination cap; later files were never fetched. */
+    listTruncated?: boolean;
 }
 interface CodeReviewReport {
     ok: boolean;
@@ -147,6 +155,15 @@ export declare function loadFixture(dir: string, exec?: ExecFn): Promise<{
 } | {
     skipped: string;
 }>;
+export interface ChunkPlan {
+    chunks: string[];
+    /** Distinct file names carried by each chunk, parallel to `chunks`. */
+    chunkFiles: string[][];
+    /** Files whose patch was too large for one chunk and was split by hunk. */
+    splitFiles: number;
+}
+/** Plan review chunks: files grouped in diff (path) order, oversize patches split by hunk. */
+export declare function planChunks(files: PrFile[], contexts?: Record<string, string>): ChunkPlan;
 export declare function buildPatchChunks(files: PrFile[], contexts?: Record<string, string>): string[];
 export declare function buildCodeReviewMessages(repo: string, pr: string, patchText: string, chunkIndex?: number, totalChunks?: number, profiles?: readonly string[]): Message[];
 export declare function parseCodeReview(content: string): {

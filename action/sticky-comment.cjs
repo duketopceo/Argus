@@ -688,6 +688,16 @@ function diagnosticsFold(manifest, report, codeReview) {
           `${sc.excludedFiles} excluded by \`review.exclude\`${sample ? ` (${sample})` : ''}`,
       )
     }
+    if (sc && sc.chunks > 1) {
+      items.push(
+        `Review chunks: ${sc.reviewedChunks} of ${sc.chunks} reviewed` +
+          `${sc.failedChunks > 0 ? `, ${sc.failedChunks} failed` : ''}` +
+          `${sc.splitFiles > 0 ? `, ${plural(sc.splitFiles, 'large file')} split by hunk` : ''}`,
+      )
+    }
+    if (sc && sc.listTruncated === true) {
+      items.push('PR file list was capped by pagination; later files were not fetched or reviewed.')
+    }
     const val = codeReview.validation
     if (val && val.dropped > 0) {
       const LABEL = {

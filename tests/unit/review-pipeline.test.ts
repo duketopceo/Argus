@@ -91,3 +91,45 @@ describe('test-file handling', () => {
     expect(client.prompts[0]).toContain('assertions describe expected behavior')
   })
 })
+
+describe('large PRs', () => {
+  const big = (i: number) => ({ [`src/f${i}.ts`]: lines(1500, `f${i}`) })
+  const head = Object.assign({}, ...Array.from({ length: 6 }, (_, i) => big(i))) as Record<string, string>
+
+  it('reviews every chunk and says how much was reviewed', async () => {
+    const client = new ScriptedClient(Array.from({ length: 20 }, () => reply([], 'pass')))
+    const r = await runReview({ head, client })
+    expect(r.code).toBe(0)
+    expect(client.prompts.length).toBeGreaterThan(2)
+    expect(r.report.scope.reviewedFiles).toBe(6)
+    expect(r.report.scope.chunks).toBe(r.report.scope.reviewedChunks)
+    expect(r.report.summary).toMatch(/Reviewed 6 of 6 changed files \(\d+ of \d+ chunks/)
+  })
+
+  it('a failed chunk is disclosed and the rest of the review survives', async () => {
+    const probe = new ScriptedClient(Array.from({ length: 20 }, () => reply([], 'pass')))
+    await runReview({ head, client: probe })
+    const n = probe.prompts.length - 1 // minus synthesis
+    const replies: (ReturnType<typeof reply> | Error)[] = []
+    for (let i = 0; i < n; i++) {
+      replies.push(
+        i === 1
+          ? new Error('boom')
+          : reply([{ file: 'src/f0.ts', line: 1, severity: 'nit', category: 'other', message: 'L1: n' }], 'approve'),
+      )
+    }
+    replies.push(reply([], 'approve'))
+    const r = await runReview({ head, client: new ScriptedClient(replies) })
+    expect(r.code).toBe(0)
+    expect(r.report.scope.failedChunks).toBe(1)
+    expect(r.report.scope.reviewedFiles).toBeLessThan(6)
+    expect(r.report.summary).toMatch(/Reviewed \d of 6 changed files/)
+    expect(r.report.verdict).toBe('needs_changes')
+    expect(r.report.ok).toBe(false)
+  })
+
+  it('still fails when no chunk could be reviewed', async () => {
+    const r = await runReview({ head, client: new ScriptedClient(Array.from({ length: 20 }, () => new Error('down'))) })
+    expect(r.code).toBe(1)
+  })
+})

@@ -1306,6 +1306,14 @@ export interface ReviewScope {
   excludedFiles: number
   /** Up to 5 excluded paths, for the Diagnostics line. */
   excludedSample: string[]
+  /** Review chunks planned, run to completion, and failed (the rest were skipped on budget). */
+  chunks: number
+  reviewedChunks: number
+  failedChunks: number
+  /** Files split by hunk because one patch exceeded a chunk. */
+  splitFiles: number
+  /** The PR file list hit the pagination cap; later files were never fetched. */
+  listTruncated?: boolean
 }
 
 interface CodeReviewReport {
@@ -1368,8 +1376,9 @@ async function fetchPrFiles(
   pr: string,
   token: string,
   ctx: Ctx,
-): Promise<PrFile[] | undefined> {
+): Promise<{ files: PrFile[]; capped: boolean } | undefined> {
   const files: PrFile[] = []
+  let capped = false
   for (let page = 1; page <= MAX_PR_FILE_PAGES; page++) {
     const batch = (await ghGet(
       `https://api.github.com/repos/${repo}/pulls/${pr}/files?per_page=100&page=${page}`,
@@ -1379,8 +1388,9 @@ async function fetchPrFiles(
     if (batch === undefined) return undefined
     files.push(...batch.filter((f) => typeof f.patch === 'string' && f.patch.length > 0))
     if (batch.length < 100) break
+    if (page === MAX_PR_FILE_PAGES) capped = true
   }
-  return files
+  return { files, capped }
 }
 
 /**
@@ -1444,33 +1454,91 @@ export async function loadFixture(
   return { files: filesFromUnifiedDiff(diff.stdout), meta, diff: diff.stdout }
 }
 
-export function buildPatchChunks(files: PrFile[], contexts: Record<string, string> = {}): string[] {
-  const section = (c: PrFile): string => {
-    const ctxBlock = contexts[c.filename]
-    const head = ctxBlock === undefined ? `### ${c.filename}` : `### ${c.filename}\n${ctxBlock}`
-    return `${head}\n\`\`\`diff\n${c.patch}\n\`\`\``
+export interface ChunkPlan {
+  chunks: string[]
+  /** Distinct file names carried by each chunk, parallel to `chunks`. */
+  chunkFiles: string[][]
+  /** Files whose patch was too large for one chunk and was split by hunk. */
+  splitFiles: number
+}
+
+const CHUNK_CHAR_TARGET = CHUNK_TOKEN_TARGET * 4
+
+/**
+ * Split an oversize patch at hunk boundaries into pieces under the chunk
+ * target. A single hunk larger than the target stays whole: nothing is
+ * truncated, a hunk is the smallest unit the model can read as code.
+ */
+function splitPatchByHunk(patch: string): string[] {
+  const parts = patch.split(/^(?=@@ )/m)
+  const header = parts[0]?.startsWith('@@ ') === true ? '' : (parts.shift() ?? '')
+  const pieces: string[] = []
+  let cur = ''
+  for (const h of parts) {
+    if (cur !== '' && cur.length + h.length > CHUNK_CHAR_TARGET) {
+      pieces.push(header + cur)
+      cur = ''
+    }
+    cur += h
+  }
+  if (cur !== '') pieces.push(header + cur)
+  return pieces
+}
+
+/** Plan review chunks: files grouped in diff (path) order, oversize patches split by hunk. */
+export function planChunks(files: PrFile[], contexts: Record<string, string> = {}): ChunkPlan {
+  type Unit = { file: PrFile; label: string }
+  const units: Unit[] = []
+  let splitFiles = 0
+  for (const f of files) {
+    const patch = f.patch ?? ''
+    if (patch.length <= CHUNK_CHAR_TARGET) {
+      units.push({ file: f, label: f.filename })
+      continue
+    }
+    const pieces = splitPatchByHunk(patch)
+    if (pieces.length > 1) splitFiles++
+    pieces.forEach((piece, i) => {
+      units.push({
+        file: { ...f, patch: piece },
+        label: pieces.length > 1 ? `${f.filename} (part ${i + 1} of ${pieces.length})` : f.filename,
+      })
+    })
+  }
+  const section = (u: Unit): string => {
+    const ctxBlock = contexts[u.file.filename]
+    const head = ctxBlock === undefined ? `### ${u.label}` : `### ${u.label}\n${ctxBlock}`
+    return `${head}\n\`\`\`diff\n${u.file.patch}\n\`\`\``
   }
   const chunks: string[] = []
-  let current: PrFile[] = []
+  const chunkFiles: string[][] = []
+  let current: Unit[] = []
   let currentTokens = 0
-  for (const f of files) {
+  const flush = (): void => {
+    if (current.length === 0) return
+    chunks.push(current.map(section).join('\n\n'))
+    chunkFiles.push([...new Set(current.map((u) => u.file.filename))])
+  }
+  for (const u of units) {
     const fileTokens =
-      Math.ceil((f.patch?.length ?? 0) / 4) +
-      Math.ceil((contexts[f.filename]?.length ?? 0) / 4) +
+      Math.ceil((u.file.patch?.length ?? 0) / 4) +
+      Math.ceil((contexts[u.file.filename]?.length ?? 0) / 4) +
       CHUNK_FILE_OVERHEAD
     if (current.length > 0 && currentTokens + fileTokens > CHUNK_TOKEN_TARGET) {
-      chunks.push(current.map(section).join('\n\n'))
-      current = [f]
+      flush()
+      current = [u]
       currentTokens = fileTokens
     } else {
-      current.push(f)
+      current.push(u)
       currentTokens += fileTokens
     }
   }
-  if (current.length > 0) {
-    chunks.push(current.map(section).join('\n\n'))
-  }
-  return chunks
+  flush()
+  return { chunks, chunkFiles, splitFiles }
+}
+
+export function buildPatchChunks(files: PrFile[], contexts: Record<string, string> = {}): string[] {
+  return planChunks(files, contexts).chunks
 }
 
 export function buildCodeReviewMessages(
@@ -1907,12 +1975,14 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     else ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`)
   }
   const budget = config.codeReviewBudgetUsd
-  const [allFiles, index] = await Promise.all([
+  const [fetched, index] = await Promise.all([
     fixture !== undefined
-      ? Promise.resolve(fixture.files)
+      ? Promise.resolve({ files: fixture.files, capped: false })
       : fetchPrFiles(repoName, prNum, ghToken, ctx),
     readIndex(indexPath),
   ])
+  const allFiles = fetched?.files
+  const prListCapped = fetched?.capped === true
   if (!allFiles || allFiles.length === 0) return await skip('could not fetch PR diff')
   stage(
     fixture !== undefined
@@ -1938,8 +2008,9 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     debug('code-review', `contexts=${attached}/${files.length}`)
   }
 
-  const chunks = buildPatchChunks(files, contexts)
-  debug('code-review', `chunks=${chunks.length} files=${files.length}`)
+  const plan = planChunks(files, contexts)
+  const chunks = plan.chunks
+  debug('code-review', `chunks=${chunks.length} files=${files.length} split=${plan.splitFiles}`)
 
   try {
     const client = createClient(deps, config, ctx)
@@ -2040,27 +2111,44 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     }
     stage(`reviewing ${chunks.length} chunk(s) — model ${reviewModel}`)
 
+    // One bad chunk must not sink the review: a failed chunk is recorded
+    // and disclosed, the rest still run. If nothing could be reviewed the
+    // first error propagates, so rate-limit and key failures keep their
+    // classified exit.
+    const chunkOk: boolean[] = chunks.map(() => false)
+    let firstChunkError: unknown
     for (let i = 0; i < chunks.length; i++) {
       if (ledger.budgetExceeded) break
       debug('code-review', `chunk=${i + 1}/${chunks.length}`)
       const chunk = chunks[i]
       if (chunk === undefined) continue
-      const response = await client.complete({
-        model: reviewModel,
-        messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles),
-        schema: CODE_REVIEW_SCHEMA,
-        kind: 'code',
-        provider: config.provider,
-      })
-      recordSpend(response.cost)
-      lastModel = response.model
-      const parsed = parseCodeReview(response.content)
-      allFindings.push(...parsed.findings)
-      stage(`chunk ${i + 1}/${chunks.length} — ${parsed.findings.length} finding(s)`)
+      try {
+        const response = await client.complete({
+          model: reviewModel,
+          messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles),
+          schema: CODE_REVIEW_SCHEMA,
+          kind: 'code',
+          provider: config.provider,
+        })
+        recordSpend(response.cost)
+        lastModel = response.model
+        const parsed = parseCodeReview(response.content)
+        allFindings.push(...parsed.findings)
+        chunkOk[i] = true
+        stage(`chunk ${i + 1}/${chunks.length} — ${parsed.findings.length} finding(s)`)
+      } catch (e) {
+        firstChunkError ??= e
+        debug('code-review', `chunk ${i + 1} failed: ${(e as Error).message}`)
+        ctx.err(`code-review: chunk ${i + 1}/${chunks.length} failed: ${(e as Error).message}`)
+        stage(`chunk ${i + 1}/${chunks.length} failed`)
+      }
       if (ledger.budgetExceeded) {
         ctx.err(`code-review: budget exceeded after chunk ${i + 1}; stopping early`)
         break
       }
+    }
+    if (chunks.length > 0 && !chunkOk.some(Boolean) && firstChunkError !== undefined) {
+      throw firstChunkError
     }
 
     let summary: string | undefined
@@ -2114,15 +2202,34 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       }
     }
 
+    // Coverage: a file counts as reviewed only when every chunk carrying it ran.
+    const reviewedChunks = chunkOk.filter(Boolean).length
+    const failedChunks = chunkOk.filter((ok, i) => !ok && !ledger.budgetExceeded && chunks[i] !== undefined).length
+    const unreviewedChunks = chunks.length - reviewedChunks
+    const reviewedSet = new Set(files.map((f) => f.filename))
+    plan.chunkFiles.forEach((names, i) => {
+      if (!chunkOk[i]) for (const n of names) reviewedSet.delete(n)
+    })
     const scope: ReviewScope = {
       totalFiles: allFiles.length,
-      reviewedFiles: files.length,
+      reviewedFiles: reviewedSet.size,
       excludedFiles: excluded.length,
       excludedSample: excluded.slice(0, 5).map((f) => f.filename),
+      chunks: chunks.length,
+      reviewedChunks,
+      failedChunks,
+      splitFiles: plan.splitFiles,
+      ...(prListCapped ? { listTruncated: true } : {}),
     }
-    if (excluded.length > 0) {
-      summary = `Reviewed ${files.length} of ${allFiles.length} changed files (${excluded.length} excluded by review.exclude). ${summary}`
+    if (excluded.length > 0 || chunks.length > 1 || unreviewedChunks > 0 || prListCapped) {
+      const notes: string[] = []
+      if (excluded.length > 0) notes.push(`${excluded.length} excluded by review.exclude`)
+      if (chunks.length > 1) notes.push(`${reviewedChunks} of ${chunks.length} chunks`)
+      if (plan.splitFiles > 0) notes.push(`${plan.splitFiles} large file(s) split by hunk`)
+      if (prListCapped) notes.push(`file list capped at ${MAX_PR_FILE_PAGES * 100}, later files not fetched`)
+      summary = `Reviewed ${reviewedSet.size} of ${allFiles.length} changed files${notes.length > 0 ? ` (${notes.join('; ')})` : ''}. ${summary}`
     }
+    if (failedChunks > 0 && verdict !== 'needs_changes') verdict = 'needs_changes'
 
     // Deterministic validation: anchors outside the reviewed diff are
     // dropped before any adjudication spend. Counted, never silent.
@@ -2377,7 +2484,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     // them without a head checkout. Keyed to the reviewed head sha.
     const persistPayload = encodeProbePayload(probes, headBinding?.intendedSha)
     const report: CodeReviewReport = {
-      ok: !hasBlocker && !ledger.budgetExceeded && isHeadBindingConclusive(headBinding),
+      ok: !hasBlocker && !ledger.budgetExceeded && scope.failedChunks === 0 && isHeadBindingConclusive(headBinding),
       skipped: false,
       summary,
       verdict,

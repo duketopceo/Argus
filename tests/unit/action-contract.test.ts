@@ -587,6 +587,19 @@ describe('sticky review top block (U4)', () => {
     expect(diagnostics).toContain('dist/a.js')
   })
 
+  it('states chunk coverage and truncation in Diagnostics', () => {
+    const cr = review({
+      scope: {
+        totalFiles: 9, reviewedFiles: 6, excludedFiles: 0, excludedSample: [],
+        chunks: 4, reviewedChunks: 3, failedChunks: 1, splitFiles: 1, listTruncated: true,
+      },
+    })
+    const body = renderReviewOnlyBody(cr, 'https://github.com/run/1', false, undefined)
+    const diagnostics = body.slice(body.indexOf('<summary>Diagnostics</summary>'))
+    expect(diagnostics).toContain('Review chunks: 3 of 4 reviewed, 1 failed, 1 large file split by hunk')
+    expect(diagnostics).toContain('capped by pagination')
+  })
+
   it('states dropped findings and reasons in Diagnostics', () => {
     const cr = review({
       validation: { dropped: 3, byReason: { file_not_in_diff: 2, line_outside_diff: 1 }, examples: [] },
