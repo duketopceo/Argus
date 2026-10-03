@@ -184,3 +184,48 @@ describe('archiveManifest', () => {
     expect(existsSync(join(reports, 'evil.json'))).toBe(false)
   })
 })
+
+describe('collect gh source state (U12)', () => {
+  const savedPath = process.env.PATH
+
+  afterEach(() => {
+    process.env.PATH = savedPath
+  })
+
+  async function fakeGh(script: string): Promise<string> {
+    const bin = join(dir, 'bin')
+    await mkdir(bin, { recursive: true })
+    await writeFile(join(bin, 'gh'), `#!/bin/sh\n${script}\n`, { mode: 0o755 })
+    return bin
+  }
+
+  it('reports gh missing as a typed state, not an empty PR list', async () => {
+    const empty = join(dir, 'empty-bin')
+    await mkdir(empty, { recursive: true })
+    process.env.PATH = empty
+    const state = await collect(dir)
+    expect(state.sources.gh.state).toBe('missing')
+    expect(state.prs).toEqual([])
+  })
+
+  it('reports a signed-out gh as unauthenticated', async () => {
+    process.env.PATH = await fakeGh(
+      "echo 'To get started with GitHub CLI, please run:  gh auth login' >&2\nexit 4",
+    )
+    const state = await collect(dir)
+    expect(state.sources.gh.state).toBe('unauthenticated')
+  })
+
+  it('reports any other gh failure as error with its first line', async () => {
+    process.env.PATH = await fakeGh("echo 'HTTP 502: bad gateway' >&2\nexit 1")
+    const state = await collect(dir)
+    expect(state.sources.gh.state).toBe('error')
+    expect(state.sources.gh.detail).toMatch(/HTTP 502/)
+  })
+
+  it('reports ok when gh answers', async () => {
+    process.env.PATH = `${await fakeGh("echo '[]'")}:${savedPath}`
+    const state = await collect(dir)
+    expect(state.sources.gh.state).toBe('ok')
+  })
+})

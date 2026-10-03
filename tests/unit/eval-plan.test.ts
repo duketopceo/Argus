@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_EVAL_MODELS,
   confirmKey,
+  evalSpendSince,
   evalPlan,
   formatEvalPlan,
 } from '../../scripts/eval-plan.mjs'
@@ -105,5 +106,29 @@ describe('confirmKey', () => {
 
   it('other keys (including e pressed again) are ignored', () => {
     for (const k of ['e', 'r', ' ', 'yes']) expect(confirmKey(k)).toBe('ignore')
+  })
+})
+
+describe('evalSpendSince', () => {
+  async function seedRun(slug: string, costUsd: number): Promise<void> {
+    await mkdir(join(dir, 'evals/work', slug, 'report'), { recursive: true })
+    await writeFile(
+      join(dir, 'evals/work', slug, 'report/run.json'),
+      JSON.stringify({ totals: { visionCostUsd: costUsd } }),
+    )
+  }
+
+  it('sums run reports written since the eval started', async () => {
+    const start = Date.now() - 1000
+    await seedRun('model-a', 0.01)
+    await seedRun('model-b', 0.0023)
+    expect(evalSpendSince(dir, start)).toBeCloseTo(0.0123, 6)
+  })
+
+  it('ignores reports older than the eval and returns null when none exist', async () => {
+    await seedRun('old', 0.5)
+    expect(evalSpendSince(dir, Date.now() + 60_000)).toBeNull()
+    await rm(join(dir, 'evals'), { recursive: true, force: true })
+    expect(evalSpendSince(dir, 0)).toBeNull()
   })
 })
