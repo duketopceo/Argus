@@ -250,6 +250,44 @@ bounded by `reportRetention` (default 20, `0` disables). The TUI and
 dashboard render current + archived runs and keep showing the last valid
 manifest if a run is interrupted mid-write.
 
+### Terminal output, errors and exit codes
+
+`run` and `verify` end with a summary block: the overall status, one row per
+lane with its spend, and the total spend against the budget. Output is
+styled in a terminal and plain when piped. `NO_COLOR=1` or `--no-color`
+turns color off and wins over `FORCE_COLOR=1`, which turns it on for
+non-terminal output such as GitHub Actions logs. `--json`, `--no-color` and
+`--debug` work with every command.
+
+Every error prints three lines: the failed glyph with a summary, the cause,
+and the next command on its own line. With `--json`, the error is one JSON
+object on stderr instead:
+
+```json
+{"error":{"code":"OPENROUTER_RATE_LIMITED","summary":"code-review: OpenRouter rate limit reached","cause":"...","fix":"sleep 20 && argus-reviewer code-review","retryAfterSeconds":20,"httpStatus":429}}
+```
+
+`code` is stable and comes from this closed set:
+
+| Code | Meaning |
+|---|---|
+| `OPENROUTER_KEY_MISSING` | `OPENROUTER_API_KEY` is not set |
+| `OPENROUTER_KEY_REJECTED` | OpenRouter did not accept the key (401/403) |
+| `OPENROUTER_OUT_OF_CREDIT` | the key has no credit left (402) |
+| `OPENROUTER_RATE_LIMITED` | rate limited (429); `retryAfterSeconds` when the reset is known |
+| `PROVIDER_UNAVAILABLE` | OpenRouter or the upstream model provider is down (5xx) |
+| `CONFIG_INVALID` | the config file could not be loaded or failed validation |
+| `MANIFEST_UNREADABLE` | a run manifest could not be read |
+| `A0_UNREACHABLE` | the Agent Zero CLI or host cannot be reached |
+| `USAGE` | a bad command, flag or argument |
+| `COMMAND_FAILED` | the command failed for another reason; re-run with `--debug` |
+| `INTERNAL` | an unexpected error, an Argus bug; the JSON carries an `issue` link |
+
+Numeric exit codes did not change: 0 is success, 1 is a failed verdict or a
+failed run, and 2 is a usage error the command checks itself. The `code`
+field tells an infrastructure failure from a verdict failure without
+breaking scripts that test the exit code.
+
 ## 6. Register a self-hosted runner
 
 On an Ubuntu machine with SSH access:

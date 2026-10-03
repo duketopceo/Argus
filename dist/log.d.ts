@@ -3,6 +3,7 @@
  * default 'warn'. Debug emits model call excerpts and recovery paths —
  * never secret values.
  */
+import { type Styler } from './ui/style.js';
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 export interface Logger {
     level: LogLevel;
@@ -13,5 +14,5 @@ export interface Logger {
 }
 export declare function createLogger(level: LogLevel, sink: {
     err: (line: string) => void;
-}, live?: (level: LogLevel, msg: string) => void): Logger;
+}, live?: (level: LogLevel, msg: string) => void, style?: Styler): Logger;
 export declare function resolveLogLevel(env: Record<string, string | undefined>, configured?: string): LogLevel;

@@ -718,7 +718,9 @@ describe('argus-reviewer CLI', () => {
     })
     expect(code).toBe(0)
     const text = out.lines.join('\n')
-    expect(text).toContain('✗ export OPENROUTER_API_KEY')
+    // U11: the missing key is a failed row, and the fix sits on its own line.
+    expect(text).toContain('⊘ openrouter key  not set')
+    expect(out.lines.map((l) => l.trim())).toContain('export OPENROUTER_API_KEY=sk-or-...')
     expect(text).toContain('sent to provider')
     expect(text).toContain('default budget')
     expect(text).toContain('how to stop')

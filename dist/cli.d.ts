@@ -25,6 +25,13 @@ export interface CliDeps {
     exec?: ExecFn;
     /** Inject the host reachability probe (tests stub a0 detection). */
     probe?: ProbeFn;
+    /**
+     * Whether output goes to a terminal. Defaults to process.stdout.isTTY
+     * when `out` is not injected, and to false when it is.
+     */
+    isTTY?: boolean;
+    /** Terminal width for the summary block (default process.stdout.columns, else 80). */
+    columns?: number;
 }
 export declare function main(argv: string[], deps?: CliDeps): Promise<number>;
 interface PrFile {
