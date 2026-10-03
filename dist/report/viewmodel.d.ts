@@ -12,8 +12,6 @@ import { type BudgetSummary, type CacheSummary, type HeadBinding, type LaneId, t
 export declare const LANE_STATUS_LABEL: Record<LaneStatus, string>;
 /** One glyph per status — terminal/comment-safe, color-independent. */
 export declare const LANE_STATUS_ICON: Record<LaneStatus, string>;
-/** Comment-flavored emoji per status — same ordering contract as the glyph. */
-export declare const LANE_STATUS_EMOJI: Record<LaneStatus, string>;
 /** Status glyph per lane status; no two statuses share one. */
 export declare const STATUS_GLYPH: Record<LaneStatus, string>;
 /** Proof strength, weakest to strongest (A4 ladder). */

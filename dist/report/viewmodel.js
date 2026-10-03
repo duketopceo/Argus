@@ -26,21 +26,12 @@ export const LANE_STATUS_ICON = {
     unavailable: '⚠',
     inconclusive: '~',
 };
-/** Comment-flavored emoji per status — same ordering contract as the glyph. */
-export const LANE_STATUS_EMOJI = {
-    passed: '✅',
-    failed: '❌',
-    skipped: '⚪',
-    blocked: '⛔',
-    unavailable: '⚠️',
-    inconclusive: '🟡',
-};
 /*
  * Ocellus vocabulary (DESIGN.md section 6.7, A4, A5). Text surfaces use these
  * glyphs: each is a single-cell, text-presentation code point, never emoji.
  * A status is always shown as glyph plus its LANE_STATUS_LABEL word.
  * `action/sticky-comment.cjs` keeps its own copy, guarded by parity tests.
- * LANE_STATUS_ICON / LANE_STATUS_EMOJI above stay until their consumers move.
+ * LANE_STATUS_ICON above stays until its TUI and dashboard consumers move (U13).
  */
 /** Status glyph per lane status; no two statuses share one. */
 export const STATUS_GLYPH = {

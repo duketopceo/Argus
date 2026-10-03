@@ -1,0 +1,8 @@
+{
+  "$comment": "run-manifest.json that does not parse (truncated write). manifestRaw is the file text (U5 renders the unreadable banner).",
+  "body": "manifest",
+  "ok": false,
+  "version": "0.4.0",
+  "runUrl": "https://github.com/acme/shop/actions/runs/123456",
+  "manifestRaw": "{\"schemaVersion\":1,\"runId\":\"run-123456\",\"lanes\":{\"review\":{\"lane\":\"rev"
+}

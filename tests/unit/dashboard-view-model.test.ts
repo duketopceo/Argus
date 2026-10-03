@@ -5,7 +5,6 @@ import {
   formatUsd,
   isRunManifest,
   laneView,
-  LANE_STATUS_EMOJI,
   LANE_STATUS_ICON,
   LANE_STATUS_LABEL,
   manifestToRunView,
@@ -65,11 +64,10 @@ describe('manifestToRunView', () => {
 })
 
 describe('status contract', () => {
-  it('every lane status has a label, icon, and emoji — no unmapped status', () => {
+  it('every lane status has a label and an icon — no unmapped status', () => {
     for (const status of LANE_STATUSES) {
       expect(LANE_STATUS_LABEL[status]).toBe(status)
       expect(LANE_STATUS_ICON[status]).toBeTruthy()
-      expect(LANE_STATUS_EMOJI[status]).toBeTruthy()
     }
     expect(Object.keys(LANE_STATUS_LABEL).sort()).toEqual([...LANE_STATUSES].sort())
   })
