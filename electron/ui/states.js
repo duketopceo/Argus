@@ -18,7 +18,10 @@ const GH_REASON = { missing: 'gh-missing', unauthenticated: 'gh-auth' }
 function ghPanel(gh, hasData) {
   const reason = GH_REASON[gh?.state]
   if (reason) return { status: 'partial', reason, hasData: false }
-  if (gh?.state === 'error') return { status: 'error', error: gh.detail || 'gh failed', detail: gh.detail || 'gh failed' }
+  if (gh?.state === 'error') {
+    const detail = gh.detail || 'gh failed'
+    return { status: 'error', error: detail, detail }
+  }
   return { status: hasData ? 'ready' : 'empty', hasData }
 }
 

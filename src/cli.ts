@@ -58,6 +58,7 @@ import { adjudicateFindings, type FindingAdjudicationAudit } from './review/adju
 import { runProbeLane, type ProbeRecord } from './probe/queue.js'
 import { decodeProbePayload, encodeProbePayload, persistProbes } from './probe/persist.js'
 import { SENTINEL } from './report/comment.js'
+import { REPORT_HTML } from './report/html.js'
 import {
   A0_DEFAULT_TIMEOUT_MS,
   A0_LANE_MAX_TASKS,
@@ -2408,7 +2409,7 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
   // config.reportDir gets the same wipe once the config loads.
   const wipeEvidence = async (dir: string): Promise<void> => {
     await mkdir(dir, { recursive: true }).catch(() => {})
-    for (const stale of ['run-manifest.json', 'run.json', 'code-review.json', 'junit.xml', 'report.html']) {
+    for (const stale of ['run-manifest.json', 'run.json', 'code-review.json', 'junit.xml', REPORT_HTML]) {
       await rm(join(dir, stale), { force: true }).catch(() => {})
     }
     for (const lane of LANE_IDS) {

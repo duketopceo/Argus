@@ -1,8 +1,9 @@
 // One renderer for the panel state diagram (plan U13, R20) so every panel
 // treats loading, error, stale, partial and empty the same way.
-import { banner, button, el, loadingRows } from '../dom.js'
+import { banner, button, loadingRows } from '../dom.js'
 
-const clock = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+export const lastGoodClock = (t) =>
+  new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
 /**
  * Fill `box` for `panel`. `ready(box)` draws data; `empty(box)` the empty
@@ -33,7 +34,3 @@ export function renderPanel(box, panel, { label, ready, empty, partial, nokey, r
   else if (status === 'empty' || status === 'nokey') empty(box)
   else ready(box)
 }
-
-export const lastGoodClock = clock
-
-export const muted = (text) => el('p', 'muted pad', text)

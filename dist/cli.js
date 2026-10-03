@@ -29,6 +29,7 @@ import { adjudicateFindings } from './review/adjudicate.js';
 import { runProbeLane } from './probe/queue.js';
 import { decodeProbePayload, encodeProbePayload, persistProbes } from './probe/persist.js';
 import { SENTINEL } from './report/comment.js';
+import { REPORT_HTML } from './report/html.js';
 import { A0_DEFAULT_TIMEOUT_MS, A0_LANE_MAX_TASKS, A0_LANE_REPORT, a0TaskPrompt, isLoopback, runA0Lane, runA0Task, } from './executor/a0.js';
 import { buildJournalEntry } from './journal/build.js';
 import { newRunId, writeJournal } from './journal/store.js';
@@ -2011,7 +2012,7 @@ async function cmdVerify(args, ctx, deps) {
     // config.reportDir gets the same wipe once the config loads.
     const wipeEvidence = async (dir) => {
         await mkdir(dir, { recursive: true }).catch(() => { });
-        for (const stale of ['run-manifest.json', 'run.json', 'code-review.json', 'junit.xml', 'report.html']) {
+        for (const stale of ['run-manifest.json', 'run.json', 'code-review.json', 'junit.xml', REPORT_HTML]) {
             await rm(join(dir, stale), { force: true }).catch(() => { });
         }
         for (const lane of LANE_IDS) {

@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { parseFrontMatter } from './build-tokens.mjs'
+import { hexToRgb, parseFrontMatter, srgbToLinear } from './build-tokens.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -21,11 +21,7 @@ const TEXT = 4.5
 const NON_TEXT = 3
 
 function luminance(hex) {
-  const n = Number.parseInt(hex.slice(1), 16)
-  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
-    const c = v / 255
-    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
-  })
+  const [r, g, b] = hexToRgb(hex).map(srgbToLinear)
   return 0.2126 * r + 0.7152 * g + 0.0722 * b
 }
 

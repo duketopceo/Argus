@@ -73,6 +73,7 @@ export interface LaneRow {
     proof: Proof;
     spend: string;
 }
+export declare function plural(n: number, one: string, many?: string): string;
 export declare function findingsOf(cr: CodeReviewInput | undefined): NonNullable<CodeReviewInput['findings']>;
 export declare function laneProof(lane: LaneId, status: LaneStatus, cr: CodeReviewInput | undefined): Proof;
 export declare function manifestRow(lane: LaneView, cr: CodeReviewInput | undefined): LaneRow;
@@ -90,6 +91,7 @@ export interface LeadFormat {
 }
 /** The verdict line's lead: what the run proved, in one phrase. */
 export declare function verdictLead(rows: LaneRow[], cr: CodeReviewInput | undefined, f?: LeadFormat): string;
+export declare function manifestDuration(m: RunManifest): number | undefined;
 /** First screen of any sticky body: sentinel through the findings summary. */
 export declare function renderCommentHead(input: CommentInput): string;
 export declare function renderMissingKeyComment(meta: CommentMeta): string;

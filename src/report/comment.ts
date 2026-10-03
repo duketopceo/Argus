@@ -7,6 +7,7 @@ import {
   PROOF_LEVELS,
   proofMeter,
   SEVERITY_GLYPH,
+  shortSha,
   STATUS_GLYPH,
   VERDICT_LABEL,
   VERDICT_STATUS,
@@ -102,7 +103,7 @@ function code(s: unknown): string {
   return `${fence}${pad}${t}${pad}${fence}`
 }
 
-function plural(n: number, one: string, many = `${one}s`): string {
+export function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`
 }
 
@@ -269,7 +270,8 @@ function verdictLine(p: {
   durationMs: number | undefined
 }): string {
   const bits = [verdictLead(p.rows, p.cr)]
-  if (p.headSha !== undefined && p.headSha !== '') bits.push(`head ${code(p.headSha.slice(0, 7))}`)
+  const sha = shortSha(p.headSha)
+  if (sha !== undefined) bits.push(`head ${code(sha)}`)
   if (p.binding?.status === 'mismatch') bits.push('head binding mismatch')
   bits.push(formatUsd(p.costUsd))
   const duration = formatDuration(p.durationMs)
@@ -336,7 +338,7 @@ function fold(lines: string[], title: string, body: string[]): void {
 
 const ALL_LANES: LaneId[] = ['review', 'flow', 'app', 'a0']
 
-function manifestDuration(m: RunManifest): number | undefined {
+export function manifestDuration(m: RunManifest): number | undefined {
   const ms = Date.parse(m.finishedAt) - Date.parse(m.startedAt)
   return Number.isFinite(ms) ? ms : undefined
 }

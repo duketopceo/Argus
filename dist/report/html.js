@@ -1,7 +1,7 @@
 import { EMPTY_STATES, FONT_FACES_CSS, MARK_SVG, SPRITE_SYMBOLS, TOKENS_CSS, } from './brand-assets.generated.js';
-import { findingsOf, laneProof, manifestRow, verdictLead, verdictOf, } from './comment.js';
+import { findingsOf, laneProof, manifestDuration, manifestRow, plural, verdictLead, verdictOf, } from './comment.js';
 import { emptyLane, LANE_IDS } from './manifest.js';
-import { isLaneManifest, isRunManifest, laneView, maskSecrets, PROOF_LEVELS, SEVERITIES, SEVERITY_LABEL, shortSha, STATUS_GLYPH, } from './viewmodel.js';
+import { formatUsd, isLaneManifest, isRunManifest, laneView, maskSecrets, PROOF_LEVELS, SEVERITIES, SEVERITY_LABEL, shortSha, STATUS_GLYPH, } from './viewmodel.js';
 /**
  * Offline HTML evidence report (plan U14, R22; DESIGN.md 7.6, A17).
  *
@@ -32,11 +32,8 @@ export function esc(v) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 }
-const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-/** Per-lane and per-call money: 6 decimals (DESIGN.md 6.2). */
-const usd6 = (n) => `$${(n ?? 0).toFixed(6)}`;
 /** Totals: 4 decimals above a cent, else 6 so small spend stays visible. */
-const usdTotal = (n) => ((n ?? 0) >= 0.01 ? `$${(n ?? 0).toFixed(4)}` : usd6(n));
+const usdTotal = (n) => ((n ?? 0) >= 0.01 ? `$${(n ?? 0).toFixed(4)}` : formatUsd(n));
 /** Budget caps read as set: `$1.00`. */
 const usdCap = (n) => `$${n.toFixed(2)}`;
 /** `450ms`, `12.3s`, `4m 05s`, `2h 14m` (DESIGN.md 6.2). */
@@ -191,7 +188,7 @@ function verdictSection(c) {
     else if (c.cr !== undefined && num(c.crRaw?.visionCostUsd) !== undefined) {
         spend = `<span class="fig">${usdTotal(num(c.crRaw?.visionCostUsd))}</span>`;
     }
-    const duration = m !== undefined ? formatDuration(Date.parse(m.finishedAt) - Date.parse(m.startedAt)) : undefined;
+    const duration = m !== undefined ? formatDuration(manifestDuration(m)) : undefined;
     const where = c.repo !== undefined
         ? `${esc(c.repo)}${m?.identity.pr !== undefined ? ` <span class="dim">#${esc(m.identity.pr)}</span>` : ''}`
         : undefined;
@@ -361,9 +358,10 @@ function flowSection(c) {
         const steps = arr(test.steps);
         const asserts = arr(test.asserts);
         const video = str(test.videoPath);
+        const dur = formatDuration(num(test.durationMs));
         const body = stepsList(steps) + assertsList(asserts);
         return `<li class="test" id="test-${i + 1}">
-<div class="test-head">${status(ok ? 'passed' : 'failed')}<span class="test-name">${esc(test.name ?? `test ${i + 1}`)}</span><code class="dim">${esc(test.file ?? '')}</code>${formatDuration(num(test.durationMs)) !== undefined ? `<span class="data dim">${formatDuration(num(test.durationMs))}</span>` : ''}</div>
+<div class="test-head">${status(ok ? 'passed' : 'failed')}<span class="test-name">${esc(test.name ?? `test ${i + 1}`)}</span><code class="dim">${esc(test.file ?? '')}</code>${dur !== undefined ? `<span class="data dim">${dur}</span>` : ''}</div>
 ${str(test.failureMessage) !== undefined ? `<p class="why t-failed">${esc(test.failureMessage)}</p>` : ''}
 ${body !== '' ? body : '<p class="note">No step records: every step replayed from the cache or the test had none.</p>'}
 ${video !== undefined ? `<p class="meta">Video in the artifact: <code>${esc(video)}</code></p>` : ''}
@@ -387,12 +385,12 @@ function healsSection(c) {
 /** 20 ticks, no filled track; the text always says the numbers (DESIGN.md 6.8). */
 function tally(spent, limit, exceeded) {
     if (limit === undefined || limit <= 0)
-        return `<span class="data">${usd6(spent)}</span> <span class="dim">no cap</span>`;
+        return `<span class="data">${formatUsd(spent)}</span> <span class="dim">no cap</span>`;
     const ratio = spent / limit;
     const tone = exceeded || ratio > 1 ? 'failed' : ratio >= 0.8 ? 'caution' : 'plain';
     const filled = Math.min(20, Math.round(ratio * 20));
     const ticks = Array.from({ length: 20 }, (_, i) => `<i${i < filled ? ' class="on"' : ''}></i>`).join('');
-    return `<span class="tally t-${tone}"><span class="ticks" aria-hidden="true">${ticks}</span><span class="data">spent ${usd6(spent)} of ${usdCap(limit)}</span>${exceeded ? ' <strong class="t-failed">exceeded</strong>' : ''}</span>`;
+    return `<span class="tally t-${tone}"><span class="ticks" aria-hidden="true">${ticks}</span><span class="data">spent ${formatUsd(spent)} of ${usdCap(limit)}</span>${exceeded ? ' <strong class="t-failed">exceeded</strong>' : ''}</span>`;
 }
 function ledgerRows(c) {
     const m = c.manifest;
@@ -406,7 +404,7 @@ function ledgerRows(c) {
             model: l.model ?? l.usage.model ?? '',
             calls: l.usage.calls,
             tokens: l.usage.tokens,
-            spend: metered ? usd6(l.usage.costUsd) : 'unmetered',
+            spend: metered ? formatUsd(l.usage.costUsd) : 'unmetered',
             budget: metered ? tally(l.usage.costUsd, l.budget.limitUsd ?? undefined, l.budget.exceeded) : '<span class="dim">unmetered</span>',
             exceeded: l.budget.exceeded === true,
         };
@@ -447,7 +445,7 @@ function ledgerSection(c) {
 ${over.length > 0 ? `<p class="banner t-failed">${glyph('status-failed')}<span>Budget exceeded: ${over.map((r) => r.lane).join(', ')}</span></p>` : ''}
 ${models.length > 0
         ? `<h3>By model</h3><div class="scroll"><table class="ledger"><thead><tr><th scope="col">Model</th><th scope="col" class="num">Calls</th><th scope="col" class="num">Spend</th></tr></thead><tbody>${models
-            .map(([k, n, cost]) => `<tr><td><code>${esc(k)}</code></td><td class="num">${n}</td><td class="num">${usd6(cost)}</td></tr>`)
+            .map(([k, n, cost]) => `<tr><td><code>${esc(k)}</code></td><td class="num">${n}</td><td class="num">${formatUsd(cost)}</td></tr>`)
             .join('')}</tbody></table></div>`
         : ''}
 </section>`;

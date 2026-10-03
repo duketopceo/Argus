@@ -153,12 +153,12 @@ export function assertSameColorKeys(colors) {
 
 // --- color math -----------------------------------------------------------
 
-function hexToRgb(hex) {
+export function hexToRgb(hex) {
   const n = Number.parseInt(hex.slice(1), 16)
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => v / 255)
 }
 
-function srgbToLinear(c) {
+export function srgbToLinear(c) {
   return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
 }
 

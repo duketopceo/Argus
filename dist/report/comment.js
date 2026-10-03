@@ -1,4 +1,4 @@
-import { formatUsd, manifestToRunView, maskSecrets, PROOF_LEVELS, proofMeter, SEVERITY_GLYPH, STATUS_GLYPH, VERDICT_LABEL, VERDICT_STATUS, } from './viewmodel.js';
+import { formatUsd, manifestToRunView, maskSecrets, PROOF_LEVELS, proofMeter, SEVERITY_GLYPH, shortSha, STATUS_GLYPH, VERDICT_LABEL, VERDICT_STATUS, } from './viewmodel.js';
 export const SENTINEL = '<!-- argus-reviewer -->';
 /** Cell semantics mirror the action: flatten newlines, escape pipes, mask secrets, cap length. */
 function cell(s, max = 200) {
@@ -13,7 +13,7 @@ function code(s) {
     const pad = t.startsWith('`') || t.endsWith('`') ? ' ' : '';
     return `${fence}${pad}${t}${pad}${fence}`;
 }
-function plural(n, one, many = `${one}s`) {
+export function plural(n, one, many = `${one}s`) {
     return `${n} ${n === 1 ? one : many}`;
 }
 function formatDuration(ms) {
@@ -155,8 +155,9 @@ export function verdictLead(rows, cr, f = MARKDOWN_LEAD) {
 }
 function verdictLine(p) {
     const bits = [verdictLead(p.rows, p.cr)];
-    if (p.headSha !== undefined && p.headSha !== '')
-        bits.push(`head ${code(p.headSha.slice(0, 7))}`);
+    const sha = shortSha(p.headSha);
+    if (sha !== undefined)
+        bits.push(`head ${code(sha)}`);
     if (p.binding?.status === 'mismatch')
         bits.push('head binding mismatch');
     bits.push(formatUsd(p.costUsd));
@@ -225,7 +226,7 @@ function fold(lines, title, body) {
     lines.push('</details>', '');
 }
 const ALL_LANES = ['review', 'flow', 'app', 'a0'];
-function manifestDuration(m) {
+export function manifestDuration(m) {
     const ms = Date.parse(m.finishedAt) - Date.parse(m.startedAt);
     return Number.isFinite(ms) ? ms : undefined;
 }

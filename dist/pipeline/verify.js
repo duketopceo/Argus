@@ -331,12 +331,10 @@ export function argusVersion() {
  * report (same contract as the manifest's own reads).
  */
 export async function writeEvidenceReport(reportDir, manifest, meta = {}) {
-    const codeReview = manifest.lanes.review.reportPath !== undefined
-        ? await readJson(join(reportDir, 'code-review.json'))
-        : undefined;
-    const run = manifest.lanes.flow.reportPath !== undefined
-        ? await readJson(join(reportDir, 'run.json'))
-        : undefined;
+    const [codeReview, run] = await Promise.all([
+        manifest.lanes.review.reportPath !== undefined ? readJson(join(reportDir, 'code-review.json')) : undefined,
+        manifest.lanes.flow.reportPath !== undefined ? readJson(join(reportDir, 'run.json')) : undefined,
+    ]);
     const html = renderReportHtml({
         manifestText: JSON.stringify(manifest),
         codeReview,

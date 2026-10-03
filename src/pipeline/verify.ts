@@ -480,14 +480,10 @@ export async function writeEvidenceReport(
   manifest: RunManifest,
   meta: { version?: string; runUrl?: string } = {},
 ): Promise<string> {
-  const codeReview =
-    manifest.lanes.review.reportPath !== undefined
-      ? await readJson<unknown>(join(reportDir, 'code-review.json'))
-      : undefined
-  const run =
-    manifest.lanes.flow.reportPath !== undefined
-      ? await readJson<unknown>(join(reportDir, 'run.json'))
-      : undefined
+  const [codeReview, run] = await Promise.all([
+    manifest.lanes.review.reportPath !== undefined ? readJson<unknown>(join(reportDir, 'code-review.json')) : undefined,
+    manifest.lanes.flow.reportPath !== undefined ? readJson<unknown>(join(reportDir, 'run.json')) : undefined,
+  ])
   const html = renderReportHtml({
     manifestText: JSON.stringify(manifest),
     codeReview,
