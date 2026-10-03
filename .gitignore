@@ -13,3 +13,5 @@ vision-e2e-report/
 *.tgz
 evals/work/
 .argus-demo/
+launch/out/
+launch/public/captures/
