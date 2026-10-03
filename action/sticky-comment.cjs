@@ -680,6 +680,14 @@ function diagnosticsFold(manifest, report, codeReview) {
   const binding = manifest?.lanes?.review?.headBinding ?? (codeReview && !codeReview.skipped ? codeReview.headBinding : undefined)
   if (binding) items.push(`Head binding: ${cell(binding.status)}, ${cell(binding.detail)}`)
   if (codeReview && !codeReview.skipped) {
+    const sc = codeReview.scope
+    if (sc && sc.excludedFiles > 0) {
+      const sample = Array.isArray(sc.excludedSample) ? sc.excludedSample.slice(0, 5).map((p) => code(p)).join(', ') : ''
+      items.push(
+        `Review scope: ${sc.reviewedFiles} of ${sc.totalFiles} changed files reviewed; ` +
+          `${sc.excludedFiles} excluded by \`review.exclude\`${sample ? ` (${sample})` : ''}`,
+      )
+    }
     const t = codeReview.triage
     if (t) {
       if (t.unadjudicated === true) {

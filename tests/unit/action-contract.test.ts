@@ -577,6 +577,16 @@ describe('sticky review top block (U4)', () => {
     expect(body).toContain('| – skipped | flow | run lane disabled |  |  |')
   })
 
+  it('states review scope exclusions in Diagnostics', () => {
+    const cr = review({
+      scope: { totalFiles: 10, reviewedFiles: 7, excludedFiles: 3, excludedSample: ['dist/a.js', 'fixtures/b.json'] },
+    })
+    const body = renderReviewOnlyBody(cr, 'https://github.com/run/1', false, undefined)
+    const diagnostics = body.slice(body.indexOf('<summary>Diagnostics</summary>'))
+    expect(diagnostics).toContain('Review scope: 7 of 10 changed files reviewed; 3 excluded by `review.exclude`')
+    expect(diagnostics).toContain('dist/a.js')
+  })
+
   it('states an inconclusive evidence link once, in Diagnostics, not on every finding (U6)', () => {
     const NOTE = 'no repo index; run `argus-reviewer index` first'
     const cr = review({

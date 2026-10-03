@@ -23,6 +23,7 @@ import { resolveTrust } from './trust.js';
 import { linkFindings } from './evidence/link.js';
 import { DecisionClient } from './vision/decisions.js';
 import { isReviewProfile, packRubric } from './review/packs.js';
+import { partitionByExclude } from './review/scope.js';
 import { materializeMergeBaseDiff, scanSecrets } from './review/secrets.js';
 import { buildTriageState, routeModel, triageAreaSignal, triagePr, } from './review/triage.js';
 import { adjudicateFindings } from './review/adjudicate.js';
@@ -1537,17 +1538,26 @@ async function cmdCodeReview(args, ctx, deps) {
             ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`);
     }
     const budget = config.codeReviewBudgetUsd;
-    const [files, index] = await Promise.all([
+    const [allFiles, index] = await Promise.all([
         fixture !== undefined
             ? Promise.resolve(fixture.files)
             : fetchPrFiles(repoName, prNum, ghToken, ctx),
         readIndex(indexPath),
     ]);
-    if (!files || files.length === 0)
+    if (!allFiles || allFiles.length === 0)
         return await skip('could not fetch PR diff');
     stage(fixture !== undefined
-        ? `fixture mode — ${files.length} changed file(s) from ${basename(fixtureDir)}`
-        : `fetched ${files.length} changed file(s)`);
+        ? `fixture mode — ${allFiles.length} changed file(s) from ${basename(fixtureDir)}`
+        : `fetched ${allFiles.length} changed file(s)`);
+    // Generated/fixture/vendored paths never reach the review model; the
+    // count and a sample land in the report's scope record (never silent).
+    const { kept: files, excluded } = partitionByExclude(allFiles, config.review.exclude);
+    if (excluded.length > 0) {
+        stage(`excluded ${excluded.length} file(s) by review.exclude`);
+    }
+    if (files.length === 0) {
+        return await skip(`all ${allFiles.length} changed file(s) match review.exclude`);
+    }
     const contexts = buildReviewContext(index, files.map((f) => ({ filename: f.filename, previousFilename: f.previous_filename })));
     const attached = Object.keys(contexts).length;
     if (attached > 0) {
@@ -1712,6 +1722,15 @@ async function cmdCodeReview(args, ctx, deps) {
                 summary = `${allFindings.length} low-severity finding(s)`;
                 verdict = 'approve';
             }
+        }
+        const scope = {
+            totalFiles: allFiles.length,
+            reviewedFiles: files.length,
+            excludedFiles: excluded.length,
+            excludedSample: excluded.slice(0, 5).map((f) => f.filename),
+        };
+        if (excluded.length > 0) {
+            summary = `Reviewed ${files.length} of ${allFiles.length} changed files (${excluded.length} excluded by review.exclude). ${summary}`;
         }
         if (ledger.budgetExceeded) {
             summary = `Budget exceeded, review stopped early. ${summary}`;
@@ -1933,6 +1952,7 @@ async function cmdCodeReview(args, ctx, deps) {
             ...(secretsScan !== undefined ? { secretsScan } : {}),
             ...(triage !== undefined ? { triage } : {}),
             ...(findingAdjudication !== undefined ? { findingAdjudication } : {}),
+            scope,
             maxComments,
             calls: allCalls,
             visionCostUsd: totalCost,

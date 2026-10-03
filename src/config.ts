@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url'
 
+import { DEFAULT_REVIEW_EXCLUDE } from './review/scope.js'
 import { isReviewProfile, type ReviewProfile } from './review/packs.js'
 import type { Trust } from './trust.js'
 import { JEV_DEFAULT_MODEL } from './vision/decisions.js'
@@ -270,6 +271,12 @@ export interface Config {
     findingThreshold: number
     requestChanges: boolean
     profiles: ReviewProfile[]
+    /**
+     * Glob list of changed paths kept out of the review input. A configured
+     * list replaces the defaults (generated, fixture, golden, vendored
+     * paths); `[]` excludes nothing.
+     */
+    exclude: string[]
   }
 }
 
@@ -349,6 +356,7 @@ const defaults: Config = {
     findingThreshold: 1.0,
     requestChanges: true,
     profiles: [],
+    exclude: [...DEFAULT_REVIEW_EXCLUDE],
   },
 }
 
@@ -491,6 +499,11 @@ export function resolveConfig(input: ConfigInput = {}): Config {
   review.profiles = Array.isArray(rawReview.profiles)
     ? [...new Set(rawReview.profiles.filter(isReviewProfile))]
     : []
+  review.exclude =
+    Array.isArray(rawReview.exclude) &&
+    rawReview.exclude.every((g) => typeof g === 'string' && g !== '')
+      ? [...rawReview.exclude]
+      : [...DEFAULT_REVIEW_EXCLUDE]
   const resolved: Config = { ...defaults, ...input, provider, sandbox, explore, app, review }
   resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP)
   // Retention is a non-negative integer (0 = keep none) — a mis-typed or

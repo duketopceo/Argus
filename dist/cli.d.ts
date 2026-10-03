@@ -64,6 +64,16 @@ export interface ReviewComment {
     /** KTD4: path:line:severity:normalizedMessage:hash8(suggestion); a corrected suggestion re-posts. */
     dedupKey: string;
 }
+export interface ReviewScope {
+    /** Changed files in the PR with a patch. */
+    totalFiles: number;
+    /** Files that reached the review model. */
+    reviewedFiles: number;
+    /** Files kept out by `review.exclude`. */
+    excludedFiles: number;
+    /** Up to 5 excluded paths, for the Diagnostics line. */
+    excludedSample: string[];
+}
 interface CodeReviewReport {
     ok: boolean;
     skipped: boolean;
@@ -94,6 +104,8 @@ interface CodeReviewReport {
     triage?: TriageRecord;
     /** U8 adjudication audit — per-finding p + suppressed records. */
     findingAdjudication?: FindingAdjudicationAudit;
+    /** How much of the PR the review covered, and what was left out. */
+    scope?: ReviewScope;
     calls: CallCost[];
     visionCostUsd: number;
     tokens: number;

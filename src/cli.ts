@@ -46,6 +46,7 @@ import { resolveTrust } from './trust.js'
 import { linkFindings, type Evidence } from './evidence/link.js'
 import { DecisionClient } from './vision/decisions.js'
 import { isReviewProfile, packRubric } from './review/packs.js'
+import { partitionByExclude } from './review/scope.js'
 import { materializeMergeBaseDiff, scanSecrets, type SecretsScanResult } from './review/secrets.js'
 import {
   buildTriageState,
@@ -1294,6 +1295,17 @@ export interface ReviewComment {
   dedupKey: string
 }
 
+export interface ReviewScope {
+  /** Changed files in the PR with a patch. */
+  totalFiles: number
+  /** Files that reached the review model. */
+  reviewedFiles: number
+  /** Files kept out by `review.exclude`. */
+  excludedFiles: number
+  /** Up to 5 excluded paths, for the Diagnostics line. */
+  excludedSample: string[]
+}
+
 interface CodeReviewReport {
   ok: boolean
   skipped: boolean
@@ -1322,6 +1334,8 @@ interface CodeReviewReport {
   triage?: TriageRecord
   /** U8 adjudication audit — per-finding p + suppressed records. */
   findingAdjudication?: FindingAdjudicationAudit
+  /** How much of the PR the review covered, and what was left out. */
+  scope?: ReviewScope
   calls: CallCost[]
   visionCostUsd: number
   tokens: number
@@ -1887,18 +1901,27 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     else ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`)
   }
   const budget = config.codeReviewBudgetUsd
-  const [files, index] = await Promise.all([
+  const [allFiles, index] = await Promise.all([
     fixture !== undefined
       ? Promise.resolve(fixture.files)
       : fetchPrFiles(repoName, prNum, ghToken, ctx),
     readIndex(indexPath),
   ])
-  if (!files || files.length === 0) return await skip('could not fetch PR diff')
+  if (!allFiles || allFiles.length === 0) return await skip('could not fetch PR diff')
   stage(
     fixture !== undefined
-      ? `fixture mode — ${files.length} changed file(s) from ${basename(fixtureDir as string)}`
-      : `fetched ${files.length} changed file(s)`,
+      ? `fixture mode — ${allFiles.length} changed file(s) from ${basename(fixtureDir as string)}`
+      : `fetched ${allFiles.length} changed file(s)`,
   )
+  // Generated/fixture/vendored paths never reach the review model; the
+  // count and a sample land in the report's scope record (never silent).
+  const { kept: files, excluded } = partitionByExclude(allFiles, config.review.exclude)
+  if (excluded.length > 0) {
+    stage(`excluded ${excluded.length} file(s) by review.exclude`)
+  }
+  if (files.length === 0) {
+    return await skip(`all ${allFiles.length} changed file(s) match review.exclude`)
+  }
 
   const contexts = buildReviewContext(
     index,
@@ -2083,6 +2106,16 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
         summary = `${allFindings.length} low-severity finding(s)`
         verdict = 'approve'
       }
+    }
+
+    const scope: ReviewScope = {
+      totalFiles: allFiles.length,
+      reviewedFiles: files.length,
+      excludedFiles: excluded.length,
+      excludedSample: excluded.slice(0, 5).map((f) => f.filename),
+    }
+    if (excluded.length > 0) {
+      summary = `Reviewed ${files.length} of ${allFiles.length} changed files (${excluded.length} excluded by review.exclude). ${summary}`
     }
 
     if (ledger.budgetExceeded) {
@@ -2321,6 +2354,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       ...(secretsScan !== undefined ? { secretsScan } : {}),
       ...(triage !== undefined ? { triage } : {}),
       ...(findingAdjudication !== undefined ? { findingAdjudication } : {}),
+      scope,
       maxComments,
       calls: allCalls,
       visionCostUsd: totalCost,

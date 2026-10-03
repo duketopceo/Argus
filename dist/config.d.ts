@@ -265,6 +265,12 @@ export interface Config {
         findingThreshold: number;
         requestChanges: boolean;
         profiles: ReviewProfile[];
+        /**
+         * Glob list of changed paths kept out of the review input. A configured
+         * list replaces the defaults (generated, fixture, golden, vendored
+         * paths); `[]` excludes nothing.
+         */
+        exclude: string[];
     };
 }
 export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review' | 'explore' | 'app'>> & {
