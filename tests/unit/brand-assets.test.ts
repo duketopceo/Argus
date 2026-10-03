@@ -7,6 +7,9 @@ import { describe, expect, it } from 'vitest'
 
 import {
   buildBrand,
+  CHROME_PREFIX,
+  EMPTY_PREFIX,
+  EMPTY_TONES,
   EXPORT_DIR,
   GLYPH_PREFIX,
   ICNS_TYPES,
@@ -39,9 +42,10 @@ function listFiles(dir: string): string[] {
 
 const allMasters = readMasters()
 const masters = allMasters.filter(
-  (m) => !m.rel.startsWith(GLYPH_PREFIX) && !m.rel.startsWith(ICON_PREFIX),
+  (m) => ![GLYPH_PREFIX, ICON_PREFIX, CHROME_PREFIX, EMPTY_PREFIX].some((p) => m.rel.startsWith(p)),
 )
 const glyphs = allMasters.filter((m) => m.rel.startsWith(GLYPH_PREFIX))
+const chrome = allMasters.filter((m) => m.rel.startsWith(CHROME_PREFIX))
 const svgo = (svg: string) =>
   optimize(svg, { multipass: true, floatPrecision: 3, plugins: [{ name: 'preset-default' }] }).data
 const isMark = (rel: string) => /(^|\/)mark(-\d+)?\.svg$/.test(rel)
@@ -97,7 +101,11 @@ describe('brand exports (KTD6)', () => {
 
   it('keeps each optimized SVG under 2 KB (DESIGN.md section 10)', () => {
     for (const [rel, buf] of first) {
-      if (rel.endsWith('.svg') && rel !== 'glyphs.svg' && !rel.startsWith(ICON_PREFIX))
+      if (
+        rel.endsWith('.svg') &&
+        !['glyphs.svg', 'chrome.svg'].includes(rel) &&
+        !rel.startsWith(ICON_PREFIX)
+      )
         expect(buf.length, rel).toBeLessThanOrEqual(2048)
     }
   })
@@ -135,6 +143,186 @@ describe('glyph set (U8, DESIGN.md A3-A6)', () => {
       expect(svg, rel).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(|hsl\(|oklch\(/i)
       for (const [, value] of svg.matchAll(/(?:fill|stroke)="([^"]+)"/g))
         expect(['currentColor', 'none'], `${rel}: ${value}`).toContain(value)
+    }
+  })
+})
+
+describe('chrome icons (U9, DESIGN.md A7, section 6.6)', () => {
+  const sprite = buildBrand().get('chrome.svg')!.toString('utf8')
+  const ids = [...sprite.matchAll(/<symbol id="([^"]+)"/g)].map((m) => m[1])
+  const glyphRoot = (svg: string) => /^<svg([^>]*)>/.exec(svg)![1].replace(/<title>.*$/, '')
+  const rootAttrs = (svg: string) =>
+    glyphRoot(svg)
+      .replace(/\s(?:xmlns|viewBox)="[^"]*"/g, '')
+      .trim()
+
+  it('ships the A7 set as one sprite symbol per master', () => {
+    expect([...ids].sort()).toEqual(
+      [
+        'check',
+        'chevron-down',
+        'chevron-left',
+        'chevron-right',
+        'chevron-up',
+        'close',
+        'copy',
+        'download',
+        'drawer',
+        'external',
+        'file',
+        'filter',
+        'key',
+        'keyboard',
+        'play',
+        'refresh',
+        'search',
+        'settings',
+        'stop',
+        'terminal',
+      ].sort(),
+    )
+    expect(chrome.map((c) => c.rel.slice(CHROME_PREFIX.length, -4)).sort()).toEqual([...ids].sort())
+  })
+
+  it('shares no id with the glyph sprite, so both can be inlined in one document', () => {
+    const glyphIds = glyphs.map((g) => g.rel.slice(GLYPH_PREFIX.length, -4))
+    for (const id of ids) expect(glyphIds, id).not.toContain(id)
+  })
+
+  it('draws in the glyph hand: 24-unit grid, same root stroke attributes, currentColor only', () => {
+    // The stroked glyphs (status, lane) set the hand; proof tallies are fills.
+    const hand = rootAttrs(glyphs.find((g) => g.rel === `${GLYPH_PREFIX}lane-review.svg`)!.svg)
+    for (const { rel, svg } of glyphs.filter((g) => /\/(?:status|lane)-/.test(g.rel)))
+      expect(rootAttrs(svg), rel).toBe(hand)
+    for (const { rel, svg } of chrome) {
+      expect(svg, rel).toMatch(/viewBox="0 0 24 24"/)
+      expect(rootAttrs(svg), rel).toBe(hand)
+      expect(svg, rel).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(|hsl\(|oklch\(/i)
+      expect(svg, rel).not.toMatch(/stroke-width="(?!1\.8")/)
+      for (const [, value] of svg.matchAll(/(?:fill|stroke)="([^"]+)"/g))
+        expect(['currentColor', 'none'], `${rel}: ${value}`).toContain(value)
+    }
+  })
+
+  it('uses no circle, ellipse or arc: circles are reserved for eye semantics', () => {
+    for (const { rel, svg } of chrome) {
+      expect(svg, rel).not.toMatch(/<(?:circle|ellipse)[\s>]/)
+      for (const [, d] of svg.matchAll(/\sd="([^"]*)"/g)) expect(d, rel).not.toMatch(/[Aa]/)
+      // A rect rounded into a circle or a pill is an eye in disguise.
+      for (const [rect] of svg.matchAll(/<rect\b[^>]*>/g)) {
+        const n = (a: string) => Number(new RegExp(`\\s${a}="([^"]*)"`).exec(rect)?.[1] ?? 0)
+        expect(n('rx') * 2, `${rel}: ${rect}`).toBeLessThan(Math.min(n('width'), n('height')))
+      }
+    }
+  })
+
+  it('keeps each optimized icon under 2 KB and the sprite under 16 KB (section 10)', () => {
+    for (const { rel, svg } of chrome) expect(svgo(svg).length, rel).toBeLessThanOrEqual(2048)
+    expect(Buffer.byteLength(sprite)).toBeLessThanOrEqual(16 * 1024)
+  })
+})
+
+describe('empty-state illustrations (U9, DESIGN.md A13)', () => {
+  const files = buildBrand()
+  const empty = allMasters.filter((m) => m.rel.startsWith(EMPTY_PREFIX))
+  const colors = readThemeColors()
+  const hexes = (svg: string) =>
+    new Set([...svg.matchAll(/#[0-9a-f]{6}\b/gi)].map((m) => m[0].toUpperCase()))
+  const tones = (theme: 'light' | 'dark') =>
+    EMPTY_TONES.map((t) => colors[theme][t as keyof (typeof colors)[typeof theme]].toUpperCase())
+
+  it('has the four A13 states at 160x120', () => {
+    expect(empty.map((m) => m.rel.slice(EMPTY_PREFIX.length, -4)).sort()).toEqual(
+      ['manifest-unreadable', 'no-key', 'no-runs', 'nothing-to-heal'].sort(),
+    )
+    for (const { rel, svg } of empty) expect(svg, rel).toMatch(/viewBox="0 0 160 120"/)
+  })
+
+  it('draws monoline in the glyph stroke with at most the two A13 tones, both used', () => {
+    for (const { rel, svg } of empty) {
+      expect([...hexes(svg)].sort(), rel).toEqual([...tones('light')].sort())
+      for (const [, w] of svg.matchAll(/stroke-width="([^"]+)"/g)) expect(w, rel).toBe('1.5')
+      expect(svg, rel).not.toMatch(/currentColor|rgb\(|hsl\(|oklch\(|opacity|Gradient|filter=/)
+    }
+  })
+
+  it('exports each state per theme, the dark one in the dark tones only', () => {
+    for (const { rel } of empty) {
+      const stem = rel.slice(0, -4)
+      for (const theme of ['light', 'dark'] as const) {
+        const out = files.get(`${stem}-${theme}.svg`)?.toString()
+        expect(out, `${stem}-${theme}`).toBeDefined()
+        expect([...hexes(out!)].sort(), `${stem}-${theme}`).toEqual([...tones(theme)].sort())
+      }
+    }
+  })
+})
+
+describe('motion (U9, DESIGN.md A14, section 6.5)', () => {
+  const css = readFileSync(join(ROOT, 'assets/brand/motion.css'), 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  )
+  /** The body of the first block opened by `head`, braces balanced. */
+  const block = (src: string, head: string) => {
+    const start = src.indexOf('{', src.indexOf(head))
+    let depth = 0
+    for (let i = start; i < src.length; i++) {
+      depth += src[i] === '{' ? 1 : src[i] === '}' ? -1 : 0
+      if (!depth) return src.slice(start + 1, i)
+    }
+    throw new Error(`unclosed ${head}`)
+  }
+  const reduce = block(css, '@media (prefers-reduced-motion: reduce)')
+  const outside = css.replace(reduce, '')
+  const rules = (src: string) =>
+    [...src.matchAll(/([^{}@]+)\{([^{}]*)\}/g)].map(([, sel, body]) => ({
+      selectors: sel.split(',').map((x) => x.trim()),
+      body,
+    }))
+  const keyframes = [...css.matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1])
+
+  it('defines only the A14 web motions: scan, blink-to-state and tally tick', () => {
+    expect(keyframes.sort()).toEqual(
+      ['argus-lid-close', 'argus-lid-open', 'argus-scan', 'argus-tally-roll'].sort(),
+    )
+  })
+
+  it('times every animation with a section 6.5 motion token', () => {
+    const animated = rules(outside).filter((r) => /(^|;|\s)animation\s*:/.test(r.body))
+    expect(animated.length).toBeGreaterThanOrEqual(keyframes.length)
+    for (const { selectors, body } of animated) {
+      const value = /animation\s*:([^;]+);/.exec(body)![1]
+      expect(value, selectors.join()).toMatch(/var\(--argus-motion-(?:scan|state|panel|instant)\)/)
+      expect(value, selectors.join()).not.toMatch(/\d(?:ms|s)\b/)
+    }
+    for (const k of keyframes) expect(outside).toMatch(new RegExp(`animation:[^;]*\\b${k}\\b`))
+    expect(outside).toMatch(/--argus-motion-scan:\s*1600ms/)
+  })
+
+  it('neutralizes every animation and zeroes every motion token under prefers-reduced-motion', () => {
+    const stilled = rules(reduce)
+      .filter((r) => /animation\s*:\s*none/.test(r.body))
+      .flatMap((r) => r.selectors)
+    for (const { selectors, body } of rules(outside))
+      if (/(^|;|\s)animation\s*:/.test(body))
+        for (const sel of selectors) expect(stilled, sel).toContain(sel)
+    for (const t of ['instant', 'state', 'panel', 'scan'])
+      expect(reduce).toMatch(new RegExp(`--argus-motion-${t}:\\s*0ms`))
+    // Running falls back to the static half-lid, resolve to an instant swap.
+    expect(reduce).toMatch(/\.argus-scan__lid\s*\{[^}]*display:\s*inline/)
+    expect(reduce).toMatch(/\.argus-blink__from[^{]*\{[^}]*display:\s*none/)
+  })
+
+  it('ships the terminal spinner as four single-cell glyphs at 120 ms (A14c)', () => {
+    const spinner = JSON.parse(readFileSync(join(ROOT, 'assets/brand/spinner.json'), 'utf8'))
+    expect(spinner.intervalMs).toBe(120)
+    expect(spinner.frames).toEqual(['◌', '◍', '◎', '◉'])
+    for (const f of spinner.frames as string[]) {
+      expect([...f].length, f).toBe(1)
+      // Geometric Shapes defaults to text presentation: one cell, never emoji.
+      const cp = f.codePointAt(0)!
+      expect(cp >= 0x25a0 && cp <= 0x25ff, f).toBe(true)
     }
   })
 })

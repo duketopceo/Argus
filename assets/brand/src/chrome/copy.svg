@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+  <title>copy</title>
+  <rect x="8.5" y="8.5" width="12" height="12" rx="2"/>
+  <path d="M15.5 8.5V5.5Q15.5 3.5 13.5 3.5H5.5Q3.5 3.5 3.5 5.5V13.5Q3.5 15.5 5.5 15.5H8.5"/>
+</svg>

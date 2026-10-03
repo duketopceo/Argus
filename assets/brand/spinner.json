@@ -1,0 +1,5 @@
+{
+  "$description": "Terminal spinner (DESIGN.md A14c). Shown only while a child process runs on a TTY; ARGUS_NO_SPINNER=1 and non-TTY output print line-based progress instead.",
+  "intervalMs": 120,
+  "frames": ["◌", "◍", "◎", "◉"]
+}

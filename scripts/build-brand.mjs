@@ -14,6 +14,14 @@
 //   glyphs.svg              sprite of every src/glyphs/ master (unit U8), one
 //                           <symbol> per glyph with the master's file stem as
 //                           its id (status-passed, proof-2, severity-q, lane-a0)
+//   chrome.svg              sprite of every src/chrome/ master (unit U9, DESIGN.md
+//                           A7): the UI chrome icons, id = file stem (refresh,
+//                           chevron-down, …), drawn from lines and rectangles
+//
+//   empty/<name>-<theme>.svg  empty-state illustrations (unit U9, DESIGN.md
+//                           A13), 160x120. Masters carry the two light-theme
+//                           tones (ink-3, accent); the dark export swaps them
+//                           for the dark tokens.
 //
 //   icons/                  app icon and favicons (unit U10, DESIGN.md A8/A9)
 //                           from the full-color masters in src/icons/:
@@ -52,6 +60,10 @@ const MARK_SIZES = [16, 32, 64, 256]
 const LOCKUP_HEIGHT = 64
 export const GLYPH_PREFIX = 'glyphs/'
 export const ICON_PREFIX = 'icons/'
+export const CHROME_PREFIX = 'chrome/'
+export const EMPTY_PREFIX = 'empty/'
+/** The only tokens an empty-state master may draw in (DESIGN.md A13). */
+export const EMPTY_TONES = ['ink-3', 'accent']
 export const APP_ICON_SIZES = [16, 32, 48, 64, 128, 256, 512, 1024]
 export const ICO_SIZES = [16, 32, 48, 256]
 /** ICNS slot -> pixel size: the iconutil 16-512 @1x/@2x set. */
@@ -99,7 +111,11 @@ export function readThemeColors(root = ROOT) {
   const colors = {}
   for (const theme of THEMES) {
     const t = tokens.color[theme]
-    colors[theme] = { accent: t.accent.$value.hex, ink: t.ink.$value.hex }
+    colors[theme] = {
+      accent: t.accent.$value.hex,
+      ink: t.ink.$value.hex,
+      'ink-3': t['ink-3'].$value.hex,
+    }
   }
   return colors
 }
@@ -139,8 +155,11 @@ export function buildBrand(masters = readMasters(), colors = readThemeColors()) 
   const files = new Map()
   const optimized = new Map()
   const glyphs = masters.filter((m) => m.rel.startsWith(GLYPH_PREFIX))
+  const chrome = masters.filter((m) => m.rel.startsWith(CHROME_PREFIX))
+  const empty = masters.filter((m) => m.rel.startsWith(EMPTY_PREFIX))
   for (const { rel, svg } of masters) {
-    if (rel.startsWith(GLYPH_PREFIX) || rel.startsWith(ICON_PREFIX)) continue
+    if ([GLYPH_PREFIX, ICON_PREFIX, CHROME_PREFIX, EMPTY_PREFIX].some((p) => rel.startsWith(p)))
+      continue
     const opt = svgoOptimize(svg)
     optimized.set(rel, opt)
     const stem = rel.replace(/\.svg$/, '')
@@ -175,8 +194,28 @@ export function buildBrand(masters = readMasters(), colors = readThemeColors()) 
     }
   }
   if (glyphs.length) files.set('glyphs.svg', Buffer.from(buildGlyphSprite(glyphs)))
+  if (chrome.length) files.set('chrome.svg', Buffer.from(buildGlyphSprite(chrome, CHROME_PREFIX)))
+  for (const [rel, buf] of buildEmptyStates(empty, colors)) files.set(rel, buf)
   const icons = masters.filter((m) => m.rel.startsWith(ICON_PREFIX))
   if (icons.length) for (const [rel, buf] of buildIcons(icons)) files.set(rel, buf)
+  return files
+}
+
+/** Light and dark exports of the empty-state masters, tones swapped by token. */
+export function buildEmptyStates(empty, colors) {
+  const files = new Map()
+  for (const { rel, svg } of empty) {
+    const opt = svgoOptimize(svg)
+    const stem = rel.replace(/\.svg$/, '')
+    for (const theme of THEMES) {
+      let out = opt
+      for (const tone of EMPTY_TONES) {
+        const from = new RegExp(colors.light[tone], 'gi')
+        out = out.replace(from, colors[theme][tone])
+      }
+      files.set(`${stem}-${theme}.svg`, Buffer.from(out))
+    }
+  }
   return files
 }
 
@@ -257,9 +296,9 @@ export function encodeIcns(entries) {
  * presentation attributes (fill, stroke, stroke-width…) move onto a <g> inside
  * the symbol so `<use href="glyphs.svg#status-passed">` keeps them.
  */
-export function buildGlyphSprite(glyphs) {
+export function buildGlyphSprite(glyphs, prefix = GLYPH_PREFIX) {
   const symbols = glyphs.map(({ rel, svg }) => {
-    const id = rel.slice(GLYPH_PREFIX.length).replace(/\.svg$/, '')
+    const id = rel.slice(prefix.length).replace(/\.svg$/, '')
     const opt = svgoOptimize(svg)
     const m = /^<svg([^>]*)>([\s\S]*)<\/svg>$/.exec(opt)
     if (!m) throw new Error(`${rel}: unexpected SVGO output`)
@@ -268,7 +307,8 @@ export function buildGlyphSprite(glyphs) {
       .replace(/\sviewBox="[^"]*"/, '')
       .trim()
     const viewBox = /viewBox="([^"]*)"/.exec(m[1])?.[1]
-    if (viewBox !== '0 0 24 24') throw new Error(`${rel}: glyphs are drawn on the 24-unit grid`)
+    if (viewBox !== '0 0 24 24')
+      throw new Error(`${rel}: sprite masters are drawn on the 24-unit grid`)
     const [, title = '', body] = /^(<title>[^<]*<\/title>)?([\s\S]*)$/.exec(m[2])
     return `<symbol id="${id}" viewBox="0 0 24 24">${title}<g ${attrs}>${body}</g></symbol>`
   })

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <title>Manifest unreadable</title>
+  <g stroke="#5D6571">
+    <path d="M100.25 24.5A1.25 1.25 0 0 1 101.5 25.75V46A21.5 21.5 0 1 1 80 24.5Z"/>
+    <circle cx="81.59" cy="44.41" r="10.6"/>
+    <path d="M104 80H28V110H100L103 104 99 98 104 92 100 86Z"/>
+    <path d="M36 90H92M36 100H90"/>
+    <path d="M114 84H132V114H110L113 108 109 102 114 96 110 90Z"/>
+    <path d="M120 94H126M118 104H126"/>
+  </g>
+  <circle cx="83.54" cy="42.47" r="5" fill="#2343F5"/>
+</svg>
