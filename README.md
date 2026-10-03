@@ -31,7 +31,7 @@ That's it. `init` drops a ready-to-run GitHub workflow; every PR from then on ge
 
 ## `verify` — four lanes, one manifest
 
-`argus-reviewer verify` runs the product lanes and writes one `run-manifest.json` — the shared evidence contract the sticky comment, the `npm run watch` TUI, and the Electron dashboard (`npm run app`) all render:
+`argus-reviewer verify` runs the product lanes and writes one `run-manifest.json`, the evidence contract the sticky PR comment renders:
 
 | Lane | Selected by | What it does |
 |---|---|---|
@@ -40,7 +40,9 @@ That's it. `init` drops a ready-to-run GitHub workflow; every PR from then on ge
 | **app** | `--app` + `--task` (action inputs `app`/`app-task`) | Directed task against your live app with an expected-state check (`--expect-text`/`--expect-url`/`--expect-selector`) |
 | **a0** | `--a0` (action input `a0`) | Escalates the task to your Agent Zero host — sandboxed child env, bounded, and deliberately honest: a completed delegation reports `inconclusive`, never `passed`, because the agent's answer is self-reported evidence |
 
-Every lane reports an honest status (`passed`/`failed`/`skipped`/`blocked`/`unavailable`/`inconclusive`) with usage, budget, and head binding in the manifest — a lane that couldn't run says so instead of silently no-opping. Completed manifests archive to `<reportDir>/manifests/` (bounded by `reportRetention`, default 20; `0` disables), and the dashboards keep the last valid run even if a write is interrupted.
+Every lane reports an honest status (`passed`/`failed`/`skipped`/`blocked`/`unavailable`/`inconclusive`) with usage, budget, and head binding in the manifest. A lane that couldn't run says so instead of silently no-opping. Completed manifests archive to `<reportDir>/manifests/` (bounded by `reportRetention`, default 20; `0` disables).
+
+The `npm run watch` terminal view and the `npm run app` desktop dashboard also read the manifest, but they are contributor tools: they run only from a clone of this repo, and the npm package does not ship them.
 
 ## What lands on your PR
 
@@ -79,8 +81,8 @@ export default defineConfig({
   budgetUsd: 1.0,
   target: { url: 'https://your-app.example.com' },
   testsDir: 'e2e',
-  // How many verify manifests stay under <reportDir>/manifests/ for the
-  // dashboard/TUI run history (default 20; 0 disables archival).
+  // How many verify manifests stay under <reportDir>/manifests/ as run
+  // history (default 20; 0 disables archival).
   reportRetention: 20,
 })
 ```
@@ -112,7 +114,7 @@ Reviews run against hostile input by design: untrusted checkouts never execute c
 argus-reviewer/
 ├── action/                  # GitHub Actions composite action + sticky PR comment
 ├── runner/                  # Self-hosted runner registration docs + script
-├── electron/                # Local observability dashboard (`npm run app`)
+├── electron/                # Contributor dashboard (`npm run app`, repo clone only)
 ├── src/
 │   ├── api.ts               # Test-facing `test`/`td` API + generated test renderer
 │   ├── cli.ts               # verify · record · run · code-review · delegate · cache · index · init

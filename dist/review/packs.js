@@ -6,7 +6,7 @@
  *
  * The `security` pack's deterministic half is the secrets lane
  * (`src/review/secrets.ts`) — regex candidates over the local merge-base
- * diff, Jev-adjudicated, masked in every output. It runs regardless of
+ * diff, adjudicated by the confidence model, masked in every output. It runs regardless of
  * profile selection; the rubric below additionally tunes the model toward
  * security-shaped defects.
  */

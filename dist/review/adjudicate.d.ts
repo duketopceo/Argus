@@ -1,12 +1,12 @@
 import { DecisionClient } from '../vision/decisions.js';
 /**
- * U8 finding adjudication — one batched Jev decide() scores each
+ * U8 finding adjudication — one batched confidence-model decide() scores each
  * synthesized finding's true-positive probability before posting. Same
- * posture as the secrets lane: Jev annotates/routes, never gates.
+ * posture as the secrets lane: the confidence model annotates/routes, never gates.
  * `p` lands on the finding record and the sticky confidence column;
  * suppression is scoped to `nit`/`q` severities whose false-positive
  * confidence exceeds `findingThreshold` — `bug`/`risk` are never
- * suppressed, and a Jev outage leaves every finding unadjudicated and
+ * suppressed, and a confidence-model outage leaves every finding unadjudicated and
  * unsuppressed (degrade open).
  *
  * `findingThreshold` is the required P(false positive): a nit/q is
@@ -28,7 +28,7 @@ export interface FindingAdjudicationRecord {
     /** Finding text — capped; suppressed findings keep their message in audit. */
     message: string;
     adjudicated: boolean;
-    /** Jev P(true positive) for this finding. */
+    /** Confidence-model P(true positive) for this finding. */
     p?: number;
     /** nit/q below the FP bar — kept for audit, removed from findings. */
     suppressed?: boolean;
@@ -49,13 +49,13 @@ export interface FindingAdjudicationResult<T extends AdjudicableFinding> extends
 }
 export declare function adjudicateFindings<T extends AdjudicableFinding>(opts: {
     findings: T[];
-    /** PR file patches keyed by filename — Jev state context. */
+    /** PR file patches keyed by filename — confidence-model state context. */
     patchByFile?: Map<string, string>;
     threshold: number;
     /**
      * User-configured blocking severities — a severity listed here drives
      * the verdict, so it must never be suppressed even if it is nit/q
-     * (otherwise Jev suppression could flip the commit-status gate).
+     * (otherwise confidence-model suppression could flip the commit-status gate).
      */
     blockSeverities?: string[];
     client: DecisionClient;

@@ -6,16 +6,16 @@ pre-1.0; breaking changes may ship without a major bump until `1.0.0`.
 ## [0.2.0] — 2026-09-21
 
 ### Added
-- **Jev-everywhere — triage, adjudication, probe targeting (U7–U9)** (#70):
-  - PR triage (`triage` report field): Jev pre-review signals — area/risk
-    classification that annotates and routes findings but never gates the
-    deterministic severity verdict
+- **Confidence model in every lane: triage, adjudication, probe targeting** (#70):
+  - PR triage (`triage` report field): confidence-model pre-review signals,
+    an area and risk classification that annotates and routes findings but
+    never gates the deterministic severity verdict
   - Secrets adjudication (`secretsScan` report field): candidate secrets
     found in the diff are adjudicated by a decision model before surfacing
   - Finding adjudication: typed decision records for model verdicts,
     fail-open on decision-API errors
-  - Probe targeting: Jev routes probe generation toward adjudicated
-    findings
+  - Probe targeting: the confidence model routes probe generation toward
+    adjudicated findings
 - `code-review --fixture <dir>`: review a local fixture repo
   (`argus-fixture-base` ref as merge base) — enables offline dogfooding
   and demos without a GitHub PR (#70)
@@ -23,7 +23,7 @@ pre-1.0; breaking changes may ship without a major bump until `1.0.0`.
   support review-only invocation (#70)
 - Live observability: `live.ndjson` event stream, `scripts/tail-live.mjs`
   watcher, scripted demo via `scripts/demo.mjs` (#70)
-- `review` config block for Jev lane tuning (#70)
+- `review` config block for confidence-model lane tuning (#70)
 
 ### Security
 - **Config-execution trust gate** (#64, fixes #58): executable config

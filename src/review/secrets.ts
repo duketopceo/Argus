@@ -9,12 +9,12 @@ import {
 
 /**
  * Deterministic secrets scan over the PR's local merge-base diff,
- * optionally adjudicated by the Decisions API (Jev). The lane is
+ * optionally adjudicated by the Decisions API (the confidence model). The lane is
  * additive-only: findings are unioned into the review AFTER model
  * synthesis so a prompt-injected synthesis can never erase them, and a
- * Jev outage degrades to regex-only findings rather than silence.
+ * A confidence-model outage degrades to regex-only findings rather than silence.
  *
- * Masking contract: raw literals transit to Jev inside `state` (KTD9 —
+ * Masking contract: raw literals transit to the confidence model inside `state` (KTD9 —
  * adjudication needs the shape, and the full diff already crosses to
  * OpenRouter in the review call) and appear NOWHERE else — not in
  * findings, comments, the report, or logs.
@@ -27,9 +27,9 @@ export interface SecretCandidate {
   patternClass: string
   /** Diff line text with every occurrence of the literal replaced by `***`. */
   contextExcerpt: string
-  /** Raw literal — Jev `state` only, never emitted. */
+  /** Raw literal — confidence-model `state` only, never emitted. */
   literal: string
-  /** Full raw added-line text — Jev `state` only, never emitted. */
+  /** Full raw added-line text — confidence-model `state` only, never emitted. */
   rawText: string
 }
 
@@ -37,10 +37,10 @@ export interface SecretScanRecord {
   file: string
   line: number
   patternClass: string
-  /** True when Jev answered for this candidate. */
+  /** True when the confidence model answered for this candidate. */
   adjudicated: boolean
   pLive?: number
-  /** Jev scored below threshold — recorded for audit, not a finding. */
+  /** The confidence model scored below threshold — recorded for audit, not a finding. */
   suppressed?: boolean
 }
 
@@ -52,12 +52,12 @@ export interface SecretsScanResult {
     severity: string
     category?: string
     message: string
-    /** Jev P(live) carried through adjudication — feeds the review gate. */
+    /** Confidence-model P(live) carried through adjudication — feeds the review gate. */
     p?: number
   }[]
   /** Audit records for report.secretsScan — literals never included. */
   records: SecretScanRecord[]
-  /** Candidates past MAX_CANDIDATES — reported count-only, never sent to Jev. */
+  /** Candidates past MAX_CANDIDATES — reported count-only, never sent to the confidence model. */
   overflow: number
   /** Why the lane produced nothing (e.g. base unfetchable). */
   skipped?: string
@@ -213,7 +213,7 @@ export async function materializeMergeBaseDiff(opts: {
 }
 
 /**
- * Full lane: scan candidates (capped), Jev-adjudicate when a client and
+ * Full lane: scan candidates (capped), adjudicate with the confidence model when a client and
  * threshold are available, and emit masked findings + audit records.
  * `client === undefined` (decisionModel unset) or any DecisionError →
  * every candidate unadjudicated — regex-only mode, never silence.
@@ -287,7 +287,7 @@ export async function scanSecrets(opts: {
       severity: adjudicated ? 'bug' : 'risk',
       category: 'security',
       message: maskFindingMessage(c, adjudicated),
-      // A Jev-confirmed live secret counts as proven for the review-event
+      // A confidence-model-confirmed live secret counts as proven for the review-event
       // gate — pLive IS the true-positive probability for this finding.
       // Unadjudicated findings carry no p (degrade-open, like U8).
       ...(adjudicated && pLive !== undefined ? { p: pLive } : {}),

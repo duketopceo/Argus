@@ -15,7 +15,7 @@ silently.
 | Code review | `code_model` | `deepseek/deepseek-v4.1-flash` | `google/gemini-2.5-flash`, `meta-llama/llama-3.3-70b-instruct` | cheap |
 | Vision ground/replay | `model` | `google/gemini-2.5-flash-lite` | `google/gemini-2.5-flash` | cheap–mid |
 | Escalation (heal) | `escalation_model` | `moonshotai/kimi-k2.5` | `anthropic/claude-sonnet-4` | mid–premium |
-| Adjudication (Jev) | `decisionModel` | `typesafe/jev-1.13-20260917` | — pinned; aliases like `~typesafe/jev-latest` drift | fixed |
+| Adjudication (confidence model) | `decisionModel` | `typesafe/jev-1.13-20260917` | none: pinned, because aliases like `~typesafe/jev-latest` drift | fixed |
 | Grounding retry | `grounding_model` | — unset | `google/gemini-2.5-flash-lite` | cheap |
 
 Tiers are qualitative: **cheap** ≈ cents per hundred reviews, **mid** ≈ cents

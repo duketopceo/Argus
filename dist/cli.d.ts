@@ -38,7 +38,7 @@ export interface ReviewFinding {
     severity: string;
     category?: string;
     message: string;
-    /** U8 — Jev true-positive probability (absent = unadjudicated). */
+    /** U8: confidence-model true-positive probability (absent = unadjudicated). */
     p?: number;
     /** R1 — committable replacement lines for the commented range (parse-bounded). */
     suggestion?: string;
@@ -69,7 +69,7 @@ interface CodeReviewReport {
     reviewEvent: 'comment' | 'request_changes';
     /** Blocker-severity findings a sandbox probe reproduced. */
     provenBlockers: number;
-    /** Blocker-severity findings at/above the Jev P(true-positive) gate. */
+    /** Blocker-severity findings at/above the confidence-model P(true-positive) gate. */
     highConfidenceBlockers: number;
     /** KTD3 — eligibility-filtered, severity-sorted, sanitized, capped. */
     reviewComments: ReviewComment[];
@@ -83,7 +83,7 @@ interface CodeReviewReport {
     secretsScan?: SecretsScanResult | {
         skipped: string;
     };
-    /** U7 triage record — Jev pre-review signals (annotate/route, never gates). */
+    /** U7 triage record: confidence-model pre-review signals (annotate/route, never gates). */
     triage?: TriageRecord;
     /** U8 adjudication audit — per-finding p + suppressed records. */
     findingAdjudication?: FindingAdjudicationAudit;
@@ -138,7 +138,7 @@ export declare function parseCodeReview(content: string): {
  */
 export declare function carryForwardSuggestions(findings: CodeReviewReport['findings'], originals: CodeReviewReport['findings']): CodeReviewReport['findings'];
 /**
- * R3/KTD2 — Jev P(true-positive) at/above which a blocker-severity finding
+ * R3/KTD2: confidence-model P(true-positive) at/above which a blocker-severity finding
  * counts as proven for the REQUEST_CHANGES gate. This is a different axis
  * from `review.findingThreshold` (P(false-positive) for nit/q suppression)
  * — never reuse that knob. 0.7: high-confidence without demanding
@@ -152,7 +152,7 @@ export declare const P_TRUE_POSITIVE_THRESHOLD = 0.7;
  * code-review.json; posters read `reviewEvent`, never recompute.
  * Unadjudicated blockers (no p, not reproduced) never escalate —
  * degrade-open by design. The two counts overlap deliberately: a
- * reproduced AND Jev-confident finding is reported under both.
+ * reproduced AND high-confidence finding is reported under both.
  */
 export declare function computeReviewEvent(findings: ReviewFinding[], blockSeverities: string[], allowRequestChanges: boolean): {
     reviewEvent: 'comment' | 'request_changes';

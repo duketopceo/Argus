@@ -4,7 +4,7 @@ import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
 /**
- * Emoji and em-dash lint (plan KTD11, R4, R5).
+ * Emoji, em-dash and codename lint (plan KTD11, R4, R5).
  *
  * Scope: every file under SCOPE. In JS/TS files only string, template and
  * regex literals are checked, because those are what reach users; comments
@@ -19,6 +19,11 @@ import { describe, expect, it } from 'vitest'
  * rewrites the file. Counts must match exactly, so a new emoji or em-dash
  * fails, and a removal fails until the count is lowered (or the entry
  * deleted). The list only shrinks.
+ *
+ * Codename check (R5, U3): the internal codename "Jev" may not appear in any
+ * output literal under SCOPE or in the user-facing docs (USER_DOCS). It has
+ * no allow-list. The real model slug (`typesafe/jev-...`) and the
+ * JEV_DEFAULT_MODEL identifier stay allowed.
  */
 
 const ROOT = join(import.meta.dirname, '..', '..')
@@ -26,6 +31,29 @@ const SCOPE = ['src', 'action', 'scripts', 'electron', 'assets/brand/templates']
 
 const EMOJI = /\p{Extended_Pictographic}|\u{FE0F}|[\u{1F1E6}-\u{1F1FF}]/u
 const EM_DASH = '—'
+/** Real model slugs that contain the codename; stripped before CODENAME runs. */
+const ALLOWED_SLUG = /~?typesafe\/jev-[\w.-]+/gi
+const CODENAME = /\bjev\b/i
+
+function hasCodename(chunk: string): boolean {
+  return CODENAME.test(chunk.replace(ALLOWED_SLUG, ''))
+}
+
+/**
+ * Docs a consumer reads. DESIGN.md is left out on purpose: it is the
+ * contributor design spec and quotes the codename as the defect to remove.
+ * docs/plans and docs/brainstorms are historical working notes.
+ */
+const USER_DOCS = [
+  'README.md',
+  'CHANGELOG.md',
+  'SECURITY.md',
+  'CONTRIBUTING.md',
+  'docs/quickstart.md',
+  'docs/models.md',
+  'docs/approval-token.md',
+  'fixtures/demo-pr/README.md',
+]
 
 const JS_EXT = new Set(['.ts', '.mts', '.cts', '.js', '.mjs', '.cjs'])
 const TEXT_EXT = new Set([...JS_EXT, '.html', '.yml', '.yaml', '.json', '.css', '.svg', '.md'])
@@ -67,8 +95,6 @@ const TEMPORARY: Record<string, Allowance> = {
   'src/review/adjudicate.ts': { emdash: 1, unit: 'U3 (if widened to strings)' },
   'src/review/packs.ts': { emdash: 4, unit: 'U3 (if widened to strings)' },
   'src/review/triage.ts': { emdash: 8, unit: 'U3 (if widened to strings)' },
-  'scripts/demo.mjs': { emdash: 6, unit: 'U3' },
-  'scripts/check-models.mjs': { emdash: 2, unit: 'U3' },
   // No unit owns these; the count is a ratchet, not a removal plan.
   'src/api.ts': { emdash: 1, unit: null, why: NO_OWNER },
   'src/driver/target.ts': { emdash: 1, unit: null, why: NO_OWNER },
@@ -102,7 +128,7 @@ function walk(dir: string, out: string[]): string[] {
 }
 
 interface Site {
-  kind: 'emoji' | 'emdash'
+  kind: 'emoji' | 'emdash' | 'codename'
   line: number
   text: string
 }
@@ -130,6 +156,7 @@ export function scanSource(file: string, text: string): Site[] {
   const add = (chunk: string, line: number) => {
     if (EMOJI.test(chunk)) sites.push({ kind: 'emoji', line, text: chunk.slice(0, 120) })
     if (chunk.includes(EM_DASH)) sites.push({ kind: 'emdash', line, text: chunk.slice(0, 120) })
+    if (hasCodename(chunk)) sites.push({ kind: 'codename', line, text: chunk.slice(0, 120) })
   }
   if (!JS_EXT.has(extname(file))) {
     text.split('\n').forEach((l, i) => add(l, i + 1))
@@ -155,9 +182,9 @@ export function scanSource(file: string, text: string): Site[] {
 function problemsFor(file: string, sites: Site[]): string[] {
   const allow = TEMPORARY[file]
   const problems: string[] = []
-  for (const kind of ['emoji', 'emdash'] as const) {
+  for (const kind of ['emoji', 'emdash', 'codename'] as const) {
     const found = sites.filter((s) => s.kind === kind)
-    const allowed = allow?.[kind] ?? 0
+    const allowed = kind === 'codename' ? 0 : (allow?.[kind] ?? 0)
     if (found.length > allowed) {
       problems.push(
         `${file}: ${found.length} ${kind} site(s), allow-list permits ${allowed}\n` +
@@ -223,5 +250,28 @@ describe('no emoji or em-dash in output-producing code (KTD11)', () => {
     expect(scanSource('src/cli.ts', other).map((s) => s.kind)).toEqual(['emoji'])
     // The exemption is tied to src/cli.ts; the same parser elsewhere is flagged.
     expect(scanSource('src/review/triage.ts', parser).map((s) => s.kind)).toEqual(['emoji', 'emoji'])
+  })
+})
+
+describe('no internal codename in user-facing copy (R5, U3)', () => {
+  it('finds no "Jev" in the user-facing docs outside the model slug', () => {
+    const hits = USER_DOCS.flatMap((file) =>
+      readFileSync(join(ROOT, file), 'utf8')
+        .split('\n')
+        .flatMap((l, i) => (hasCodename(l) ? [`${file}:${i + 1}: ${l.trim()}`] : [])),
+    )
+    expect(hits.join('\n')).toBe('')
+  })
+
+  it('allows the slug and identifier but flags the codename in prose and strings', () => {
+    expect(hasCodename("decisionModel: 'typesafe/jev-1.13-20260917'")).toBe(false)
+    expect(hasCodename('aliases like `~typesafe/jev-latest` drift')).toBe(false)
+    expect(hasCodename('import { JEV_DEFAULT_MODEL } from x')).toBe(false)
+    expect(hasCodename('Jev unavailable')).toBe(true)
+    expect(hasCodename('Jev-adjudicated above threshold')).toBe(true)
+    expect(hasCodename('typesafe/jev-1.13 failed; Jev retried')).toBe(true)
+    const file = 'src/report/manifest.ts'
+    expect(scanSource(file, `// Jev in a comment\nconst s = 'ok'\n`)).toEqual([])
+    expect(scanSource(file, `const s = 'Jev unavailable'\n`).map((x) => x.kind)).toEqual(['codename'])
   })
 })

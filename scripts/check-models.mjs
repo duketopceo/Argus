@@ -15,8 +15,8 @@ const DOC = new URL('../docs/models.md', import.meta.url)
 // owner/model with optional :variant — model part carries no '/', so a
 // backticked path like `src/review/packs.ts` can't parse as a slug.
 const SLUG = /`([a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._:-]*)`/gi
-// Jev adjudication slugs resolve on the typesafe Decisions API, not the
-// OpenRouter catalog — there is nothing for this check to verify.
+// Confidence-model slugs resolve on the typesafe Decisions API, not the
+// OpenRouter catalog, so there is nothing for this check to verify.
 const SKIP_PREFIXES = ['typesafe/']
 
 const md = await readFile(DOC, 'utf8')
@@ -28,7 +28,7 @@ const slugs = [
   ),
 ]
 if (slugs.length === 0) {
-  console.error('check-models: no slugs found in docs/models.md — the extraction regex is broken')
+  console.error('check-models: no slugs found in docs/models.md; the extraction regex is broken')
   process.exit(1)
 }
 
@@ -47,7 +47,7 @@ for (const slug of slugs) {
   if (live.has(base)) {
     console.log(`  ok      ${slug}`)
   } else {
-    console.error(`  MISSING ${slug} — update docs/models.md`)
+    console.error(`  MISSING ${slug}: update docs/models.md`)
     failed = true
   }
 }
