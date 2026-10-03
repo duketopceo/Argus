@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <title>Nothing to heal</title>
+  <g stroke="#5D6571">
+    <path d="M100.25 24.5A1.25 1.25 0 0 1 101.5 25.75V46A21.5 21.5 0 1 1 80 24.5Z"/>
+    <circle cx="81.59" cy="44.41" r="10.6"/>
+    <path d="M24 96H136M74 90V102M86 90V102"/>
+  </g>
+  <circle cx="81.59" cy="44.41" r="5" fill="#2343F5"/>
+</svg>

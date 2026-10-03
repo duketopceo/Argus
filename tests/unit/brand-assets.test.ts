@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest'
 import {
   buildBrand,
   CHROME_PREFIX,
+  EMPTY_PREFIX,
+  EMPTY_TONES,
   EXPORT_DIR,
   GLYPH_PREFIX,
   ICNS_TYPES,
@@ -40,7 +42,7 @@ function listFiles(dir: string): string[] {
 
 const allMasters = readMasters()
 const masters = allMasters.filter(
-  (m) => ![GLYPH_PREFIX, ICON_PREFIX, CHROME_PREFIX].some((p) => m.rel.startsWith(p)),
+  (m) => ![GLYPH_PREFIX, ICON_PREFIX, CHROME_PREFIX, EMPTY_PREFIX].some((p) => m.rel.startsWith(p)),
 )
 const glyphs = allMasters.filter((m) => m.rel.startsWith(GLYPH_PREFIX))
 const chrome = allMasters.filter((m) => m.rel.startsWith(CHROME_PREFIX))
@@ -217,6 +219,42 @@ describe('chrome icons (U9, DESIGN.md A7, section 6.6)', () => {
   it('keeps each optimized icon under 2 KB and the sprite under 16 KB (section 10)', () => {
     for (const { rel, svg } of chrome) expect(svgo(svg).length, rel).toBeLessThanOrEqual(2048)
     expect(Buffer.byteLength(sprite)).toBeLessThanOrEqual(16 * 1024)
+  })
+})
+
+describe('empty-state illustrations (U9, DESIGN.md A13)', () => {
+  const files = buildBrand()
+  const empty = allMasters.filter((m) => m.rel.startsWith(EMPTY_PREFIX))
+  const colors = readThemeColors()
+  const hexes = (svg: string) =>
+    new Set([...svg.matchAll(/#[0-9a-f]{6}\b/gi)].map((m) => m[0].toUpperCase()))
+  const tones = (theme: 'light' | 'dark') =>
+    EMPTY_TONES.map((t) => colors[theme][t as keyof (typeof colors)[typeof theme]].toUpperCase())
+
+  it('has the four A13 states at 160x120', () => {
+    expect(empty.map((m) => m.rel.slice(EMPTY_PREFIX.length, -4)).sort()).toEqual(
+      ['manifest-unreadable', 'no-key', 'no-runs', 'nothing-to-heal'].sort(),
+    )
+    for (const { rel, svg } of empty) expect(svg, rel).toMatch(/viewBox="0 0 160 120"/)
+  })
+
+  it('draws monoline in the glyph stroke with at most the two A13 tones, both used', () => {
+    for (const { rel, svg } of empty) {
+      expect([...hexes(svg)].sort(), rel).toEqual([...tones('light')].sort())
+      for (const [, w] of svg.matchAll(/stroke-width="([^"]+)"/g)) expect(w, rel).toBe('1.5')
+      expect(svg, rel).not.toMatch(/currentColor|rgb\(|hsl\(|oklch\(|opacity|Gradient|filter=/)
+    }
+  })
+
+  it('exports each state per theme, the dark one in the dark tones only', () => {
+    for (const { rel } of empty) {
+      const stem = rel.slice(0, -4)
+      for (const theme of ['light', 'dark'] as const) {
+        const out = files.get(`${stem}-${theme}.svg`)?.toString()
+        expect(out, `${stem}-${theme}`).toBeDefined()
+        expect([...hexes(out!)].sort(), `${stem}-${theme}`).toEqual([...tones(theme)].sort())
+      }
+    }
   })
 })
 
