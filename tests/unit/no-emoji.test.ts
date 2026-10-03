@@ -76,14 +76,7 @@ const NO_OWNER =
 
 const TEMPORARY: Record<string, Allowance> = {
   // Rewritten by a later unit of the Ocellus plan (docs/plans/2026-10-02-2316-*).
-  // U11 rewrote the CLI terminal output. What remains is review/report content (U6) and
-  // the generated config/workflow text, plus the verbatim init cost block (DESIGN 7.8).
-  'src/cli.ts': { emoji: 2, emdash: 42, unit: 'U6 (review comments, persist reply, report text)' },
   'src/report/viewmodel.ts': { emoji: 2, emdash: 2, unit: 'U13 (legacy LANE_STATUS_ICON consumers)' },
-  'src/review/secrets.ts': { emoji: 3, emdash: 3, unit: 'U6' },
-  'src/probe/persist.ts': { emoji: 1, emdash: 1, unit: 'U6' },
-  'action/sticky-comment.cjs': { emoji: 1, emdash: 1, unit: 'U6 (review body)' },
-  'action/approval-review.mjs': { emdash: 2, unit: 'U6' },
   'electron/renderer.js': { emoji: 2, emdash: 8, unit: 'U13 (replaced by electron/ui/)' },
   'electron/index.html': { emdash: 3, unit: 'U13 (replaced by electron/ui/)' },
   // U3 touches these files, but its plan text scopes it to comments; strings need U3 widened.
@@ -93,12 +86,16 @@ const TEMPORARY: Record<string, Allowance> = {
   'src/review/packs.ts': { emdash: 4, unit: 'U3 (if widened to strings)' },
   'src/review/triage.ts': { emdash: 8, unit: 'U3 (if widened to strings)' },
   // No unit owns these; the count is a ratchet, not a removal plan.
+  // U6 cleaned the review comment, persist reply and code-review report text in src/cli.ts.
+  // What remains is terminal stage lines, mention replies, run-report skip text, the
+  // generated workflow text and the verbatim init cost block (DESIGN 7.8).
+  'src/cli.ts': { emdash: 27, unit: null, why: NO_OWNER },
   'src/api.ts': { emdash: 1, unit: null, why: NO_OWNER },
   'src/driver/target.ts': { emdash: 1, unit: null, why: NO_OWNER },
   'src/engine/explore.ts': { emdash: 2, unit: null, why: NO_OWNER },
   'src/engine/loop.ts': { emdash: 1, unit: null, why: NO_OWNER },
   'src/engine/prompts.ts': { emdash: 4, unit: null, why: NO_OWNER },
-  'src/evidence/link.ts': { emdash: 2, unit: null, why: NO_OWNER },
+  'src/evidence/link.ts': { emdash: 1, unit: null, why: NO_OWNER },
   'src/executor/a0.ts': { emdash: 6, unit: null, why: NO_OWNER },
   'src/mention.ts': { emdash: 9, unit: null, why: NO_OWNER },
   'src/pipeline/app.ts': { emdash: 4, unit: null, why: NO_OWNER },

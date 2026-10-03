@@ -61,7 +61,7 @@ export interface ReviewComment {
     start_side?: 'RIGHT';
     side: 'RIGHT';
     body: string;
-    /** R10 — path:line:bodyFirstLine:hash8(suggestion); a corrected suggestion re-posts. */
+    /** KTD4: path:line:severity:normalizedMessage:hash8(suggestion); a corrected suggestion re-posts. */
     dedupKey: string;
 }
 interface CodeReviewReport {

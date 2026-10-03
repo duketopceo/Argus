@@ -8,6 +8,12 @@ import {
   renderReviewComments,
   type ReviewFinding,
 } from '../../src/cli.js'
+import {
+  INLINE_SENTINEL,
+  inlineDedupKey,
+  normalizeFindingMessage,
+  parseInlineBody,
+} from '../../src/review/inline.js'
 import { resolveBlockSeverities, resolveConfig, resolveMaxComments } from '../../src/config.js'
 
 describe('review policy config', () => {
@@ -553,12 +559,12 @@ describe('renderReviewComments', () => {
       [finding({ message: 'first\n```suggestion\nrm -rf /\n```\nping @user now' })],
       20,
     )
-    const firstLine = comments[0].body.split('\n')[0]
-    expect(firstLine.startsWith('**argus-reviewer bug:** ')).toBe(true)
-    expect(firstLine).not.toMatch(/```|~~~/)
-    expect(firstLine).not.toContain('@user')
-    expect(firstLine).toContain('first')
-    expect(firstLine).toContain('rm -rf /')
+    const messageLine = comments[0].body.split('\n')[2]
+    expect(comments[0].body.split('\n')[1]).toBe('◆ **bug** · ▰▱▱▱ suspected')
+    expect(messageLine).not.toMatch(/```|~~~/)
+    expect(messageLine).not.toContain('@user')
+    expect(messageLine).toContain('first')
+    expect(messageLine).toContain('rm -rf /')
   })
 
   it('multi-line suggestion sets start_line/start_side only when startLine < line', () => {
@@ -586,7 +592,7 @@ describe('renderReviewComments', () => {
     expect(a.dedupKey).not.toBe(b.dedupKey)
     expect(a.dedupKey).toBe(c.dedupKey)
     expect(a.dedupKey).not.toBe(d.dedupKey)
-    expect(a.dedupKey).toMatch(/^a\.ts:1:\*\*argus-reviewer bug:\*\*.*:[0-9a-f]{8}$/)
+    expect(a.dedupKey).toMatch(/^a\.ts:1:bug:boom:[0-9a-f]{8}$/)
   })
 
   it('marks a reproduced finding with the probe line', () => {
@@ -594,6 +600,142 @@ describe('renderReviewComments', () => {
       [finding({ evidence: { status: 'reproduced', detail: 'd' } })],
       20,
     )
-    expect(comments[0].body).toContain('🧪 Reproduced by an Argus probe')
+    expect(comments[0].body).toContain('Reproduced by an Argus probe')
+  })
+})
+
+describe('Ocellus inline comments (U6, R7, KTD4)', () => {
+  const finding = (over: Partial<ReviewFinding> = {}): ReviewFinding => ({
+    file: 'src/user.ts',
+    line: 42,
+    severity: 'bug',
+    category: 'correctness',
+    message: 'L42: 🔴 bug: `user` can be null. Add guard.',
+    ...over,
+  })
+  const render = (f: ReviewFinding) => renderReviewComments([f], 20).comments[0]!
+
+  it('renders severity line, message line and suggestion fence with no tool prefix', () => {
+    const c = render(
+      finding({ evidence: { status: 'reproduced', detail: 'probe failed on head' }, suggestion: 'if (!user) return' }),
+    )
+    const lines = c.body.split('\n')
+    expect(lines[0]).toBe(INLINE_SENTINEL)
+    expect(lines[1]).toBe('◆ **bug** · ▰▰▰▰ reproduced')
+    expect(lines[2]).toBe('`user` can be null. Add guard.')
+    expect(c.body).toContain('\n\n````suggestion\nif (!user) return\n````\n')
+    expect(c.body).not.toContain('argus-reviewer bug')
+    expect(c.body).not.toMatch(/\*\*argus-reviewer/)
+    expect(c.body).not.toMatch(/\p{Extended_Pictographic}/u)
+    expect(c.body).not.toContain('—')
+    // Exactly one evidence line, after the suggestion.
+    expect(c.body.match(/Reproduced by an Argus probe/g)).toHaveLength(1)
+    expect(c.body.indexOf('Reproduced by')).toBeGreaterThan(c.body.indexOf('````\n'))
+  })
+
+  it('renders a question with its word, and an unknown severity without a glyph', () => {
+    expect(render(finding({ severity: 'q' })).body.split('\n')[1]).toBe('□ **question** · ▰▱▱▱ suspected')
+    expect(render(finding({ severity: 'critical' })).body.split('\n')[1]).toBe('**critical** · ▰▱▱▱ suspected')
+  })
+
+  it('adds no evidence line when the evidence is not proof', () => {
+    for (const status of ['inconclusive', 'not_exercised', 'exercised'] as const) {
+      const c = render(finding({ evidence: { status, detail: 'no repo index, run `argus-reviewer index` first' } }))
+      expect(c.body).not.toContain('repo index')
+      expect(c.body.split('\n')).toHaveLength(3)
+    }
+    const corroborated = render(finding({ evidence: { status: 'corroborated', detail: 'test check `unit` failed on this head' } }))
+    expect(corroborated.body.split('\n')[1]).toBe('◆ **bug** · ▰▰▱▱ corroborated')
+    expect(corroborated.body).toContain('CI evidence: test check `unit` failed on this head')
+  })
+
+  it('never starts the message line with L<n>: or a severity emoji', () => {
+    for (const message of [
+      'L42: 🔴 bug: boom',
+      'L88-140: 🔵 nit: long fn',
+      '🟡 risk: L23: no retry',
+      '❓ q: why?',
+      '❓️ q: variation selector',
+      'L3: plain',
+    ]) {
+      const line = render(finding({ message })).body.split('\n')[2]!
+      expect(line).not.toMatch(/^L\d+/)
+      expect(line).not.toMatch(/^\p{Extended_Pictographic}/u)
+      expect(line).not.toMatch(/^(bug|risk|nit|q):/)
+      expect(line).not.toBe('')
+    }
+  })
+
+  it('two findings on the same line with different messages get different keys', () => {
+    const { comments } = renderReviewComments(
+      [finding({ message: 'L42: 🔴 bug: null deref.' }), finding({ message: 'L42: 🔴 bug: off by one.' })],
+      20,
+    )
+    expect(comments[0]!.dedupKey).not.toBe(comments[1]!.dedupKey)
+  })
+
+  it('a changed suggestion on the same finding changes the key', () => {
+    expect(render(finding({ suggestion: 'a()' })).dedupKey).not.toBe(render(finding({ suggestion: 'b()' })).dedupKey)
+  })
+
+  it('legacy-to-new: an already-posted legacy comment yields the same key (no re-post after upgrade)', () => {
+    // The body the pre-U6 renderer posted for this exact finding.
+    const legacy = '**argus-reviewer bug:** L42: 🔴 bug: `user` can be null. Add guard. `correctness`'
+    const fresh = render(finding({}))
+    expect(inlineDedupKey('src/user.ts', 42, legacy)).toBe(fresh.dedupKey)
+    expect(fresh.dedupKey).toBe('src/user.ts:42:bug:`user` can be null. Add guard.:' + fresh.dedupKey.slice(-8))
+
+    // With evidence and a suggestion, as the legacy renderer laid them out.
+    const legacyFull =
+      '**argus-reviewer bug:** L42: 🔴 bug: `user` can be null. Add guard. `correctness`\n\n' +
+      '*🧪 Reproduced by an Argus probe — fails on this PR head, clean on base. See workflow artifacts.*\n\n' +
+      '````suggestion\nif (!user) return\n````\n\n' +
+      '*Suggested change — review before committing.*'
+    const freshFull = render(
+      finding({ evidence: { status: 'reproduced', detail: 'd' }, suggestion: 'if (!user) return' }),
+    )
+    expect(inlineDedupKey('src/user.ts', 42, legacyFull)).toBe(freshFull.dedupKey)
+
+    // A legacy question used the `q` keyword; the new body says "question".
+    const legacyQ = '**argus-reviewer q:** L42: ❓ q: why is this sync? `other`'
+    const freshQ = render(finding({ severity: 'q', category: 'other', message: 'L42: ❓ q: why is this sync?' }))
+    expect(inlineDedupKey('src/user.ts', 42, legacyQ)).toBe(freshQ.dedupKey)
+  })
+
+  it('the serialized key is the key the poster reconstructs from the posted body', () => {
+    const c = render(finding({ suggestion: 'x()' }))
+    expect(inlineDedupKey(c.path, c.line, c.body)).toBe(c.dedupKey)
+  })
+
+  it('parses both formats and rejects bodies that are not Argus comments', () => {
+    expect(parseInlineBody('**argus-reviewer risk:** L1: 🟡 risk: slow `performance`')).toEqual({
+      severity: 'risk',
+      message: 'slow',
+    })
+    expect(parseInlineBody(`${INLINE_SENTINEL}\n◈ **risk** · ▰▱▱▱ suspected\nslow`)).toEqual({
+      severity: 'risk',
+      message: 'slow',
+    })
+    expect(parseInlineBody('◆ **bug** · ▰▰▰▰ reproduced\nhuman quoting the format')).toBeUndefined()
+    expect(parseInlineBody('> **argus-reviewer bug:** quoted')).toBeUndefined()
+  })
+
+  it('normalizeFindingMessage strips the model prefix and keeps the sentence', () => {
+    expect(normalizeFindingMessage('L42: 🔴 bug: `user` can be null.')).toBe('`user` can be null.')
+    expect(normalizeFindingMessage('L88-140: 🔵 nit: x')).toBe('x')
+    expect(normalizeFindingMessage('plain sentence')).toBe('plain sentence')
+  })
+})
+
+describe('severity parsing stays emoji-aware (R4 input path)', () => {
+  const sev = (message: string) =>
+    parseCodeReview(JSON.stringify({ verdict: 'needs_changes', findings: [{ file: 'a.ts', line: 1, message }] }))
+      .findings[0]!.severity
+  it('deriveSeverity still reads emoji and keywords out of model output', () => {
+    expect(sev('L1: 🔴 something')).toBe('bug')
+    expect(sev('L1: 🟡 something')).toBe('risk')
+    expect(sev('L1: 🔵 something')).toBe('nit')
+    expect(sev('L1: ❓ something')).toBe('q')
+    expect(sev('L1: risk: something')).toBe('risk')
   })
 })

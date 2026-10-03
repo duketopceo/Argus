@@ -8,6 +8,7 @@ import {
   scanSecrets,
 } from '../../src/review/secrets.js'
 import type { ExecFn } from '../../src/detect.js'
+import { parseCodeReview } from '../../src/cli.js'
 
 // Credential-shaped literals are built by concatenation — a static
 // provider-shaped string trips GitHub push protection.
@@ -247,5 +248,33 @@ describe('materializeMergeBaseDiff', () => {
     const exec: ExecFn = async () => ({ code: 1, stdout: '', stderr: 'fetch failed' })
     const r = await materializeMergeBaseDiff({ cwd: '/x', baseSha: 'abc123', token: 't', exec })
     expect(r).toMatchObject({ skipped: expect.any(String) })
+  })
+})
+
+describe('secret finding wording (U6, R4)', () => {
+  const NO_EMOJI = /\p{Extended_Pictographic}/u
+  // Strip the explicit severity so parseCodeReview derives it from the text,
+  // as it would for a message that lost its field.
+  const derived = (message: string) =>
+    parseCodeReview(JSON.stringify({ verdict: 'needs_changes', findings: [{ file: 'a', line: 1, message }] }))
+      .findings[0]!.severity
+
+  it('uses severity words, never emoji or em-dashes, and still derives the same severity', async () => {
+    const adjudicated = await scanSecrets({ diff: DIFF, client: jevClient([0.03, 0.85]), threshold: 0.3 })
+    const unadjudicated = await scanSecrets({ diff: DIFF })
+    const many = Array.from({ length: MAX_CANDIDATES + 1 }, (_, i) => `+token = "abcd1234efgh5678ijkl${i}"`)
+    const overflow = await scanSecrets({ diff: ['+++ b/f.txt', '@@ -0,0 +1,51 @@', ...many].join('\n') })
+    const findings = [
+      ...adjudicated.findings,
+      ...unadjudicated.findings,
+      overflow.findings.find((f) => f.file === '-')!,
+    ]
+    expect(findings.map((f) => f.severity)).toEqual(['bug', 'risk', 'risk', 'risk'])
+    for (const f of findings) {
+      expect(f.message).not.toMatch(NO_EMOJI)
+      expect(f.message).not.toContain('\u2014')
+      expect(f.message).toMatch(new RegExp(`^L\\d+: ${f.severity}: `))
+      expect(derived(f.message)).toBe(f.severity)
+    }
   })
 })
