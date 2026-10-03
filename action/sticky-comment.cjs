@@ -37,53 +37,101 @@ function maskSecrets(s) {
   return out
 }
 
-function cell(s) {
+function cell(s, max = 200) {
   return maskSecrets(
     String(s ?? '')
       .replace(/\|/g, '\\|')
       .replace(/[\r\n]+/g, ' '),
-  ).slice(0, 200)
+  ).slice(0, max)
 }
 
-function renderMissingKeyBody() {
-  const lines = []
-  lines.push(SENTINEL)
-  lines.push('')
-  lines.push('## argus-reviewer ⚪ skipped')
-  lines.push('')
-  lines.push(
-    '`OPENROUTER_API_KEY` is not configured. Add it as a repository or workflow secret to run argus-reviewer.',
-  )
-  lines.push('')
-  lines.push('This status is intentionally neutral, not a failure.')
-  lines.push('')
-  return lines.join('\n')
+/** Inline code span around a cell-safe string. The fence is one backtick
+ *  longer than any run inside, so report text cannot close it early. */
+function code(s) {
+  const t = cell(s)
+  const longest = Math.max(0, ...(t.match(/`+/g) ?? []).map((r) => r.length))
+  const fence = '`'.repeat(longest + 1)
+  const pad = t.startsWith('`') || t.endsWith('`') ? ' ' : ''
+  return `${fence}${pad}${t}${pad}${fence}`
 }
 
-function renderNoReportBody(reportDir, runUrl) {
-  const lines = []
-  lines.push(SENTINEL)
-  lines.push('')
-  lines.push('## argus-reviewer ⚠️ no report')
-  lines.push('')
-  lines.push(
-    `The run step produced no \`run.json\` under \`${reportDir}\`. The commit status fails closed — check the action logs before merging.`,
-  )
-  lines.push('')
-  lines.push(`[View run](${runUrl})`)
-  lines.push('')
-  return lines.join('\n')
+function plural(n, one, many = `${one}s`) {
+  return `${n} ${n === 1 ? one : many}`
 }
 
-// --- run-manifest lane block ------------------------------------------------
+function formatDuration(ms) {
+  if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return undefined
+  return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`
+}
+
+// --- Ocellus vocabulary (DESIGN.md 6.7) --------------------------------------
+// This file's own copy of the src/report/viewmodel.ts vocabulary (plan KTD2):
+// the action loads it with require() and no build step. The comment-golden
+// parity test pins both copies equal.
+const STATUS_GLYPH = {
+  passed: '●',
+  failed: '⊘',
+  skipped: '–',
+  blocked: '⊖',
+  unavailable: '◌',
+  inconclusive: '◐',
+}
+const PROOF_LEVELS = ['suspected', 'corroborated', 'exercised', 'reproduced']
+const SEVERITY_GLYPH = { bug: '◆', risk: '◈', nit: '○', q: '□' }
+const SEVERITY_LABEL = { bug: 'bug', risk: 'risk', nit: 'nit', q: 'question' }
+const VERDICT_STATUS = { approve: 'passed', needs_changes: 'failed', pass: 'passed' }
+const VERDICT_LABEL = { approve: 'approve', needs_changes: 'needs changes', pass: 'clean' }
+
+function proofMeter(level) {
+  const filled = PROOF_LEVELS.indexOf(level ?? '') + 1
+  return '▰'.repeat(filled) + '▱'.repeat(PROOF_LEVELS.length - filled)
+}
+
+/** Status is always glyph plus lowercase word (R2). */
+function statusText(status) {
+  return `${STATUS_GLYPH[status]} ${status}`
+}
+
+/** Proof cell: blank for a lane that did not run, the empty meter plus
+ *  "none" for one that ran and proved nothing, otherwise meter plus word. */
+function proofText(level) {
+  if (level === null) return ''
+  if (level === 'none') return `${proofMeter(undefined)} none`
+  return `${proofMeter(level)} ${level}`
+}
+
+function ladderLevel(status) {
+  return PROOF_LEVELS.includes(status) ? status : 'suspected'
+}
+
+function findingsOf(codeReview) {
+  return codeReview && Array.isArray(codeReview.findings) ? codeReview.findings : []
+}
+
+/** Strongest proof any finding reached; a review with no evidence is a suspicion. */
+function bestFindingProof(codeReview) {
+  let best = 0
+  for (const f of findingsOf(codeReview)) {
+    best = Math.max(best, PROOF_LEVELS.indexOf(f.evidence?.status))
+  }
+  return PROOF_LEVELS[best]
+}
+
+/** How far a lane's result is proven (A4). a0 is self-reported, the browser
+ *  lanes exercise the app, the review is as strong as its best evidence. */
+function laneProof(lane, status, codeReview) {
+  if (status === 'skipped') return null
+  if (status === 'blocked' || status === 'unavailable') return 'none'
+  if (status === 'inconclusive' || lane === 'a0') return 'suspected'
+  if (lane === 'review') return bestFindingProof(codeReview)
+  return 'exercised'
+}
+
+// --- run-manifest lanes -------------------------------------------------------
 // The manifest is the shared evidence contract (R15): these labels/statuses/
 // costs/head fields must stay identical to the TUI and dashboard rendering —
 // the parity contract test enforces it.
 const MANIFEST_LANE_ORDER = ['review', 'flow', 'app', 'a0']
-const MANIFEST_STATUS_EMOJI = {
-  passed: '✅', failed: '❌', skipped: '⚪',
-  blocked: '⛔', unavailable: '⚠️', inconclusive: '🟡',
-}
 
 // The commit-status surface validates at least as strictly as the display
 // surfaces (viewmodel.isRunManifest / collect.validManifest) — this file is
@@ -109,7 +157,7 @@ function validManifest(m) {
   if (m.aggregate === null || typeof m.aggregate !== 'object') return false
   // aggregate.status must be a real lane status and ok a real boolean —
   // a type-confused aggregate must fail the gate, not reach the renderer.
-  if (!Object.hasOwn(MANIFEST_STATUS_EMOJI, m.aggregate.status)) return false
+  if (!Object.hasOwn(STATUS_GLYPH, m.aggregate.status)) return false
   if (m.aggregate.ok !== true && m.aggregate.ok !== false) return false
   if (!num(m.aggregate.calls) || !num(m.aggregate.tokens) || !num(m.aggregate.costUsd)) {
     return false
@@ -122,7 +170,7 @@ function validManifest(m) {
       typeof lane === 'object' &&
       lane.lane === id &&
       typeof lane.selected === 'boolean' &&
-      Object.hasOwn(MANIFEST_STATUS_EMOJI, lane.status) &&
+      Object.hasOwn(STATUS_GLYPH, lane.status) &&
       lane.usage !== null &&
       typeof lane.usage === 'object' &&
       num(lane.usage.calls) &&
@@ -137,511 +185,245 @@ function validManifest(m) {
 function manifestLanes(manifest) {
   const lanes = manifest && manifest.lanes ? manifest.lanes : {}
   return MANIFEST_LANE_ORDER.map((id) => lanes[id]).filter(
-    (l) => l !== null && typeof l === 'object' && typeof l.status === 'string',
+    (l) => l !== null && typeof l === 'object' && Object.hasOwn(STATUS_GLYPH, l.status),
   )
 }
 
-/** Lane table + head binding lines rendered from a parsed run-manifest.json. */
-function renderManifestLanes(manifest) {
-  const lines = []
-  const identity = manifest.identity || {}
-  const headBinding = (manifest.lanes || {}).review?.headBinding
-  if (identity.intendedHeadSha || headBinding) {
-    const bits = []
-    if (identity.intendedHeadSha) {
-      bits.push(`head \`${cell(String(identity.intendedHeadSha).slice(0, 7))}\``)
-    }
-    if (headBinding) {
-      bits.push(`${cell(headBinding.status)} — ${cell(headBinding.detail)}`)
-    }
-    lines.push(`**Head binding:** ${bits.join(' · ')}`)
-    lines.push('')
-  }
-  lines.push('| Lane | Status | Calls | Cost | Detail |')
-  lines.push('| --- | --- | ---: | ---: | --- |')
-  for (const lane of manifestLanes(manifest)) {
+/** One lane-table row per manifest lane, canonical order. */
+function manifestLaneRows(manifest, codeReview) {
+  return manifestLanes(manifest).map((lane) => {
     if (lane.selected !== true) {
-      lines.push(`| ${cell(lane.lane)} | ⚪ skipped | 0 | — | not selected |`)
-      continue
+      return { lane: lane.lane, status: 'skipped', result: 'not selected', proof: null, spend: '' }
     }
-    const icon = MANIFEST_STATUS_EMOJI[lane.status] ?? '❔'
     const usage = lane.usage || {}
-    const cost = usage.metered === true ? formatUsd(usage.costUsd) : 'unmetered'
-    const detail = cell(lane.reason ?? lane.summary ?? '')
-    const model = lane.model || usage.model ? ` (\`${cell(lane.model ?? usage.model)}\`)` : ''
-    lines.push(
-      `| ${cell(lane.lane)} | ${icon} ${cell(lane.status)} | ` +
-        `${usage.calls ?? 0} | ${cost} | ${detail}${model} |`,
-    )
+    return {
+      lane: lane.lane,
+      status: lane.status,
+      result: lane.reason ?? lane.summary ?? '',
+      proof: laneProof(lane.lane, lane.status, codeReview),
+      spend: usage.metered === true ? formatUsd(usage.costUsd) : 'unmetered',
+    }
+  })
+}
+
+function reproducedCount(codeReview) {
+  return typeof codeReview.provenBlockers === 'number'
+    ? codeReview.provenBlockers
+    : findingsOf(codeReview).filter((f) => f.evidence?.status === 'reproduced').length
+}
+
+/** Review-lane row synthesized from code-review.json when no manifest exists.
+ *  A missing report means the review step crashed: failed, never skipped. */
+function reviewLaneRow(codeReview) {
+  if (!codeReview) {
+    return { lane: 'review', status: 'failed', result: 'no code-review.json', proof: 'none', spend: '' }
   }
-  const cache = (manifest.lanes || {}).flow?.cache
-  if (cache && typeof cache === 'object') {
-    lines.push('')
-    lines.push(
-      `**Fingerprint cache:** ${cache.hits ?? 0} hit(s) · ${cache.misses ?? 0} miss(es) · ${cache.heals ?? 0} heal(s)`,
-    )
+  if (codeReview.skipped) {
+    return { lane: 'review', status: 'skipped', result: codeReview.summary ?? 'skipped', proof: null, spend: '' }
   }
-  lines.push('')
+  const status = codeReview.ok === true ? 'passed' : 'failed'
+  return {
+    lane: 'review',
+    status,
+    result: `${plural(findingsOf(codeReview).length, 'finding')}, ${reproducedCount(codeReview)} reproduced`,
+    proof: laneProof('review', status, codeReview),
+    spend: formatUsd(codeReview.visionCostUsd),
+  }
+}
+
+function healsOf(report) {
+  return (report.tests ?? []).flatMap((t) => t.healEvents ?? [])
+}
+
+/** Flow-lane row synthesized from run.json when no manifest exists. */
+function flowLaneRow(report) {
+  if (!report) {
+    return { lane: 'flow', status: 'skipped', result: 'run lane disabled', proof: null, spend: '' }
+  }
+  const totals = report.totals ?? {}
+  const heals = healsOf(report).length
+  const status = report.ok === true ? 'passed' : 'failed'
+  return {
+    lane: 'flow',
+    status,
+    result: `${totals.passed ?? 0} of ${totals.tests ?? 0} tests passed${heals > 0 ? `, ${heals} healed` : ''}`,
+    proof: laneProof('flow', status, undefined),
+    spend: formatUsd(totals.visionCostUsd),
+  }
+}
+
+// --- the one layout (R6) ---------------------------------------------------------
+// header, verdict line, lane table, findings summary, folds, footer. Every
+// body below is this layout with different parts; the first screen stays
+// within 12 lines before the first fold.
+
+function laneTable(rows) {
+  const lines = ['| Status | Lane | Result | Proof | Spend |', '|---|---|---|---|--:|']
+  for (const r of rows) {
+    lines.push(`| ${statusText(r.status)} | ${cell(r.lane)} | ${cell(r.result)} | ${proofText(r.proof)} | ${r.spend} |`)
+  }
   return lines
 }
 
-/**
- * Manifest-only body — a verify run whose lanes produced no run.json
- * (review-only, or a flow lane that never reached the browser). The
- * aggregate status is the verdict; lane detail lives in the manifest.
- */
-function renderManifestBody(manifest, codeReview, runUrl) {
-  const aggregate = (manifest && manifest.aggregate) || {}
-  const status = typeof aggregate.status === 'string' ? aggregate.status : 'failed'
-  const lines = []
-  lines.push(SENTINEL)
-  lines.push('')
-  lines.push(`## argus-reviewer ${MANIFEST_STATUS_EMOJI[status] ?? '⚠️'} ${cell(status).toUpperCase()}`)
-  lines.push('')
-  lines.push(
-    `**Summary:** ${aggregate.calls ?? 0} provider call(s) · ${formatUsd(aggregate.costUsd)} spend`,
-  )
-  lines.push('')
-  lines.push(...renderManifestLanes(manifest))
-  if (runUrl) lines.push(`[View run](${runUrl})`)
-  lines.push('')
-  pushCodeReviewDetails(lines, codeReview, undefined)
-  lines.push('---')
-  lines.push('')
-  lines.push('<sub>`argus-reviewer` — self-hosted, BYOK review. Lane detail lives in the run manifest.</sub>')
-  lines.push('')
-  return lines.join('\n')
+/** Header word: a failed run is never shown with a positive verdict. */
+function headline(ok, aggregateStatus, codeReview) {
+  const verdict =
+    codeReview && !codeReview.skipped && Object.hasOwn(VERDICT_LABEL, codeReview.verdict)
+      ? codeReview.verdict
+      : undefined
+  if (ok !== true) {
+    if (verdict === 'needs_changes') return `${STATUS_GLYPH.failed} ${VERDICT_LABEL.needs_changes}`
+    const s = aggregateStatus !== undefined && !['passed', 'skipped'].includes(aggregateStatus)
+      ? aggregateStatus
+      : 'failed'
+    return statusText(s)
+  }
+  if (verdict !== undefined) return `${STATUS_GLYPH[VERDICT_STATUS[verdict]]} ${VERDICT_LABEL[verdict]}`
+  return statusText(aggregateStatus ?? 'passed')
 }
 
-function renderBody(report, codeReview, runUrl, ok, inlinePlan, manifest) {
-  if (!report) return renderMissingKeyBody()
-
-  const lines = []
-  const budgetCap = report.config?.budgetUsd ?? 0
-  const healCount = report.tests.reduce((n, t) => n + (t.healEvents?.length ?? 0), 0)
-  const assertCount = report.tests.reduce((n, t) => n + (t.asserts?.length ?? 0), 0)
-  const assertFails = report.tests.reduce(
-    (n, t) => n + (t.asserts?.filter((a) => a.verdict === 'fail').length ?? 0),
-    0,
-  )
-  const trace = report.trace ?? {}
-
-  lines.push(SENTINEL)
-  lines.push('')
-  lines.push(`## argus-reviewer ${ok ? '✅ PASS' : '❌ FAIL'}`)
-  lines.push('')
-  pushReviewTop(lines, codeReview)
-  lines.push(
-    `**Summary:** ${report.totals.passed}/${report.totals.tests} passed · ` +
-      `${report.totals.visionCalls} vision calls · ` +
-      `${formatUsd(report.totals.visionCostUsd)} spend · ` +
-      `${report.totals.sandboxSeconds.toFixed(1)}s sandbox`,
-  )
-  lines.push(
-    `**Fingerprint cache:** ${report.totals.cacheHits ?? 0} hit(s) · ` +
-      `${report.totals.cacheMisses ?? 0} miss(es) · ${report.totals.cacheHeals ?? 0} heal(s)`,
-  )
-  lines.push('')
-  // The verify manifest is the lane contract — when present, the lane table
-  // rides above the run.json detail sections so all four lanes surface.
-  if (manifest !== undefined) lines.push(...renderManifestLanes(manifest))
-
-  lines.push('<details>')
-  lines.push('<summary>📝 Summary</summary>')
-  lines.push('')
-  lines.push('**What ran**')
-  for (const t of report.tests) {
-    lines.push(`- \`${path.basename(t.file)}\` — ${t.name}`)
-  }
-  lines.push('')
-  lines.push(
-    `**Risk:** ${ok ? 'Low — UI regression tests and code review passed; no heals or failures.' : 'High — investigate failures before merge.'}`,
-  )
-  lines.push('')
-  if (Object.keys(trace).length > 0) {
-    lines.push('**Trace**')
-    for (const [k, v] of Object.entries(trace)) {
-      lines.push(`- ${k}: \`${v}\``)
-    }
-    lines.push('')
-  }
-  lines.push('</details>')
-  lines.push('')
-
-  lines.push('<details>')
-  lines.push(`<summary>📒 Tests (${report.totals.tests})</summary>`)
-  lines.push('')
-  lines.push('| Test | Result | Calls | Cost | Heals | Asserts |')
-  lines.push('| --- | --- | ---: | ---: | ---: | ---: |')
-  for (const t of report.tests) {
-    const result = t.ok ? '✅ pass' : '❌ fail'
-    lines.push(
-      `| ${t.name} | ${result} | ${t.visionCalls} | ${formatUsd(t.visionCostUsd)} | ${t.healEvents?.length ?? 0} | ${t.asserts?.length ?? 0} |`,
-    )
-  }
-  lines.push('')
-  lines.push('</details>')
-  lines.push('')
-
-  lines.push('<details>')
-  lines.push('<summary>💰 Cost ledger</summary>')
-  lines.push('')
-  lines.push('| Line item | Value |')
-  lines.push('| --- | ---: |')
-  lines.push(`| Vision calls | ${report.totals.visionCalls} |`)
-  const perCall =
-    report.totals.visionCalls > 0
-      ? formatUsd(report.totals.visionCostUsd / report.totals.visionCalls)
-      : '$0.00'
-  lines.push(`| Per-call cost (avg) | ${perCall} |`)
-  for (const model of Object.keys(report.totals.callsByModel ?? {}).sort()) {
-    lines.push(`| Calls (${model}) | ${report.totals.callsByModel[model]} |`)
-    lines.push(`| Spend (${model}) | ${formatUsd(report.totals.costByModel?.[model] ?? 0)} |`)
-  }
-  lines.push(`| Total vision spend | ${formatUsd(report.totals.visionCostUsd)} |`)
-  lines.push(`| Sandbox seconds | ${report.totals.sandboxSeconds.toFixed(1)}s |`)
-  if (budgetCap > 0) {
-    lines.push(`| Budget cap | ${formatUsd(budgetCap)} |`)
-    lines.push(`| Budget exceeded | ${report.totals.budgetExceeded ? '⚠️ yes' : '✅ no'} |`)
-  }
-  lines.push('')
-  lines.push('</details>')
-  lines.push('')
-
-  lines.push('<details>')
-  lines.push('<summary>🔧 Heal events</summary>')
-  lines.push('')
-  const heals = report.tests.flatMap((t) => t.healEvents ?? [])
-  if (heals.length === 0) {
-    lines.push('No heals this run.')
-  } else {
-    for (const h of heals) {
-      lines.push(`- \`${h.instruction}\` healed with ${h.model || 'unknown model'}`)
+/** Bold lead of the verdict line: the one fact a reader needs first. */
+function verdictLead(rows, codeReview) {
+  const findings = findingsOf(codeReview)
+  const reviewed = codeReview && !codeReview.skipped
+  if (reviewed) {
+    const reproduced = reproducedCount(codeReview)
+    if (reproduced > 0) {
+      const files = new Set(
+        findings.filter((f) => f.evidence?.status === 'reproduced').map((f) => f.file),
+      )
+      const where = files.size === 1 ? ` in ${code([...files][0])}` : ''
+      return `**${plural(reproduced, 'finding')} reproduced**${where}`
     }
   }
-  lines.push('')
-  lines.push('</details>')
-  lines.push('')
-
-  lines.push('<details>')
-  lines.push('<summary>✅ Assertions</summary>')
-  lines.push('')
-  let any = false
-  for (const t of report.tests) {
-    if (!t.asserts || t.asserts.length === 0) continue
-    any = true
-    lines.push(`**${t.name}**`)
-    for (const a of t.asserts) {
-      const icon = a.verdict === 'pass' ? '✅' : a.verdict === 'fail' ? '❌' : '⚪'
-      lines.push(`- ${icon} *${a.question}* — ${a.reasoning}`)
-    }
-    lines.push('')
+  const failing = rows.filter((r) => r.lane !== 'review' && !['passed', 'skipped'].includes(r.status))
+  if (failing.length > 0) {
+    return `**${failing.map((r) => `${cell(r.lane)} ${r.status}`).join(', ')}**`
   }
-  if (!any) {
-    lines.push('No assertions recorded.')
-    lines.push('')
+  if (reviewed && findings.length > 0) return `**${plural(findings.length, 'finding')}, none reproduced**`
+  const review = rows.find((r) => r.lane === 'review')
+  if (review !== undefined && !['passed', 'skipped'].includes(review.status)) {
+    return `**review ${review.status}**`
   }
-  lines.push('</details>')
-  lines.push('')
-
-  // U4a — Exploratory lane: observed runtime anomalies from the browser
-  // session (console errors, page errors, failed same-origin requests).
-  // Evidence only — captures never change the verdict. Rendered only when
-  // the lane was enabled so the section never becomes ambient noise.
-  if (report.explore && report.explore.enabled === true) {
-    lines.push('<details>')
-    lines.push('<summary>🔭 Exploratory</summary>')
-    lines.push('')
-    if (typeof report.explore.skipped === 'string') {
-      lines.push(`- ⚪ explore skipped — ${cell(report.explore.skipped)}`)
-      lines.push('')
-    } else {
-      // U4b act pass summary — the bounded free-explore run's step count,
-      // pages visited, and stop reason.
-      if (typeof report.explore.steps === 'number') {
-        const pages = typeof report.explore.visited === 'number' ? report.explore.visited : 0
-        const spend =
-          typeof report.explore.visionCostUsd === 'number'
-            ? ` · $${report.explore.visionCostUsd.toFixed(6)}`
-            : ''
-        lines.push(
-          `explored **${report.explore.steps}** step(s) across **${pages}** page(s) — ` +
-            `stopped: ${cell(report.explore.stopReason ?? 'unknown')}${spend}`,
-        )
-        lines.push('')
-      }
-      // The same signature can appear on multiple test reports from one
-      // file's shared browser session — collapse before rendering.
-      const seen = new Map()
-      for (const c of [
-        ...(report.explore.captures ?? []),
-        ...report.tests.flatMap((t) => t.captures ?? []),
-      ]) {
-        const key = `${c.kind}|${c.text}|${c.url ?? ''}`
-        const existing = seen.get(key)
-        if (existing) existing.count += c.count
-        else seen.set(key, { ...c })
-      }
-      const LABEL = {
-        'console-error': 'console error',
-        pageerror: 'page error',
-        'request-failed': 'failed request',
-      }
-      const caps = [...seen.values()]
-      if (caps.length === 0) {
-        lines.push('No page errors, console errors, or failed same-origin requests captured.')
-      } else {
-        for (const c of caps.slice(0, 10)) {
-          const times = c.count > 1 ? ` ×${c.count}` : ''
-          const target = c.url !== undefined ? ` — \`${cell(c.url)}\`` : ''
-          lines.push(`- 🟡 observed · ${LABEL[c.kind] ?? cell(c.kind)}${times}: \`${cell(c.text)}\`${target}`)
-        }
-        if (caps.length > 10) lines.push(`- … +${caps.length - 10} more distinct capture(s)`)
-        lines.push('')
-        lines.push('*Observed findings are evidence only — they do not change the verdict.*')
-      }
-      lines.push('')
-    }
-    lines.push('</details>')
-    lines.push('')
-  }
-
-  lines.push('<details>')
-  lines.push('<summary>📂 Evidence</summary>')
-  lines.push('')
-  if (report.artifacts && report.artifacts.videos.length > 0) {
-    for (const v of report.artifacts.videos) lines.push(`- video: \`${v}\``)
-  }
-  if (runUrl) lines.push(`- [workflow run / artifacts](${runUrl})`)
-  if ((!report.artifacts || report.artifacts.videos.length === 0) && !runUrl) {
-    lines.push('No artifact links available.')
-  }
-  lines.push('')
-  lines.push('</details>')
-  lines.push('')
-
-  lines.push('<details>')
-  lines.push('<summary>🚥 Pre-merge checks</summary>')
-  lines.push('')
-  lines.push('| Check | Status | Explanation |')
-  lines.push('| --- | --- | --- |')
-  lines.push(
-    `| Tests | ${report.ok ? '✅ Passed' : '❌ Failed'} | ${report.totals.passed}/${report.totals.tests} tests passed |`,
-  )
-  lines.push(
-    `| Budget | ${report.totals.budgetExceeded ? '⚠️ Warning' : '✅ Passed'} | ${formatUsd(report.totals.visionCostUsd)} spent${budgetCap > 0 ? ` of ${formatUsd(budgetCap)}` : ''} |`,
-  )
-  lines.push(
-    `| Heal events | ${healCount === 0 ? '✅ Passed' : '⚠️ Warning'} | ${healCount} heal event${healCount === 1 ? '' : 's'} |`,
-  )
-  lines.push(
-    `| Assertions | ${assertFails === 0 ? '✅ Passed' : '❌ Failed'} | ${assertFails === 0 ? assertCount : `${assertFails} failed`} assertion${assertCount === 1 ? '' : 's'} |`,
-  )
-  lines.push(`| OpenRouter key | ✅ Passed | \`OPENROUTER_API_KEY\` configured |`)
-  if (codeReview && !codeReview.skipped) {
-    const codeStatus = codeReview.ok ? '✅ Passed' : '❌ Failed'
-    lines.push(
-      `| Code review | ${codeStatus} | ${codeReview.findings.length} findings (${codeReview.model}) |`,
-    )
-  } else {
-    lines.push(`| Code review | ⚪ Skipped | ${codeReview?.summary ?? 'no report'} |`)
-  }
-  lines.push('')
-  lines.push('</details>')
-  lines.push('')
-
-  pushCodeReviewDetails(lines, codeReview, inlinePlan)
-
-  lines.push('<details>')
-  lines.push('<summary>✨ Actions</summary>')
-  lines.push('')
-  lines.push('- [ ] Re-run argus-reviewer')
-  lines.push('- [ ] Open a heal PR')
-  lines.push('- [ ] Record a new flow')
-  lines.push('')
-  lines.push('</details>')
-  lines.push('')
-  lines.push('---')
-  lines.push('')
-  lines.push('<sub>`argus-reviewer` — self-hosted, BYOK OpenRouter UI regression.</sub>')
-  lines.push('')
-  return lines.join('\n')
+  if (reviewed) return '**No findings**'
+  return rows.some((r) => r.status !== 'skipped') ? '**All selected lanes passed**' : '**No lane ran**'
 }
 
-// ---------------------------------------------------------------------------
-// R6 — scannable top block under the sentinel: verdict icon + one-line
-// summary + honest counts, so the first screen answers "verdict, what
-// kinds, what needs me" before the <details> fold. ⛔ counts
-// probe-reproduced findings only — a high p alone is never "proven" —
-// while ◎ carries the confidence-model count; the two overlap when a
-// finding is both (KTD2). The serialized blocker counts win when present
-// (same numbers reviewBody prints); the recount is the fallback for
-// reports predating them — P_FALLBACK_GATE must match
-// P_TRUE_POSITIVE_THRESHOLD in src/cli.ts.
+function verdictLine({ rows, codeReview, headSha, binding, costUsd, durationMs }) {
+  const bits = [verdictLead(rows, codeReview)]
+  if (typeof headSha === 'string' && headSha !== '') bits.push(`head ${code(headSha.slice(0, 7))}`)
+  if (binding && binding.status === 'mismatch') bits.push('head binding mismatch')
+  bits.push(formatUsd(costUsd))
+  const duration = formatDuration(durationMs)
+  if (duration !== undefined) bits.push(duration)
+  return bits.join(' · ')
+}
 
-const REVIEW_VERDICT_ICON = { pass: '✅', approve: '👍', needs_changes: '🔴' }
-const P_FALLBACK_GATE = 0.7
+const NO_REVIEW_REPORT = 'No code review report was found; check the action logs before merging.'
+const NO_REVIEW_ATTACHED = 'No code review report is attached to this run.'
 
-function pushReviewTop(lines, codeReview) {
-  if (!codeReview || codeReview.skipped) return
-  const findings = Array.isArray(codeReview.findings) ? codeReview.findings : []
-  const icon = REVIEW_VERDICT_ICON[codeReview.verdict] ?? '❔'
-  lines.push(
-    `**Code review:** ${icon} **${cell(codeReview.verdict ?? 'unknown')}** — ${cell(codeReview.summary)}`,
-  )
-  if (findings.length === 0) {
-    lines.push('no findings')
-    lines.push('')
-    return
-  }
+function findingsLine(codeReview, missing = NO_REVIEW_REPORT) {
+  if (!codeReview) return missing
+  if (codeReview.skipped) return `Code review skipped: ${cell(codeReview.summary, 300)}`
+  const findings = findingsOf(codeReview)
   const sev = { bug: 0, risk: 0, nit: 0, q: 0 }
   for (const f of findings) if (Object.hasOwn(sev, f.severity)) sev[f.severity] += 1
-  const tail = []
-  // 🔧 counts serialized comments carrying a committable block — what
-  // actually lands on the PR — not every finding the model offered a
-  // patch for (overflowed/ineligible suggestions aren't committable).
-  const suggestions = Array.isArray(codeReview.reviewComments)
-    ? codeReview.reviewComments.filter((c) => extractSuggestion(c.body ?? '') !== '').length
-    : findings.filter((f) => typeof f.suggestion === 'string' && f.suggestion !== '').length
-  if (suggestions > 0) tail.push(`🔧 ${suggestions} suggestion${suggestions === 1 ? '' : 's'}`)
-  const reproduced =
-    typeof codeReview.provenBlockers === 'number'
-      ? codeReview.provenBlockers
-      : findings.filter((f) => f.evidence?.status === 'reproduced').length
-  if (reproduced > 0) tail.push(`⛔ ${reproduced} reproduced`)
+  const parts = [
+    `${SEVERITY_GLYPH.bug} ${plural(sev.bug, 'bug')}`,
+    `${SEVERITY_GLYPH.risk} ${plural(sev.risk, 'risk')}`,
+    `${SEVERITY_GLYPH.nit} ${plural(sev.nit, 'nit')}`,
+  ]
+  if (sev.q > 0) parts.push(`${SEVERITY_GLYPH.q} ${plural(sev.q, 'question')}`)
+  // p alone is never proof: high-confidence is counted apart from reproduced
+  // (KTD2). Serialized counts win; the recount serves older reports and
+  // P_FALLBACK_GATE must match P_TRUE_POSITIVE_THRESHOLD in src/cli.ts.
   const confident =
     typeof codeReview.highConfidenceBlockers === 'number'
       ? codeReview.highConfidenceBlockers
       : findings.filter((f) => typeof f.p === 'number' && f.p >= P_FALLBACK_GATE).length
-  if (confident > 0) tail.push(`◎ ${confident} high-confidence`)
-  lines.push(
-    `🐛 ${sev.bug} · ⚠️ ${sev.risk} · 💡 ${sev.nit} · ❓ ${sev.q}` +
-      (tail.length > 0 ? ` — ${tail.join(' · ')}` : ''),
-  )
+  if (confident > 0) parts.push(`${confident} high-confidence`)
+  // Counts serialized comments carrying a committable block (what lands on
+  // the PR), not every finding the model offered a patch for.
+  const suggestions = Array.isArray(codeReview.reviewComments)
+    ? codeReview.reviewComments.filter((c) => extractSuggestion(c.body ?? '') !== '').length
+    : findings.filter((f) => typeof f.suggestion === 'string' && f.suggestion !== '').length
+  if (suggestions > 0) parts.push(`${plural(suggestions, 'suggestion')} ready to commit`)
+  return parts.join(' · ')
+}
+
+const P_FALLBACK_GATE = 0.7
+
+function fold(lines, title, body) {
+  if (body.length === 0) return
+  lines.push('<details>')
+  lines.push(`<summary>${title}</summary>`)
+  lines.push('')
+  lines.push(...body)
+  if (body[body.length - 1] !== '') lines.push('')
+  lines.push('</details>')
   lines.push('')
 }
 
-// The 🧠 Code review details block — shared by the full body and the
-// review-only body (run lane disabled).
-function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
-  if (!codeReview || codeReview.skipped) return
-  lines.push('<details>')
-  lines.push('<summary>🧠 Code review</summary>')
+function footer(meta, runUrl) {
+  const bits = [`Argus ${meta.version ?? packageVersion()}`]
+  const url = runUrl ?? meta.runUrl
+  if (url) bits.push(`[workflow run and evidence](${url})`)
+  bits.push('self-hosted, BYOK')
+  return `<sub>${bits.join(' · ')}</sub>`
+}
+
+function packageVersion() {
+  return require('../package.json').version
+}
+
+/** The shared layout. `folds` is a list of [title, bodyLines]. */
+function layout({ status, verdict, rows, summary, folds, meta, runUrl }) {
+  const lines = [SENTINEL, `### Argus: ${status}`, '', verdict, '', ...laneTable(rows), '', summary, '']
+  for (const [title, body] of folds) fold(lines, title, body)
+  lines.push(footer(meta, runUrl))
   lines.push('')
-  lines.push(
-    `**Verdict:** ${codeReview.verdict} · ${codeReview.model} · ${codeReview.tokens}tok ${formatUsd(codeReview.visionCostUsd)}`,
-  )
-  if (codeReview.headBinding) {
-    lines.push(
-      `**Head binding:** ${cell(codeReview.headBinding.status)} · ${cell(codeReview.headBinding.detail)}`,
-    )
+  return lines.join('\n')
+}
+
+// --- folds ---------------------------------------------------------------------
+
+const MAX_FINDING_ROWS = 25
+
+function severityText(s) {
+  return Object.hasOwn(SEVERITY_GLYPH, s) ? `${SEVERITY_GLYPH[s]} ${SEVERITY_LABEL[s]}` : cell(s ?? 'unknown')
+}
+
+function findingsFold(codeReview, inlinePlan) {
+  if (!codeReview || codeReview.skipped) return []
+  const body = []
+  const findings = findingsOf(codeReview)
+  if (codeReview.summary) {
+    body.push(cell(codeReview.summary, 1000))
+    body.push('')
   }
-  // U7 triage record: confidence-model annotate/route signals, never the gate.
-  if (codeReview.triage) {
-    const t = codeReview.triage
-    if (t.unadjudicated === true) {
-      lines.push(` · 🧭 risk triage unavailable — confidence model did not respond`)
-    } else {
-      lines.push(
-        ` · 🧭 triage: risk ${t.risk ?? '?'}/5` +
-          `${typeof t.needsDeepReview === 'number' ? ` · deep-review ${t.needsDeepReview.toFixed(2)}` : ''}` +
-          `${t.topRiskArea !== undefined ? ` · top area \`${cell(t.topRiskArea)}\`` : ''}` +
-          ` (${cell(t.mode)})`,
+  if (findings.length > 0) {
+    body.push('| Severity | Proof | p | Category | Location | Finding |')
+    body.push('|---|---|---|---|---|---|')
+    // Findings/evidence strings are model- and probe-emitted: sanitized per
+    // cell, and the section is bounded so an oversized report can't push the
+    // body past GitHub's 65536-char comment limit.
+    for (const f of findings.slice(0, MAX_FINDING_ROWS)) {
+      const level = ladderLevel(f.evidence?.status)
+      const p = typeof f.p === 'number' ? f.p.toFixed(2) : ''
+      const where = typeof f.line === 'number' ? `${f.file}:${f.line}` : f.file
+      const evidence = f.evidence?.detail ? `<br>evidence: ${cell(f.evidence.detail)}` : ''
+      body.push(
+        `| ${severityText(f.severity)} | ${proofText(level)} | ${p} | ${cell(f.category ?? '')} | ` +
+          `${code(where)} | ${cell(f.message)}${evidence} |`,
       )
     }
-  }
-  if (Array.isArray(codeReview.probes) && codeReview.probes.length > 0) {
-    const reproduced = codeReview.probes.filter((p) => p.outcome === 'reproduced').length
-    lines.push(
-      ` · 🧪 ${codeReview.probes.length} probe${codeReview.probes.length === 1 ? '' : 's'} run, ${reproduced} reproduced`,
-    )
-  }
-  if (typeof codeReview.probeLaneSkipped === 'string') {
-    lines.push(` · 🧪 probe lane skipped — ${cell(codeReview.probeLaneSkipped)}`)
-  }
-  // E1.U3 — reproduced probes render copy-pasteable source + the
-  // machine-readable payload `@argus persist` parses back. Content is
-  // rendered bounded (2 probes, 8KB each) and fenced — ``` runs inside the
-  // source are flattened so the block can't break out of its fence.
-  const persistable = (codeReview.probes ?? []).filter(
-    (p) => p.outcome === 'reproduced' && typeof p.path === 'string' && typeof p.content === 'string',
-  )
-  if (persistable.length > 0) {
-    lines.push('')
-    lines.push(
-      `*Reproduced probe(s) — comment \`@argus persist\` to open a regression-test PR, or copy into your suite:*`,
-    )
-    for (const p of persistable.slice(0, 2)) {
-      const rendered = p.content.replace(/`{3,}/g, '``').slice(0, 8 * 1024)
-      lines.push('<details>')
-      lines.push(`<summary>🧪 \`${cell(p.path)}\`</summary>`)
-      lines.push('')
-      lines.push('```ts')
-      lines.push(rendered)
-      lines.push('```')
-      lines.push('</details>')
+    if (findings.length > MAX_FINDING_ROWS) {
+      body.push(`| | | | | | ${findings.length - MAX_FINDING_ROWS} more findings in \`code-review.json\` |`)
     }
-    if (persistable.length > 2) {
-      lines.push(`*…and ${persistable.length - 2} more in \`code-review.json\`.*`)
-    }
+    body.push('')
   }
-  if (typeof codeReview.persistPayload === 'string' && codeReview.persistPayload.length < 32768) {
-    lines.push(codeReview.persistPayload)
-  }
-  lines.push('')
-  lines.push(codeReview.summary)
-  lines.push('')
-  if (codeReview.findings.length > 0) {
-    const evidenceIcon = {
-      exercised: '✅',
-      corroborated: '🔴',
-      not_exercised: '⚪',
-      inconclusive: '❔',
-      reproduced: '🧪',
-    }
-    lines.push('| File | Severity | p | Category | Evidence | Finding |')
-    lines.push('| --- | --- | --- | --- | --- | --- |')
-    // Findings/evidence strings are model- and probe-emitted — sanitize
-    // for the markdown table and bound the section so an oversized report
-    // can't push the body past GitHub's 65536-char comment limit.
-    const MAX_FINDING_ROWS = 25
-    for (const f of codeReview.findings.slice(0, MAX_FINDING_ROWS)) {
-      const ev = f.evidence
-        ? `${evidenceIcon[f.evidence.status] ?? '❔'} ${cell(f.evidence.detail)}`
-        : '—'
-      // U8: confidence-model P(true positive); unadjudicated findings render '—'.
-      const p = typeof f.p === 'number' ? f.p.toFixed(2) : '—'
-      lines.push(
-        `| \`${cell(f.file)}\` | ${cell(f.severity)} | ${p} | ${cell(f.category ?? '—')} | ${ev} | ${cell(f.message)} |`,
-      )
-    }
-    if (codeReview.findings.length > MAX_FINDING_ROWS) {
-      lines.push(
-        `| … | — | — | — | — | ${codeReview.findings.length - MAX_FINDING_ROWS} more findings in \`code-review.json\` |`,
-      )
-    }
-    lines.push('')
-    // Secrets-lane audit line — adjudicated/suppressed counts, never literals.
-    if (codeReview.secretsScan) {
-      if (typeof codeReview.secretsScan.skipped === 'string') {
-        lines.push(`*🔐 secrets scan skipped — ${cell(codeReview.secretsScan.skipped)}*`)
-      } else if (Array.isArray(codeReview.secretsScan.records)) {
-        const suppressed = codeReview.secretsScan.records.filter((r) => r.suppressed).length
-        const unadj = codeReview.secretsScan.records.filter((r) => !r.adjudicated).length
-        lines.push(
-          `*🔐 secrets scan: ${codeReview.secretsScan.records.length} candidate(s)` +
-            `${suppressed > 0 ? `, ${suppressed} adjudicated-suppressed` : ''}` +
-            `${unadj > 0 ? `, ${unadj} unadjudicated` : ''}` +
-            `${codeReview.secretsScan.overflow > 0 ? `, +${codeReview.secretsScan.overflow} over cap` : ''}.*`,
-        )
-      }
-      lines.push('')
-    }
-  }
-  // Serialized comments that didn't post — the maxComments cap
-  // (serialized overflow) plus post-time drops (off-diff anchors,
-  // retry-ladder discards). Outside the findings guard: drops still
-  // disclose even when the findings table rendered nothing.
+  // Serialized comments that didn't post: the maxComments cap plus post-time
+  // drops (off-diff anchors, retry-ladder discards).
   if (inlinePlan !== undefined && inlinePlan.dropped > 0) {
     const overflow = inlinePlan.overflow ?? 0
     const reasons = []
@@ -649,92 +431,379 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
     if (inlinePlan.dropped - overflow > 0) {
       reasons.push(`${inlinePlan.dropped - overflow} outside the PR diff`)
     }
-    lines.push(`*+${inlinePlan.dropped} inline comment(s) not posted — ${reasons.join(', ')}.*`)
-    lines.push('')
+    body.push(`*${plural(inlinePlan.dropped, 'inline comment')} not posted: ${reasons.join(', ')}.*`)
+    body.push('')
   }
-  // U8 adjudication audit — outside the findings guard so suppressed-
-  // only reviews still show what the confidence model removed. p values live on the
-  // findings table and in code-review.json records.
-  if (codeReview.findingAdjudication && Array.isArray(codeReview.findingAdjudication.records)) {
-    const fa = codeReview.findingAdjudication
-    if (fa.unadjudicated === true) {
-      lines.push('*🧮 finding adjudication unavailable — confidence model did not respond, nothing suppressed.*')
-    } else {
-      const suppressed = fa.records.filter((r) => r.suppressed).length
-      const unadj = fa.records.filter((r) => !r.adjudicated).length
-      lines.push(
-        `*🧮 adjudication: ${fa.records.length} finding(s) scored` +
-          `${suppressed > 0 ? `, ${suppressed} suppressed (nit/q)` : ''}` +
-          `${unadj > 0 ? `, ${unadj} unadjudicated` : ''}` +
-          `${fa.overflow > 0 ? `, +${fa.overflow} over cap` : ''}.*`,
-      )
+  // E1.U3: reproduced probes render copy-pasteable source plus the payload
+  // `@argus persist` parses back. Bounded (2 probes, 8KB each) and fenced;
+  // ``` runs inside the source are flattened so it can't break the fence.
+  const persistable = (codeReview.probes ?? []).filter(
+    (p) => p.outcome === 'reproduced' && typeof p.path === 'string' && typeof p.content === 'string',
+  )
+  if (persistable.length > 0) {
+    body.push(
+      'Reproduced probes: comment `@argus persist` to open a regression-test PR, or copy them into your suite.',
+    )
+    body.push('')
+    for (const p of persistable.slice(0, 2)) {
+      const rendered = p.content.replace(/`{3,}/g, '``').slice(0, 8 * 1024)
+      body.push('<details>')
+      body.push(`<summary>Probe ${code(p.path)}</summary>`)
+      body.push('')
+      body.push('```ts')
+      body.push(rendered)
+      body.push('```')
+      body.push('</details>')
+      body.push('')
     }
-    lines.push('')
+    if (persistable.length > 2) {
+      body.push(`*${persistable.length - 2} more in \`code-review.json\`.*`)
+      body.push('')
+    }
   }
-  lines.push('</details>')
-  lines.push('')
+  if (typeof codeReview.persistPayload === 'string' && codeReview.persistPayload.length < 32768) {
+    body.push(codeReview.persistPayload)
+    body.push('')
+  }
+  return body
 }
 
-// Sticky body for `run: 'false'` consumers — no run.json exists by
-// design, so the body and conclusion reflect code-review alone.
-function renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan, manifest) {
-  const lines = []
-  lines.push(SENTINEL)
-  lines.push('')
-  lines.push(`## argus-reviewer ${ok ? '✅ PASS' : '❌ FAIL'}`)
-  lines.push('')
-  pushReviewTop(lines, codeReview)
-  if (manifest !== undefined) lines.push(...renderManifestLanes(manifest))
-  if (!codeReview) {
-    lines.push(
-      '**Summary:** code-review only (run lane disabled) — no `code-review.json` found. The review step crashed or produced no report; the commit status fails closed — check the action logs before merging.',
-    )
-  } else if (codeReview.skipped) {
-    lines.push(
-      `**Summary:** code-review only (run lane disabled) — review skipped: ${cell(codeReview.summary)}`,
-    )
-  } else {
-    lines.push(
-      `**Summary:** code review only (run lane disabled) · verdict **${codeReview.verdict}** · ` +
-        `${codeReview.findings.length} finding(s) · ${codeReview.model} · ` +
-        `${codeReview.tokens}tok ${formatUsd(codeReview.visionCostUsd)}`,
+function assertionStatus(verdict) {
+  return verdict === 'pass' ? 'passed' : verdict === 'fail' ? 'failed' : 'skipped'
+}
+
+function testsFold(report) {
+  const tests = report.tests ?? []
+  if (tests.length === 0) return []
+  const body = ['| Test | Result | Calls | Spend | Heals | Asserts |', '|---|---|--:|--:|--:|--:|']
+  for (const t of tests) {
+    body.push(
+      `| ${cell(t.name)} | ${statusText(t.ok ? 'passed' : 'failed')} | ${t.visionCalls ?? 0} | ` +
+        `${formatUsd(t.visionCostUsd)} | ${t.healEvents?.length ?? 0} | ${t.asserts?.length ?? 0} |`,
     )
   }
-  lines.push('')
-  lines.push('<details>')
-  lines.push('<summary>🚥 Pre-merge checks</summary>')
-  lines.push('')
-  lines.push('| Check | Status | Explanation |')
-  lines.push('| --- | --- | --- |')
-  lines.push('| OpenRouter key | ✅ Passed | `OPENROUTER_API_KEY` configured |')
+  body.push('')
+  for (const t of tests) {
+    if (!t.asserts || t.asserts.length === 0) continue
+    body.push(`**${cell(t.name)}**`)
+    for (const a of t.asserts) {
+      body.push(`- ${statusText(assertionStatus(a.verdict))} · *${cell(a.question)}*: ${cell(a.reasoning, 500)}`)
+    }
+    body.push('')
+  }
+  const videos = report.artifacts?.videos ?? []
+  for (const v of videos) body.push(`- video: ${code(v)}`)
+  if (videos.length > 0) body.push('')
+  return body
+}
+
+function healsFold(heals) {
+  return heals.map((h) => `- ${code(h.instruction)} healed with ${cell(h.model || 'unknown model')}`)
+}
+
+const CAPTURE_LABEL = {
+  'console-error': 'console error',
+  pageerror: 'page error',
+  'request-failed': 'failed request',
+}
+
+// U4a exploratory lane: observed runtime anomalies from the browser session.
+// Evidence only; captures never change the verdict.
+function exploreFold(report) {
+  const explore = report.explore
+  if (!explore || explore.enabled !== true) return []
+  const body = []
+  if (typeof explore.skipped === 'string') {
+    body.push(`Explore skipped: ${cell(explore.skipped)}`)
+    return body
+  }
+  if (typeof explore.steps === 'number') {
+    const pages = typeof explore.visited === 'number' ? explore.visited : 0
+    const spend = typeof explore.visionCostUsd === 'number' ? ` · ${formatUsd(explore.visionCostUsd)}` : ''
+    body.push(
+      `explored **${explore.steps}** step(s) across **${pages}** page(s), ` +
+        `stopped: ${cell(explore.stopReason ?? 'unknown')}${spend}`,
+    )
+    body.push('')
+  }
+  // The same signature can appear on several test reports from one file's
+  // shared browser session; collapse before rendering.
+  const seen = new Map()
+  for (const c of [...(explore.captures ?? []), ...(report.tests ?? []).flatMap((t) => t.captures ?? [])]) {
+    const key = `${c.kind}|${c.text}|${c.url ?? ''}`
+    const existing = seen.get(key)
+    if (existing) existing.count += c.count
+    else seen.set(key, { ...c })
+  }
+  const caps = [...seen.values()]
+  if (caps.length === 0) {
+    body.push('No page errors, console errors, or failed same-origin requests captured.')
+    return body
+  }
+  for (const c of caps.slice(0, 10)) {
+    const times = c.count > 1 ? ` ×${c.count}` : ''
+    const target = c.url !== undefined ? ` at ${code(c.url)}` : ''
+    body.push(`- observed · ${CAPTURE_LABEL[c.kind] ?? cell(c.kind)}${times}: ${code(c.text)}${target}`)
+  }
+  if (caps.length > 10) body.push(`- ${caps.length - 10} more distinct captures`)
+  body.push('')
+  body.push('*Observed findings are evidence only; they do not change the verdict.*')
+  return body
+}
+
+function spendFold(manifest, report, codeReview) {
+  const body = []
+  if (manifest !== undefined) {
+    body.push('| Lane | Model | Calls | Tokens | Spend |', '|---|---|--:|--:|--:|')
+    for (const lane of manifestLanes(manifest)) {
+      if (lane.selected !== true) continue
+      const usage = lane.usage || {}
+      const spend = usage.metered === true ? formatUsd(usage.costUsd) : 'unmetered'
+      body.push(
+        `| ${cell(lane.lane)} | ${cell(lane.model ?? usage.model ?? '')} | ${usage.calls ?? 0} | ` +
+          `${usage.tokens ?? 0} | ${spend} |`,
+      )
+    }
+    const agg = manifest.aggregate || {}
+    body.push(`| Total |  | ${agg.calls ?? 0} | ${agg.tokens ?? 0} | ${formatUsd(agg.costUsd)} |`)
+    body.push('')
+    const over = manifestLanes(manifest).filter((l) => l.selected === true && l.budget?.exceeded === true)
+    if (over.length > 0) {
+      body.push(`**Budget exceeded:** ${over.map((l) => cell(l.lane)).join(', ')}`)
+      body.push('')
+    }
+  }
+  if (report !== undefined) {
+    const t = report.totals ?? {}
+    const budgetCap = report.config?.budgetUsd ?? 0
+    body.push('| Line item | Value |', '|---|--:|')
+    body.push(`| Vision calls | ${t.visionCalls ?? 0} |`)
+    const perCall = t.visionCalls > 0 ? formatUsd(t.visionCostUsd / t.visionCalls) : formatUsd(0)
+    body.push(`| Per-call cost (avg) | ${perCall} |`)
+    for (const model of Object.keys(t.callsByModel ?? {}).sort()) {
+      body.push(`| Calls (${cell(model)}) | ${t.callsByModel[model]} |`)
+      body.push(`| Spend (${cell(model)}) | ${formatUsd(t.costByModel?.[model] ?? 0)} |`)
+    }
+    body.push(`| Total vision spend | ${formatUsd(t.visionCostUsd)} |`)
+    body.push(`| Sandbox seconds | ${(t.sandboxSeconds ?? 0).toFixed(1)}s |`)
+    if (budgetCap > 0) {
+      body.push(`| Budget cap | ${formatUsd(budgetCap)} |`)
+      body.push(`| Budget exceeded | ${t.budgetExceeded ? 'yes' : 'no'} |`)
+    }
+    body.push('')
+  }
+  // Cache economics: the run report's totals when present, else the manifest's flow lane.
+  const cache = report !== undefined
+    ? { hits: report.totals?.cacheHits, misses: report.totals?.cacheMisses, heals: report.totals?.cacheHeals }
+    : manifest?.lanes?.flow?.cache
+  if (cache && typeof cache === 'object') {
+    body.push(
+      `**Fingerprint cache:** ${cache.hits ?? 0} hit(s) · ${cache.misses ?? 0} miss(es) · ${cache.heals ?? 0} heal(s)`,
+    )
+    body.push('')
+  }
   if (codeReview && !codeReview.skipped) {
-    const codeStatus = codeReview.ok ? '✅ Passed' : '❌ Failed'
-    lines.push(
-      `| Code review | ${codeStatus} | ${codeReview.findings.length} findings (${codeReview.model}) |`,
+    body.push(
+      `**Code review:** ${cell(codeReview.model ?? 'unknown model')} · ${codeReview.tokens ?? 0} tokens · ` +
+        `${formatUsd(codeReview.visionCostUsd)}`,
     )
-  } else {
-    lines.push(
-      `| Code review | ${codeReview ? '⚪ Skipped' : '❌ Failed'} | ${cell(codeReview?.summary ?? 'no report')} |`,
-    )
+    body.push('')
   }
-  lines.push('')
-  lines.push('</details>')
-  lines.push('')
-  pushCodeReviewDetails(lines, codeReview, inlinePlan)
-  if (runUrl) lines.push(`[View run](${runUrl})`)
-  lines.push('')
-  lines.push('<details>')
-  lines.push('<summary>✨ Actions</summary>')
-  lines.push('')
-  lines.push('- [ ] Re-run argus-reviewer')
-  lines.push('')
-  lines.push('</details>')
-  lines.push('')
-  lines.push('---')
-  lines.push('')
-  lines.push('<sub>`argus-reviewer` — self-hosted, BYOK OpenRouter UI regression.</sub>')
-  lines.push('')
-  return lines.join('\n')
+  return body
+}
+
+function diagnosticsFold(manifest, report, codeReview) {
+  const items = []
+  const binding = manifest?.lanes?.review?.headBinding ?? (codeReview && !codeReview.skipped ? codeReview.headBinding : undefined)
+  if (binding) items.push(`Head binding: ${cell(binding.status)}, ${cell(binding.detail)}`)
+  if (codeReview && !codeReview.skipped) {
+    const t = codeReview.triage
+    if (t) {
+      if (t.unadjudicated === true) {
+        items.push('Risk triage unavailable: the confidence model did not respond.')
+      } else {
+        items.push(
+          `Risk triage: risk ${cell(t.risk ?? '?')}/5` +
+            `${typeof t.needsDeepReview === 'number' ? ` · deep-review ${t.needsDeepReview.toFixed(2)}` : ''}` +
+            `${t.topRiskArea !== undefined ? ` · top area ${code(t.topRiskArea)}` : ''}` +
+            ` (${cell(t.mode)})`,
+        )
+      }
+    }
+    if (Array.isArray(codeReview.probes) && codeReview.probes.length > 0) {
+      const reproduced = codeReview.probes.filter((p) => p.outcome === 'reproduced').length
+      items.push(`Probes: ${codeReview.probes.length} run, ${reproduced} reproduced`)
+    }
+    if (typeof codeReview.probeLaneSkipped === 'string') {
+      items.push(`Probe lane skipped: ${cell(codeReview.probeLaneSkipped)}`)
+    }
+    // Secrets-lane audit: adjudicated/suppressed counts, never literals.
+    const scan = codeReview.secretsScan
+    if (scan) {
+      if (typeof scan.skipped === 'string') {
+        items.push(`Secrets scan skipped: ${cell(scan.skipped)}`)
+      } else if (Array.isArray(scan.records)) {
+        const suppressed = scan.records.filter((r) => r.suppressed).length
+        const unadj = scan.records.filter((r) => !r.adjudicated).length
+        items.push(
+          `Secrets scan: ${scan.records.length} candidate(s)` +
+            `${suppressed > 0 ? `, ${suppressed} adjudicated-suppressed` : ''}` +
+            `${unadj > 0 ? `, ${unadj} unadjudicated` : ''}` +
+            `${scan.overflow > 0 ? `, ${scan.overflow} over cap` : ''}`,
+        )
+      }
+    }
+    // U8 adjudication audit: shows what the confidence model removed.
+    const fa = codeReview.findingAdjudication
+    if (fa && Array.isArray(fa.records)) {
+      if (fa.unadjudicated === true) {
+        items.push('Finding adjudication unavailable: the confidence model did not respond, nothing suppressed.')
+      } else {
+        const suppressed = fa.records.filter((r) => r.suppressed).length
+        const unadj = fa.records.filter((r) => !r.adjudicated).length
+        items.push(
+          `Adjudication: ${fa.records.length} finding(s) scored` +
+            `${suppressed > 0 ? `, ${suppressed} suppressed (nit/q)` : ''}` +
+            `${unadj > 0 ? `, ${unadj} unadjudicated` : ''}` +
+            `${fa.overflow > 0 ? `, ${fa.overflow} over cap` : ''}`,
+        )
+      }
+    }
+  }
+  for (const [k, v] of Object.entries(report?.trace ?? {})) items.push(`${cell(k)}: ${code(v)}`)
+  return items.map((i) => `- ${i}`)
+}
+
+// --- bodies ----------------------------------------------------------------------
+
+function renderMissingKeyBody(meta = {}) {
+  return layout({
+    status: statusText('skipped'),
+    verdict:
+      '**Not run:** `OPENROUTER_API_KEY` is not configured, so no lane ran. This status is neutral, not a failure.',
+    rows: MANIFEST_LANE_ORDER.map((lane) => ({ lane, status: 'skipped', result: 'no API key', proof: null, spend: '' })),
+    summary:
+      'Fix: add the key as a repository secret, then re-run the workflow: `gh secret set OPENROUTER_API_KEY`',
+    folds: [],
+    meta,
+  })
+}
+
+function renderNoReportBody(reportDir, runUrl, meta = {}) {
+  return layout({
+    status: statusText('failed'),
+    verdict:
+      `**No report:** the run step produced no \`run.json\` under ${code(reportDir)}. ` +
+      'The commit status fails closed.',
+    rows: [{ lane: 'flow', status: 'failed', result: 'no run.json', proof: 'none', spend: '' }],
+    summary: 'Check the action logs before merging.',
+    folds: [],
+    meta,
+    runUrl,
+  })
+}
+
+/** Lane table rows (string lines) for a parsed run-manifest.json. */
+function renderManifestLanes(manifest, codeReview) {
+  return laneTable(manifestLaneRows(manifest, codeReview))
+}
+
+function manifestDuration(manifest) {
+  const ms = Date.parse(manifest.finishedAt) - Date.parse(manifest.startedAt)
+  return Number.isFinite(ms) ? ms : undefined
+}
+
+/**
+ * Manifest-only body: a verify run whose lanes produced no run.json
+ * (review-only, or a flow lane that never reached the browser). The
+ * aggregate status is the verdict; lane detail lives in the manifest.
+ */
+function renderManifestBody(manifest, codeReview, runUrl, meta = {}) {
+  const aggregate = (manifest && manifest.aggregate) || {}
+  const rows = manifestLaneRows(manifest, codeReview)
+  return layout({
+    status: headline(aggregate.ok === true, aggregate.status, codeReview),
+    verdict: verdictLine({
+      rows,
+      codeReview,
+      headSha: manifest.identity?.intendedHeadSha,
+      binding: manifest.lanes?.review?.headBinding,
+      costUsd: aggregate.costUsd,
+      durationMs: manifestDuration(manifest),
+    }),
+    rows,
+    summary: findingsLine(codeReview, NO_REVIEW_ATTACHED),
+    folds: [
+      [`Findings (${findingsOf(codeReview).length})`, findingsFold(codeReview, undefined)],
+      ['Spend ledger', spendFold(manifest, undefined, codeReview)],
+      ['Diagnostics', diagnosticsFold(manifest, undefined, codeReview)],
+    ],
+    meta,
+    runUrl,
+  })
+}
+
+function renderBody(report, codeReview, runUrl, ok, inlinePlan, manifest, meta = {}) {
+  if (!report) return renderMissingKeyBody(meta)
+  // The verify manifest is the lane contract; without one, the review and
+  // flow rows are synthesized from their own reports.
+  const rows = manifest !== undefined
+    ? manifestLaneRows(manifest, codeReview)
+    : [reviewLaneRow(codeReview), flowLaneRow(report)]
+  const reviewSpend = codeReview && !codeReview.skipped ? codeReview.visionCostUsd ?? 0 : 0
+  const heals = healsOf(report)
+  return layout({
+    status: headline(ok, manifest?.aggregate?.status, codeReview),
+    verdict: verdictLine({
+      rows,
+      codeReview,
+      headSha: manifest?.identity?.intendedHeadSha ?? codeReview?.headBinding?.intendedSha,
+      binding: manifest?.lanes?.review?.headBinding ?? codeReview?.headBinding,
+      costUsd: manifest !== undefined ? manifest.aggregate.costUsd : (report.totals?.visionCostUsd ?? 0) + reviewSpend,
+      durationMs: manifest !== undefined ? manifestDuration(manifest) : report.durationMs,
+    }),
+    rows,
+    summary: findingsLine(codeReview),
+    folds: [
+      [`Findings (${findingsOf(codeReview).length})`, findingsFold(codeReview, inlinePlan)],
+      [`Tests (${report.tests?.length ?? 0})`, testsFold(report)],
+      [`Heals (${heals.length}): review before merging`, healsFold(heals)],
+      ['Exploratory', exploreFold(report)],
+      ['Spend ledger', spendFold(manifest, report, codeReview)],
+      ['Diagnostics', diagnosticsFold(manifest, report, codeReview)],
+    ],
+    meta,
+    runUrl,
+  })
+}
+
+// Sticky body for `run: 'false'` consumers: no run.json exists by design, so
+// the body and conclusion reflect code review alone.
+function renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan, manifest, meta = {}) {
+  const rows = manifest !== undefined
+    ? manifestLaneRows(manifest, codeReview)
+    : [reviewLaneRow(codeReview), flowLaneRow(undefined)]
+  const reviewed = codeReview && !codeReview.skipped
+  return layout({
+    status: headline(ok, manifest?.aggregate?.status, codeReview),
+    verdict: verdictLine({
+      rows,
+      codeReview,
+      headSha: manifest?.identity?.intendedHeadSha ?? (reviewed ? codeReview.headBinding?.intendedSha : undefined),
+      binding: manifest?.lanes?.review?.headBinding ?? (reviewed ? codeReview.headBinding : undefined),
+      costUsd: manifest !== undefined ? manifest.aggregate.costUsd : reviewed ? codeReview.visionCostUsd : 0,
+      durationMs: manifest !== undefined ? manifestDuration(manifest) : undefined,
+    }),
+    rows,
+    summary: findingsLine(codeReview),
+    folds: [
+      [`Findings (${findingsOf(codeReview).length})`, findingsFold(codeReview, inlinePlan)],
+      ['Spend ledger', spendFold(manifest, undefined, codeReview)],
+      ['Diagnostics', diagnosticsFold(manifest, undefined, codeReview)],
+    ],
+    meta,
+    runUrl,
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -1111,7 +1180,7 @@ async function main() {
   const inlinePlan = hasKey ? await planInlineComments(pr, codeReview) : undefined
   if (pr) await postInlineComments(pr, inlinePlan)
   const baseBody = !hasKey
-    ? renderMissingKeyBody()
+    ? renderMissingKeyBody({ runUrl })
     : runDisabled
       ? renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan, manifest)
       : report === undefined
@@ -1124,8 +1193,8 @@ async function main() {
   let body = baseBody
   for (const file of staleEvidence) {
     body +=
-      `\n\n> ⚠️ A \`${file}\` was found but its head/run binding does not ` +
-      'match this run — it was ignored.'
+      `\n\n> A \`${file}\` was found but its head/run binding does not ` +
+      'match this run, so it was ignored.'
   }
 
   if (pr) {
@@ -1185,6 +1254,13 @@ async function run(runtime) {
 
 module.exports = {
   run,
+  STATUS_GLYPH,
+  PROOF_LEVELS,
+  SEVERITY_GLYPH,
+  SEVERITY_LABEL,
+  VERDICT_STATUS,
+  VERDICT_LABEL,
+  proofMeter,
   validManifest,
   renderBody,
   renderReviewOnlyBody,

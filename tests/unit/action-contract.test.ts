@@ -103,7 +103,7 @@ describe('action input contract', () => {
     // Lane off → captures present but no section rendered.
     expect(
       renderStickyBody({ ...base }, undefined, undefined, true, inline),
-    ).not.toContain('Exploratory')
+    ).not.toContain('<summary>Exploratory</summary>')
 
     // Lane on → observed findings with collapsed counts.
     const on = renderStickyBody(
@@ -113,8 +113,8 @@ describe('action input contract', () => {
       true,
       inline,
     )
-    expect(on).toContain('🔭 Exploratory')
-    expect(on).toContain('🟡 observed · console error ×3: `seeded console boom`')
+    expect(on).toContain('<summary>Exploratory</summary>')
+    expect(on).toContain('observed · console error ×3: `seeded console boom`')
     expect(on).toContain('do not change the verdict')
 
     // Skip line — unreachable target is explicit, not silent.
@@ -125,7 +125,7 @@ describe('action input contract', () => {
       true,
       inline,
     )
-    expect(skipped).toContain('explore skipped — no page loaded')
+    expect(skipped).toContain('Explore skipped: no page loaded')
 
     // U4b act pass — step/visited/stopReason summary plus its own captures
     // merged with the per-file ones.
@@ -149,8 +149,8 @@ describe('action input contract', () => {
     )
     expect(acted).toContain('explored **7** step(s) across **2** page(s)')
     expect(acted).toContain('stopped: max-steps')
-    expect(acted).toContain('🟡 observed · page error: `TypeError: boom`')
-    expect(acted).toContain('🟡 observed · console error ×3: `seeded console boom`')
+    expect(acted).toContain('observed · page error: `TypeError: boom`')
+    expect(acted).toContain('observed · console error ×3: `seeded console boom`')
   })
 
   it('parses trusted CLI argv without a shell and rejects shell operators', () => {
@@ -359,8 +359,9 @@ describe('action input contract', () => {
   })
 })
 
-// U4/R6 — the sticky's scannable top block: verdict + one-line summary +
-// honest counts under the sentinel, ahead of every <details> fold.
+// U4/R6: the sticky's first screen (header, verdict line, lane table,
+// findings summary) carries the verdict and honest counts ahead of every fold.
+// Whole-body layout is pinned by the goldens in comment-golden.test.ts.
 describe('sticky review top block (U4)', () => {
   const runReport = {
     ok: true,
@@ -421,28 +422,30 @@ describe('sticky review top block (U4)', () => {
 
     const body = renderStickyBody(runReport, cr, 'https://github.com/run/1', false, undefined)
 
-    expect(body.indexOf('<!-- argus-reviewer -->')).toBeLessThan(body.indexOf('**Code review:**'))
-    expect(body.indexOf('**Code review:**')).toBeLessThan(body.indexOf('<details>'))
-    expect(body).toContain('**Code review:** 🔴 **needs_changes** — found real problems')
-    expect(body).toContain('🐛 1 · ⚠️ 1 · 💡 1 · ❓ 0')
-    expect(body).toContain('⛔ 1 reproduced')
-    expect(body).not.toContain('◎')
+    expect(body.indexOf('<!-- argus-reviewer -->')).toBeLessThan(body.indexOf('### Argus:'))
+    expect(body.indexOf('### Argus:')).toBeLessThan(body.indexOf('<details>'))
+    expect(body).toContain('### Argus: ⊘ needs changes\n')
+    expect(body).toContain('**1 finding reproduced** in `a.ts`')
+    expect(body).toContain('◆ 1 bug · ◈ 1 risk · ○ 1 nit\n')
+    expect(body.indexOf('◆ 1 bug')).toBeLessThan(body.indexOf('<details>'))
+    expect(body).not.toContain('high-confidence')
   })
 
   it('renders a clean zero-finding block with no proof counts', () => {
     const cr = review({ verdict: 'pass', summary: 'clean diff' })
     const body = renderStickyBody(runReport, cr, 'https://github.com/run/1', true, undefined)
 
-    expect(body).toContain('**Code review:** ✅ **pass** — clean diff')
-    expect(body).toContain('no findings')
-    expect(body).not.toContain('⛔')
-    expect(body).not.toContain('◎')
-    expect(body).not.toMatch(/🔧 \d+ suggestion/)
+    expect(body).toContain('### Argus: ● clean\n')
+    expect(body).toContain('**No findings**')
+    expect(body).toContain('◆ 0 bugs · ◈ 0 risks · ○ 0 nits\n')
+    expect(body).not.toContain('reproduced**')
+    expect(body).not.toContain('high-confidence')
+    expect(body).not.toMatch(/\d+ suggestions? ready/)
   })
 
   it('counts reproduced and p-only findings separately — p alone is never proven', () => {
-    // No serialized counts — exercises the finding-level recount fallback:
-    // the p-only blocker must land under ◎ and never leak into ⛔.
+    // No serialized counts: exercises the finding-level recount fallback.
+    // The p-only blocker counts as high-confidence, never as reproduced.
     const cr = review({
       findings: [
         {
@@ -461,10 +464,10 @@ describe('sticky review top block (U4)', () => {
 
     const body = renderStickyBody(runReport, cr, 'https://github.com/run/1', false, undefined)
 
-    expect(body).toContain('⛔ 1 reproduced')
-    expect(body).toContain('◎ 1 high-confidence')
-    expect(body).not.toContain('⛔ 2')
-    expect(body).not.toContain('◎ 2')
+    expect(body).toContain('**1 finding reproduced** in `a.ts`')
+    expect(body).toContain('· 1 high-confidence')
+    expect(body).not.toContain('2 findings reproduced')
+    expect(body).not.toContain('2 high-confidence')
   })
 
   it('counts only serialized comments that carry a committable suggestion', () => {
@@ -498,8 +501,8 @@ describe('sticky review top block (U4)', () => {
 
     const body = renderStickyBody(runReport, cr, 'https://github.com/run/1', false, undefined)
 
-    expect(body).toContain('🔧 1 suggestion\n')
-    expect(body).not.toContain('🔧 2')
+    expect(body).toContain('· 1 suggestion ready to commit\n')
+    expect(body).not.toContain('2 suggestions')
   })
 
   it('renders the same top block in the review-only body', () => {
@@ -519,8 +522,8 @@ describe('sticky review top block (U4)', () => {
 
     const body = renderReviewOnlyBody(cr, 'https://github.com/run/1', false, undefined)
 
-    expect(body.indexOf('**Code review:**')).toBeLessThan(body.indexOf('<details>'))
-    expect(body).toContain('⛔ 1 reproduced')
+    expect(body.indexOf('**1 finding reproduced**')).toBeLessThan(body.indexOf('<details>'))
+    expect(body).toContain('| – skipped | flow | run lane disabled |  |  |')
   })
 })
 
@@ -955,12 +958,13 @@ describe('manifest comment parity (U5)', () => {
   function laneRows(body: string): string[] {
     return body
       .split('\n')
-      .filter((l) => /^\| (review|flow|app|a0) \|/.test(l))
+      .filter((l) => /^\| [^|]+ \| (review|flow|app|a0) \|/.test(l))
   }
+  const meta = { version: '0.0.0' }
 
   it('the action lane block and the shared view-model render identical rows', () => {
     const cjsBody = renderManifestLanes(manifest).join('\n')
-    const tsBody = renderManifestComment(manifest)
+    const tsBody = renderManifestComment(manifest, meta)
     const cjsRows = laneRows(cjsBody)
     const tsRows = laneRows(tsBody)
     expect(cjsRows).toHaveLength(4)
@@ -971,10 +975,10 @@ describe('manifest comment parity (U5)', () => {
   })
 
   it('the header and cache line agree across renderers', () => {
-    const cjsBody = renderManifestLanes(manifest).join('\n')
-    const tsBody = renderManifestComment(manifest)
+    const cjsBody = renderManifestBody(manifest, undefined, undefined, meta)
+    const tsBody = renderManifestComment(manifest, meta)
     for (const text of [
-      '| Lane | Status | Calls | Cost | Detail |',
+      '| Status | Lane | Result | Proof | Spend |',
       '**Fingerprint cache:** 2 hit(s) · 1 miss(es) · 1 heal(s)',
     ]) {
       expect(cjsBody).toContain(text)
@@ -988,14 +992,14 @@ describe('manifest comment parity (U5)', () => {
       'line one\nline two | pipe-break ' + 'x'.repeat(250)
     hostile.lanes.flow.reason = 'secret sk-or-v1-leak-here inside'
     const cjsRows = laneRows(renderManifestLanes(hostile).join('\n'))
-    const tsRows = laneRows(renderManifestComment(hostile))
+    const tsRows = laneRows(renderManifestComment(hostile, meta))
     expect(cjsRows).toEqual(tsRows)
     // The token is masked and the pipe is escaped — the raw two-line
     // reason must not break the table row.
     for (const row of tsRows) {
       expect(row).not.toContain('sk-or-v1-leak-here')
     }
-    const appRow = tsRows.find((r) => r.startsWith('| app |')) ?? ''
+    const appRow = tsRows.find((r) => r.includes(' | app | ')) ?? ''
     expect(appRow).toContain('line one line two \\| pipe-break')
     // Five column delimiters; every other pipe must be backslash-escaped.
     expect(appRow.match(/(?<!\\)\|/g)).toHaveLength(6)
@@ -1070,8 +1074,10 @@ describe('manifest comment parity (U5)', () => {
       const sticky = calls.find((c) => c.method === 'createComment')
       expect(sticky).toBeDefined()
       const body = sticky!.params.body as string
-      expect(body).toContain('## argus-reviewer ❌ FAILED')
-      expect(body).toContain('| a0 | 🟡 inconclusive | 0 | unmetered |')
+      expect(body).toContain('### Argus: ⊘ failed\n')
+      expect(body).toContain(
+        '| ◐ inconclusive | a0 | delegation returned — self-reported | ▰▱▱▱ suspected | unmetered |',
+      )
       // The manifest aggregate is the verdict — no run.json exists.
       const status = calls.find((c) => c.method === 'createCommitStatus')
       expect(status!.params.state).toBe('failure')

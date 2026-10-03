@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import { LANE_STATUSES } from '../../src/report/manifest.js'
 import {
-  LANE_STATUS_EMOJI,
   LANE_STATUS_ICON,
   LANE_STATUS_LABEL,
   PROOF_LEVELS,
@@ -39,10 +38,9 @@ describe('Ocellus status vocabulary (DESIGN.md section 6.7)', () => {
     expect(new Set(glyphs).size).toBe(glyphs.length)
   })
 
-  it('keeps the legacy LANE_STATUS_ICON / LANE_STATUS_EMOJI exports until U4 and U13', () => {
+  it('keeps the legacy LANE_STATUS_ICON export until U13', () => {
     for (const status of LANE_STATUSES) {
       expect(LANE_STATUS_ICON[status]).toBeTruthy()
-      expect(LANE_STATUS_EMOJI[status]).toBeTruthy()
     }
   })
 })

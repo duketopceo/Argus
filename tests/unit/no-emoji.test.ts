@@ -77,12 +77,11 @@ const NO_OWNER =
 const TEMPORARY: Record<string, Allowance> = {
   // Rewritten by a later unit of the Ocellus plan (docs/plans/2026-10-02-2316-*).
   'src/cli.ts': { emoji: 2, emdash: 78, unit: 'U6 (review comments, persist reply), U11 (CLI output)' },
-  'src/report/comment.ts': { emoji: 11, emdash: 9, unit: 'U4' },
-  'src/report/viewmodel.ts': { emoji: 8, emdash: 2, unit: 'U4 + U13 (legacy LANE_STATUS_EMOJI/ICON consumers)' },
+  'src/report/viewmodel.ts': { emoji: 2, emdash: 2, unit: 'U13 (legacy LANE_STATUS_ICON consumers)' },
   'src/review/secrets.ts': { emoji: 3, emdash: 3, unit: 'U6' },
   'src/probe/persist.ts': { emoji: 1, emdash: 1, unit: 'U6' },
   'src/vision/decisions.ts': { emdash: 4, unit: 'U11' },
-  'action/sticky-comment.cjs': { emoji: 80, emdash: 33, unit: 'U4, U5, U6' },
+  'action/sticky-comment.cjs': { emoji: 1, emdash: 4, unit: 'U5 (core.warning text), U6 (review body)' },
   'action/approval-review.mjs': { emdash: 2, unit: 'U6' },
   'action/action.yml': { emdash: 12, unit: 'U5 (job summary wording)' },
   'electron/renderer.js': { emoji: 2, emdash: 8, unit: 'U13 (replaced by electron/ui/)' },
