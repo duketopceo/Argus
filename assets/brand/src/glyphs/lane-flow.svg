@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+  <title>flow</title>
+  <path d="M6.6 15.4 10.4 9.6M13.6 9.6 17.4 15.4"/>
+  <g fill="currentColor" stroke="none"><circle cx="5" cy="17.5" r="2.5"/><circle cx="12" cy="7" r="2.5"/><circle cx="19" cy="17.5" r="2.5"/></g>
+</svg>
