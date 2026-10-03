@@ -337,6 +337,18 @@ Each finding carries a `category` (`correctness`, `security`,
 table and inline comments. All findings land in `code-review.json`
 regardless of the comment cap.
 
+Before the verdict is derived, two deterministic filters remove model
+noise: findings whose cited line falls outside the file's diff hunks, and
+nit/q findings asking to revert text the diff itself added.
+Verdict-driving findings — `bug`, `risk`, the `security` category, or any
+configured blocking severity — are exempt, so a misnumbered cite on a real
+defect still gates. Drops are audited, not silent: `code-review.json`
+carries `droppedUnanchored`, `droppedReverted`, and a capped
+`droppedFindings[]` list (`file`/`line`/`severity`/`category`/`message`/
+`reason`). `verdict`, `ok`, and `reviewEvent` all derive from the
+post-filter set; when the model's own synthesis verdict disagrees it is
+preserved separately as `modelVerdict`.
+
 What posts to the PR: one batched review containing inline comments on
 all severities (severity-sorted, capped by `maxComments`), each carrying
 a committable ```` ```suggestion ```` block when the model proposed a clean
