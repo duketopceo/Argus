@@ -20,6 +20,12 @@ import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
+// The Ocellus verdict vocabulary has one action-side copy (KTD2), in the
+// sticky-comment module; this lane reuses it rather than keeping a third.
+import sticky from './sticky-comment.cjs'
+
+const { STATUS_GLYPH, VERDICT_STATUS, VERDICT_LABEL } = sticky
+
 const GH_API = 'https://api.github.com'
 
 /** Verdicts that mean "ship it". Everything else blocks. */
@@ -85,12 +91,16 @@ export function classifyApprovalFailure(status, message) {
 export function reviewBody(codeReview, runUrl, evidence, evidenceCheck) {
   const lines = []
   const verdict = String(codeReview?.verdict ?? 'unknown')
-  lines.push(`**Argus verdict:** \`${verdict}\``)
+  lines.push(
+    Object.hasOwn(VERDICT_LABEL, verdict)
+      ? `**Argus: ${STATUS_GLYPH[VERDICT_STATUS[verdict]]} ${VERDICT_LABEL[verdict]}**`
+      : `**Argus:** verdict \`${oneLine(verdict).replace(/`/g, '')}\``,
+  )
   if (codeReview?.summary) lines.push('', codeReview.summary)
   if (evidence !== undefined && evidence !== '') {
     lines.push('', `**Verified by:** \`${oneLine(evidence)}\``)
   } else {
-    lines.push('', '**Verified by:** none — this approval cites no test command.')
+    lines.push('', '**Verified by:** none. This approval cites no test command.')
   }
   if (evidenceCheck) {
     // The command above is the caller's claim; this line is the receipt. A
@@ -113,7 +123,7 @@ export function reviewBody(codeReview, runUrl, evidence, evidenceCheck) {
     )
     for (const f of blocking.slice(0, 5)) {
       const where = f.file ? ` \`${f.file}${f.line ? `:${f.line}` : ''}\`` : ''
-      lines.push(`- **${f.severity}**${where} — ${oneLine(f.message)}`)
+      lines.push(`- **${f.severity}**${where}: ${oneLine(f.message)}`)
     }
   }
   if (runUrl) lines.push('', `[argus-reviewer run](${runUrl})`)

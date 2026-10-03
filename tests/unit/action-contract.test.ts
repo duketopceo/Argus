@@ -26,8 +26,20 @@ import {
   renderManifestLanes,
   renderReviewOnlyBody,
   run,
-  shortHash,
+  postedDedupKey,
+  normalizeFindingMessage as cjsNormalizeFindingMessage,
+  parseInlineBody as cjsParseInlineBody,
+  fitStatusDescription,
+  INLINE_SENTINEL as CJS_INLINE_SENTINEL,
 } from '../../action/sticky-comment.cjs'
+
+import { renderReviewComments } from '../../src/cli.js'
+import {
+  INLINE_SENTINEL,
+  inlineDedupKey,
+  normalizeFindingMessage,
+  parseInlineBody,
+} from '../../src/review/inline.js'
 
 import { renderManifestComment } from '../../src/report/comment.js'
 import { fixtureLane, fixtureManifest } from '../fixtures/manifest.js'
@@ -564,6 +576,23 @@ describe('sticky review top block (U4)', () => {
     expect(body.indexOf('**1 finding reproduced**')).toBeLessThan(body.indexOf('<details>'))
     expect(body).toContain('| – skipped | flow | run lane disabled |  |  |')
   })
+
+  it('states an inconclusive evidence link once, in Diagnostics, not on every finding (U6)', () => {
+    const NOTE = 'no repo index; run `argus-reviewer index` first'
+    const cr = review({
+      findings: [1, 2, 3].map((line) => ({
+        file: 'a.ts',
+        line,
+        severity: 'bug',
+        message: `boom ${line}`,
+        evidence: { status: 'inconclusive', detail: NOTE },
+      })),
+    })
+    const body = renderReviewOnlyBody(cr, 'https://github.com/run/1', false, undefined)
+    const diagnostics = body.slice(body.indexOf('<summary>Diagnostics</summary>'))
+    expect(body.split('repo index')).toHaveLength(2)
+    expect(diagnostics).toContain(`- CI evidence inconclusive for 3 findings: no repo index; run \`argus-reviewer index\` first`)
+  })
 })
 
 // U3 — the poster consumes the serialized `reviewComments[]`/`reviewEvent`
@@ -602,14 +631,9 @@ describe('action review poster (U3)', () => {
     }
   })
 
-  function comment(path: string, line: number, body: string, suggestion = '') {
-    return {
-      path,
-      line,
-      side: 'RIGHT',
-      body,
-      dedupKey: `${path}:${line}:${body.split('\n')[0]}:${shortHash(suggestion)}`,
-    }
+  // The CLI serializes the key the poster reconstructs from the body (KTD4).
+  function comment(path: string, line: number, body: string) {
+    return { path, line, side: 'RIGHT', body, dedupKey: postedDedupKey({ path, line, body }) as string }
   }
 
   function codeReview(overrides: Record<string, unknown> = {}) {
@@ -859,7 +883,7 @@ describe('action review poster (U3)', () => {
       '**argus-reviewer bug:** fix this\n\n' +
       '````suggestion\nconst x = 1\n````\n\n' +
       '*Suggested change — review before committing.*'
-    const c = comment('a.ts', 3, body, 'const x = 1')
+    const c = comment('a.ts', 3, body)
     await writeReport(codeReview({ reviewComments: [c] }))
     const { runtime, calls } = makeRuntime({
       pulls: { listFiles: async () => ({ data: [{ filename: 'a.ts', patch: A_TS_PATCH }] }) },
@@ -878,7 +902,7 @@ describe('action review poster (U3)', () => {
       '**argus-reviewer bug:** fix this\n\n' +
       '````suggestion\nconst x = 1\n````\n\n' +
       '*Suggested change — review before committing.*'
-    const c = comment('a.ts', 3, body, 'const x = 1')
+    const c = comment('a.ts', 3, body)
     await writeReport(codeReview({ reviewComments: [c] }))
     const { runtime, calls } = makeRuntime({
       pulls: {
@@ -984,6 +1008,147 @@ describe('action review poster (U3)', () => {
 
     const status = calls.find((x) => x.method === 'createCommitStatus')
     expect(status!.params.state).toBe('success')
+  })
+
+  describe('Ocellus inline comments, review body and status (U6)', () => {
+    const finding = {
+      file: 'a.ts',
+      line: 3,
+      severity: 'bug',
+      category: 'correctness',
+      message: 'L3: 🔴 bug: `user` can be null. Add guard.',
+    }
+    const fresh = () => renderReviewComments([finding], 20).comments[0]!
+    const LEGACY = '**argus-reviewer bug:** L3: 🔴 bug: `user` can be null. Add guard. `correctness`'
+    const onDiff = { listFiles: async () => ({ data: [{ filename: 'a.ts', patch: A_TS_PATCH }] }) }
+
+    it('legacy-to-new: a comment posted before the upgrade still suppresses the new-format re-post', async () => {
+      await writeReport(codeReview({ reviewComments: [fresh()] }))
+      const { runtime, calls } = makeRuntime({
+        pulls: {
+          ...onDiff,
+          listReviewComments: async () => ({ data: [{ path: 'a.ts', line: 3, commit_id: HEAD, body: LEGACY }] }),
+        },
+      })
+      await run(runtime)
+      expect(calls.filter((x) => x.method === 'createReview')).toHaveLength(0)
+    })
+
+    it('a new-format comment already on the head is recognized by its sentinel', async () => {
+      const c = fresh()
+      await writeReport(codeReview({ reviewComments: [c] }))
+      const { runtime, calls } = makeRuntime({
+        pulls: { ...onDiff, listReviewComments: async () => ({ data: [{ path: 'a.ts', line: 3, commit_id: HEAD, body: c.body }] }) },
+      })
+      await run(runtime)
+      expect(calls.filter((x) => x.method === 'createReview')).toHaveLength(0)
+    })
+
+    it('a human comment on the same line is never treated as Argus\'s own', async () => {
+      const c = fresh()
+      const withoutSentinel = c.body.split('\n').slice(1).join('\n')
+      await writeReport(codeReview({ reviewComments: [c] }))
+      const { runtime, calls } = makeRuntime({
+        pulls: {
+          ...onDiff,
+          listReviewComments: async () => ({
+            data: [
+              { path: 'a.ts', line: 3, commit_id: HEAD, body: withoutSentinel },
+              { path: 'a.ts', line: 3, commit_id: HEAD, body: `> ${c.body.split('\n').join('\n> ')}\n\nagreed` },
+              { path: 'a.ts', line: 3, commit_id: HEAD, body: `> ${LEGACY}` },
+            ],
+          }),
+        },
+      })
+      await run(runtime)
+      const reviews = calls.filter((x) => x.method === 'createReview')
+      expect(reviews).toHaveLength(1)
+      expect((reviews[0]!.params.comments as { body: string }[])[0]!.body).toBe(c.body)
+    })
+
+    it('the review body leads with the verdict glyph and word, without emoji or the tool prefix', async () => {
+      await writeReport(
+        codeReview({ reviewEvent: 'request_changes', provenBlockers: 2, highConfidenceBlockers: 1 }),
+      )
+      const { runtime, calls } = makeRuntime()
+      await run(runtime)
+      const body = calls.find((x) => x.method === 'createReview')!.params.body as string
+      expect(body.split('\n')[0]).toBe('<!-- argus-reviewer -->')
+      expect(body.split('\n')[1]).toBe('**Argus: ⊘ needs changes** · 2 reproduced blockers · 1 high-confidence blocker')
+      expect(body).not.toMatch(/\p{Extended_Pictographic}|\u{FE0F}/u)
+      expect(body).not.toContain('\u2014')
+      expect(body).not.toContain('**argus-reviewer**')
+    })
+
+    it('the commit status mirrors the comment verdict line', async () => {
+      await writeReport(
+        codeReview({ findings: [finding], visionCostUsd: 0.00421, verdict: 'needs_changes', ok: false }),
+      )
+      const { runtime, calls } = makeRuntime()
+      await run(runtime)
+      const status = calls.find((x) => x.method === 'createCommitStatus')!
+      expect(status.params.state).toBe('failure')
+      expect(status.params.description).toBe('⊘ needs changes · 1 finding · $0.004210')
+      const sticky = calls.find((x) => x.method === 'createComment')!.params.body as string
+      expect(sticky).toContain('### Argus: ⊘ needs changes')
+    })
+
+    it('a clean review reads as the clean verdict', async () => {
+      await writeReport(codeReview({ verdict: 'pass', findings: [] }))
+      const { runtime, calls } = makeRuntime()
+      await run(runtime)
+      const status = calls.find((x) => x.method === 'createCommitStatus')!
+      expect(status.params.description).toBe('● clean · 0 findings · $0.000000')
+    })
+
+    it('a missing key reads as a skip with the reason', async () => {
+      delete process.env.OPENROUTER_API_KEY
+      const { runtime, calls } = makeRuntime()
+      await run(runtime)
+      expect(calls.find((x) => x.method === 'createCommitStatus')!.params.description).toBe(
+        '– skipped · no OPENROUTER_API_KEY',
+      )
+    })
+
+    it('a long status stays within 140 characters and ends cleanly', () => {
+      const long = fitStatusDescription(['⊘ needs changes', 'x'.repeat(200), '3 findings', '$1.000000'])
+      expect(long.length).toBeLessThanOrEqual(140)
+      expect(long.startsWith('⊘ needs changes')).toBe(true)
+      expect(long).not.toMatch(/ · ?$|\s$/)
+      // Whole segments are dropped before any cut; a single over-long one is cut on a code point.
+      expect(fitStatusDescription(['⊘ needs changes', 'a'.repeat(118), '$0.1'])).toBe(`⊘ needs changes · ${'a'.repeat(118)}`)
+      const cut = fitStatusDescription([`${'◆'.repeat(150)}`])
+      expect([...cut].length).toBeLessThanOrEqual(140)
+      expect(cut.endsWith('…')).toBe(true)
+      expect(cut.length).toBeLessThanOrEqual(140)
+      const astral = fitStatusDescription(['𝐱'.repeat(100)])
+      expect(astral.length).toBeLessThanOrEqual(140)
+      expect(astral).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/)
+      expect(fitStatusDescription(['● clean', '0 findings', '$0.000000'])).toBe('● clean · 0 findings · $0.000000')
+    })
+
+    it('keeps the inline parser, normalizer and key equal to the TS copy (KTD2 parity)', () => {
+      expect(CJS_INLINE_SENTINEL).toBe(INLINE_SENTINEL)
+      const bodies = [
+        LEGACY,
+        fresh().body,
+        renderReviewComments([{ ...finding, severity: 'q', message: '❓ q: why?', suggestion: 'x()' }], 20).comments[0]!.body,
+        renderReviewComments([{ ...finding, severity: 'critical', evidence: { status: 'reproduced', detail: 'd' } }], 20)
+          .comments[0]!.body,
+        '**argus-reviewer nit:** meh',
+        '**argus-reviewer risk:** L1-4: 🟡 risk: retry missing `performance`',
+        'just a human comment',
+        `> ${LEGACY}`,
+        '',
+      ]
+      for (const body of bodies) {
+        expect(cjsParseInlineBody(body)).toEqual(parseInlineBody(body))
+        expect(postedDedupKey({ path: 'a.ts', line: 3, body })).toBe(inlineDedupKey('a.ts', 3, body))
+      }
+      for (const m of ['L42: 🔴 bug: x', '🟡 risk: L2: y', '❓️ q: z', 'plain', 'L1-2: nit: w', '']) {
+        expect(cjsNormalizeFindingMessage(m)).toBe(normalizeFindingMessage(m))
+      }
+    })
   })
 
   describe('posting never fails silently (U5, R9)', () => {
@@ -1611,7 +1776,7 @@ describe('manifest comment parity (U5)', () => {
 
       const status = calls.find((c) => c.method === 'createCommitStatus')
       expect(status!.params.state).toBe('success')
-      expect(status!.params.description).toBe('argus-reviewer skipped (no lanes ran)')
+      expect(status!.params.description).toBe('– skipped · no lanes ran')
     } finally {
       for (const [k, v] of Object.entries(saved)) {
         if (v === undefined) Reflect.deleteProperty(process.env, k)

@@ -150,9 +150,9 @@ export function scanDiffForSecrets(diffText: string): SecretCandidate[] {
 function maskFindingMessage(c: SecretCandidate, adjudicated: boolean): string {
   const verdict = adjudicated
     ? 'live-looking credential'
-    : 'secret-shaped literal (unadjudicated — decision model unavailable)'
+    : 'secret-shaped literal (unadjudicated: decision model unavailable)'
   return (
-    `L${c.line}: ${adjudicated ? '🔴' : '🟡'} ${adjudicated ? 'bug' : 'risk'}: ` +
+    `L${c.line}: ${adjudicated ? 'bug' : 'risk'}: ` +
     `${verdict} (${c.patternClass}) added in this PR at \`${c.file}\`. ` +
     `Rotate it and purge it from history.`
   )
@@ -261,7 +261,7 @@ export async function scanSecrets(opts: {
       })
     } catch (e) {
       adjudicationFailed = true
-      debug('secrets', `adjudication failed — degrading to regex-only: ${describeDecisionError(e)}`)
+      debug('secrets', `adjudication failed, degrading to regex-only: ${describeDecisionError(e)}`)
     }
   }
 
@@ -310,8 +310,8 @@ export async function scanSecrets(opts: {
       severity: 'risk',
       category: 'security',
       message:
-        `L0: 🟡 risk: ${overflow} secret-shaped literal(s) exceeded the ` +
-        `${MAX_CANDIDATES}-candidate adjudication cap and were not evaluated — ` +
+        `L0: risk: ${overflow} secret-shaped literal(s) exceeded the ` +
+        `${MAX_CANDIDATES}-candidate adjudication cap and were not evaluated; ` +
         'review the diff for secrets manually.',
     })
   }

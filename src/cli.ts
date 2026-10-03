@@ -105,7 +105,8 @@ import {
 import { CliError, errorJson, renderError, toCliError, type ErrorCode } from './ui/errors.js'
 import { colorEnabled, createStyler, type Styler } from './ui/style.js'
 import { renderSummary, verifySummary } from './ui/summary.js'
-import { shortSha } from './report/viewmodel.js'
+import { PROOF_LEVELS, proofMeter, SEVERITY_GLYPH, SEVERITY_LABEL, shortSha } from './report/viewmodel.js'
+import { INLINE_SENTINEL, inlineDedupKey, normalizeFindingMessage } from './review/inline.js'
 
 export interface CliDeps {
   cwd?: string
@@ -1288,7 +1289,7 @@ export interface ReviewComment {
   start_side?: 'RIGHT'
   side: 'RIGHT'
   body: string
-  /** R10 — path:line:bodyFirstLine:hash8(suggestion); a corrected suggestion re-posts. */
+  /** KTD4: path:line:severity:normalizedMessage:hash8(suggestion); a corrected suggestion re-posts. */
   dedupKey: string
 }
 
@@ -1393,7 +1394,7 @@ export async function loadFixture(
 ): Promise<{ files: PrFile[]; meta: PrMeta; diff: string } | { skipped: string }> {
   const base = await exec('git', ['-C', dir, 'rev-parse', 'argus-fixture-base'], 30_000)
   if (base.code !== 0) {
-    return { skipped: 'no argus-fixture-base ref — materialize the fixture with scripts/demo.mjs' }
+    return { skipped: 'no argus-fixture-base ref; materialize the fixture with scripts/demo.mjs' }
   }
   const head = await exec('git', ['-C', dir, 'rev-parse', 'HEAD'], 30_000)
   if (head.code !== 0) return { skipped: 'fixture has no HEAD commit' }
@@ -1693,13 +1694,6 @@ function suggestionFence(suggestion: string): string {
   return '`'.repeat(Math.max(4, longest + 1))
 }
 
-/** djb2 → 8 hex chars — dedup identity only, not a security boundary. */
-function shortHash(s: string): string {
-  let h = 5381
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
-  return (h >>> 0).toString(16).padStart(8, '0')
-}
-
 /**
  * KTD3 — pre-render the inline review surface: eligibility-filtered
  * (R8's static half — real path, positive integer line), severity-sorted
@@ -1724,26 +1718,40 @@ export function renderReviewComments(
     (a, b) => (SEVERITY_RANK[a.severity] ?? 4) - (SEVERITY_RANK[b.severity] ?? 4),
   )
   const comments = sorted.slice(0, Math.max(0, maxComments)).map((f) => {
-    let body = `**argus-reviewer ${sanitizeCommentText(String(f.severity))}:** ${sanitizeCommentText(String(f.message ?? ''))}`
-    if (typeof f.category === 'string' && f.category !== '') body += ` \`${f.category}\``
-    if (f.evidence?.status === 'reproduced') {
-      body +=
-        '\n\n*🧪 Reproduced by an Argus probe — fails on this PR head, clean on base. See workflow artifacts.*'
-    } else if (f.evidence !== undefined && f.evidence.status !== 'exercised') {
-      body += `\n\n*CI evidence: ${sanitizeCommentText(f.evidence.detail)}*`
-    }
+    // R7 / DESIGN 7.2: severity line, message line, optional suggestion, then
+    // at most one evidence line. GitHub already shows the author and line.
+    const severity = sanitizeCommentText(String(f.severity))
+    const glyph = (SEVERITY_GLYPH as Record<string, string>)[severity]
+    const word = (SEVERITY_LABEL as Record<string, string>)[severity] ?? severity
+    const status = f.evidence?.status ?? ''
+    const level = (PROOF_LEVELS as readonly string[]).includes(status) ? status : 'suspected'
+    // Sanitize first, then normalize: the same order the legacy body had, so
+    // a legacy comment and this one key to the same message (KTD4).
+    const message = normalizeFindingMessage(sanitizeCommentText(String(f.message ?? ''))) || 'No message.'
+    let body =
+      `${INLINE_SENTINEL}\n` +
+      `${glyph !== undefined ? `${glyph} ` : ''}**${word}** · ${proofMeter(level)} ${level}\n` +
+      message
     const suggestion = typeof f.suggestion === 'string' && f.suggestion !== '' ? f.suggestion : ''
     if (suggestion !== '') {
       const fence = suggestionFence(suggestion)
       body += `\n\n${fence}suggestion\n${suggestion}\n${fence}`
-      body += '\n\n*Suggested change — review before committing.*'
+      body += '\n\n*Suggested change: review before committing.*'
+    }
+    // Evidence line only when there is evidence. "No repo index" and other
+    // inconclusive links are reported once, in the sticky Diagnostics fold.
+    if (f.evidence?.status === 'reproduced') {
+      body +=
+        '\n\n*Reproduced by an Argus probe: fails on this PR head, clean on base. See workflow artifacts.*'
+    } else if (f.evidence?.status === 'corroborated') {
+      body += `\n\n*CI evidence: ${sanitizeCommentText(f.evidence.detail)}*`
     }
     const comment: ReviewComment = {
       path: f.file,
       line: f.line,
       side: 'RIGHT',
       body,
-      dedupKey: `${f.file}:${f.line}:${body.split('\n')[0]}:${shortHash(suggestion)}`,
+      dedupKey: inlineDedupKey(f.file, f.line, body),
     }
     if (typeof f.startLine === 'number' && Number.isInteger(f.startLine) && f.startLine < f.line) {
       comment.start_line = f.startLine
@@ -1832,7 +1840,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     const skipped: CodeReviewReport = {
       ok: true,
       skipped: true,
-      summary: `Code review skipped — ${reason}`,
+      summary: `Code review skipped: ${reason}`,
       verdict: 'pass',
       findings: [],
       reviewEvent: 'comment',
@@ -1864,7 +1872,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
   const indexPath = resolve(fixtureDir ?? ctx.cwd, config.indexPath ?? 'argus.index.json')
   const fixture = fixtureDir !== undefined ? await loadFixture(fixtureDir, deps.exec) : undefined
   if (fixture !== undefined && 'skipped' in fixture) {
-    return await skip(`fixture — ${fixture.skipped}`)
+    return await skip(`fixture: ${fixture.skipped}`)
   }
   // Narrowed: fixture mode sets both; the guards above return early in
   // live-PR mode when either is missing.
@@ -2077,7 +2085,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     }
 
     if (ledger.budgetExceeded) {
-      summary = `Budget exceeded — review stopped early. ${summary}`
+      summary = `Budget exceeded, review stopped early. ${summary}`
       if (verdict !== 'needs_changes') verdict = 'needs_changes'
     }
     // Annotate-mode triage overlapped the chunk loop — resolve it here,
@@ -2129,7 +2137,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     )
     stage(`head binding — ${headBinding.status}: ${headBinding.detail}`)
     if (!isHeadBindingConclusive(headBinding)) {
-      summary = `Head binding inconclusive — ${summary}`
+      summary = `Head binding inconclusive: ${summary}`
     }
 
     // Secrets lane: deterministic regex scan over the local merge-base
@@ -2178,7 +2186,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       }
     } else {
       // Distinguish "ran, clean" from "never ran" in the report.
-      secretsScan = { skipped: 'no merge-base SHA — lane did not run' }
+      secretsScan = { skipped: 'no merge-base SHA, so the lane did not run' }
     }
 
     // Resolve the deferred adjudication kicked off above, then union —
@@ -2230,13 +2238,13 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     if (ctx.env.GITHUB_EVENT_NAME === 'pull_request_target') sandbox.enabled = false
     if (!isHeadBindingConclusive(headBinding)) {
       sandbox.enabled = false
-      probeLaneSkipped = `head binding ${headBinding.status} — ${headBinding.detail}`
+      probeLaneSkipped = `head binding ${headBinding.status}: ${headBinding.detail}`
     }
     // Fixture mode reviews a local repo, not the cwd checkout — probes
     // would execute against the wrong tree.
     if (fixtureDir !== undefined && sandbox.enabled) {
       sandbox.enabled = false
-      probeLaneSkipped = 'fixture mode — probes need a real PR checkout'
+      probeLaneSkipped = 'fixture mode: probes need a real PR checkout'
     }
     if (sandbox.enabled && !ledger.budgetExceeded) {
       try {
@@ -2745,7 +2753,7 @@ async function cmdMention(args: string[], ctx: Ctx, deps: CliDeps): Promise<numb
       return 2
     }
     if (meta?.baseRef === undefined) {
-      await reply("I couldn't resolve this PR's base branch — persist is unavailable right now.")
+      await reply("I couldn't resolve this PR's base branch, so persist is unavailable right now.")
       return 0
     }
     const comments = (await ghGet(
@@ -2757,7 +2765,7 @@ async function cmdMention(args: string[], ctx: Ctx, deps: CliDeps): Promise<numb
     const decoded =
       sticky?.body === undefined ? undefined : decodeProbePayload(sticky.body)
     if (decoded === undefined) {
-      await reply('no reproduced probes to persist — a 🧪 reproduced probe carries the payload.')
+      await reply('no reproduced probes to persist: only a reproduced probe carries the payload.')
       return 0
     }
     // Stale-head guard: probes were authored against a specific head — a
@@ -2769,18 +2777,18 @@ async function cmdMention(args: string[], ctx: Ctx, deps: CliDeps): Promise<numb
     ) {
       await reply(
         `the persisted probes were authored against head \`${decoded.head.slice(0, 8)}\`, ` +
-          `but the PR is now at \`${meta.headSha.slice(0, 8)}\` — run \`@argus review\` first.`,
+          `but the PR is now at \`${meta.headSha.slice(0, 8)}\`. Run \`@argus review\` first.`,
       )
       return 0
     }
     const result = await persistProbes(repo, issueNum, meta.baseRef, decoded.probes, token, ctx)
     if (result.error !== undefined) {
-      await reply(`persist failed — ${result.error}. The probe source is still in the sticky comment.`)
+      await reply(`persist failed: ${result.error}. The probe source is still in the sticky comment.`)
       return 1
     }
     const wrote = result.written.map((p) => `\`${p}\``).join(', ')
     const dup = result.skipped.length > 0 ? ` (${result.skipped.length} already present)` : ''
-    await reply(`persisted ${wrote} — regression-test PR: ${result.prUrl}${dup}`)
+    await reply(`persisted ${wrote}. Regression-test PR: ${result.prUrl}${dup}`)
     return 0
   }
   if (parsed.name === 'record') {

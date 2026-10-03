@@ -963,6 +963,10 @@ describe('argus-reviewer mention', () => {
       expect(code).toBe(0)
       expect(replies).toHaveLength(1)
       expect(replies[0]).toContain('no reproduced probes')
+      // U6 (R4, R5): the reply names the proof level in words, no emoji or em-dash.
+      expect(replies[0]).toContain('reproduced probe carries the payload')
+      expect(replies[0]).not.toMatch(/\p{Extended_Pictographic}|\u{FE0F}/u)
+      expect(replies[0]).not.toContain('\u2014')
     } finally {
       globalThis.fetch = original
     }

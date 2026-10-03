@@ -13,6 +13,7 @@ import {
 } from '../../src/report/comment.js'
 import type { RunManifest } from '../../src/report/manifest.js'
 import * as vocab from '../../src/report/viewmodel.js'
+import { renderReviewComments, type ReviewFinding } from '../../src/cli.js'
 
 /**
  * Comment goldens (plan U4, KTD3). Each fixture in fixtures/manifests/ is one
@@ -399,5 +400,70 @@ describe('comment error and degraded states (U5)', () => {
     const body = sticky.renderBody(f.report, cr, f.runUrl, f.ok, undefined, undefined, { version: f.version, runUrl: f.runUrl }) as string
     expect(body).toMatch(/^<details><summary>Findings \(60\): omitted/m)
     expect(body.split(payload)).toHaveLength(2)
+  })
+})
+
+/**
+ * Inline review goldens (U6, DESIGN.md 7.2). The inline comments and the
+ * formal review body a reviewer sees on the diff, rendered from fixed inputs.
+ */
+describe('inline review goldens (U6)', () => {
+  const INLINE = join(ROOT, 'tests', 'goldens', 'inline')
+  const findings: ReviewFinding[] = [
+    {
+      file: 'src/discount.ts',
+      line: 19,
+      severity: 'bug',
+      category: 'correctness',
+      message: 'L19: 🔴 bug: Loop bound `i <= len(events)` reads one past the end when `i == len(events)`. Use `<`.',
+      suggestion: 'for (let i = 0; i < events.length; i++) {',
+      evidence: { status: 'reproduced', detail: 'probe fails on head, passes on base' },
+    },
+    {
+      file: 'src/discount.ts',
+      line: 42,
+      severity: 'risk',
+      category: 'performance',
+      message: 'L42: 🟡 risk: no retry on 429 from the pricing API. Wrap the call in `withBackoff(3)`.',
+      evidence: { status: 'corroborated', detail: 'test check `unit (22)` failed on this head' },
+    },
+    {
+      file: 'src/cart.ts',
+      line: 7,
+      severity: 'nit',
+      category: 'convention',
+      message: 'L7: 🔵 nit: `tmp` names a long-lived value. Rename to `subtotal`.',
+      evidence: { status: 'inconclusive', detail: 'no repo index; run `argus-reviewer index` first' },
+    },
+  ]
+  const comments = renderReviewComments(findings, 20).comments
+  const review = sticky.reviewBody({ verdict: 'needs_changes', provenBlockers: 1, highConfidenceBlockers: 1 }) as string
+  const downgraded = sticky.reviewBody(
+    { verdict: 'needs_changes', provenBlockers: 1, highConfidenceBlockers: 0 },
+    {
+      text: 'Posted as a comment instead of requesting changes: GitHub did not allow a change request here.',
+      diagnostic: 'GitHub API 422: Can not request changes on your own pull request',
+    },
+  ) as string
+  const cases: [string, string][] = [
+    ['bug-reproduced-suggestion', comments[0]!.body],
+    ['risk-corroborated', comments[1]!.body],
+    ['nit-no-evidence', comments[2]!.body],
+    ['review-body', review],
+    ['review-body-downgraded', downgraded],
+  ]
+
+  it.each(cases)('%s renders exactly its golden', (name, body) => {
+    const path = join(INLINE, `${name}.md`)
+    if (UPDATE || !existsSync(path)) {
+      if (!UPDATE) throw new Error(`missing golden ${path}; run with UPDATE_GOLDENS=1`)
+      writeFileSync(path, body)
+    }
+    expect(body).toBe(readFileSync(path, 'utf8'))
+  })
+
+  it.each(cases)('%s carries no emoji and no em-dash', (_name, body) => {
+    expect(body).not.toMatch(EMOJI)
+    expect(body).not.toContain('\u2014')
   })
 })

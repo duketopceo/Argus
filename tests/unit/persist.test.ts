@@ -154,6 +154,12 @@ describe('persistProbes', () => {
     expect((put?.body as { branch: string }).branch).toBe('argus/probe-regression-pr-7')
     const post = calls.find((c) => c.method === 'POST' && c.url.endsWith('/pulls'))
     expect((post?.body as { base: string }).base).toBe('main')
+    // U6: the heal note keeps its warning without an emoji or an em-dash.
+    const prBody = (post?.body as { body: string }).body
+    expect(prBody).toContain('Probe source is model-authored')
+    expect(prBody).toContain('review before merging')
+    expect(prBody).not.toMatch(/\p{Extended_Pictographic}|\u{FE0F}/u)
+    expect(prBody).not.toContain('\u2014')
   })
 
   it('is idempotent — existing branch, existing file, existing open PR', async () => {

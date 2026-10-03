@@ -451,7 +451,9 @@ function findingsFold(codeReview, inlinePlan) {
       const level = ladderLevel(f.evidence?.status)
       const p = typeof f.p === 'number' ? f.p.toFixed(2) : ''
       const where = typeof f.line === 'number' ? `${f.file}:${f.line}` : f.file
-      const evidence = f.evidence?.detail ? `<br>evidence: ${cell(f.evidence.detail)}` : ''
+      // An inconclusive link says the same thing on every row; Diagnostics states it once.
+      const evidence =
+        f.evidence?.detail && f.evidence.status !== 'inconclusive' ? `<br>evidence: ${cell(f.evidence.detail)}` : ''
       body.push(
         `| ${severityText(f.severity)} | ${proofText(level)} | ${p} | ${cell(f.category ?? '')} | ` +
           `${code(where)} | ${cell(f.message)}${evidence} |`,
@@ -688,6 +690,16 @@ function diagnosticsFold(manifest, report, codeReview) {
             ` (${cell(t.mode)})`,
         )
       }
+    }
+    // Evidence links that could not conclude (no repo index, CI unreachable):
+    // one line per distinct reason instead of one per finding (U6).
+    const inconclusive = new Map()
+    for (const f of findingsOf(codeReview)) {
+      if (f.evidence?.status !== 'inconclusive' || !f.evidence.detail) continue
+      inconclusive.set(f.evidence.detail, (inconclusive.get(f.evidence.detail) ?? 0) + 1)
+    }
+    for (const [detail, n] of inconclusive) {
+      items.push(`CI evidence inconclusive for ${plural(n, 'finding')}: ${cell(detail)}`)
     }
     if (Array.isArray(codeReview.probes) && codeReview.probes.length > 0) {
       const reproduced = codeReview.probes.filter((p) => p.outcome === 'reproduced').length
@@ -1056,8 +1068,8 @@ async function reportWriteFailure(what, e, scope) {
 // (KTD5), and POSTs one batched review with the serialized event plus a
 // bounded retry ladder (R4/KTD4).
 
-/** djb2 → 8 hex chars. Must match shortHash() in src/cli.ts — the CLI's
- *  dedupKey suffix is this hash over the raw suggestion text. */
+/** djb2 → 8 hex chars. Must match shortHash() in src/review/inline.ts — the
+ *  CLI's dedupKey suffix is this hash over the raw suggestion text. */
 function shortHash(s) {
   let h = 5381
   for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
@@ -1073,12 +1085,64 @@ function extractSuggestion(body) {
   return m === null ? '' : m[2]
 }
 
-/** Reconstruct the R10 dedupKey for an already-posted review comment:
- *  `path:line:bodyFirstLine:hash8(suggestion|'')` — identical to the key the
- *  CLI serialized, so a corrected suggestion re-posts instead of colliding. */
+// --- inline comment identity (plan KTD4) --------------------------------------
+// This file's copy of src/review/inline.ts (KTD2); the action-contract parity
+// test pins both equal. A legacy body (`**argus-reviewer <sev>:** <msg>`) and
+// an Ocellus body (sentinel, `<glyph> **<sev>** · <proof>`, message) key to
+// the same value for the same finding, so an upgrade never re-posts.
+const INLINE_SENTINEL = '<!-- argus-reviewer:inline -->'
+const LEGACY_PREFIX = '**argus-reviewer'
+const LEGACY_LINE = /^\*\*argus-reviewer ([^:*]+):\*\* ?(.*)$/
+const SEVERITY_LINE = /^(?:\S+ )?\*\*([^*]+)\*\* · /
+const CATEGORY_SUFFIX = /\s*`(?:correctness|security|performance|usability|convention|other)`$/
+const MESSAGE_PREFIX = /^(?:L\d+(?:-\d+)?:|\p{Extended_Pictographic}\u{FE0F}?|(?:bug|risk|nit|q|question):)\s*/iu
+const LABEL_TO_SEVERITY = new Map(Object.entries(SEVERITY_LABEL).map(([s, label]) => [label, s]))
+
+/** Strip the model's `L<n>: <emoji> <sev>:` prefix so the sentence leads. */
+function normalizeFindingMessage(message) {
+  let out = message.trim()
+  for (let i = 0; i < 4; i++) {
+    const next = out.replace(MESSAGE_PREFIX, '')
+    if (next === out) break
+    out = next
+  }
+  return out
+}
+
+function keyMessage(message) {
+  return normalizeFindingMessage(message.replace(CATEGORY_SUFFIX, '')).replace(/\s+/g, ' ').trim()
+}
+
+/** Severity and message of an Argus inline comment in either format. */
+function parseInlineBody(body) {
+  const lines = body.split(/\r?\n/)
+  if (body.startsWith(LEGACY_PREFIX)) {
+    const m = LEGACY_LINE.exec(lines[0] ?? '')
+    if (m === null) return undefined
+    return { severity: m[1].trim(), message: keyMessage(m[2]) }
+  }
+  if (lines[0] === INLINE_SENTINEL) {
+    const m = SEVERITY_LINE.exec(lines[1] ?? '')
+    if (m === null) return undefined
+    const word = m[1].trim()
+    return { severity: LABEL_TO_SEVERITY.get(word) ?? word, message: keyMessage(lines[2] ?? '') }
+  }
+  return undefined
+}
+
+/** Argus's own inline comment: the legacy prefix or the sentinel, at the very start. */
+function isArgusInlineBody(body) {
+  return body.startsWith(LEGACY_PREFIX) || body.startsWith(INLINE_SENTINEL)
+}
+
+/** KTD4 key `path:line:severity:normalizedMessage:hash8(suggestion)`, rebuilt
+ *  from a posted body; identical to the key the CLI serialized. */
 function postedDedupKey(c) {
   const body = c.body ?? ''
-  return `${c.path}:${c.line}:${body.split('\n')[0]}:${shortHash(extractSuggestion(body))}`
+  const parsed = parseInlineBody(body)
+  const hash = shortHash(extractSuggestion(body))
+  if (parsed === undefined) return `${c.path}:${c.line}:${body.split('\n')[0]}:${hash}`
+  return `${c.path}:${c.line}:${parsed.severity}:${parsed.message}:${hash}`
 }
 
 /** Fetch every page of a list endpoint (100/page, octokit shape). */
@@ -1168,17 +1232,13 @@ async function planInlineComments(pr, codeReview) {
   try {
     // R10 dedup — paginate fully and scope to the current head so comments on
     // older commits can't suppress still-valid findings. Keys are
-    // reconstructed from the posted body (first line + hash of the embedded
-    // suggestion), so a re-run with a corrected suggestion posts the fix
-    // instead of colliding.
+    // reconstructed from the posted body in either format (KTD4: severity,
+    // normalized message, hash of the embedded suggestion), so a re-run with
+    // a corrected suggestion posts the fix instead of colliding.
     const posted = new Set()
     const existing = await listAll((p) => github.rest.pulls.listReviewComments(p), prRef)
     for (const c of existing) {
-      if (
-        c.commit_id === pr.head.sha &&
-        typeof c.body === 'string' &&
-        c.body.startsWith('**argus-reviewer')
-      ) {
+      if (c.commit_id === pr.head.sha && typeof c.body === 'string' && isArgusInlineBody(c.body)) {
         posted.add(postedDedupKey(c))
       }
     }
@@ -1212,18 +1272,18 @@ async function planInlineComments(pr, codeReview) {
   }
 }
 
-/** Review body: verdict line + honest blocker counts (R6 — reproduced and
- *  p-gated are never lumped). Always present — REQUEST_CHANGES requires a
- *  body. Carries the sentinel so KTD5 dismissal can self-identify. */
+/** Review body: the verdict word with its glyph, then honest blocker counts
+ *  (R6: reproduced and p-gated are never lumped). Always present, since
+ *  REQUEST_CHANGES requires a body. Carries the sentinel so KTD5 dismissal can
+ *  self-identify. */
 function reviewBody(plan, note) {
-  const parts = [`verdict **${plan.verdict ?? 'unknown'}**`]
-  if (plan.provenBlockers > 0) {
-    parts.push(`⛔ ${plan.provenBlockers} reproduced blocker(s)`)
-  }
-  if (plan.highConfidenceBlockers > 0) {
-    parts.push(`◎ ${plan.highConfidenceBlockers} high-confidence blocker(s)`)
-  }
-  let body = `${SENTINEL}\n**argus-reviewer** — ${parts.join(' · ')}`
+  const verdict = Object.hasOwn(VERDICT_LABEL, plan.verdict ?? '')
+    ? `${STATUS_GLYPH[VERDICT_STATUS[plan.verdict]]} ${VERDICT_LABEL[plan.verdict]}`
+    : `${STATUS_GLYPH.inconclusive} verdict unknown`
+  const parts = [`**Argus: ${verdict}**`]
+  if (plan.provenBlockers > 0) parts.push(plural(plan.provenBlockers, 'reproduced blocker'))
+  if (plan.highConfidenceBlockers > 0) parts.push(plural(plan.highConfidenceBlockers, 'high-confidence blocker'))
+  let body = `${SENTINEL}\n${parts.join(' · ')}`
   if (note !== undefined) {
     body += `\n\n*${note.text}*`
     // Raw API status/message stays available but out of the reading path.
@@ -1357,6 +1417,42 @@ async function postSticky(owner, repo, pr, body) {
   }
 }
 
+// --- commit status (R8) ----------------------------------------------------------
+
+/** GitHub rejects a commit status description over 140 characters. */
+const STATUS_DESCRIPTION_MAX = 140
+
+/** Join segments with ` · `, dropping whole trailing segments until the text
+ *  fits; a lone first segment that still overflows is cut on a code point
+ *  boundary and ends with an ellipsis, so no glyph is ever split. */
+function fitStatusDescription(parts) {
+  const kept = [...parts]
+  let text = kept.join(' · ')
+  while (text.length > STATUS_DESCRIPTION_MAX && kept.length > 1) {
+    kept.pop()
+    text = kept.join(' · ')
+  }
+  if (text.length <= STATUS_DESCRIPTION_MAX) return text
+  const points = [...text]
+  while (points.length > 0 && points.join('').length > STATUS_DESCRIPTION_MAX - 1) points.pop()
+  return `${points.join('').trimEnd()}…`
+}
+
+/** The comment verdict line in status form: `<glyph> <verdict> · <n> findings · $<total>`.
+ *  Cost and verdict come from the same sources the sticky header uses. */
+function statusDescription({ conclusion, hasKey, ok, report, codeReview, manifest }) {
+  if (conclusion === 'neutral') {
+    return fitStatusDescription([statusText('skipped'), hasKey ? 'no lanes ran' : 'no OPENROUTER_API_KEY'])
+  }
+  const parts = [headline(ok, manifest?.aggregate?.status, codeReview)]
+  const reviewed = codeReview && !codeReview.skipped
+  if (reviewed) parts.push(plural(findingsOf(codeReview).length, 'finding'))
+  const reviewSpend = reviewed ? codeReview.visionCostUsd ?? 0 : 0
+  const cost = manifest !== undefined ? manifest.aggregate.costUsd : (report?.totals?.visionCostUsd ?? 0) + reviewSpend
+  parts.push(formatUsd(cost))
+  return fitStatusDescription(parts)
+}
+
 async function main() {
   const pr = context.payload && context.payload.pull_request
   const owner = context.repo.owner
@@ -1460,12 +1556,7 @@ async function main() {
   // Commit statuses have no 'neutral'; a 'pending' skip would wedge a
   // required check forever, so skip maps to success with a clear label.
   const state = conclusion === 'failure' ? 'failure' : 'success'
-  const description =
-    conclusion === 'neutral'
-      ? !hasKey
-        ? 'argus-reviewer skipped (no OPENROUTER_API_KEY)'
-        : 'argus-reviewer skipped (no lanes ran)'
-      : `argus-reviewer ${conclusion}`
+  const description = statusDescription({ conclusion, hasKey, ok, report, codeReview, manifest })
   try {
     await github.rest.repos.createCommitStatus({
       owner,
@@ -1514,4 +1605,11 @@ module.exports = {
   postInlineComments,
   shortHash,
   postedDedupKey,
+  INLINE_SENTINEL,
+  normalizeFindingMessage,
+  parseInlineBody,
+  isArgusInlineBody,
+  fitStatusDescription,
+  statusDescription,
+  reviewBody,
 }

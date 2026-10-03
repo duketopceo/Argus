@@ -68,7 +68,7 @@ describe('review body', () => {
       { verdict: 'needs_changes', summary: 'budget cap is not enforced', findings: [] },
       'https://github.com/o/r/actions/runs/1',
     )
-    expect(body).toContain('`needs_changes`')
+    expect(body.split('\n')[0]).toBe('**Argus: ⊘ needs changes**')
     expect(body).toContain('budget cap is not enforced')
     expect(body).toContain('actions/runs/1')
   })
@@ -90,6 +90,18 @@ describe('review body', () => {
     expect(body).not.toContain('`f6.py:7`')
     // Multi-line messages must not break the list.
     expect(body).toContain('problem 0 second line')
+    expect(body).toContain('- **high** `f0.py:1`: problem 0 second line')
+  })
+
+  it('uses the Ocellus verdict vocabulary with no emoji or em-dash (U6)', () => {
+    expect(reviewBody({ verdict: 'approve' }, undefined).split('\n')[0]).toBe('**Argus: ● approve**')
+    expect(reviewBody({ verdict: 'pass' }, undefined).split('\n')[0]).toBe('**Argus: ● clean**')
+    expect(reviewBody({ verdict: 'weird`|' }, undefined).split('\n')[0]).toBe('**Argus:** verdict `weird|`')
+    const findings = [{ severity: 'critical', file: 'a.py', line: 1, message: 'x' }]
+    for (const body of [reviewBody({ verdict: 'needs_changes', findings }, 'https://x'), reviewBody({ verdict: 'pass' }, undefined)]) {
+      expect(body).not.toMatch(/\p{Extended_Pictographic}|\u{FE0F}/u)
+      expect(body).not.toContain('\u2014')
+    }
   })
 
   it('cites the test command the approval stands on', () => {
@@ -326,7 +338,7 @@ describe('emit-review lane', () => {
     expect(submit).toHaveBeenCalledOnce()
     const arg = submit.mock.calls[0][0]
     expect(arg).toMatchObject({ repo: 'duketopceo/orchestral', pr: 101, event: 'APPROVE' })
-    expect(arg.body).toContain('`pass`')
+    expect(arg.body).toContain('**Argus: ● clean**')
     // AC: an approval must cite the command it stands on.
     expect(arg.body).toContain('`python -m unittest discover -s tests`')
     // ...and the citation is checked against a real run, not trusted.
