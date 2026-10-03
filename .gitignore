@@ -12,4 +12,10 @@ vision-e2e-report/
 *.webm
 *.tgz
 evals/work/
+# regenerable run artifacts — materialized diffs embed corpus secret literals
+evals/review-quality/results/*.diffs.json
+evals/review-quality/results/*.judge.json
 .argus-demo/
+
+# ce-optimize local experiment state
+.context/

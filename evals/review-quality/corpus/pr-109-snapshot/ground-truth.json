@@ -1,0 +1,9 @@
+{
+  "title": "Real PR #109 — live A0 round-trip (redirect probe, env allowlist, heal ceiling)",
+  "kind": "revisions",
+  "revisions": { "baseRev": "bd43dd1a6c3e045424d997798043a22142c27ecd", "headRev": "8fb4dedf0c50f6acba3271d1c83680a3fbf795dd" },
+  "strip": ["dist", "package-lock.json"],
+  "planted": [],
+  "precisionOnly": true,
+  "note": "Merged real diff — no ground truth; judge scores findings for precision. dist/ and lockfile excluded."
+}

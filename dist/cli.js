@@ -1166,6 +1166,131 @@ export function carryForwardSuggestions(findings, originals) {
     });
 }
 /**
+ * New-side (RIGHT) line ranges covered by each file's diff hunks — the
+ * only lines a finding can anchor to (and the only ones it could have
+ * seen).
+ */
+export function diffLineRanges(files) {
+    const byFile = new Map();
+    for (const f of files) {
+        const ranges = [];
+        for (const raw of (f.patch ?? '').split('\n')) {
+            const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(raw);
+            if (hunk === null)
+                continue;
+            const start = Number(hunk[1]);
+            const len = hunk[2] === undefined ? 1 : Number(hunk[2]);
+            if (len > 0)
+                ranges.push([start, start + len - 1]);
+        }
+        byFile.set(f.filename, ranges);
+    }
+    return byFile;
+}
+/**
+ * New-side line number -> line text for every line the diff shows
+ * (added and context). Lets post-parse checks compare a finding's claim
+ * against what the cited line actually says.
+ */
+export function diffLineTexts(files) {
+    const byFile = new Map();
+    for (const f of files) {
+        const lines = new Map();
+        let newLine = 0;
+        for (const raw of (f.patch ?? '').split('\n')) {
+            const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw);
+            if (hunk !== null) {
+                newLine = Number(hunk[1]);
+                continue;
+            }
+            if (newLine === 0)
+                continue;
+            const tag = raw[0];
+            if (tag === '+' || tag === ' ') {
+                lines.set(newLine, raw.slice(1));
+                newLine++;
+            }
+        }
+        byFile.set(f.filename, lines);
+    }
+    return byFile;
+}
+const REVERT_VERB = /\b(?:remove|delete|drop|strip|revert)\s+[`'"]([^`'"]{2,80})[`'"]/i;
+const REPLACE_VERB = /\b(?:replace|rename|reword|swap)\s+[`'"][^`'"]{2,80}[`'"]\s+(?:with|to|by)\s+[`'"]([^`'"]{2,80})[`'"]/i;
+/**
+ * A finding that must reach the verdict even when its cite can't be
+ * anchored or looks like a revert-nit: blocker severities (bug/risk and
+ * anything the operator configured via `severity`/`severityGate`) and
+ * security-category findings. Posting already drops comments that don't
+ * anchor (sticky-comment isOnDiff); dropping these here would erase them
+ * from the verdict, adjudication, and the probe lane — failing open on
+ * exactly the class of finding the review exists to catch.
+ */
+function isVerdictDriving(f, blockSeverities) {
+    return (f.severity === 'bug' ||
+        f.severity === 'risk' ||
+        f.category === 'security' ||
+        blockSeverities.includes(f.severity));
+}
+/**
+ * Drop nit/q findings that ask to remove or revert text the cited diff
+ * line itself contains — i.e. findings that would undo wording the PR
+ * deliberately added ("remove `inconclusive`", "replace 'self-reported'
+ * with 'self-reported'"). Verdict-driving findings (bug/risk, security-
+ * category, configured blocking severities) are never touched: if the
+ * claim is real, severity stays the reviewer's call.
+ */
+export function filterRevertNits(findings, textsByFile, blockSeverities = []) {
+    const kept = [];
+    const dropped = [];
+    for (const f of findings) {
+        if ((f.severity === 'nit' || f.severity === 'q') &&
+            !isVerdictDriving(f, blockSeverities) &&
+            f.line !== undefined) {
+            const lineText = textsByFile.get(f.file)?.get(f.line);
+            if (lineText !== undefined) {
+                const remove = REVERT_VERB.exec(f.message);
+                const replace = REPLACE_VERB.exec(f.message);
+                if ((remove !== null && lineText.includes(remove[1] ?? '')) ||
+                    (replace !== null && lineText.includes(replace[1] ?? ''))) {
+                    dropped.push(f);
+                    continue;
+                }
+            }
+        }
+        kept.push(f);
+    }
+    return { kept, dropped };
+}
+/**
+ * Drop findings whose line isn't visible in the file's diff. A finding on
+ * a file the diff doesn't touch, or at a line outside every hunk, is
+ * unverifiable and unpostable — misnumbered and fabricated citations land
+ * here. Line-less (file-level) findings always survive. Verdict-driving
+ * findings (bug/risk, security-category, configured blocking severities)
+ * are never dropped — a misnumbered cite on a real defect must still
+ * gate; the post-time isOnDiff check keeps its comment off the PR.
+ */
+export function filterToDiffLines(findings, rangesByFile, blockSeverities = []) {
+    const kept = [];
+    const dropped = [];
+    for (const f of findings) {
+        const line = f.line;
+        if (line === undefined || isVerdictDriving(f, blockSeverities)) {
+            kept.push(f);
+            continue;
+        }
+        const ranges = rangesByFile.get(f.file);
+        if (ranges !== undefined && ranges.some(([a, b]) => line >= a && line <= b)) {
+            kept.push(f);
+        }
+        else {
+            dropped.push(f);
+        }
+    }
+    return { kept, dropped };
+}
+/**
  * R3/KTD2 — Jev P(true-positive) at/above which a blocker-severity finding
  * counts as proven for the REQUEST_CHANGES gate. This is a different axis
  * from `review.findingThreshold` (P(false-positive) for nit/q suppression)
@@ -1494,6 +1619,32 @@ async function cmdCodeReview(args, ctx, deps) {
                 stage(`${triageLine(triage)} — ${routed.reason}`);
         }
         stage(`reviewing ${chunks.length} chunk(s) — model ${reviewModel}`);
+        // Findings must anchor to lines the diff shows — a cite outside every
+        // hunk (or in a file the diff doesn't touch) is unverifiable and
+        // unpostable. Filter at parse and again after synthesis. Verdict-
+        // driving findings are exempt from anchoring — a misnumbered cite on
+        // a real defect must still gate; post-time isOnDiff keeps its comment
+        // off the PR.
+        const blockSeverities = resolveBlockSeverities(config);
+        const diffRanges = diffLineRanges(files);
+        const diffTexts = diffLineTexts(files);
+        let droppedUnanchored = 0;
+        let droppedReverted = 0;
+        const droppedFindings = [];
+        const recordDrops = (ds, reason) => {
+            for (const f of ds) {
+                if (droppedFindings.length >= 50)
+                    break;
+                droppedFindings.push({
+                    file: f.file,
+                    severity: f.severity,
+                    message: f.message.slice(0, 300),
+                    reason,
+                    ...(f.line !== undefined ? { line: f.line } : {}),
+                    ...(f.category !== undefined ? { category: f.category } : {}),
+                });
+            }
+        };
         for (let i = 0; i < chunks.length; i++) {
             if (ledger.budgetExceeded)
                 break;
@@ -1511,15 +1662,24 @@ async function cmdCodeReview(args, ctx, deps) {
             recordSpend(response.cost);
             lastModel = response.model;
             const parsed = parseCodeReview(response.content);
-            allFindings.push(...parsed.findings);
+            const anchored = filterToDiffLines(parsed.findings, diffRanges, blockSeverities);
+            droppedUnanchored += anchored.dropped.length;
+            recordDrops(anchored.dropped, 'outside-diff');
+            const vetted = filterRevertNits(anchored.kept, diffTexts, blockSeverities);
+            droppedReverted += vetted.dropped.length;
+            recordDrops(vetted.dropped, 'revert-nit');
+            if (anchored.dropped.length + vetted.dropped.length > 0) {
+                debug('code-review', `chunk ${i + 1}: dropped ${anchored.dropped.length} outside-diff, ${vetted.dropped.length} revert-nit finding(s)`);
+            }
+            allFindings.push(...vetted.kept);
             stage(`chunk ${i + 1}/${chunks.length} — ${parsed.findings.length} finding(s)`);
             if (ledger.budgetExceeded) {
                 ctx.err(`code-review: budget exceeded after chunk ${i + 1}; stopping early`);
                 break;
             }
         }
-        let summary;
-        let verdict;
+        let modelVerdict;
+        let modelSummary;
         let finalFindings = allFindings;
         if (chunks.length > 1 && !ledger.budgetExceeded) {
             try {
@@ -1535,12 +1695,24 @@ async function cmdCodeReview(args, ctx, deps) {
                 recordSpend(synthResponse.cost);
                 lastModel = synthResponse.model;
                 const parsed = parseCodeReview(synthResponse.content);
-                summary = parsed.summary;
-                verdict = parsed.verdict;
+                modelSummary = parsed.summary;
+                modelVerdict = parsed.verdict;
                 finalFindings =
                     parsed.findings.length > 0
                         ? carryForwardSuggestions(parsed.findings, allFindings)
                         : allFindings;
+                const anchored = filterToDiffLines(finalFindings, diffRanges, blockSeverities);
+                droppedUnanchored += anchored.dropped.length;
+                recordDrops(anchored.dropped, 'outside-diff');
+                const vetted = filterRevertNits(anchored.kept, diffTexts, blockSeverities);
+                droppedReverted += vetted.dropped.length;
+                recordDrops(vetted.dropped, 'revert-nit');
+                finalFindings = vetted.kept;
+                // The model's summary describes the set it emitted — reuse it only
+                // when this pass dropped nothing, else its prose can cite findings
+                // that were filtered out.
+                if (anchored.dropped.length + vetted.dropped.length > 0)
+                    modelSummary = undefined;
                 if (ledger.budgetExceeded) {
                     ctx.err('code-review: budget exceeded after synthesis; stopping early');
                 }
@@ -1550,20 +1722,34 @@ async function cmdCodeReview(args, ctx, deps) {
                 ctx.err(`code-review synthesis failed: ${e.message}`);
             }
         }
-        if (summary === undefined || verdict === undefined) {
-            if (allFindings.length === 0) {
-                summary = 'No issues found';
-                verdict = 'pass';
-            }
-            else if (allFindings.some((f) => ['bug', 'risk'].includes(f.severity))) {
-                summary = `${allFindings.length} finding(s) include bug or risk`;
-                verdict = 'needs_changes';
-            }
-            else {
-                summary = `${allFindings.length} low-severity finding(s)`;
-                verdict = 'approve';
-            }
+        // Verdict describes the emitted findings against the operator's gate —
+        // derived from the post-filter set on every path, so a filtered-out
+        // finding can never flip the gate open (dropped bug -> 'pass') nor
+        // leave an inconsistent 'needs_changes' over an empty findings list.
+        // needs_changes means "a blocking severity is present" — same set the
+        // ok flag and reviewEvent are computed from, so verdict, ok, and
+        // reviewEvent can never disagree. The model's own verdict is recorded
+        // when it diverges, never trusted.
+        let verdict;
+        let summary;
+        if (finalFindings.length === 0) {
+            const dropped = droppedUnanchored + droppedReverted;
+            summary =
+                dropped > 0
+                    ? `No issues found — ${dropped} model finding(s) dropped as off-diff or self-reverting`
+                    : 'No issues found';
+            verdict = 'pass';
         }
+        else if (finalFindings.some((f) => blockSeverities.includes(f.severity))) {
+            summary = `${finalFindings.length} finding(s) include a blocking severity`;
+            verdict = 'needs_changes';
+        }
+        else {
+            summary = `${finalFindings.length} low-severity finding(s)`;
+            verdict = 'approve';
+        }
+        if (modelVerdict === verdict && modelSummary !== undefined)
+            summary = modelSummary;
         if (ledger.budgetExceeded) {
             summary = `Budget exceeded — review stopped early. ${summary}`;
             if (verdict !== 'needs_changes')
@@ -1585,10 +1771,10 @@ async function cmdCodeReview(args, ctx, deps) {
         // secrets lane's materialize+scan below (the two lanes are
         // independent; results apply in order: adjudication, then union).
         // Skipped when the budget is already blown — no trailing spend.
-        // blockSeverities flows in so a user-blocking severity (e.g. a
-        // config severity list containing 'nit') can never be suppressed —
-        // Jev must not be able to flip the commit-status gate.
-        const blockSeverities = resolveBlockSeverities(config);
+        // blockSeverities (resolved above, before the anchor filters) flows
+        // in so a user-blocking severity (e.g. a config severity list
+        // containing 'nit') can never be suppressed — Jev must not be able
+        // to flip the commit-status gate.
         let findingAdjudication;
         const adjudicationPromise = decisionClient !== undefined && !ledger.budgetExceeded && finalFindings.length > 0
             ? adjudicateFindings({
@@ -1784,6 +1970,10 @@ async function cmdCodeReview(args, ctx, deps) {
             ...(secretsScan !== undefined ? { secretsScan } : {}),
             ...(triage !== undefined ? { triage } : {}),
             ...(findingAdjudication !== undefined ? { findingAdjudication } : {}),
+            ...(droppedUnanchored > 0 ? { droppedUnanchored } : {}),
+            ...(droppedReverted > 0 ? { droppedReverted } : {}),
+            ...(droppedFindings.length > 0 ? { droppedFindings } : {}),
+            ...(modelVerdict !== undefined && modelVerdict !== verdict ? { modelVerdict } : {}),
             maxComments,
             calls: allCalls,
             visionCostUsd: totalCost,

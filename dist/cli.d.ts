@@ -57,6 +57,15 @@ export interface ReviewComment {
     /** R10 — path:line:bodyFirstLine:hash8(suggestion); a corrected suggestion re-posts. */
     dedupKey: string;
 }
+/** Per-finding audit record for a finding the post-parse filters removed. */
+export interface DroppedFinding {
+    file: string;
+    line?: number;
+    severity: string;
+    category?: string;
+    message: string;
+    reason: 'outside-diff' | 'revert-nit';
+}
 interface CodeReviewReport {
     ok: boolean;
     skipped: boolean;
@@ -87,6 +96,14 @@ interface CodeReviewReport {
     triage?: TriageRecord;
     /** U8 adjudication audit — per-finding p + suppressed records. */
     findingAdjudication?: FindingAdjudicationAudit;
+    /** Findings dropped for citing a file/line the diff never shows. */
+    droppedUnanchored?: number;
+    /** nit/q findings dropped for asking to revert text the diff added. */
+    droppedReverted?: number;
+    /** Per-finding audit of dropped findings (capped at 50); counters stay total. */
+    droppedFindings?: DroppedFinding[];
+    /** Synthesis verdict when it diverges from the post-filter derived verdict. */
+    modelVerdict?: 'pass' | 'needs_changes' | 'approve';
     calls: CallCost[];
     visionCostUsd: number;
     tokens: number;
@@ -137,6 +154,49 @@ export declare function parseCodeReview(content: string): {
  * synthesis output is ungrounded model text, never committable code.
  */
 export declare function carryForwardSuggestions(findings: CodeReviewReport['findings'], originals: CodeReviewReport['findings']): CodeReviewReport['findings'];
+/**
+ * New-side (RIGHT) line ranges covered by each file's diff hunks — the
+ * only lines a finding can anchor to (and the only ones it could have
+ * seen).
+ */
+export declare function diffLineRanges(files: readonly {
+    filename: string;
+    patch?: string | undefined;
+}[]): Map<string, [number, number][]>;
+/**
+ * New-side line number -> line text for every line the diff shows
+ * (added and context). Lets post-parse checks compare a finding's claim
+ * against what the cited line actually says.
+ */
+export declare function diffLineTexts(files: readonly {
+    filename: string;
+    patch?: string | undefined;
+}[]): Map<string, Map<number, string>>;
+/**
+ * Drop nit/q findings that ask to remove or revert text the cited diff
+ * line itself contains — i.e. findings that would undo wording the PR
+ * deliberately added ("remove `inconclusive`", "replace 'self-reported'
+ * with 'self-reported'"). Verdict-driving findings (bug/risk, security-
+ * category, configured blocking severities) are never touched: if the
+ * claim is real, severity stays the reviewer's call.
+ */
+export declare function filterRevertNits(findings: readonly ReviewFinding[], textsByFile: Map<string, Map<number, string>>, blockSeverities?: readonly string[]): {
+    kept: ReviewFinding[];
+    dropped: ReviewFinding[];
+};
+/**
+ * Drop findings whose line isn't visible in the file's diff. A finding on
+ * a file the diff doesn't touch, or at a line outside every hunk, is
+ * unverifiable and unpostable — misnumbered and fabricated citations land
+ * here. Line-less (file-level) findings always survive. Verdict-driving
+ * findings (bug/risk, security-category, configured blocking severities)
+ * are never dropped — a misnumbered cite on a real defect must still
+ * gate; the post-time isOnDiff check keeps its comment off the PR.
+ */
+export declare function filterToDiffLines(findings: readonly ReviewFinding[], rangesByFile: Map<string, [number, number][]>, blockSeverities?: readonly string[]): {
+    kept: ReviewFinding[];
+    dropped: ReviewFinding[];
+};
 /**
  * R3/KTD2 — Jev P(true-positive) at/above which a blocker-severity finding
  * counts as proven for the REQUEST_CHANGES gate. This is a different axis

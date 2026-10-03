@@ -1,0 +1,9 @@
+{
+  "title": "API handlers — planted SQL injection + header-trust authz bypass",
+  "kind": "trees",
+  "planted": [
+    { "file": "src/api.ts", "line": 25, "severity": "bug", "category": "security", "note": "string-interpolated SQL — injection" },
+    { "file": "src/api.ts", "line": 30, "severity": "risk", "category": "security", "note": "x-admin header trusted — authz bypass" }
+  ],
+  "expectVerdictIn": ["needs_changes"]
+}
