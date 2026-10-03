@@ -11,6 +11,12 @@
 //   mark-<px>-<theme>.png   marks only, at 16/32/64/256 px; each size uses
 //                           the optical master drawn for it
 //   lockup-64-<theme>.png   lockups only, 64 px tall
+//   glyphs.svg              sprite of every src/glyphs/ master (unit U8), one
+//                           <symbol> per glyph with the master's file stem as
+//                           its id (status-passed, proof-2, severity-q, lane-a0)
+//
+// Glyphs stay in currentColor: surfaces color them through status tokens, so
+// they get no per-theme or per-file exports.
 //
 // Marks take the `accent` token, the wordmark and lockups take `ink`
 // (DESIGN.md A1/A2, §6.1). Colors come from assets/brand/tokens.json so the
@@ -34,6 +40,7 @@ export const EXPORT_DIR = 'assets/brand/export'
 const THEMES = ['light', 'dark']
 const MARK_SIZES = [16, 32, 64, 256]
 const LOCKUP_HEIGHT = 64
+export const GLYPH_PREFIX = 'glyphs/'
 
 /** Optical master for a pixel size: ticks and thin strokes drop out small. */
 export function markMasterFor(px) {
@@ -104,7 +111,9 @@ const kindOf = (rel) => {
 export function buildBrand(masters = readMasters(), colors = readThemeColors()) {
   const files = new Map()
   const optimized = new Map()
+  const glyphs = masters.filter((m) => m.rel.startsWith(GLYPH_PREFIX))
   for (const { rel, svg } of masters) {
+    if (rel.startsWith(GLYPH_PREFIX)) continue
     const opt = svgoOptimize(svg)
     optimized.set(rel, opt)
     const stem = rel.replace(/\.svg$/, '')
@@ -138,7 +147,31 @@ export function buildBrand(masters = readMasters(), colors = readThemeColors()) 
       }
     }
   }
+  if (glyphs.length) files.set('glyphs.svg', Buffer.from(buildGlyphSprite(glyphs)))
   return files
+}
+
+/**
+ * One <symbol> per glyph master, id = file stem. The master's root
+ * presentation attributes (fill, stroke, stroke-width…) move onto a <g> inside
+ * the symbol so `<use href="glyphs.svg#status-passed">` keeps them.
+ */
+export function buildGlyphSprite(glyphs) {
+  const symbols = glyphs.map(({ rel, svg }) => {
+    const id = rel.slice(GLYPH_PREFIX.length).replace(/\.svg$/, '')
+    const opt = svgoOptimize(svg)
+    const m = /^<svg([^>]*)>([\s\S]*)<\/svg>$/.exec(opt)
+    if (!m) throw new Error(`${rel}: unexpected SVGO output`)
+    const attrs = m[1]
+      .replace(/\sxmlns="[^"]*"/, '')
+      .replace(/\sviewBox="[^"]*"/, '')
+      .trim()
+    const viewBox = /viewBox="([^"]*)"/.exec(m[1])?.[1]
+    if (viewBox !== '0 0 24 24') throw new Error(`${rel}: glyphs are drawn on the 24-unit grid`)
+    const [, title = '', body] = /^(<title>[^<]*<\/title>)?([\s\S]*)$/.exec(m[2])
+    return `<symbol id="${id}" viewBox="0 0 24 24">${title}<g ${attrs}>${body}</g></symbol>`
+  })
+  return `<svg xmlns="http://www.w3.org/2000/svg">${symbols.join('')}</svg>\n`
 }
 
 export function writeExports(files, root = ROOT) {
