@@ -46,6 +46,7 @@
     "smoke:dashboard": "node tests/e2e/dashboard-smoke.mjs",
     "app": "electron electron",
     "demo": "node scripts/demo.mjs",
+    "demo:record": "node scripts/demo-record.mjs",
     "tokens": "node scripts/build-tokens.mjs",
     "brand": "node scripts/build-brand.mjs",
     "render:brand": "node scripts/render-brand.mjs",

@@ -406,6 +406,18 @@ against it: the real chunking, model review, secrets scan and
 confidence-model adjudication, with zero GitHub API calls. Run
 `npm run watch` in a second terminal to stream the stage lines live. Requires `OPENROUTER_API_KEY` (BYOK, real model calls).
 
+### README casts (`npm run demo:record`, contributors)
+
+The terminal casts in the README are VHS tapes in `assets/demo/`. After
+`npm run build`, `npm run demo:record` replays each one in a clean
+environment (a temp `HOME`, a minimal `PATH`, no API key; it refuses to start
+if `OPENROUTER_API_KEY` is set) and writes `docs/assets/demo/<tape>.gif`. The
+`run` and `verify` casts replay `fixtures/demo-cache/checkout.flow.json`, a
+flow cache seeded with zero model calls, so they cost $0. Pass `--seed` to
+re-seed it if the replay stops matching (for example after a font or
+browser change). Requires `vhs`, `ttyd`, `ffmpeg`, `gifski` and
+`woff2_decompress`.
+
 ### Sandbox probes (opt-in, requires Docker)
 
 With `sandbox: { enabled: true }` in config (or the action's `sandbox: 'true'`
