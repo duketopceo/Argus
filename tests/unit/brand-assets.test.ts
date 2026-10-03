@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   buildBrand,
+  CHROME_PREFIX,
   EXPORT_DIR,
   GLYPH_PREFIX,
   ICNS_TYPES,
@@ -39,9 +40,10 @@ function listFiles(dir: string): string[] {
 
 const allMasters = readMasters()
 const masters = allMasters.filter(
-  (m) => !m.rel.startsWith(GLYPH_PREFIX) && !m.rel.startsWith(ICON_PREFIX),
+  (m) => ![GLYPH_PREFIX, ICON_PREFIX, CHROME_PREFIX].some((p) => m.rel.startsWith(p)),
 )
 const glyphs = allMasters.filter((m) => m.rel.startsWith(GLYPH_PREFIX))
+const chrome = allMasters.filter((m) => m.rel.startsWith(CHROME_PREFIX))
 const svgo = (svg: string) =>
   optimize(svg, { multipass: true, floatPrecision: 3, plugins: [{ name: 'preset-default' }] }).data
 const isMark = (rel: string) => /(^|\/)mark(-\d+)?\.svg$/.test(rel)
@@ -97,7 +99,11 @@ describe('brand exports (KTD6)', () => {
 
   it('keeps each optimized SVG under 2 KB (DESIGN.md section 10)', () => {
     for (const [rel, buf] of first) {
-      if (rel.endsWith('.svg') && rel !== 'glyphs.svg' && !rel.startsWith(ICON_PREFIX))
+      if (
+        rel.endsWith('.svg') &&
+        !['glyphs.svg', 'chrome.svg'].includes(rel) &&
+        !rel.startsWith(ICON_PREFIX)
+      )
         expect(buf.length, rel).toBeLessThanOrEqual(2048)
     }
   })
@@ -136,6 +142,81 @@ describe('glyph set (U8, DESIGN.md A3-A6)', () => {
       for (const [, value] of svg.matchAll(/(?:fill|stroke)="([^"]+)"/g))
         expect(['currentColor', 'none'], `${rel}: ${value}`).toContain(value)
     }
+  })
+})
+
+describe('chrome icons (U9, DESIGN.md A7, section 6.6)', () => {
+  const sprite = buildBrand().get('chrome.svg')!.toString('utf8')
+  const ids = [...sprite.matchAll(/<symbol id="([^"]+)"/g)].map((m) => m[1])
+  const glyphRoot = (svg: string) => /^<svg([^>]*)>/.exec(svg)![1].replace(/<title>.*$/, '')
+  const rootAttrs = (svg: string) =>
+    glyphRoot(svg)
+      .replace(/\s(?:xmlns|viewBox)="[^"]*"/g, '')
+      .trim()
+
+  it('ships the A7 set as one sprite symbol per master', () => {
+    expect([...ids].sort()).toEqual(
+      [
+        'check',
+        'chevron-down',
+        'chevron-left',
+        'chevron-right',
+        'chevron-up',
+        'close',
+        'copy',
+        'download',
+        'drawer',
+        'external',
+        'file',
+        'filter',
+        'key',
+        'keyboard',
+        'play',
+        'refresh',
+        'search',
+        'settings',
+        'stop',
+        'terminal',
+      ].sort(),
+    )
+    expect(chrome.map((c) => c.rel.slice(CHROME_PREFIX.length, -4)).sort()).toEqual([...ids].sort())
+  })
+
+  it('shares no id with the glyph sprite, so both can be inlined in one document', () => {
+    const glyphIds = glyphs.map((g) => g.rel.slice(GLYPH_PREFIX.length, -4))
+    for (const id of ids) expect(glyphIds, id).not.toContain(id)
+  })
+
+  it('draws in the glyph hand: 24-unit grid, same root stroke attributes, currentColor only', () => {
+    // The stroked glyphs (status, lane) set the hand; proof tallies are fills.
+    const hand = rootAttrs(glyphs.find((g) => g.rel === `${GLYPH_PREFIX}lane-review.svg`)!.svg)
+    for (const { rel, svg } of glyphs.filter((g) => /\/(?:status|lane)-/.test(g.rel)))
+      expect(rootAttrs(svg), rel).toBe(hand)
+    for (const { rel, svg } of chrome) {
+      expect(svg, rel).toMatch(/viewBox="0 0 24 24"/)
+      expect(rootAttrs(svg), rel).toBe(hand)
+      expect(svg, rel).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(|hsl\(|oklch\(/i)
+      expect(svg, rel).not.toMatch(/stroke-width="(?!1\.8")/)
+      for (const [, value] of svg.matchAll(/(?:fill|stroke)="([^"]+)"/g))
+        expect(['currentColor', 'none'], `${rel}: ${value}`).toContain(value)
+    }
+  })
+
+  it('uses no circle, ellipse or arc: circles are reserved for eye semantics', () => {
+    for (const { rel, svg } of chrome) {
+      expect(svg, rel).not.toMatch(/<(?:circle|ellipse)[\s>]/)
+      for (const [, d] of svg.matchAll(/\sd="([^"]*)"/g)) expect(d, rel).not.toMatch(/[Aa]/)
+      // A rect rounded into a circle or a pill is an eye in disguise.
+      for (const [rect] of svg.matchAll(/<rect\b[^>]*>/g)) {
+        const n = (a: string) => Number(new RegExp(`\\s${a}="([^"]*)"`).exec(rect)?.[1] ?? 0)
+        expect(n('rx') * 2, `${rel}: ${rect}`).toBeLessThan(Math.min(n('width'), n('height')))
+      }
+    }
+  })
+
+  it('keeps each optimized icon under 2 KB and the sprite under 16 KB (section 10)', () => {
+    for (const { rel, svg } of chrome) expect(svgo(svg).length, rel).toBeLessThanOrEqual(2048)
+    expect(Buffer.byteLength(sprite)).toBeLessThanOrEqual(16 * 1024)
   })
 })
 
