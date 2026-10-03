@@ -21,10 +21,14 @@ const masters = readMasters()
 const isMark = (rel: string) => /(^|\/)mark(-\d+)?\.svg$/.test(rel)
 
 describe('brand SVG masters (KTD6)', () => {
-  it('finds the mark candidates and the wordmark', () => {
-    const rels = masters.map((m) => m.rel)
-    expect(rels).toContain('wordmark.svg')
-    expect(rels.filter(isMark).length).toBeGreaterThanOrEqual(3)
+  it('has the three optical mark masters, the wordmark and the lockup', () => {
+    expect(masters.map((m) => m.rel)).toEqual([
+      'lockup.svg',
+      'mark-16.svg',
+      'mark-24.svg',
+      'mark.svg',
+      'wordmark.svg',
+    ])
   })
 
   it.each(masters.map((m) => [m.rel, m.svg]))('%s parses and is self-contained', (_rel, svg) => {

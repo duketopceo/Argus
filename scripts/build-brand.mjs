@@ -52,7 +52,7 @@ function listSvgs(dir) {
   return out.sort()
 }
 
-/** Master files as { rel: 'candidates/a/mark.svg', svg: '<svg…' }, sorted. */
+/** Master files as { rel: 'mark-16.svg', svg: '<svg…' }, sorted. */
 export function readMasters(root = ROOT) {
   const base = join(root, SRC_DIR)
   return listSvgs(base).map((path) => ({
@@ -210,7 +210,7 @@ export function buildPreview(masters = readMasters(), colors = readThemeColors()
         `<rect x="${x0}" y="${y0}" width="${half}" height="${ROW}" fill="${CANVAS[theme]}"/>`,
       )
       parts.push(
-        `<text x="${x0 + 16}" y="${y0 + 24}" font-family="sans-serif" font-size="14" fill="${LABEL[theme]}">${name} · ${label}</text>`,
+        `<text x="${x0 + 16}" y="${y0 + 24}" font-family="sans-serif" font-size="14" fill="${LABEL[theme]}">${name || 'argus'} · ${label}</text>`,
       )
       let x = x0 + 16
       const base = y0 + 40
