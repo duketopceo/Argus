@@ -87,8 +87,6 @@ const TEMPORARY: Record<string, Allowance> = {
   'action/action.yml': { emdash: 12, unit: 'U5 (job summary wording)' },
   'electron/renderer.js': { emoji: 2, emdash: 8, unit: 'U13 (replaced by electron/ui/)' },
   'electron/index.html': { emdash: 3, unit: 'U13 (replaced by electron/ui/)' },
-  'scripts/watch.mjs': { emdash: 5, unit: 'U12' },
-  'scripts/collect.mjs': { emdash: 1, unit: 'U12' },
   // U3 touches these files, but its plan text scopes it to comments; strings need U3 widened.
   'src/config.ts': { emdash: 2, unit: 'U3 (if widened to strings)' },
   'src/evidence/ci.ts': { emdash: 5, unit: 'U3 (if widened to strings)' },

@@ -25,6 +25,20 @@ export function safe(s) {
   return String(s ?? '').replace(/[\x00-\x1f\x7f]/g, ' ').replace(/\x1b/g, ' ')
 }
 
+/**
+ * Classify a failed `gh` call into a typed source state so surfaces can say
+ * "GitHub CLI not found" or "not signed in" instead of "none open".
+ */
+export function ghSourceState(err) {
+  if (err?.code === 'ENOENT') return { state: 'missing' }
+  const text = `${err?.stderr ?? ''}\n${err?.message ?? ''}`
+  if (/gh auth login|not logged in|authentication required|GH_TOKEN/i.test(text)) {
+    return { state: 'unauthenticated' }
+  }
+  const first = String(err?.stderr ?? '').trim().split('\n')[0] || safe(err?.message).split('\n')[0]
+  return { state: 'error', detail: safe(first) }
+}
+
 // --- run-manifest layer ----------------------------------------------------
 // The manifest is the shared evidence contract for every surface (R15–R18):
 // the dashboard workspace and the TUI pane render these sanitized records,
@@ -316,7 +330,7 @@ async function collectManifests(root) {
     workspace.degraded =
       workspace.current === undefined
         ? 'run-manifest.json is unreadable'
-        : 'run-manifest.json unreadable — showing last valid run'
+        : 'run-manifest.json unreadable, showing the last valid run'
   } else {
     workspace.current = archived[archived.length - 1]
   }
@@ -357,6 +371,9 @@ async function collectNow(root) {
       corrupt: 0,
       degraded: undefined,
     },
+    // Typed per-source state: `gh` can be ok, missing, unauthenticated or
+    // error, so an empty PR list is never mistaken for "none open".
+    sources: { gh: { state: 'ok' } },
     error: '',
     updatedAt: new Date().toISOString(),
   }
@@ -387,6 +404,7 @@ async function collectNow(root) {
       )
       state.prChecks = Object.fromEntries(checks)
     } catch (e) {
+      state.sources.gh = ghSourceState(e)
       state.error = `gh: ${safe(e.message).split('\n')[0]}`
     }
   }

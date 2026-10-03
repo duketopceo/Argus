@@ -3,7 +3,7 @@
 // real OpenRouter money. No network: the estimate comes from the most recent
 // evals/results/*.json that covered each model.
 
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 // Single source for evals/run.mjs defaults so the confirm text cannot drift
@@ -143,4 +143,33 @@ export function confirmKey(key) {
   if (key === 'y' || key === 'Y') return 'confirm'
   if (key === 'n' || key === 'N' || key === '\x1b' || key === '\r' || key === '\n') return 'cancel'
   return 'ignore'
+}
+
+/**
+ * Spend recorded so far by an eval that started at `sinceMs`: the sum of
+ * `totals.visionCostUsd` in evals/work/<model>/report/run.json files written
+ * since then. run.mjs overwrites each report with the cached warm run, so
+ * this is a floor, not an exact figure. Returns null when nothing was
+ * recorded (the eval failed before any model finished a run).
+ */
+export function evalSpendSince(root, sinceMs) {
+  const work = join(root, 'evals/work')
+  let total = null
+  let dirs
+  try {
+    dirs = readdirSync(work)
+  } catch {
+    return null
+  }
+  for (const d of dirs) {
+    const p = join(work, d, 'report/run.json')
+    try {
+      if (statSync(p).mtimeMs < sinceMs) continue
+      const cost = Number(JSON.parse(readFileSync(p, 'utf8'))?.totals?.visionCostUsd)
+      if (Number.isFinite(cost)) total = (total ?? 0) + cost
+    } catch {
+      // missing or half-written report: no data point
+    }
+  }
+  return total
 }
