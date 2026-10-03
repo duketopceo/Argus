@@ -35,6 +35,66 @@ export const LANE_STATUS_EMOJI = {
     unavailable: '⚠️',
     inconclusive: '🟡',
 };
+/*
+ * Ocellus vocabulary (DESIGN.md section 6.7, A4, A5). Text surfaces use these
+ * glyphs: each is a single-cell, text-presentation code point, never emoji.
+ * A status is always shown as glyph plus its LANE_STATUS_LABEL word.
+ * `action/sticky-comment.cjs` keeps its own copy, guarded by parity tests.
+ * LANE_STATUS_ICON / LANE_STATUS_EMOJI above stay until their consumers move.
+ */
+/** Status glyph per lane status; no two statuses share one. */
+export const STATUS_GLYPH = {
+    passed: '●',
+    failed: '⊘',
+    skipped: '–',
+    blocked: '⊖',
+    unavailable: '◌',
+    inconclusive: '◐',
+};
+/** Proof strength, weakest to strongest (A4 ladder). */
+export const PROOF_LEVELS = ['suspected', 'corroborated', 'exercised', 'reproduced'];
+const PROOF_NOTCH_FILLED = '▰';
+const PROOF_NOTCH_EMPTY = '▱';
+/**
+ * Four-notch meter: one filled notch per ladder step reached. Any other
+ * value (an evidence status outside the ladder, a missing level) is the
+ * empty meter, so a renderer never throws on unexpected input.
+ */
+export function proofMeter(level) {
+    const filled = PROOF_LEVELS.indexOf(level ?? '') + 1;
+    return PROOF_NOTCH_FILLED.repeat(filled) + PROOF_NOTCH_EMPTY.repeat(PROOF_LEVELS.length - filled);
+}
+/** Finding severities as the review pipeline emits them (`q` is a question). */
+export const SEVERITIES = ['bug', 'risk', 'nit', 'q'];
+/** Geometric, shape-only severity glyphs (A5). */
+export const SEVERITY_GLYPH = {
+    bug: '◆',
+    risk: '◈',
+    nit: '○',
+    q: '□',
+};
+export const SEVERITY_LABEL = {
+    bug: 'bug',
+    risk: 'risk',
+    nit: 'nit',
+    q: 'question',
+};
+/** Review verdicts as the synthesis step emits them. */
+export const VERDICTS = ['approve', 'needs_changes', 'pass'];
+/** Verdicts reuse status glyphs, so there is no third vocabulary. */
+export const VERDICT_STATUS = {
+    approve: 'passed',
+    needs_changes: 'failed',
+    pass: 'passed',
+};
+export const VERDICT_LABEL = {
+    approve: 'approve',
+    needs_changes: 'needs changes',
+    pass: 'clean',
+};
+export function verdictGlyph(verdict) {
+    return STATUS_GLYPH[VERDICT_STATUS[verdict]];
+}
 function laneDurationMs(lane) {
     if (lane.startedAt === undefined || lane.finishedAt === undefined)
         return undefined;

@@ -45,7 +45,9 @@
     "watch": "node scripts/watch.mjs",
     "smoke:dashboard": "node tests/e2e/dashboard-smoke.mjs",
     "app": "electron electron",
-    "demo": "node scripts/demo.mjs"
+    "demo": "node scripts/demo.mjs",
+    "tokens": "node scripts/build-tokens.mjs",
+    "check:contrast": "node scripts/check-contrast.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

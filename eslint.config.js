@@ -48,6 +48,13 @@ export default tseslint.config(
     },
   },
   {
+    // Brand template scripts (assets/brand/templates/) run inside a browser page.
+    files: ['assets/**/*.{js,mjs}'],
+    languageOptions: {
+      globals: globals.browser,
+    },
+  },
+  {
     // ANSI escape handling is the point of these files.
     files: ['scripts/**'],
     rules: {

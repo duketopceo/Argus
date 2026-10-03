@@ -17,6 +17,7 @@ colors:
     canvas: "#F4F5F7"
     surface: "#FFFFFF"
     surface-sunk: "#EAECEF"
+    raised: "#FFFFFF"
     hairline: "#D3D8DF"
     control-border: "#7E8693"
     ink: "#0E1116"
@@ -34,6 +35,7 @@ colors:
   dark:
     canvas: "#0C0E12"
     surface: "#14171C"
+    surface-sunk: "#090B0E"
     raised: "#1B1F26"
     hairline: "#272C34"
     control-border: "#666E7A"
@@ -397,7 +399,8 @@ canvas and surface of the same theme.
 |---|---|---|---|
 | `canvas` | `#F4F5F7` | App/report background | n/a |
 | `surface` | `#FFFFFF` | Panels, table bodies, inputs | n/a |
-| `surface-sunk` | `#EAECEF` | Code wells, log stream, selected row base | n/a |
+| `surface-sunk` | `#EAECEF` | Code wells, log stream, selected row base | n/a (ink-3 on it 4.98) |
+| `raised` | `#FFFFFF` | Popovers, inspector. Same value as `surface`: light elevation is the overlay shadow (§6.4) | n/a (ink-3 on it 5.89) |
 | `hairline` | `#D3D8DF` | Dividers (decorative, exempt from 3:1) | 1.31 / 1.43 |
 | `control-border` | `#7E8693` | Input/button outlines (must meet 3:1) | 3.37 / 3.67 |
 | `ink` | `#0E1116` | Primary text | 17.3 / 18.9 |
@@ -415,7 +418,8 @@ canvas and surface of the same theme.
 |---|---|---|---|
 | `canvas` | `#0C0E12` | Background | n/a |
 | `surface` | `#14171C` | Panels | n/a |
-| `raised` | `#1B1F26` | Popovers, inspector, selected row base | n/a |
+| `surface-sunk` | `#090B0E` | Code wells, log stream (one step below `canvas`) | n/a (ink-3 on it 6.27) |
+| `raised` | `#1B1F26` | Popovers, inspector, selected row base | n/a (ink-3 on it 5.26) |
 | `hairline` | `#272C34` | Dividers | 1.38 / 1.28 |
 | `control-border` | `#666E7A` | Control outlines | 3.75 / 3.49 |
 | `ink` | `#E8EBF0` | Primary text | 16.2 / 15.0 |
