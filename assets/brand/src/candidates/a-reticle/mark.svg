@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <title>argus mark, candidate a-reticle, mark</title>
+  <circle cx="12" cy="12" r="10.125" stroke="currentColor" stroke-width="1.75"/>
+  <circle cx="12" cy="12" r="5.5" stroke="currentColor" stroke-width="1.75"/>
+  <path d="M17.303 6.697L18.01 5.99M6.697 6.697L5.99 5.99M6.697 17.303L5.99 18.01M17.303 17.303L18.01 18.01" stroke="currentColor" stroke-width="1.75"/>
+  <circle cx="13" cy="11" r="2.75" fill="currentColor"/>
+</svg>
