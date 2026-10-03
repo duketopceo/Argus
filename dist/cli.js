@@ -24,6 +24,7 @@ import { linkFindings } from './evidence/link.js';
 import { DecisionClient } from './vision/decisions.js';
 import { isReviewProfile, packRubric } from './review/packs.js';
 import { partitionByExclude } from './review/scope.js';
+import { auditOf, validateFindings } from './review/validate.js';
 import { materializeMergeBaseDiff, scanSecrets } from './review/secrets.js';
 import { buildTriageState, routeModel, triageAreaSignal, triagePr, } from './review/triage.js';
 import { adjudicateFindings } from './review/adjudicate.js';
@@ -1732,6 +1733,22 @@ async function cmdCodeReview(args, ctx, deps) {
         if (excluded.length > 0) {
             summary = `Reviewed ${files.length} of ${allFiles.length} changed files (${excluded.length} excluded by review.exclude). ${summary}`;
         }
+        // Deterministic validation: anchors outside the reviewed diff are
+        // dropped before any adjudication spend. Counted, never silent.
+        let validation;
+        {
+            const checked = validateFindings(finalFindings, files, new Set(excluded.map((f) => f.filename)));
+            if (checked.dropped.length > 0) {
+                validation = auditOf(checked.dropped);
+                finalFindings = checked.kept;
+                stage(`validation dropped ${checked.dropped.length} finding(s) outside the diff`);
+                summary = `${summary} ${checked.dropped.length} finding(s) dropped: anchored outside the reviewed diff.`;
+                const stillBlocking = finalFindings.some((f) => ['bug', 'risk'].includes(f.severity));
+                if (verdict === 'needs_changes' && !stillBlocking) {
+                    verdict = finalFindings.length === 0 ? 'pass' : 'approve';
+                }
+            }
+        }
         if (ledger.budgetExceeded) {
             summary = `Budget exceeded, review stopped early. ${summary}`;
             if (verdict !== 'needs_changes')
@@ -1953,6 +1970,7 @@ async function cmdCodeReview(args, ctx, deps) {
             ...(triage !== undefined ? { triage } : {}),
             ...(findingAdjudication !== undefined ? { findingAdjudication } : {}),
             scope,
+            ...(validation !== undefined ? { validation } : {}),
             maxComments,
             calls: allCalls,
             visionCostUsd: totalCost,

@@ -688,6 +688,18 @@ function diagnosticsFold(manifest, report, codeReview) {
           `${sc.excludedFiles} excluded by \`review.exclude\`${sample ? ` (${sample})` : ''}`,
       )
     }
+    const val = codeReview.validation
+    if (val && val.dropped > 0) {
+      const LABEL = {
+        file_not_in_diff: 'file not in the diff',
+        file_excluded: 'file excluded from review',
+        file_deleted: 'file deleted at head',
+        line_beyond_file: 'line past end of file',
+        line_outside_diff: 'line outside changed hunks',
+      }
+      const parts = Object.entries(val.byReason ?? {}).map(([k, n]) => `${n} ${LABEL[k] ?? cell(k)}`)
+      items.push(`Findings dropped by validation: ${val.dropped} (${parts.join(', ')})`)
+    }
     const t = codeReview.triage
     if (t) {
       if (t.unadjudicated === true) {

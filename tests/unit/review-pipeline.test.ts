@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { reply, runReview, ScriptedClient } from './review-pipeline.helpers.js'
+import { lines, reply, runReview, ScriptedClient } from './review-pipeline.helpers.js'
 
 describe('review scope exclusions', () => {
   it('keeps fixture, golden and dist paths out of the model input and reports it', async () => {
@@ -43,3 +43,33 @@ describe('review scope exclusions', () => {
   })
 })
 
+
+describe('finding validation', () => {
+  it('drops findings outside the diff and reports counts and reasons', async () => {
+    const client = new ScriptedClient([
+      reply([
+        { file: 'src/a.ts', line: 2, severity: 'bug', category: 'correctness', message: 'L2: real' },
+        { file: 'src/discount.ts', line: 6, severity: 'bug', category: 'correctness', message: 'L6: ghost' },
+        { file: 'src/a.ts', line: 90, severity: 'risk', category: 'correctness', message: 'L90: past eof' },
+      ]),
+    ])
+    const r = await runReview({
+      base: { 'src/a.ts': lines(5) },
+      head: { 'src/a.ts': lines(5).replace('line 2', 'LINE 2') },
+      client,
+    })
+    expect(r.report.findings.map((x: { message: string }) => x.message)).toEqual(['L2: real'])
+    expect(r.report.validation.dropped).toBe(2)
+    expect(r.report.validation.byReason).toEqual({ file_not_in_diff: 1, line_outside_diff: 1 })
+    expect(r.report.validation.examples).toHaveLength(2)
+  })
+
+  it('downgrades the verdict when every blocking finding was dropped', async () => {
+    const client = new ScriptedClient([
+      reply([{ file: 'src/ghost.ts', line: 1, severity: 'bug', category: 'correctness', message: 'L1: ghost' }]),
+    ])
+    const r = await runReview({ head: { 'src/a.ts': 'x\n' }, client })
+    expect(r.report.findings).toHaveLength(0)
+    expect(r.report.verdict).toBe('pass')
+  })
+})

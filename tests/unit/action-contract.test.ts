@@ -587,6 +587,17 @@ describe('sticky review top block (U4)', () => {
     expect(diagnostics).toContain('dist/a.js')
   })
 
+  it('states dropped findings and reasons in Diagnostics', () => {
+    const cr = review({
+      validation: { dropped: 3, byReason: { file_not_in_diff: 2, line_outside_diff: 1 }, examples: [] },
+    })
+    const body = renderReviewOnlyBody(cr, 'https://github.com/run/1', false, undefined)
+    const diagnostics = body.slice(body.indexOf('<summary>Diagnostics</summary>'))
+    expect(diagnostics).toContain(
+      'Findings dropped by validation: 3 (2 file not in the diff, 1 line outside changed hunks)',
+    )
+  })
+
   it('states an inconclusive evidence link once, in Diagnostics, not on every finding (U6)', () => {
     const NOTE = 'no repo index; run `argus-reviewer index` first'
     const cr = review({

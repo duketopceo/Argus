@@ -47,6 +47,7 @@ import { linkFindings, type Evidence } from './evidence/link.js'
 import { DecisionClient } from './vision/decisions.js'
 import { isReviewProfile, packRubric } from './review/packs.js'
 import { partitionByExclude } from './review/scope.js'
+import { auditOf, validateFindings, type ValidationAudit } from './review/validate.js'
 import { materializeMergeBaseDiff, scanSecrets, type SecretsScanResult } from './review/secrets.js'
 import {
   buildTriageState,
@@ -1336,6 +1337,8 @@ interface CodeReviewReport {
   findingAdjudication?: FindingAdjudicationAudit
   /** How much of the PR the review covered, and what was left out. */
   scope?: ReviewScope
+  /** Findings dropped by deterministic validation, with reasons. */
+  validation?: ValidationAudit
   calls: CallCost[]
   visionCostUsd: number
   tokens: number
@@ -2118,6 +2121,27 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       summary = `Reviewed ${files.length} of ${allFiles.length} changed files (${excluded.length} excluded by review.exclude). ${summary}`
     }
 
+    // Deterministic validation: anchors outside the reviewed diff are
+    // dropped before any adjudication spend. Counted, never silent.
+    let validation: ValidationAudit | undefined
+    {
+      const checked = validateFindings(
+        finalFindings,
+        files,
+        new Set(excluded.map((f) => f.filename)),
+      )
+      if (checked.dropped.length > 0) {
+        validation = auditOf(checked.dropped)
+        finalFindings = checked.kept
+        stage(`validation dropped ${checked.dropped.length} finding(s) outside the diff`)
+        summary = `${summary} ${checked.dropped.length} finding(s) dropped: anchored outside the reviewed diff.`
+        const stillBlocking = finalFindings.some((f) => ['bug', 'risk'].includes(f.severity))
+        if (verdict === 'needs_changes' && !stillBlocking) {
+          verdict = finalFindings.length === 0 ? 'pass' : 'approve'
+        }
+      }
+    }
+
     if (ledger.budgetExceeded) {
       summary = `Budget exceeded, review stopped early. ${summary}`
       if (verdict !== 'needs_changes') verdict = 'needs_changes'
@@ -2355,6 +2379,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       ...(triage !== undefined ? { triage } : {}),
       ...(findingAdjudication !== undefined ? { findingAdjudication } : {}),
       scope,
+      ...(validation !== undefined ? { validation } : {}),
       maxComments,
       calls: allCalls,
       visionCostUsd: totalCost,

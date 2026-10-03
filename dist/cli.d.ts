@@ -5,6 +5,7 @@ import { BrowserDriver } from './driver/browser.js';
 import { VisionClient } from './engine/loop.js';
 import { type PrMeta } from './evidence/ci.js';
 import { type Evidence } from './evidence/link.js';
+import { type ValidationAudit } from './review/validate.js';
 import { type SecretsScanResult } from './review/secrets.js';
 import { type TriageRecord } from './review/triage.js';
 import { type FindingAdjudicationAudit } from './review/adjudicate.js';
@@ -106,6 +107,8 @@ interface CodeReviewReport {
     findingAdjudication?: FindingAdjudicationAudit;
     /** How much of the PR the review covered, and what was left out. */
     scope?: ReviewScope;
+    /** Findings dropped by deterministic validation, with reasons. */
+    validation?: ValidationAudit;
     calls: CallCost[];
     visionCostUsd: number;
     tokens: number;
