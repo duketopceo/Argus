@@ -81,6 +81,12 @@ export declare function laneView(lane: LaneManifest): LaneView;
 export declare function manifestToRunView(manifest: RunManifest): RunView;
 /** Structural validation — a manifest the view-model can trust enough to render. */
 export declare function isRunManifest(value: unknown): value is RunManifest;
+/**
+ * One lane record the view-model can render. Exported so a surface that
+ * degrades per lane (the HTML report) applies the same check as the whole-
+ * manifest guard.
+ */
+export declare function isLaneManifest(value: unknown, id: LaneId): value is LaneManifest;
 export declare function maskSecrets(s: string): string;
 export declare function formatUsd(n: number | undefined): string;
 export declare function formatDuration(ms: number | undefined): string;

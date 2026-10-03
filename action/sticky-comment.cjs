@@ -368,6 +368,8 @@ function footer(meta, runUrl) {
   const bits = [`Argus ${meta.version ?? packageVersion()}`]
   const url = runUrl ?? meta.runUrl
   if (url) bits.push(`[workflow run and evidence](${url})`)
+  // U14 (KTD12, Q13): name where report.html sits in the consumer's upload.
+  if (meta.reportHtml) bits.push(`report ${code(meta.reportHtml)} in the run artifacts`)
   bits.push('self-hosted, BYOK')
   return `<sub>${bits.join(' · ')}</sub>`
 }
@@ -975,13 +977,19 @@ function staleEvidenceNotice(file) {
 /**
  * Pick and render the sticky body for one run. `ev` carries what main() read:
  * hasKey, runDisabled, eventName, report, codeReview, manifestState, inlinePlan,
- * ok, reportDir, staleEvidence, runUrl.
+ * ok, reportDir, staleEvidence, runUrl, reportHtml.
  */
-function renderSticky(ev, meta = {}) {
+function renderSticky(ev, baseMeta = {}) {
   const runUrl = ev.runUrl
-  if (!ev.hasKey) return renderMissingKeyBody({ ...meta, runUrl })
+  if (!ev.hasKey) return renderMissingKeyBody({ ...baseMeta, runUrl })
   const ms = ev.manifestState ?? { state: 'missing' }
   const manifest = ms.state === 'ok' ? ms.manifest : undefined
+  // report.html is written beside the manifest by the same verify run. Only
+  // a fresh, valid manifest vouches for it; otherwise it may be residue.
+  const meta =
+    manifest !== undefined && typeof ev.reportHtml === 'string' && ev.reportHtml !== ''
+      ? { ...baseMeta, reportHtml: ev.reportHtml }
+      : baseMeta
   const named = ms.state !== 'ok' && manifestExpected(ms, ev.eventName)
   const notices = []
   if (named) {
@@ -1510,6 +1518,10 @@ async function main() {
     manifestState = resolveManifest(raw, { headSha: pr ? pr.head.sha : context.sha, nonce: expectedNonce })
     manifest = manifestState.state === 'ok' ? manifestState.manifest : undefined
   }
+  const reportHtmlPath = path.join(reportDir, 'report.html')
+  const reportHtml = fs.existsSync(reportHtmlPath)
+    ? path.relative(process.env.GITHUB_WORKSPACE || process.cwd(), reportHtmlPath).split(path.sep).join('/')
+    : undefined
 
   // Missing code-review.json after a continue-on-error step means the review
   // crashed, not that it skipped — an intentional skip writes ok+skipped.
@@ -1548,6 +1560,7 @@ async function main() {
     reportDir,
     staleEvidence,
     runUrl,
+    reportHtml,
   })
 
   if (pr) await postSticky(owner, repo, pr, body)

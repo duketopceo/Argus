@@ -96,7 +96,7 @@ import {
   postIssueComment,
 } from './mention.js'
 import type { BudgetOptions } from './pipeline/budget.js'
-import { runVerify } from './pipeline/verify.js'
+import { runVerify, writeEvidenceReport } from './pipeline/verify.js'
 import {
   APP_LANE_DEFAULT_TIMEOUT_MS,
   APP_LANE_REPORT,
@@ -2408,7 +2408,7 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
   // config.reportDir gets the same wipe once the config loads.
   const wipeEvidence = async (dir: string): Promise<void> => {
     await mkdir(dir, { recursive: true }).catch(() => {})
-    for (const stale of ['run-manifest.json', 'run.json', 'code-review.json', 'junit.xml']) {
+    for (const stale of ['run-manifest.json', 'run.json', 'code-review.json', 'junit.xml', 'report.html']) {
       await rm(join(dir, stale), { force: true }).catch(() => {})
     }
     for (const lane of LANE_IDS) {
@@ -2561,6 +2561,20 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
   }
   const manifestPath = join(reportDir, 'run-manifest.json')
   await writeAtomicJson(manifestPath, result.manifest)
+  // U14: the offline HTML evidence report beside the manifest. A render
+  // failure must not change the verdict the manifest already carries.
+  try {
+    const server = envOr(ctx.env.GITHUB_SERVER_URL)
+    const repository = envOr(ctx.env.GITHUB_REPOSITORY)
+    const runId = envOr(ctx.env.GITHUB_RUN_ID)
+    await writeEvidenceReport(reportDir, result.manifest, {
+      ...(server !== undefined && repository !== undefined && runId !== undefined
+        ? { runUrl: `${server}/${repository}/actions/runs/${runId}` }
+        : {}),
+    })
+  } catch (e) {
+    ctx.err(`warning: evidence report failed: ${(e as Error).message}`)
+  }
   // Local run history for the dashboard/TUI workspace — bounded by
   // reportRetention (default 20; 0 disables archival).
   try {
