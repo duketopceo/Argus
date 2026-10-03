@@ -1,12 +1,12 @@
 /**
  * U7 PR triage lane — one batched `decide` call before chunk review
  * produces a typed-probability triage record (the pace two-round
- * pattern). Jev routes and annotates, never gates: every chunk is still
+ * pattern). The confidence model routes and annotates, never gates: every chunk is still
  * reviewed by a code model and the deterministic verdict stays
  * authoritative. `decide` failure degrades open — the record lands with
  * `unadjudicated` and routing keeps the configured (strong) model.
  *
- * PR title/body in `state` are untrusted text — Jev is the only
+ * PR title/body in `state` are untrusted text — the confidence model is the only
  * consumer; they never reach the verdict path.
  */
 import { debug } from '../debug.js';

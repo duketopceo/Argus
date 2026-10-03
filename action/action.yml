@@ -1,6 +1,9 @@
 name: argus-reviewer
 description: Run the argus-reviewer harness and post a sticky PR comment with cost and evidence.
 author: duketopceo
+branding:
+  icon: eye
+  color: blue
 inputs:
   openrouter-api-key:
     description: OpenRouter API key (BYOK). All vision calls are billed through this key.

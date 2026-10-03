@@ -1166,7 +1166,7 @@ export function carryForwardSuggestions(findings, originals) {
     });
 }
 /**
- * R3/KTD2 — Jev P(true-positive) at/above which a blocker-severity finding
+ * R3/KTD2: confidence-model P(true-positive) at/above which a blocker-severity finding
  * counts as proven for the REQUEST_CHANGES gate. This is a different axis
  * from `review.findingThreshold` (P(false-positive) for nit/q suppression)
  * — never reuse that knob. 0.7: high-confidence without demanding
@@ -1180,7 +1180,7 @@ export const P_TRUE_POSITIVE_THRESHOLD = 0.7;
  * code-review.json; posters read `reviewEvent`, never recompute.
  * Unadjudicated blockers (no p, not reproduced) never escalate —
  * degrade-open by design. The two counts overlap deliberately: a
- * reproduced AND Jev-confident finding is reported under both.
+ * reproduced AND high-confidence finding is reported under both.
  */
 export function computeReviewEvent(findings, blockSeverities, allowRequestChanges) {
     const blockers = findings.filter((f) => blockSeverities.includes(f.severity));
@@ -1450,10 +1450,10 @@ async function cmdCodeReview(args, ctx, deps) {
                 }),
             })
             : undefined;
-        // U7 triage lane — one batched Jev decide(). 'route' needs the
+        // U7 triage lane — one batched confidence-model decide(). 'route' needs the
         // signal before chunk review to pick the model tier, so it awaits
         // here; 'annotate' (default) overlaps the decide() round-trip with
-        // the chunk loop and resolves before the probe lane below. Jev
+        // the chunk loop and resolves before the probe lane below. The confidence model
         // routes/annotates, never gates: every chunk is still reviewed.
         let reviewModel = model;
         let triage;
@@ -1576,7 +1576,7 @@ async function cmdCodeReview(args, ctx, deps) {
             if (triage !== undefined)
                 stage(triageLine(triage));
         }
-        // U8 finding adjudication — one batched Jev noul per synthesized
+        // U8 finding adjudication — one batched confidence-model noul per synthesized
         // finding. Runs on the model findings only (secrets findings carry
         // their own adjudication) and BEFORE the secrets union below so a
         // suppressed nit can never reach a secret record. bug/risk are
@@ -1587,7 +1587,7 @@ async function cmdCodeReview(args, ctx, deps) {
         // Skipped when the budget is already blown — no trailing spend.
         // blockSeverities flows in so a user-blocking severity (e.g. a
         // config severity list containing 'nit') can never be suppressed —
-        // Jev must not be able to flip the commit-status gate.
+        // The confidence model must not be able to flip the commit-status gate.
         const blockSeverities = resolveBlockSeverities(config);
         let findingAdjudication;
         const adjudicationPromise = decisionClient !== undefined && !ledger.budgetExceeded && finalFindings.length > 0
@@ -1619,7 +1619,7 @@ async function cmdCodeReview(args, ctx, deps) {
         // local diff is the complete scan surface. Findings union into
         // finalFindings AFTER the synthesis replacement above so a
         // prompt-injected synthesis can never erase them. Literals are
-        // masked in every output (Jev `state` is the documented exception).
+        // masked in every output (confidence-model `state` is the documented exception).
         let secretsScan;
         const secretsFindings = [];
         if (prMeta?.baseSha !== undefined) {

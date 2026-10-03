@@ -1,6 +1,6 @@
 import type { CallCost, ProviderValue } from './cost.js';
 /**
- * Pinned Jev slug — the alias `~typesafe/jev-latest` drifts silently and
+ * Pinned confidence-model slug — the alias `~typesafe/jev-latest` drifts silently and
  * adjudication thresholds are calibrated to a version. The alias stays
  * usable via `config.decisionModel` for experimentation.
  */
@@ -52,7 +52,7 @@ export declare const isChoiceAnswer: (a: DecisionAnswer) => a is ChoiceAnswer;
 export declare const isScoreAnswer: (a: DecisionAnswer) => a is ScoreAnswer;
 /** Short error label for lane debug lines: DecisionError kind, else message. */
 export declare function describeDecisionError(e: unknown): string;
-/** Shared per-call batch cap for the Jev lanes (secrets, findings, triage). */
+/** Shared per-call batch cap for the confidence-model lanes (secrets, findings, triage). */
 export declare const MAX_CANDIDATES = 50;
 export interface DecisionClientOptions {
     apiKey: string;

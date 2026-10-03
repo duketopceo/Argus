@@ -50,7 +50,7 @@ export interface PrMeta {
    * timeline fetch failed (the gate fails closed either way).
    */
   labelApprovedAt: string | undefined
-  /** PR title/body — triage state only (untrusted text; feeds Jev, never gates). */
+  /** PR title/body — triage state only (untrusted text; feeds the confidence model, never gates). */
   title: string | undefined
   body: string | undefined
 }

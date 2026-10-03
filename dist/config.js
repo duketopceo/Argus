@@ -173,7 +173,7 @@ export function resolveConfig(input = {}) {
     const rawReview = typeof input.review === 'object' && input.review !== null ? input.review : {};
     const review = { ...defaults.review, ...rawReview };
     // Thresholds must be probabilities — anything else (NaN, >1,
-    // negative) would silently suppress or flood the Jev lanes.
+    // negative) would silently suppress or flood the confidence-model lanes.
     review.secretsThreshold = prob01(review.secretsThreshold, defaults.review.secretsThreshold);
     review.maxComments =
         typeof review.maxComments === 'number' &&

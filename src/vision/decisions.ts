@@ -3,7 +3,7 @@ import { makeDecisionsCallCost } from './cost.js'
 import type { CallCost, DecisionsResponse, ProviderValue } from './cost.js'
 
 /**
- * Pinned Jev slug — the alias `~typesafe/jev-latest` drifts silently and
+ * Pinned confidence-model slug — the alias `~typesafe/jev-latest` drifts silently and
  * adjudication thresholds are calibrated to a version. The alias stays
  * usable via `config.decisionModel` for experimentation.
  */
@@ -82,7 +82,7 @@ export function describeDecisionError(e: unknown): string {
   return e instanceof DecisionError ? e.kind : (e as Error).message
 }
 
-/** Shared per-call batch cap for the Jev lanes (secrets, findings, triage). */
+/** Shared per-call batch cap for the confidence-model lanes (secrets, findings, triage). */
 export const MAX_CANDIDATES = 50
 
 export interface DecisionClientOptions {

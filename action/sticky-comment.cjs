@@ -473,7 +473,7 @@ function renderBody(report, codeReview, runUrl, ok, inlinePlan, manifest) {
 // summary + honest counts, so the first screen answers "verdict, what
 // kinds, what needs me" before the <details> fold. ⛔ counts
 // probe-reproduced findings only — a high p alone is never "proven" —
-// while ◎ carries the Jev-confidence count; the two overlap when a
+// while ◎ carries the confidence-model count; the two overlap when a
 // finding is both (KTD2). The serialized blocker counts win when present
 // (same numbers reviewBody prints); the recount is the fallback for
 // reports predating them — P_FALLBACK_GATE must match
@@ -536,7 +536,7 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
       `**Head binding:** ${cell(codeReview.headBinding.status)} · ${cell(codeReview.headBinding.detail)}`,
     )
   }
-  // U7 triage record — Jev annotate/route signals, never the gate.
+  // U7 triage record: confidence-model annotate/route signals, never the gate.
   if (codeReview.triage) {
     const t = codeReview.triage
     if (t.unadjudicated === true) {
@@ -609,7 +609,7 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
       const ev = f.evidence
         ? `${evidenceIcon[f.evidence.status] ?? '❔'} ${cell(f.evidence.detail)}`
         : '—'
-      // U8 — Jev P(true positive); unadjudicated findings render '—'.
+      // U8: confidence-model P(true positive); unadjudicated findings render '—'.
       const p = typeof f.p === 'number' ? f.p.toFixed(2) : '—'
       lines.push(
         `| \`${cell(f.file)}\` | ${cell(f.severity)} | ${p} | ${cell(f.category ?? '—')} | ${ev} | ${cell(f.message)} |`,
@@ -653,7 +653,7 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
     lines.push('')
   }
   // U8 adjudication audit — outside the findings guard so suppressed-
-  // only reviews still show what Jev removed. p values live on the
+  // only reviews still show what the confidence model removed. p values live on the
   // findings table and in code-review.json records.
   if (codeReview.findingAdjudication && Array.isArray(codeReview.findingAdjudication.records)) {
     const fa = codeReview.findingAdjudication

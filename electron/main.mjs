@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { collect, ROOT } from '../scripts/collect.mjs'
 import { evalPlan, fmtUsd, formatEvalPlan } from '../scripts/eval-plan.mjs'
+import { APP_TITLE, appVersion } from './app-meta.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 // The CLI honours config.cacheDir / --cache-dir; the dashboard must tail the
@@ -19,7 +20,7 @@ try {
   if (cfg.cacheDir) LIVE_LOG = join(ROOT, cfg.cacheDir, 'live.ndjson')
 } catch { /* fall back to the default cache dir */ }
 app.disableHardwareAcceleration()
-app.setVersion('0.1.0')
+app.setVersion(appVersion())
 let win
 let evalChild
 let logChild
@@ -104,7 +105,7 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#0d1117',
-    title: 'argus-reviewer',
+    title: APP_TITLE,
     webPreferences: {
       preload: join(HERE, 'preload.mjs'),
       contextIsolation: true,

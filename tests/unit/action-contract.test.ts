@@ -200,6 +200,21 @@ describe('action input contract', () => {
     )
   })
 
+  it('declares Marketplace branding (R25): icon eye, color blue', async () => {
+    const action = await readFile(join(ACTION, 'action.yml'), 'utf8')
+    // Top-level `branding:` block: the key at column 0, its children indented.
+    const block = /^branding:\n((?:[ \t]+.*\n)+)/m.exec(action)
+    expect(block, 'action.yml has no top-level branding block').not.toBeNull()
+    const fields = Object.fromEntries(
+      block![1]!
+        .split('\n')
+        .map((l) => /^\s+([a-z]+):\s*(\S+)\s*$/.exec(l))
+        .filter((m): m is RegExpExecArray => m !== null)
+        .map((m) => [m[1], m[2]]),
+    )
+    expect(fields).toEqual({ icon: 'eye', color: 'blue' })
+  })
+
   it('uses safe action wiring: pinned bootstrap, no dynamic source evaluation, opt-in runtime install', async () => {
     const action = await readFile(join(ACTION, 'action.yml'), 'utf8')
     expect(action).toContain('argus-version:')

@@ -128,7 +128,7 @@ export async function materializeMergeBaseDiff(opts) {
     return { diff: diff.stdout };
 }
 /**
- * Full lane: scan candidates (capped), Jev-adjudicate when a client and
+ * Full lane: scan candidates (capped), adjudicate with the confidence model when a client and
  * threshold are available, and emit masked findings + audit records.
  * `client === undefined` (decisionModel unset) or any DecisionError →
  * every candidate unadjudicated — regex-only mode, never silence.
@@ -194,7 +194,7 @@ export async function scanSecrets(opts) {
             severity: adjudicated ? 'bug' : 'risk',
             category: 'security',
             message: maskFindingMessage(c, adjudicated),
-            // A Jev-confirmed live secret counts as proven for the review-event
+            // A confidence-model-confirmed live secret counts as proven for the review-event
             // gate — pLive IS the true-positive probability for this finding.
             // Unadjudicated findings carry no p (degrade-open, like U8).
             ...(adjudicated && pLive !== undefined ? { p: pLive } : {}),

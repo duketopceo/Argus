@@ -1,7 +1,7 @@
 import { debug } from '../debug.js';
 import { makeDecisionsCallCost } from './cost.js';
 /**
- * Pinned Jev slug — the alias `~typesafe/jev-latest` drifts silently and
+ * Pinned confidence-model slug — the alias `~typesafe/jev-latest` drifts silently and
  * adjudication thresholds are calibrated to a version. The alias stays
  * usable via `config.decisionModel` for experimentation.
  */
@@ -29,7 +29,7 @@ export const isScoreAnswer = (a) => 'score' in a;
 export function describeDecisionError(e) {
     return e instanceof DecisionError ? e.kind : e.message;
 }
-/** Shared per-call batch cap for the Jev lanes (secrets, findings, triage). */
+/** Shared per-call batch cap for the confidence-model lanes (secrets, findings, triage). */
 export const MAX_CANDIDATES = 50;
 function isRecord(v) {
     return typeof v === 'object' && v !== null && !Array.isArray(v);
