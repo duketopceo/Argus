@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { collect, ROOT } from '../scripts/collect.mjs'
 import { evalPlan, fmtUsd, formatEvalPlan } from '../scripts/eval-plan.mjs'
-import { APP_TITLE, appVersion } from './app-meta.mjs'
+import { APP_ICON, APP_TITLE, appVersion } from './app-meta.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 // The CLI honours config.cacheDir / --cache-dir; the dashboard must tail the
@@ -106,6 +106,7 @@ function createWindow() {
     minHeight: 600,
     backgroundColor: '#0d1117',
     title: APP_TITLE,
+    icon: APP_ICON,
     webPreferences: {
       preload: join(HERE, 'preload.mjs'),
       contextIsolation: true,
@@ -156,6 +157,8 @@ ipcMain.handle('run-eval', (_e, opts) => {
 })
 
 app.whenReady().then(() => {
+  // macOS takes the dock icon from the app bundle; in dev there is none.
+  app.dock?.setIcon(APP_ICON)
   createWindow()
   const tailTimer = setInterval(tailLive, 2000)
   tailTimer.unref()
