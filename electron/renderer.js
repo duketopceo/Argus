@@ -331,12 +331,68 @@ async function refresh() {
 }
 
 $('refresh').onclick = refresh
-$('eval').onclick = async () => {
+// "run eval" spends real OpenRouter credit, so it opens a confirm showing
+// what will run, the estimated cost and the budget cap. Only the Run button
+// starts the eval; Cancel, Esc and closing the dialog never do.
+const evalLogNote = (cls, msg) => {
+  $('evalcard').hidden = false
+  $('evallog').append(el('div', cls, esc(msg)))
+}
+let confirmSeq = 0
+async function openEvalConfirm() {
+  const dlg = $('evalconfirm')
+  const body = $('ecbody')
+  const run = $('ecrun')
+  const seq = ++confirmSeq
+  run.disabled = true
+  run.textContent = 'Run eval'
+  body.replaceChildren(el('div', 'dim', 'Working out what will run...'))
+  if (!dlg.open) dlg.showModal()
+  $('eccancel').focus()
+  let plan
+  try {
+    plan = await window.argus.evalPlan()
+  } catch (e) {
+    if (seq !== confirmSeq || !dlg.open) return
+    body.replaceChildren(
+      el('div', 'warn', `Could not work out the eval plan or its cost (${esc(e?.message ?? e)}).`),
+      el('div', 'dim', 'The eval was not started. Close this and try again.'),
+    )
+    return
+  }
+  if (seq !== confirmSeq || !dlg.open) return
+  body.replaceChildren(...plan.lines.map((l) =>
+    el('div', /not set|^Note:|unknown/.test(l) ? 'warn' : '', esc(l))))
+  if (plan.keyPresent) {
+    run.disabled = false
+    run.textContent = `Run eval (cap ${esc(plan.capLabel)})`
+  }
+}
+function closeEvalConfirm() {
+  confirmSeq++
+  if ($('evalconfirm').open) $('evalconfirm').close()
+  $('eval').focus()
+}
+$('eval').onclick = openEvalConfirm
+$('eccancel').onclick = () => {
+  closeEvalConfirm()
+  evalLogNote('dim', 'eval cancelled, nothing was run')
+}
+// Esc fires 'cancel' on a modal dialog — same path as the Cancel button.
+$('evalconfirm').addEventListener('cancel', (e) => {
+  e.preventDefault()
+  $('eccancel').click()
+})
+$('ecrun').onclick = async () => {
+  if ($('ecrun').disabled) return
+  closeEvalConfirm()
   $('evalcard').hidden = false
   $('evallog').replaceChildren()
-  const res = await window.argus.runEval()
-  if (!res.ok) {
-    $('evallog').append(el('div','warn', esc(res.msg)))
+  try {
+    const res = await window.argus.runEval({ confirmed: true })
+    if (!res?.ok) evalLogNote('warn', res?.msg ?? 'Eval did not start.')
+  } catch (e) {
+    evalLogNote('bad', `Eval did not start: ${esc(e?.message ?? e)}`)
   }
 }
 window.argus.onEvalLog(({ stream, line }) => {

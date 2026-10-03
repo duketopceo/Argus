@@ -7,6 +7,7 @@ import { open } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { collect, ROOT } from '../scripts/collect.mjs'
+import { evalPlan, fmtUsd, formatEvalPlan } from '../scripts/eval-plan.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 // The CLI honours config.cacheDir / --cache-dir; the dashboard must tail the
@@ -116,10 +117,21 @@ function createWindow() {
 
 ipcMain.handle('collect', () => collect())
 
-ipcMain.handle('run-eval', () => {
-  if (evalChild) return { ok: false, msg: 'already running' }
+// The renderer shows this plan (models, cases, estimate, budget cap) in a
+// confirm dialog before it may call run-eval. evalPlan never throws.
+ipcMain.handle('eval-plan', () => {
+  const plan = evalPlan(ROOT)
+  return { ...plan, lines: formatEvalPlan(plan), capLabel: fmtUsd(plan.capUsd) }
+})
+
+ipcMain.handle('run-eval', (_e, opts) => {
+  // Evals spend real OpenRouter credit — refuse unless the user confirmed.
+  if (opts?.confirmed !== true) {
+    return { ok: false, msg: 'Eval not started: it needs to be confirmed first.' }
+  }
+  if (evalChild) return { ok: false, msg: 'An eval is already running.' }
   if (!process.env.OPENROUTER_API_KEY) {
-    return { ok: false, msg: 'OPENROUTER_API_KEY not set' }
+    return { ok: false, msg: 'OPENROUTER_API_KEY is not set. Export it and restart the dashboard.' }
   }
   evalChild = spawn('node', ['evals/run.mjs'], { cwd: ROOT, env: process.env })
   const send = (stream, d) => {

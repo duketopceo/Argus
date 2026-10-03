@@ -79,6 +79,21 @@
   button:hover { border-color: var(--cyan); color: var(--cyan); }
   canvas { display: block; }
   .spark-title { font-size: 11px; color: var(--dim); margin: 6px 0 2px; }
+  button:disabled { opacity: .5; cursor: not-allowed; border-color: var(--border); color: var(--dim); }
+  button.primary { border-color: var(--yellow); color: var(--yellow); }
+
+  /* Spend confirm — evals cost real OpenRouter credit, so "run eval" opens
+     this instead of starting. Esc cancels; Cancel has initial focus. */
+  dialog#evalconfirm {
+    background: var(--panel); color: var(--fg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px 18px; width: min(640px, 92vw);
+    margin: auto; /* the global margin reset would pin it top-left */
+  }
+  dialog#evalconfirm::backdrop { background: rgba(1, 4, 9, .7); }
+  dialog#evalconfirm h2 { font-size: 14px; margin-bottom: 10px; color: var(--fg); }
+  #ecbody { white-space: pre-wrap; font-size: 12px; margin-bottom: 14px; }
+  #ecbody .warn { color: var(--yellow); }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; }
 </style>
 </head>
 <body>
@@ -108,6 +123,14 @@
   <section class="card wide" id="evalcard" hidden><h2>Eval Log</h2><div id="evallog"></div></section>
   <section class="card wide"><h2>Live Log <span class="dim">— argus debug output, tailed live</span></h2><div id="livelog"></div></section>
 </div>
+<dialog id="evalconfirm" aria-labelledby="ectitle" aria-describedby="ecbody">
+  <h2 id="ectitle">Run eval?</h2>
+  <div id="ecbody" aria-live="polite"></div>
+  <div class="actions">
+    <button id="eccancel" type="button" autofocus>Cancel</button>
+    <button id="ecrun" type="button" class="primary" disabled>Run eval</button>
+  </div>
+</dialog>
 <script src="renderer.js"></script>
 </body>
 </html>

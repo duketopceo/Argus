@@ -713,8 +713,10 @@ describe('action review poster (U3)', () => {
     expect(reviews).toHaveLength(2)
     expect(reviews[0].params.event).toBe('REQUEST_CHANGES')
     expect(reviews[1].params.event).toBe('COMMENT')
-    expect(reviews[1].params.body).toContain('REQUEST_CHANGES downgraded to COMMENT')
-    expect(reviews[1].params.body).toContain('Resource not accessible')
+    expect(reviews[1].params.body).toContain('Posted as a comment instead of requesting changes')
+    // The raw status stays in a collapsed fold, not the readable sentence.
+    expect(reviews[1].params.body).toContain('<details><summary>Diagnostics</summary>')
+    expect(reviews[1].params.body).toContain('GitHub API 403: Resource not accessible')
   })
 
   it('dismisses a prior self CHANGES_REQUESTED before posting', async () => {

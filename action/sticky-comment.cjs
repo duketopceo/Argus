@@ -540,7 +540,7 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
   if (codeReview.triage) {
     const t = codeReview.triage
     if (t.unadjudicated === true) {
-      lines.push(` · 🧭 triage unadjudicated — Jev unavailable`)
+      lines.push(` · 🧭 risk triage unavailable — confidence model did not respond`)
     } else {
       lines.push(
         ` · 🧭 triage: risk ${t.risk ?? '?'}/5` +
@@ -658,7 +658,7 @@ function pushCodeReviewDetails(lines, codeReview, inlinePlan) {
   if (codeReview.findingAdjudication && Array.isArray(codeReview.findingAdjudication.records)) {
     const fa = codeReview.findingAdjudication
     if (fa.unadjudicated === true) {
-      lines.push('*🧮 adjudication: unadjudicated — Jev unavailable, nothing suppressed.*')
+      lines.push('*🧮 finding adjudication unavailable — confidence model did not respond, nothing suppressed.*')
     } else {
       const suppressed = fa.records.filter((r) => r.suppressed).length
       const unadj = fa.records.filter((r) => !r.adjudicated).length
@@ -914,7 +914,13 @@ function reviewBody(plan, note) {
     parts.push(`◎ ${plan.highConfidenceBlockers} high-confidence blocker(s)`)
   }
   let body = `${SENTINEL}\n**argus-reviewer** — ${parts.join(' · ')}`
-  if (note !== undefined) body += `\n\n*${note}*`
+  if (note !== undefined) {
+    body += `\n\n*${note.text}*`
+    // Raw API status/message stays available but out of the reading path.
+    if (note.diagnostic) {
+      body += `\n\n<details><summary>Diagnostics</summary>\n\n${note.diagnostic}\n\n</details>`
+    }
+  }
   return body
 }
 
@@ -992,7 +998,12 @@ async function postInlineComments(pr, plan) {
       lastErr = e
       if (attempt === 0 && event === 'REQUEST_CHANGES' && (e.status === 403 || e.status === 422)) {
         event = 'COMMENT'
-        note = `REQUEST_CHANGES downgraded to COMMENT — ${e.status} ${e.message}`
+        note = {
+          text:
+            'Posted as a comment instead of requesting changes: GitHub did not allow a ' +
+            'change request here (for example on your own PR, or without write permission).',
+          diagnostic: `GitHub API ${e.status}: ${e.message}`,
+        }
         continue
       }
       if (e.status === 422 && comments.length > 0) {

@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 // argus-reviewer watch — local-only TUI: PRs, checks, workflow runs, evals,
 // journals. No deps; reads `gh` CLI + local artifacts via scripts/collect.mjs.
-// `npm run watch`. Keys: r refresh · e run eval · q quit. Auto-refresh 30s.
+// `npm run watch`. Keys: r refresh · e run eval (asks to confirm spend first)
+// · q quit. Auto-refresh 30s.
 
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { collect, ROOT, safe } from './collect.mjs'
+import { confirmKey, evalPlan, formatEvalPlan } from './eval-plan.mjs'
 import { createLiveTailer } from './tail-live.mjs'
 
 const REFRESH_MS = 30_000
@@ -52,6 +54,10 @@ const state = {
   journal: undefined,
   evalRunning: false,
   evalLog: [],
+  // Pending spend confirmation: the plan shown before an eval starts, or
+  // undefined when no confirm is open.
+  evalConfirm: undefined,
+  evalNote: '',
   live: [],
   review: undefined,
   error: '',
@@ -86,6 +92,17 @@ function render() {
   if (state.error) out.push(bad(`  ${state.error}`))
   out.push('')
 
+  if (state.evalConfirm) {
+    out.push(hr('Run eval?'))
+    for (const l of formatEvalPlan(state.evalConfirm)) out.push(`  ${trunc(l)}`)
+    out.push(
+      state.evalConfirm.keyPresent
+        ? warn('  Press y to run the eval, n or Esc to cancel.')
+        : warn('  Press n or Esc to close.'),
+    )
+    out.push('')
+  }
+
   out.push(hr('Pull Requests'))
   if (state.prs.length === 0) out.push(paint('  none open', C.dim))
   for (const p of state.prs) {
@@ -118,6 +135,7 @@ function render() {
   } else {
     out.push(paint('  no docs/evals/*.md yet — press e to run', C.dim))
   }
+  if (state.evalNote) out.push(paint(`  ${state.evalNote}`, C.dim))
   if (state.evalRunning || state.evalLog.length > 0) {
     out.push('')
     out.push(hr(`Eval ${state.evalRunning ? 'running…' : 'finished'}`))
@@ -220,6 +238,27 @@ function render() {
   process.stdout.write(`\x1b[2J\x1b[H${out.join('\n')}\n`)
 }
 
+// `e` never spends directly — it opens a confirm showing models, case
+// count, estimated cost and the budget cap. Only `y` starts the eval.
+function openEvalConfirm() {
+  if (state.evalRunning || state.evalConfirm) return
+  state.evalConfirm = evalPlan(ROOT)
+  render()
+}
+
+function onConfirmKey(k) {
+  const decision = confirmKey(k)
+  if (decision === 'ignore') return
+  state.evalConfirm = undefined
+  if (decision === 'confirm') {
+    state.evalNote = ''
+    runEval() // still refuses (with a message) when the key is missing
+    return
+  }
+  state.evalNote = 'eval cancelled, nothing was run'
+  render()
+}
+
 function runEval() {
   if (state.evalRunning) return
   if (!process.env.OPENROUTER_API_KEY) {
@@ -285,11 +324,15 @@ async function main() {
         process.stdout.write('\x1b[2J\x1b[H')
         process.exit(0)
       }
+      if (state.evalConfirm) {
+        onConfirmKey(k)
+        return
+      }
       if (k === 'r') {
         await fetchData()
         render()
       }
-      if (k === 'e') runEval()
+      if (k === 'e') openEvalConfirm()
     })
   }
 }
