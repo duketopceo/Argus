@@ -78,6 +78,19 @@ const seededState = {
   updatedAt: new Date().toISOString(),
 }
 
+// What main.mjs returns from 'eval-plan' (evalPlan + formatted lines).
+const seededPlan = {
+  keyPresent: true,
+  capLabel: '$4.00',
+  lines: [
+    'Runs node evals/run.mjs: 3 test case(s) x 2 model(s), 2 runs each (cold, then cached).',
+    '  google/gemini-2.5-flash-lite  (last run $0.0014)',
+    '  moonshotai/kimi-k2.5  (last run $0.15)',
+    'Estimated cost: about $0.15, based on the last recorded run.',
+    'Budget cap: $1.00 per run, at most $4.00 in total. This spends real OpenRouter credit.',
+  ],
+}
+
 const checks = []
 const check = (name, cond, detail = '') => {
   checks.push({ name, ok: !!cond, detail })
@@ -103,16 +116,26 @@ try {
 
   browser = await chromium.launch()
   const page = await browser.newPage()
-  await page.addInitScript((state) => {
+  await page.addInitScript(({ state, plan }) => {
+    // Spend-confirm gate: record every runEval call; never spawns anything.
+    window.__evalCalls = []
+    window.__planFails = false
     window.argus = {
       collect: async () => state,
-      runEval: async () => ({ ok: true }),
+      evalPlan: async () => {
+        if (window.__planFails) throw new Error('plan read failed')
+        return plan
+      },
+      runEval: async (opts) => {
+        window.__evalCalls.push(opts ?? null)
+        return { ok: true }
+      },
       runLogs: async () => ({ ok: true }),
       onEvalLog: () => {},
       onLiveLog: () => {},
       onRunLog: () => {},
     }
-  }, seededState)
+  }, { state: seededState, plan: seededPlan })
 
   await page.goto(`http://127.0.0.1:${port}/`)
   await page.waitForSelector('.runrow')
@@ -167,6 +190,46 @@ try {
   await mkdir(SHOT_DIR, { recursive: true })
   await page.screenshot({ path: join(SHOT_DIR, 'dashboard-smoke.png'), fullPage: true })
   console.log(`screenshot → argus-reviewer-report/dashboard-smoke.png`)
+
+  // Spend confirm (F6): "run eval" opens a dialog, never spends directly.
+  const dlg = page.locator('#evalconfirm')
+  const evalCalls = () => page.evaluate(() => window.__evalCalls.length)
+  await page.click('#eval')
+  await page.waitForSelector('#evalconfirm[open]')
+  await page.waitForFunction(() => !document.getElementById('ecrun').disabled)
+  const body = await page.locator('#ecbody').textContent()
+  check('confirm shows estimate and cap', body.includes('Estimated cost') && body.includes('Budget cap'))
+  check('confirm names the models', body.includes('moonshotai/kimi-k2.5'))
+  check('Run button states the cap', (await page.locator('#ecrun').textContent()).includes('$4.00'))
+  check('Cancel has initial focus', await page.evaluate(() => document.activeElement?.id === 'eccancel'))
+  check('opening the confirm does not run the eval', (await evalCalls()) === 0)
+  await page.screenshot({ path: join(SHOT_DIR, 'dashboard-eval-confirm.png') })
+  console.log(`screenshot → argus-reviewer-report/dashboard-eval-confirm.png`)
+
+  await page.keyboard.press('Escape')
+  check('Esc closes the confirm', !(await dlg.evaluate((d) => d.open)))
+  check('Esc does not run the eval', (await evalCalls()) === 0)
+  check('cancel is reported', (await page.locator('#evallog').textContent()).includes('nothing was run'))
+
+  await page.click('#eval')
+  await page.waitForSelector('#evalconfirm[open]')
+  await page.keyboard.press('Enter') // focus is on Cancel
+  check('Enter on default focus cancels', (await evalCalls()) === 0 && !(await dlg.evaluate((d) => d.open)))
+
+  await page.evaluate(() => { window.__planFails = true })
+  await page.click('#eval')
+  await page.waitForFunction(() => document.getElementById('ecbody').textContent.includes('Could not'))
+  check('plan failure is a readable message', (await page.locator('#ecbody').textContent()).includes('was not started'))
+  check('plan failure keeps Run disabled', await page.locator('#ecrun').isDisabled())
+  await page.click('#eccancel')
+  check('plan failure can still be cancelled', !(await dlg.evaluate((d) => d.open)) && (await evalCalls()) === 0)
+  await page.evaluate(() => { window.__planFails = false })
+
+  await page.click('#eval')
+  await page.waitForFunction(() => !document.getElementById('ecrun').disabled)
+  await page.click('#ecrun')
+  const calls = await page.evaluate(() => window.__evalCalls)
+  check('Run starts the eval once, explicitly confirmed', calls.length === 1 && calls[0]?.confirmed === true, JSON.stringify(calls))
 } catch (e) {
   check('smoke completed without error', false, e.message)
 } finally {

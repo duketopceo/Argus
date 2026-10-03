@@ -2009,7 +2009,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       const suppressed = adj.records.filter((r) => r.suppressed === true).length
       stage(
         `finding adjudication — ${adj.records.length} scored, ${suppressed} suppressed` +
-          (adj.unadjudicated === true ? ' (Jev unavailable — none suppressed)' : '') +
+          (adj.unadjudicated === true ? ' (confidence model unavailable — none suppressed)' : '') +
           (adj.overflow > 0 ? `, +${adj.overflow} over cap` : ''),
       )
     }

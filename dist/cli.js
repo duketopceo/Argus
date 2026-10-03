@@ -1670,7 +1670,7 @@ async function cmdCodeReview(args, ctx, deps) {
             findingAdjudication = audit;
             const suppressed = adj.records.filter((r) => r.suppressed === true).length;
             stage(`finding adjudication — ${adj.records.length} scored, ${suppressed} suppressed` +
-                (adj.unadjudicated === true ? ' (Jev unavailable — none suppressed)' : '') +
+                (adj.unadjudicated === true ? ' (confidence model unavailable — none suppressed)' : '') +
                 (adj.overflow > 0 ? `, +${adj.overflow} over cap` : ''));
         }
         finalFindings = [...finalFindings, ...secretsFindings];
