@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Argus</title>
+<link rel="icon" href="brand/export/icons/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="brand/tokens.css">
+<link rel="stylesheet" href="brand/fonts.css">
+<link rel="stylesheet" href="brand/motion.css">
+<link rel="stylesheet" href="desk.css">
+<script type="module" src="app.js"></script>
+</head>
+<body class="desk">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <div class="brand">
+    <picture>
+      <source srcset="brand/export/mark-dark.svg" media="(prefers-color-scheme: dark)">
+      <img src="brand/export/mark-light.svg" alt="" width="22" height="22">
+    </picture>
+    <span class="brand-name">Argus</span>
+  </div>
+  <nav class="tabs" aria-label="Views">
+    <button type="button" class="tab" data-view="runs" aria-current="page">Runs</button>
+    <button type="button" class="tab" data-view="heals">Heals</button>
+    <button type="button" class="tab" data-view="spend">Spend</button>
+    <button type="button" class="tab" data-view="repo">Repo</button>
+  </nav>
+  <div class="topbar-end">
+    <span id="updated" class="updated" aria-live="polite"></span>
+    <button type="button" id="refresh" class="btn ghost" title="Refresh (r)">
+      <svg class="icon" aria-hidden="true"><use href="brand/export/chrome.svg#refresh"/></svg><span class="label">Refresh</span>
+    </button>
+    <button type="button" id="eval" class="btn secondary" title="Run the eval suite (asks first)">
+      <svg class="icon" aria-hidden="true"><use href="brand/export/chrome.svg#play"/></svg><span class="label">Run eval</span>
+    </button>
+    <button type="button" id="helpbtn" class="btn ghost square" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">
+      <svg class="icon" aria-hidden="true"><use href="brand/export/chrome.svg#keyboard"/></svg>
+    </button>
+  </div>
+</header>
+<div id="banner" class="banner" role="status" hidden></div>
+<main id="main" tabindex="-1">
+  <section id="view-runs" class="view view-runs" data-stack="runs" aria-label="Runs">
+    <div class="pane pane-runs" id="pane-runs">
+      <div class="pane-head">
+        <h2 id="runs-h" tabindex="-1">Runs <span class="count" id="runcount"></span></h2>
+      </div>
+      <label class="filter">
+        <svg class="icon" aria-hidden="true"><use href="brand/export/chrome.svg#filter"/></svg>
+        <span class="sr-only">Filter runs</span>
+        <input id="filter" type="search" placeholder="Filter runs" autocomplete="off" spellcheck="false">
+        <kbd>/</kbd>
+      </label>
+      <div id="runs-note"></div>
+      <div id="veruns" class="list" role="listbox" aria-label="Verify runs" aria-labelledby="runs-h"></div>
+    </div>
+    <div class="pane pane-lanes" id="pane-lanes">
+      <button type="button" class="btn ghost back" data-back="runs">
+        <svg class="icon" aria-hidden="true"><use href="brand/export/chrome.svg#chevron-left"/></svg><span>Runs</span>
+      </button>
+      <div class="pane-head">
+        <h2 id="lanes-h" tabindex="-1">Lanes</h2>
+      </div>
+      <div id="runhead" class="runhead"></div>
+      <div id="velanes" class="list" role="listbox" aria-label="Lanes"></div>
+    </div>
+    <aside class="pane pane-inspector" id="inspector" aria-labelledby="insp-h">
+      <div class="sheet-bar">
+        <button type="button" class="btn ghost back" id="inspector-close">
+          <svg class="icon" aria-hidden="true"><use href="brand/export/chrome.svg#chevron-left"/></svg><span>Lanes</span>
+        </button>
+        <button type="button" class="btn ghost square close" id="inspector-x" aria-label="Close inspector">
+          <svg class="icon" aria-hidden="true"><use href="brand/export/chrome.svg#close"/></svg>
+        </button>
+      </div>
+      <div class="pane-head">
+        <h2 id="insp-h" tabindex="-1">Inspector</h2>
+      </div>
+      <div id="vedetail" class="inspector-body"></div>
+    </aside>
+  </section>
+
+  <section id="view-heals" class="view view-single" aria-labelledby="heals-h" hidden>
+    <div class="panel" id="panel-heals">
+      <div class="panel-head"><h2 id="heals-h" tabindex="-1">Heals</h2><span class="asof" data-asof></span></div>
+      <p class="lede">Steps the cache re-located after the page changed. Check each one before trusting the replay.</p>
+      <div class="panel-body" id="heals"></div>
+    </div>
+  </section>
+
+  <section id="view-spend" class="view view-single" aria-labelledby="spend-h" hidden>
+    <div class="panel" id="panel-spend">
+      <div class="panel-head"><h2 id="spend-h" tabindex="-1">Spend</h2><span class="asof" data-asof></span></div>
+      <div class="panel-body" id="spend"></div>
+    </div>
+  </section>
+
+  <section id="view-repo" class="view view-repo" aria-labelledby="repo-h" hidden>
+    <h2 id="repo-h" class="sr-only" tabindex="-1">Repo</h2>
+    <div class="panel" id="panel-prs">
+      <div class="panel-head"><h3>Pull requests</h3><span class="asof" data-asof></span></div>
+      <div class="panel-body" id="prs"></div>
+    </div>
+    <div class="panel" id="panel-workflows">
+      <div class="panel-head"><h3>Workflow runs</h3><span class="asof" data-asof></span></div>
+      <div class="panel-body" id="workflows"></div>
+    </div>
+    <div class="panel wide" id="panel-evals">
+      <div class="panel-head"><h3>Evals <span class="dim" id="evalfile"></span></h3><span class="asof" data-asof></span></div>
+      <div class="panel-body" id="evals"></div>
+      <div id="evalstatus" class="evalstatus"></div>
+      <div id="evallog" class="log evallog" aria-live="polite"></div>
+    </div>
+    <div class="panel wide" id="panel-journals">
+      <div class="panel-head"><h3>Journals <span class="dim" id="jfile"></span></h3></div>
+      <div class="panel-body" id="journals"></div>
+    </div>
+  </section>
+</main>
+
+<details class="drawer" id="drawer">
+  <summary>
+    <svg class="icon" aria-hidden="true"><use href="brand/export/chrome.svg#terminal"/></svg>
+    Live log <span class="dim" id="livecount"></span>
+  </summary>
+  <div id="livelog" class="log" role="log" aria-label="Live log"></div>
+</details>
+
+<footer class="kbdbar" aria-hidden="true">
+  <span><kbd>j</kbd><kbd>k</kbd> runs</span>
+  <span><kbd>[</kbd><kbd>]</kbd> lanes</span>
+  <span><kbd>/</kbd> filter</span>
+  <span><kbd>?</kbd> keys</span>
+</footer>
+
+<div id="announce" class="sr-only" aria-live="polite"></div>
+
+<dialog id="evalconfirm" class="dialog" aria-labelledby="ectitle" aria-describedby="ecbody">
+  <h2 id="ectitle">Run eval?</h2>
+  <div id="ecbody" aria-live="polite"></div>
+  <div class="actions">
+    <button id="eccancel" type="button" class="btn secondary" autofocus>Cancel</button>
+    <button id="ecrun" type="button" class="btn primary" disabled>Run eval</button>
+  </div>
+</dialog>
+
+<dialog id="help" class="dialog" aria-labelledby="help-h">
+  <h2 id="help-h">Keyboard</h2>
+  <dl id="helpkeys" class="keys"></dl>
+  <div class="actions">
+    <button type="button" class="btn secondary" id="helpclose" autofocus>Close</button>
+  </div>
+</dialog>
+</body>
+</html>

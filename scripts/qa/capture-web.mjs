@@ -5,8 +5,8 @@
 //   node scripts/qa/capture-web.mjs --target dashboard --unit U13
 //   node scripts/qa/capture-web.mjs --target assets/brand/templates/card.html --unit U9 --width 1440
 //
-// `--target dashboard` serves electron/ with the stubbed preload bridge and
-// captures the filled and empty states. Any other target is a URL or a local
+// `--target dashboard` serves the desk front end (electron/ui/) with the
+// stubbed preload bridge and captures every state in DASHBOARD_STATES. Any other target is a URL or a local
 // HTML file. Output goes to argus-reviewer-report/qa/<unit>/ (gitignored;
 // attach to the PR). Refuses to run while OPENROUTER_API_KEY is set (R32).
 // Requires `npx playwright install chromium`.
@@ -175,9 +175,15 @@ export async function captureWeb(opts, log = console.log) {
         deviceScaleFactor: 1,
       })
       const page = await context.newPage()
-      if (isDashboard) await fixture.installBridgeStub(page, fixture.DASHBOARD_STATES[state])
+      const spec = isDashboard ? fixture.DASHBOARD_STATES[state] : undefined
+      if (spec) await fixture.installBridgeStub(page, spec.data)
       await page.goto(url, { waitUntil: 'load' })
-      if (isDashboard) await page.waitForFunction(() => document.querySelector('#veruns')?.childElementCount > 0)
+      if (spec) {
+        await page.waitForFunction(() => document.documentElement.dataset.desk === 'ready')
+        await page.evaluate(() => document.fonts.ready)
+        if (spec.view) await page.click(`.tab[data-view="${spec.view}"]`)
+        if (spec.setup) await spec.setup(page, { width, theme })
+      }
       return { context, page }
     }
 

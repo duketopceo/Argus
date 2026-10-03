@@ -77,8 +77,6 @@ const NO_OWNER =
 const TEMPORARY: Record<string, Allowance> = {
   // Rewritten by a later unit of the Ocellus plan (docs/plans/2026-10-02-2316-*).
   'src/report/viewmodel.ts': { emoji: 2, emdash: 2, unit: 'U13 (legacy LANE_STATUS_ICON consumers)' },
-  'electron/renderer.js': { emoji: 2, emdash: 8, unit: 'U13 (replaced by electron/ui/)' },
-  'electron/index.html': { emdash: 3, unit: 'U13 (replaced by electron/ui/)' },
   // U3 touches these files, but its plan text scopes it to comments; strings need U3 widened.
   'src/config.ts': { emdash: 2, unit: 'U3 (if widened to strings)' },
   'src/evidence/ci.ts': { emdash: 5, unit: 'U3 (if widened to strings)' },
@@ -199,7 +197,7 @@ describe('no emoji or em-dash in output-producing code (KTD11)', () => {
     expect(rel).toContain('src/cli.ts')
     expect(rel).toContain('action/sticky-comment.cjs')
     expect(rel).toContain('scripts/build-tokens.mjs')
-    expect(rel).toContain('electron/renderer.js')
+    expect(rel).toContain('electron/ui/app.js')
   })
 
   it('finds nothing outside the allow-lists', () => {
