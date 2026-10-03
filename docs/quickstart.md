@@ -262,7 +262,7 @@ non-terminal output such as GitHub Actions logs. `--json`, `--no-color` and
 
 Every error prints three lines: the failed glyph with a summary, the cause,
 and the next command on its own line. With `--json`, the error is one JSON
-object on stderr instead:
+object on stdout instead, so a pipe captures it; the exit code is unchanged:
 
 ```json
 {"error":{"code":"OPENROUTER_RATE_LIMITED","summary":"code-review: OpenRouter rate limit reached","cause":"...","fix":"sleep 20 && argus-reviewer code-review","retryAfterSeconds":20,"httpStatus":429}}

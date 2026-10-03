@@ -56,13 +56,14 @@ function shellQuote(arg) {
 }
 /**
  * Print a classified error (R14): three styled lines, or one JSON object
- * under `--json`. The caller still returns its own exit code.
+ * on stdout under `--json`, so a pipe captures it. The caller still returns
+ * its own exit code.
  */
 function reportError(ctx, e, context, fallback) {
     const err = toCliError(e, fallback);
     const opts = { context, rerun: ctx.rerun, debug: ctx.debug, width: ctx.width };
     if (ctx.json)
-        ctx.err(errorJson(err, opts));
+        ctx.out(errorJson(err, opts));
     else
         for (const line of renderError(err, ctx.style, opts))
             ctx.err(line);

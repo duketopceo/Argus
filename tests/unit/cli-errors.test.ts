@@ -139,10 +139,11 @@ describe('CLI error grammar (R14)', () => {
     expect(r.err[i + 2]?.trim()).toMatch(/^export OPENROUTER_API_KEY=\S+$/)
   })
 
-  it('--json prints one JSON object with a stable code and a fix field', async () => {
+  it('--json prints one JSON object on stdout with a stable code and a fix field', async () => {
     const r = await reviewWith(undefined, ['--json'])
     expect(r.code).toBe(1)
-    const json = r.err.filter((l) => l.startsWith('{'))
+    expect(r.err.some((l) => l.startsWith('{'))).toBe(false)
+    const json = r.out.filter((l) => l.startsWith('{'))
     expect(json).toHaveLength(1)
     const parsed = JSON.parse(json[0]!) as { error: { code: string; fix: string; summary: string } }
     expect(parsed.error.code).toBe('OPENROUTER_KEY_MISSING')
@@ -162,7 +163,7 @@ describe('CLI error grammar (R14)', () => {
     expect(text).not.toMatch(/\b429\b/)
 
     const j = await reviewWith(mockedClient(() => new Response('{}', { status: 429, headers: { 'retry-after': '20' } })).client, ['--json'])
-    const parsed = JSON.parse(j.err.find((l) => l.startsWith('{'))!) as { error: Record<string, unknown> }
+    const parsed = JSON.parse(j.out.find((l) => l.startsWith('{'))!) as { error: Record<string, unknown> }
     expect(parsed.error).toMatchObject({ code: 'OPENROUTER_RATE_LIMITED', retryAfterSeconds: 20 })
   })
 
@@ -174,7 +175,7 @@ describe('CLI error grammar (R14)', () => {
     ] as const) {
       const r = await reviewWith(mockedClient(() => new Response('{}', { status })).client, ['--json'])
       expect(r.code, String(status)).toBe(1)
-      const parsed = JSON.parse(r.err.find((l) => l.startsWith('{'))!) as { error: { code: string; fix: string } }
+      const parsed = JSON.parse(r.out.find((l) => l.startsWith('{'))!) as { error: { code: string; fix: string } }
       expect(parsed.error.code, String(status)).toBe(code)
       expect(parsed.error.fix.length).toBeGreaterThan(0)
     }
@@ -202,10 +203,10 @@ describe('CLI error grammar (R14)', () => {
   it('an invalid config is CONFIG_INVALID, not a crash', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'argus-err-cfg-'))
     await writeFile(join(cwd, 'argus-reviewer.config.json'), '{not json')
-    const err = capture()
-    const code = await main(['cache', 'list', '--json'], { cwd, env: MIN_ENV, out: capture().fn, err: err.fn })
+    const out = capture()
+    const code = await main(['cache', 'list', '--json'], { cwd, env: MIN_ENV, out: out.fn, err: capture().fn })
     expect(code).toBe(1)
-    const parsed = JSON.parse(err.lines.find((l) => l.startsWith('{'))!) as { error: { code: string } }
+    const parsed = JSON.parse(out.lines.find((l) => l.startsWith('{'))!) as { error: { code: string } }
     expect(parsed.error.code).toBe('CONFIG_INVALID')
   })
 })
