@@ -1,95 +1,18 @@
 #!/usr/bin/env node
 // Dashboard smoke (U5/R17): serve electron/ over HTTP, stub the preload
-// bridge with a seeded four-lane manifest workspace, and assert the verify
+// bridge with a seeded four-lane manifest workspace (shared with the QA
+// harness in scripts/qa/dashboard-fixture.mjs), and assert the verify
 // workspace renders — run list, lane matrix, inspector — with statuses as
 // text and working keyboard selection. Not a vitest test; run directly:
 //   node tests/e2e/dashboard-smoke.mjs
 // Requires `npx playwright install chromium`.
-import { createServer } from 'node:http'
-import { readFile } from 'node:fs/promises'
 import { mkdir } from 'node:fs/promises'
-import { extname, join } from 'node:path'
+import { join } from 'node:path'
 import { chromium } from 'playwright'
 
-const ELECTRON = new URL('../../electron/', import.meta.url).pathname
+import { installBridgeStub, seededPlan, seededState, serveElectron } from '../../scripts/qa/dashboard-fixture.mjs'
+
 const SHOT_DIR = new URL('../../argus-reviewer-report/', import.meta.url).pathname
-
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' }
-
-const lane = (id, status, extra = {}) => ({
-  lane: id,
-  selected: true,
-  status,
-  startedAt: '2026-09-30T20:00:00.000Z',
-  finishedAt: '2026-09-30T20:00:30.000Z',
-  reportPath: `reports/${id}-lane.json`,
-  model: 'google/gemini-2.5-flash-lite',
-  summary: `${id} summary`,
-  usage: { provider: 'openrouter', model: 'google/gemini-2.5-flash-lite', calls: 2, tokens: 200, costUsd: 0.001, metered: true },
-  budget: { limitUsd: 1, spentUsd: 0.001, exceeded: false, maxDurationMs: 120000, elapsedMs: 30000, maxTasks: undefined, tasks: 0 },
-  ...extra,
-})
-
-const seededManifest = {
-  schemaVersion: 1,
-  runId: 'smoke-run-1',
-  startedAt: '2026-09-30T20:00:00.000Z',
-  finishedAt: '2026-09-30T20:02:00.000Z',
-  identity: { repo: 'o/r', pr: '7', intendedHeadSha: 'abc1234deadbeef', checkoutSha: 'abc1234deadbeef', baseSha: 'base00', runNonce: 'smoke:1' },
-  lanes: {
-    review: lane('review', 'passed', {
-      summary: '2 findings',
-      headBinding: { intendedSha: 'abc1234deadbeef', checkoutSha: 'abc1234deadbeef', status: 'match', source: 'github', detail: 'checkout matches the intended PR head' },
-    }),
-    flow: lane('flow', 'failed', {
-      summary: undefined,
-      reason: 'landing.test.ts: assertion failed',
-      cache: { hits: 2, misses: 1, heals: 1, staleEntries: 0, assertionHits: 1, assertionMisses: 0 },
-    }),
-    app: lane('app', 'passed', { summary: 'expected state verified' }),
-    a0: lane('a0', 'inconclusive', {
-      summary: 'delegation returned — self-reported',
-      usage: { provider: 'a0', model: undefined, calls: 0, tokens: 0, costUsd: 0, metered: false },
-      budget: { limitUsd: undefined, spentUsd: 0, exceeded: false, maxDurationMs: 600000, elapsedMs: 40000, maxTasks: 1, tasks: 1 },
-    }),
-  },
-  aggregate: { status: 'failed', ok: false, costUsd: 0.006, calls: 6, tokens: 600 },
-}
-
-const seededState = {
-  prs: [],
-  prChecks: {},
-  runs: [],
-  evalDoc: '',
-  evalFile: '',
-  journal: undefined,
-  journals: [],
-  journalFiles: 0,
-  live: [],
-  review: undefined,
-  workspace: {
-    reportDir: '/tmp/argus-reviewer-report',
-    runs: [{ ...seededManifest, runId: 'smoke-run-0', aggregate: { status: 'passed', ok: true, costUsd: 0.001, calls: 1, tokens: 100 } }],
-    current: seededManifest,
-    corrupt: 1,
-    degraded: undefined,
-  },
-  error: '',
-  updatedAt: new Date().toISOString(),
-}
-
-// What main.mjs returns from 'eval-plan' (evalPlan + formatted lines).
-const seededPlan = {
-  keyPresent: true,
-  capLabel: '$4.00',
-  lines: [
-    'Runs node evals/run.mjs: 3 test case(s) x 2 model(s), 2 runs each (cold, then cached).',
-    '  google/gemini-2.5-flash-lite  (last run $0.0014)',
-    '  moonshotai/kimi-k2.5  (last run $0.15)',
-    'Estimated cost: about $0.15, based on the last recorded run.',
-    'Budget cap: $1.00 per run, at most $4.00 in total. This spends real OpenRouter credit.',
-  ],
-}
 
 const checks = []
 const check = (name, cond, detail = '') => {
@@ -97,47 +20,16 @@ const check = (name, cond, detail = '') => {
   console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}${detail ? ` — ${detail}` : ''}`)
 }
 
-const server = createServer(async (req, res) => {
-  const path = req.url === '/' ? '/index.html' : (req.url?.split('?')[0] ?? '/')
-  const file = join(ELECTRON, path)
-  try {
-    const body = await readFile(file)
-    res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' })
-    res.end(body)
-  } catch {
-    res.writeHead(404); res.end('not found')
-  }
-})
-
 let browser
+let server
 try {
-  await new Promise((r) => server.listen(0, '127.0.0.1', r))
-  const port = server.address().port
+  server = await serveElectron()
 
   browser = await chromium.launch()
   const page = await browser.newPage()
-  await page.addInitScript(({ state, plan }) => {
-    // Spend-confirm gate: record every runEval call; never spawns anything.
-    window.__evalCalls = []
-    window.__planFails = false
-    window.argus = {
-      collect: async () => state,
-      evalPlan: async () => {
-        if (window.__planFails) throw new Error('plan read failed')
-        return plan
-      },
-      runEval: async (opts) => {
-        window.__evalCalls.push(opts ?? null)
-        return { ok: true }
-      },
-      runLogs: async () => ({ ok: true }),
-      onEvalLog: () => {},
-      onLiveLog: () => {},
-      onRunLog: () => {},
-    }
-  }, { state: seededState, plan: seededPlan })
+  await installBridgeStub(page, seededState, seededPlan)
 
-  await page.goto(`http://127.0.0.1:${port}/`)
+  await page.goto(server.url)
   await page.waitForSelector('.runrow')
 
   // Run list: current + one archived run, statuses as words.
@@ -234,7 +126,7 @@ try {
   check('smoke completed without error', false, e.message)
 } finally {
   await browser?.close()
-  server.close()
+  await server?.close()
 }
 
 const failed = checks.filter((c) => !c.ok)
