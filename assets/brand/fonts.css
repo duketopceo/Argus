@@ -1,0 +1,107 @@
+/*
+ * Ocellus type (DESIGN.md A15, §6.2, §10; plan KTD8).
+ *
+ * Self-hosted subset WOFF2. assets/brand/fonts/SUBSET.md records the sources,
+ * licenses and the exact subsetting command. Paths are relative to this file.
+ *
+ * Use the stacks, not the bare family names:
+ *   font-family: var(--argus-font-sans);
+ *   font-family: var(--argus-font-mono);  font-stretch: 87.5%;  (data roles)
+ *
+ * The "... Fallback" faces are local system fonts scaled to the brand
+ * fonts' metrics (size-adjust and ascent/descent overrides), so the swap
+ * from fallback to web font moves no text (§10, CLS < 0.02). The sans
+ * fallback matches Schibsted Grotesk 400 on a 250-character product-copy
+ * sample at 100 px (unhinted advances; hinted Liberation Sans at 12-15 px
+ * runs 1-4% narrower). The mono fallback matches Martian Mono at the data
+ * role (wght 450, wdth 87.5), where most mono text sits; widths and line box
+ * measure identical in Chromium.
+ */
+
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  src: url('fonts/schibsted-grotesk-var.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  src: url('fonts/schibsted-grotesk-italic.woff2') format('woff2');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Martian Mono';
+  src: url('fonts/martian-mono-var.woff2') format('woff2');
+  font-weight: 400 600;
+  font-stretch: 87.5% 100%;
+  font-style: normal;
+  font-display: swap;
+}
+
+/*
+ * Vocabulary glyphs (§6.7, A4, A5): ● ⊘ ◐ ⊖ ◌ ▱ ▰ ◆ ◈ ○ □.
+ * Martian Mono has none of them and Schibsted Grotesk only ○, so both
+ * families take them from one DejaVu Sans Mono subset. Declared after the
+ * main faces so they win for this unicode-range, with descriptors identical
+ * to the face they extend so each pair forms one composite face (a different
+ * weight or stretch range would make it a separate, never-chosen face). The
+ * mono copy is scaled so each glyph advances exactly one Martian Mono data
+ * cell (0.65 em). tests/unit/brand-assets.test.ts keeps this range in step
+ * with src/report/viewmodel.ts.
+ */
+@font-face {
+  font-family: 'Martian Mono';
+  src: url('fonts/argus-glyphs.woff2') format('woff2');
+  unicode-range: U+25A1, U+25B0-25B1, U+25C6, U+25C8, U+25CB-25CC, U+25CF-25D0, U+2296, U+2298;
+  font-weight: 400 600;
+  font-stretch: 87.5% 100%;
+  font-style: normal;
+  size-adjust: 107.96%;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  src: url('fonts/argus-glyphs.woff2') format('woff2');
+  unicode-range: U+25A1, U+25B0-25B1, U+25C6, U+25C8, U+25CB-25CC, U+25CF-25D0, U+2296, U+2298;
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  src: url('fonts/argus-glyphs.woff2') format('woff2');
+  unicode-range: U+25A1, U+25B0-25B1, U+25C6, U+25C8, U+25CB-25CC, U+25CF-25D0, U+2296, U+2298;
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Schibsted Grotesk Fallback';
+  src: local('Arial'), local('Helvetica'), local('Liberation Sans');
+  size-adjust: 102.41%;
+  ascent-override: 95.37%;
+  descent-override: 25.18%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Martian Mono Fallback';
+  src: local('Menlo'), local('DejaVu Sans Mono'), local('Liberation Mono'), local('Courier New');
+  size-adjust: 107.96%;
+  ascent-override: 92.62%;
+  descent-override: 18.52%;
+  line-gap-override: 0%;
+}
+
+:root {
+  --argus-font-sans: 'Schibsted Grotesk', 'Schibsted Grotesk Fallback', system-ui, sans-serif;
+  --argus-font-mono: 'Martian Mono', 'Martian Mono Fallback', ui-monospace, monospace;
+}
