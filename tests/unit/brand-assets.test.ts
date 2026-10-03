@@ -1,10 +1,19 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { brotliDecompressSync } from 'node:zlib'
+import { Resvg } from '@resvg/resvg-js'
 import { optimize } from 'svgo'
 import { describe, expect, it } from 'vitest'
 
-import { buildBrand, EXPORT_DIR, GLYPH_PREFIX, readMasters } from '../../scripts/build-brand.mjs'
+import {
+  buildBrand,
+  EXPORT_DIR,
+  GLYPH_PREFIX,
+  ICNS_TYPES,
+  ICON_PREFIX,
+  readMasters,
+  readThemeColors,
+} from '../../scripts/build-brand.mjs'
 import { LANE_IDS, LANE_STATUSES } from '../../src/report/manifest.js'
 import {
   PROOF_LEVELS,
@@ -29,7 +38,9 @@ function listFiles(dir: string): string[] {
 }
 
 const allMasters = readMasters()
-const masters = allMasters.filter((m) => !m.rel.startsWith(GLYPH_PREFIX))
+const masters = allMasters.filter(
+  (m) => !m.rel.startsWith(GLYPH_PREFIX) && !m.rel.startsWith(ICON_PREFIX),
+)
 const glyphs = allMasters.filter((m) => m.rel.startsWith(GLYPH_PREFIX))
 const svgo = (svg: string) =>
   optimize(svg, { multipass: true, floatPrecision: 3, plugins: [{ name: 'preset-default' }] }).data
@@ -86,7 +97,7 @@ describe('brand exports (KTD6)', () => {
 
   it('keeps each optimized SVG under 2 KB (DESIGN.md section 10)', () => {
     for (const [rel, buf] of first) {
-      if (rel.endsWith('.svg') && rel !== 'glyphs.svg')
+      if (rel.endsWith('.svg') && rel !== 'glyphs.svg' && !rel.startsWith(ICON_PREFIX))
         expect(buf.length, rel).toBeLessThanOrEqual(2048)
     }
   })
@@ -348,5 +359,129 @@ describe('fonts (U10, DESIGN.md A15, KTD8)', () => {
       )
       expect(covered.sort()).toEqual([...shapes].sort())
     }
+  })
+})
+
+// ---- App icon and favicons (U10, DESIGN.md A8, A9) --------------------------
+
+describe('app icon and favicons (U10, DESIGN.md A8/A9)', () => {
+  const files = buildBrand()
+  const icon = (name: string) => allMasters.find((m) => m.rel === `${ICON_PREFIX}${name}.svg`)!.svg
+  const tokens = JSON.parse(readFileSync(join(ROOT, 'assets/brand/tokens.json'), 'utf8'))
+  const colors = readThemeColors()
+  const elements = (svg: string) =>
+    [...svg.matchAll(/<(?:path|circle)\b[^>]*\/>/g)].map((m) =>
+      m[0].replace(/\s(?:fill|stroke)="[^"]*"/g, '').replace(/\s+/g, ' '),
+    )
+
+  it('exports the A8/A9 set', () => {
+    const want = [
+      ...[16, 32, 48, 64, 128, 256, 512, 1024].map((px) => `app-icon-${px}.png`),
+      'app-icon.icns',
+      'app-icon.ico',
+      'favicon.svg',
+      'favicon-32.png',
+      'apple-touch-icon.png',
+      'icon-512.png',
+      'icon-maskable-512.png',
+    ]
+    for (const f of want) expect(files.has(`${ICON_PREFIX}${f}`), f).toBe(true)
+  })
+
+  it('builds the icon marks from the mark masters and colors them from tokens.json', () => {
+    const accent = colors.light.accent
+    const onAccent = tokens.color.light['on-accent'].$value.hex
+    for (const [name, master] of [
+      ['app-icon', 'mark.svg'],
+      ['app-icon-maskable', 'mark.svg'],
+      ['app-icon-16', 'mark-16.svg'],
+      ['favicon', 'mark-16.svg'],
+    ]) {
+      const markEls = elements(allMasters.find((m) => m.rel === master)!.svg)
+      const g = /<g id="mark"[^>]*>([\s\S]*?)<\/g>/.exec(icon(name))![1]
+      for (const el of markEls) expect(elements(g), `${name} carries ${master}`).toContain(el)
+    }
+    for (const name of ['app-icon', 'app-icon-maskable', 'app-icon-16']) {
+      const svg = icon(name)
+      expect(svg, name).toContain(`fill="${accent}"`)
+      expect(svg, name).toMatch(new RegExp(`(?:fill|stroke)="${onAccent}"`))
+      expect(svg, name).not.toMatch(/Gradient|filter=|opacity/)
+    }
+    const fav = files.get(`${ICON_PREFIX}favicon.svg`)!.toString()
+    expect(fav.toLowerCase()).toContain(colors.light.accent.toLowerCase())
+    expect(fav.toLowerCase()).toMatch(
+      new RegExp(
+        `@media \\(prefers-color-scheme:dark\\)\\{[^}]*${colors.dark.accent.toLowerCase()}`,
+      ),
+    )
+    // An inline style would outrank the media query and pin the light color.
+    expect(fav).not.toMatch(/\sstyle=/)
+  })
+
+  it('writes an ICO with 16, 32, 48 and 256 PNG entries', () => {
+    const ico = files.get(`${ICON_PREFIX}app-icon.ico`)!
+    expect(ico.readUInt16LE(2)).toBe(1)
+    const sizes = Array.from({ length: ico.readUInt16LE(4) }, (_, i) => {
+      const e = 6 + i * 16
+      const data = ico.subarray(
+        ico.readUInt32LE(e + 12),
+        ico.readUInt32LE(e + 12) + ico.readUInt32LE(e + 8),
+      )
+      expect(data.subarray(1, 4).toString('latin1')).toBe('PNG')
+      expect(data.readUInt32BE(16)).toBe(ico[e] || 256)
+      return ico[e] || 256
+    })
+    expect(sizes).toEqual([16, 32, 48, 256])
+  })
+
+  it('writes an ICNS with the macOS 16-512 @1x/@2x set', () => {
+    const icns = files.get(`${ICON_PREFIX}app-icon.icns`)!
+    expect(icns.toString('latin1', 0, 4)).toBe('icns')
+    expect(icns.readUInt32BE(4)).toBe(icns.length)
+    const found: Record<string, number> = {}
+    for (let p = 8; p < icns.length; p += icns.readUInt32BE(p + 4)) {
+      const data = icns.subarray(p + 8, p + icns.readUInt32BE(p + 4))
+      found[icns.toString('latin1', p, p + 4)] = data.readUInt32BE(16)
+    }
+    expect(found).toEqual(ICNS_TYPES)
+    for (const t of [
+      'icp4',
+      'icp5',
+      'ic11',
+      'ic12',
+      'ic07',
+      'ic13',
+      'ic08',
+      'ic14',
+      'ic09',
+      'ic10',
+    ])
+      expect(found[t], t).toBeDefined()
+  })
+
+  it('keeps the maskable mark inside the 80% safe zone (bounding box on the master)', () => {
+    const svg = icon('app-icon-maskable')
+    const size = Number(/viewBox="0 0 (\d+) \d+"/.exec(svg)![1])
+    const mark = /<g id="mark"[\s\S]*?<\/g>/.exec(svg)![0]
+    const box = new Resvg(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">${mark}</svg>`,
+    ).getBBox()!
+    const c = size / 2
+    const r = 0.4 * size
+    for (const [x, y] of [
+      [box.x, box.y],
+      [box.x + box.width, box.y],
+      [box.x, box.y + box.height],
+      [box.x + box.width, box.y + box.height],
+    ])
+      expect(Math.hypot(x - c, y - c), `corner ${x},${y}`).toBeLessThanOrEqual(r)
+    expect(box.width).toBeGreaterThan(0.35 * size)
+  })
+
+  it('wires the desk app window icon to an exported PNG', async () => {
+    // @ts-expect-error plain-node electron helper, no type declarations
+    const { APP_ICON } = await import('../../electron/app-meta.mjs')
+    expect(existsSync(APP_ICON), APP_ICON).toBe(true)
+    expect(readFileSync(join(ROOT, 'electron/main.mjs'), 'utf8')).toMatch(/icon: APP_ICON/)
   })
 })

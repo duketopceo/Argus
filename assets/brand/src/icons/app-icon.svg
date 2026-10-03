@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="none">
+  <title>Argus</title>
+  <!-- A8. macOS icon grid: 824 px squircle (corner 185, smoothing 0.6) on a
+       1024 canvas. Field: accent #2343F5. The mark is mark.svg at 24 px per
+       grid unit in on-accent #FFFFFF. The band inside the outer ring is the
+       sunk inner ring: one value step down (#1B30E5, oklch L 0.455 vs 0.50),
+       no gradient or gloss. -->
+  <path d="M628 100c103.61 0 155.41 0 194.99 20.16a185 185 0 0 1 80.85 80.85c20.16 39.57 20.16 91.38 20.16 194.99V628c0 103.61 0 155.41 -20.16 194.99a185 185 0 0 1 -80.85 80.85c-39.57 20.16 -91.38 20.16 -194.99 20.16H396c-103.61 0 -155.41 0 -194.99 -20.16a185 185 0 0 1 -80.85 -80.85c-20.16 -39.57 -20.16 -91.38 -20.16 -194.99V396c0 -103.61 0 -155.41 20.16 -194.99a185 185 0 0 1 80.85 -80.85c39.57 -20.16 91.38 -20.16 194.99 -20.16Z" fill="#2343F5"/>
+  <g id="mark" transform="translate(224 224) scale(24)">
+    <path d="M20.1 3.4A0.5 0.5 0 0 1 20.6 3.9L20.6 12A8.6 8.6 0 1 1 12 3.4Z" fill="#1B30E5"/>
+    <circle cx="12.636" cy="11.364" r="4.25" fill="#2343F5"/>
+    <path d="M20.1 3.4A0.5 0.5 0 0 1 20.6 3.9L20.6 12A8.6 8.6 0 1 1 12 3.4Z" stroke="#FFFFFF" stroke-width="1.75" stroke-linejoin="round"/>
+    <circle cx="12.636" cy="11.364" r="4.25" stroke="#FFFFFF" stroke-width="1.75"/>
+    <circle cx="13.414" cy="10.586" r="2" fill="#FFFFFF"/>
+  </g>
+</svg>

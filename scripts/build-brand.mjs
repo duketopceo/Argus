@@ -15,8 +15,18 @@
 //                           <symbol> per glyph with the master's file stem as
 //                           its id (status-passed, proof-2, severity-q, lane-a0)
 //
+//   icons/                  app icon and favicons (unit U10, DESIGN.md A8/A9)
+//                           from the full-color masters in src/icons/:
+//     app-icon-<px>.png     16-1024; 16 and 32 use the app-icon-16 optical master
+//     app-icon.ico          16, 32, 48, 256 (PNG entries)
+//     app-icon.icns         the macOS 16-512 @1x/@2x set (PNG entries)
+//     favicon.svg           mark with an internal prefers-color-scheme swap
+//     favicon-32.png, apple-touch-icon.png (180), icon-512.png,
+//     icon-maskable-512.png
+//
 // Glyphs stay in currentColor: surfaces color them through status tokens, so
-// they get no per-theme or per-file exports.
+// they get no per-theme or per-file exports. Icon masters carry their own
+// colors (accent field, on-accent mark); the test pins them to tokens.json.
 //
 // Marks take the `accent` token, the wordmark and lockups take `ink`
 // (DESIGN.md A1/A2, §6.1). Colors come from assets/brand/tokens.json so the
@@ -41,6 +51,22 @@ const THEMES = ['light', 'dark']
 const MARK_SIZES = [16, 32, 64, 256]
 const LOCKUP_HEIGHT = 64
 export const GLYPH_PREFIX = 'glyphs/'
+export const ICON_PREFIX = 'icons/'
+export const APP_ICON_SIZES = [16, 32, 48, 64, 128, 256, 512, 1024]
+export const ICO_SIZES = [16, 32, 48, 256]
+/** ICNS slot -> pixel size: the iconutil 16-512 @1x/@2x set. */
+export const ICNS_TYPES = {
+  icp4: 16,
+  icp5: 32,
+  ic11: 32,
+  ic12: 64,
+  ic07: 128,
+  ic13: 256,
+  ic08: 256,
+  ic14: 512,
+  ic09: 512,
+  ic10: 1024,
+}
 
 /** Optical master for a pixel size: ticks and thin strokes drop out small. */
 export function markMasterFor(px) {
@@ -78,12 +104,13 @@ export function readThemeColors(root = ROOT) {
   return colors
 }
 
-function svgoOptimize(svg) {
-  return optimize(svg, {
-    multipass: true,
-    floatPrecision: 3,
-    plugins: [{ name: 'preset-default' }],
-  }).data
+function svgoOptimize(svg, { keepStyles = false } = {}) {
+  // keepStyles: inlining a <style> rule onto its element would outrank the
+  // favicon's prefers-color-scheme override and freeze it in light colors.
+  const preset = keepStyles
+    ? { name: 'preset-default', params: { overrides: { inlineStyles: false } } }
+    : { name: 'preset-default' }
+  return optimize(svg, { multipass: true, floatPrecision: 3, plugins: [preset] }).data
 }
 
 function colorize(svg, hex) {
@@ -113,7 +140,7 @@ export function buildBrand(masters = readMasters(), colors = readThemeColors()) 
   const optimized = new Map()
   const glyphs = masters.filter((m) => m.rel.startsWith(GLYPH_PREFIX))
   for (const { rel, svg } of masters) {
-    if (rel.startsWith(GLYPH_PREFIX)) continue
+    if (rel.startsWith(GLYPH_PREFIX) || rel.startsWith(ICON_PREFIX)) continue
     const opt = svgoOptimize(svg)
     optimized.set(rel, opt)
     const stem = rel.replace(/\.svg$/, '')
@@ -148,7 +175,81 @@ export function buildBrand(masters = readMasters(), colors = readThemeColors()) 
     }
   }
   if (glyphs.length) files.set('glyphs.svg', Buffer.from(buildGlyphSprite(glyphs)))
+  const icons = masters.filter((m) => m.rel.startsWith(ICON_PREFIX))
+  if (icons.length) for (const [rel, buf] of buildIcons(icons)) files.set(rel, buf)
   return files
+}
+
+/** App icon, ICO, ICNS and favicon exports from the src/icons/ masters. */
+export function buildIcons(icons) {
+  const svg = new Map(
+    icons.map(({ rel, svg }) => [
+      rel.slice(ICON_PREFIX.length, -4),
+      svgoOptimize(svg, { keepStyles: true }),
+    ]),
+  )
+  const need = (name) => {
+    const s = svg.get(name)
+    if (!s) throw new Error(`missing master ${SRC_DIR}/${ICON_PREFIX}${name}.svg`)
+    return s
+  }
+  const appIcon = (px) =>
+    renderPng(need(px <= 32 ? 'app-icon-16' : 'app-icon'), { mode: 'width', value: px })
+  const png = new Map(APP_ICON_SIZES.map((px) => [px, appIcon(px)]))
+  const files = new Map()
+  for (const [name, s] of svg) files.set(`${ICON_PREFIX}${name}.svg`, Buffer.from(s))
+  for (const [px, buf] of png) files.set(`${ICON_PREFIX}app-icon-${px}.png`, buf)
+  files.set(`${ICON_PREFIX}app-icon.ico`, encodeIco(ICO_SIZES.map((px) => [px, png.get(px)])))
+  files.set(
+    `${ICON_PREFIX}app-icon.icns`,
+    encodeIcns(Object.entries(ICNS_TYPES).map(([type, px]) => [type, png.get(px)])),
+  )
+  files.set(`${ICON_PREFIX}favicon-32.png`, png.get(32))
+  const maskable = need('app-icon-maskable')
+  files.set(
+    `${ICON_PREFIX}apple-touch-icon.png`,
+    renderPng(maskable, { mode: 'width', value: 180 }),
+  )
+  files.set(`${ICON_PREFIX}icon-512.png`, png.get(512))
+  files.set(
+    `${ICON_PREFIX}icon-maskable-512.png`,
+    renderPng(maskable, { mode: 'width', value: 512 }),
+  )
+  return files
+}
+
+/** ICO with PNG-compressed entries (Windows Vista+, every browser). */
+export function encodeIco(entries) {
+  const head = Buffer.alloc(6 + entries.length * 16)
+  head.writeUInt16LE(0, 0)
+  head.writeUInt16LE(1, 2)
+  head.writeUInt16LE(entries.length, 4)
+  let offset = head.length
+  entries.forEach(([px, buf], i) => {
+    const e = 6 + i * 16
+    head.writeUInt8(px >= 256 ? 0 : px, e)
+    head.writeUInt8(px >= 256 ? 0 : px, e + 1)
+    head.writeUInt16LE(1, e + 4)
+    head.writeUInt16LE(32, e + 6)
+    head.writeUInt32LE(buf.length, e + 8)
+    head.writeUInt32LE(offset, e + 12)
+    offset += buf.length
+  })
+  return Buffer.concat([head, ...entries.map(([, buf]) => buf)])
+}
+
+/** ICNS with PNG entries, the format `iconutil` writes. */
+export function encodeIcns(entries) {
+  const chunks = entries.map(([type, buf]) => {
+    const h = Buffer.alloc(8)
+    h.write(type, 0, 'latin1')
+    h.writeUInt32BE(buf.length + 8, 4)
+    return Buffer.concat([h, buf])
+  })
+  const h = Buffer.alloc(8)
+  h.write('icns', 0, 'latin1')
+  h.writeUInt32BE(8 + chunks.reduce((n, c) => n + c.length, 0), 4)
+  return Buffer.concat([h, ...chunks])
 }
 
 /**
