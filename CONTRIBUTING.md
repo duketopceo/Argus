@@ -32,6 +32,32 @@ CI runs the same four steps on every PR plus a clean-install consumer
 smoke (`scripts/consumer-smoke.mjs`) when `src/`, `action/`, or
 `package.json` change.
 
+## Visual evidence (QA captures)
+
+UI, CLI and comment changes attach screenshots to the PR. Two scripts
+produce them without any model call:
+
+```bash
+# Web: 1440 and 390 px, light and dark, plus a keyboard (Tab order and
+# focus indicator) report. `dashboard` serves electron/ with a stubbed
+# bridge and captures its filled and empty states; any other target is a
+# URL or a local HTML file.
+env -u OPENROUTER_API_KEY node scripts/qa/capture-web.mjs --target dashboard --unit U13
+env -u OPENROUTER_API_KEY node scripts/qa/capture-web.mjs --target dashboard --unit U13 \
+  --width 1440 --theme dark --filter grayscale      # or --filter deuteranopia
+
+# Terminal: the command run at 80 and 120 columns (needs vhs, ttyd, ffmpeg).
+env -u OPENROUTER_API_KEY node scripts/qa/capture-term.mjs --unit U11 -- node dist/cli.js --help
+```
+
+Output lands in `argus-reviewer-report/qa/<unit>/`, which is gitignored:
+attach the files to the PR, do not commit them. Both scripts refuse to run
+while `OPENROUTER_API_KEY` is set, so a capture can never spend model
+credit. Exit codes: `0` done, `1` keyboard check failed (captures still
+written), `2` bad arguments or capture error, `3` refused because the key
+is set. The dashboard seed data lives in `scripts/qa/dashboard-fixture.mjs`
+and is shared with `npm run smoke:dashboard`.
+
 ## Conventions
 
 - **Commits/PRs:** conventional-style subjects (`feat:`, `fix:`, `docs:`,

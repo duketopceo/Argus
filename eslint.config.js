@@ -42,7 +42,7 @@ export default tseslint.config(
   {
     // e2e scripts are node entrypoints that inject browser-context
     // functions into Playwright pages — they need both global sets.
-    files: ['tests/e2e/**'],
+    files: ['tests/e2e/**', 'scripts/qa/**'],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },
     },
