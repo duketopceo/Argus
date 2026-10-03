@@ -180,30 +180,36 @@ export function isRunManifest(value) {
     }
     if (m.lanes === undefined || m.lanes === null || typeof m.lanes !== 'object')
         return false;
-    for (const id of LANE_IDS) {
-        const lane = m.lanes[id];
-        if (lane === undefined || lane === null || typeof lane !== 'object')
+    return LANE_IDS.every((id) => isLaneManifest(m.lanes[id], id));
+}
+/**
+ * One lane record the view-model can render. Exported so a surface that
+ * degrades per lane (the HTML report) applies the same check as the whole-
+ * manifest guard.
+ */
+export function isLaneManifest(value, id) {
+    if (value === undefined || value === null || typeof value !== 'object')
+        return false;
+    const lane = value;
+    if (lane.lane !== id || typeof lane.status !== 'string')
+        return false;
+    if (!LANE_STATUSES.includes(lane.status))
+        return false;
+    if (typeof lane.selected !== 'boolean')
+        return false;
+    // usage/budget are dereferenced by laneView — a guard that certifies a
+    // shape it doesn't check is a lying guard. `typeof null === 'object'`,
+    // so a null here must be rejected before the field reads, not crash
+    // inside the guard.
+    if (lane.usage === null || lane.usage === undefined || typeof lane.usage !== 'object') {
+        return false;
+    }
+    for (const n of [lane.usage.calls, lane.usage.tokens, lane.usage.costUsd]) {
+        if (typeof n !== 'number' || !Number.isFinite(n))
             return false;
-        if (lane.lane !== id || typeof lane.status !== 'string')
-            return false;
-        if (!LANE_STATUSES.includes(lane.status))
-            return false;
-        if (typeof lane.selected !== 'boolean')
-            return false;
-        // usage/budget are dereferenced by laneView — a guard that certifies a
-        // shape it doesn't check is a lying guard. `typeof null === 'object'`,
-        // so a null here must be rejected before the field reads, not crash
-        // inside the guard.
-        if (lane.usage === null || lane.usage === undefined || typeof lane.usage !== 'object') {
-            return false;
-        }
-        for (const n of [lane.usage.calls, lane.usage.tokens, lane.usage.costUsd]) {
-            if (typeof n !== 'number' || !Number.isFinite(n))
-                return false;
-        }
-        if (lane.budget === null || lane.budget === undefined || typeof lane.budget !== 'object') {
-            return false;
-        }
+    }
+    if (lane.budget === null || lane.budget === undefined || typeof lane.budget !== 'object') {
+        return false;
     }
     return true;
 }

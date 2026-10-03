@@ -32,6 +32,11 @@ export interface CommentMeta {
   version: string
   /** Link to the workflow run page (evidence and artifacts). */
   runUrl?: string
+  /**
+   * Workspace-relative path of this run's `report.html` (U14). Set only when
+   * the manifest is fresh, so the footer never points at a planted file.
+   */
+  reportHtml?: string
 }
 
 /** The subset of code-review.json the comment head reads. */
@@ -70,9 +75,9 @@ export interface CommentInput {
   reportDir?: string
 }
 
-type Proof = ProofLevel | 'none' | null
+export type Proof = ProofLevel | 'none' | null
 
-interface LaneRow {
+export interface LaneRow {
   lane: LaneId
   status: LaneStatus
   result: string
@@ -116,7 +121,7 @@ function proofText(level: Proof): string {
   return `${proofMeter(level)} ${level}`
 }
 
-function findingsOf(cr: CodeReviewInput | undefined): NonNullable<CodeReviewInput['findings']> {
+export function findingsOf(cr: CodeReviewInput | undefined): NonNullable<CodeReviewInput['findings']> {
   return cr !== undefined && Array.isArray(cr.findings) ? cr.findings : []
 }
 
@@ -128,7 +133,7 @@ function bestFindingProof(cr: CodeReviewInput | undefined): ProofLevel {
   return PROOF_LEVELS[best] ?? 'suspected'
 }
 
-function laneProof(lane: LaneId, status: LaneStatus, cr: CodeReviewInput | undefined): Proof {
+export function laneProof(lane: LaneId, status: LaneStatus, cr: CodeReviewInput | undefined): Proof {
   if (status === 'skipped') return null
   if (status === 'blocked' || status === 'unavailable') return 'none'
   if (status === 'inconclusive' || lane === 'a0') return 'suspected'
@@ -136,7 +141,7 @@ function laneProof(lane: LaneId, status: LaneStatus, cr: CodeReviewInput | undef
   return 'exercised'
 }
 
-function manifestRow(lane: LaneView, cr: CodeReviewInput | undefined): LaneRow {
+export function manifestRow(lane: LaneView, cr: CodeReviewInput | undefined): LaneRow {
   if (!lane.selected) {
     return { lane: lane.lane, status: 'skipped', result: 'not selected', proof: null, spend: '' }
   }
@@ -149,7 +154,7 @@ function manifestRow(lane: LaneView, cr: CodeReviewInput | undefined): LaneRow {
   }
 }
 
-function reproducedCount(cr: CodeReviewInput): number {
+export function reproducedCount(cr: CodeReviewInput): number {
   return typeof cr.provenBlockers === 'number'
     ? cr.provenBlockers
     : findingsOf(cr).filter((f) => f.evidence?.status === 'reproduced').length
@@ -201,37 +206,58 @@ function isVerdict(v: unknown): v is Verdict {
   return typeof v === 'string' && Object.hasOwn(VERDICT_LABEL, v)
 }
 
-function headline(ok: boolean | undefined, aggregate: LaneStatus | undefined, cr: CodeReviewInput | undefined): string {
+/** Headline status and word, shared by the comment and the HTML report. */
+export function verdictOf(
+  ok: boolean | undefined,
+  aggregate: LaneStatus | undefined,
+  cr: CodeReviewInput | undefined,
+): { status: LaneStatus; label: string } {
   const verdict = cr !== undefined && cr.skipped !== true && isVerdict(cr.verdict) ? cr.verdict : undefined
   if (ok !== true) {
-    if (verdict === 'needs_changes') return `${STATUS_GLYPH.failed} ${VERDICT_LABEL.needs_changes}`
+    if (verdict === 'needs_changes') return { status: 'failed', label: VERDICT_LABEL.needs_changes }
     const s = aggregate !== undefined && aggregate !== 'passed' && aggregate !== 'skipped' ? aggregate : 'failed'
-    return statusText(s)
+    return { status: s, label: s }
   }
-  if (verdict !== undefined) return `${STATUS_GLYPH[VERDICT_STATUS[verdict]]} ${VERDICT_LABEL[verdict]}`
-  return statusText(aggregate ?? 'passed')
+  if (verdict !== undefined) return { status: VERDICT_STATUS[verdict], label: VERDICT_LABEL[verdict] }
+  const s = aggregate ?? 'passed'
+  return { status: s, label: s }
+}
+
+function headline(ok: boolean | undefined, aggregate: LaneStatus | undefined, cr: CodeReviewInput | undefined): string {
+  const { status, label } = verdictOf(ok, aggregate, cr)
+  return `${STATUS_GLYPH[status]} ${label}`
 }
 
 const settled = (s: LaneStatus) => s === 'passed' || s === 'skipped'
 
-function verdictLead(rows: LaneRow[], cr: CodeReviewInput | undefined): string {
+/** How a lead sentence marks up emphasis, code and plain text. */
+export interface LeadFormat {
+  strong: (s: string) => string
+  code: (s: unknown) => string
+  text: (s: unknown) => string
+}
+
+const MARKDOWN_LEAD: LeadFormat = { strong: (s) => `**${s}**`, code, text: cell }
+
+/** The verdict line's lead: what the run proved, in one phrase. */
+export function verdictLead(rows: LaneRow[], cr: CodeReviewInput | undefined, f: LeadFormat = MARKDOWN_LEAD): string {
   const findings = findingsOf(cr)
   const reviewed = cr !== undefined && cr.skipped !== true
   if (reviewed) {
     const reproduced = reproducedCount(cr)
     if (reproduced > 0) {
-      const files = new Set(findings.filter((f) => f.evidence?.status === 'reproduced').map((f) => f.file))
-      const where = files.size === 1 ? ` in ${code([...files][0])}` : ''
-      return `**${plural(reproduced, 'finding')} reproduced**${where}`
+      const files = new Set(findings.filter((x) => x.evidence?.status === 'reproduced').map((x) => x.file))
+      const where = files.size === 1 ? ` in ${f.code([...files][0])}` : ''
+      return `${f.strong(`${plural(reproduced, 'finding')} reproduced`)}${where}`
     }
   }
   const failing = rows.filter((r) => r.lane !== 'review' && !settled(r.status))
-  if (failing.length > 0) return `**${failing.map((r) => `${cell(r.lane)} ${r.status}`).join(', ')}**`
-  if (reviewed && findings.length > 0) return `**${plural(findings.length, 'finding')}, none reproduced**`
+  if (failing.length > 0) return f.strong(failing.map((r) => `${f.text(r.lane)} ${r.status}`).join(', '))
+  if (reviewed && findings.length > 0) return f.strong(`${plural(findings.length, 'finding')}, none reproduced`)
   const review = rows.find((r) => r.lane === 'review')
-  if (review !== undefined && !settled(review.status)) return `**review ${review.status}**`
-  if (reviewed) return '**No findings**'
-  return rows.some((r) => r.status !== 'skipped') ? '**All selected lanes passed**' : '**No lane ran**'
+  if (review !== undefined && !settled(review.status)) return f.strong(`review ${review.status}`)
+  if (reviewed) return f.strong('No findings')
+  return f.strong(rows.some((r) => r.status !== 'skipped') ? 'All selected lanes passed' : 'No lane ran')
 }
 
 function verdictLine(p: {
@@ -292,6 +318,7 @@ function findingsLine(cr: CodeReviewInput | undefined, missing = NO_REVIEW_REPOR
 function footer(meta: CommentMeta): string {
   const bits = [`Argus ${meta.version}`]
   if (meta.runUrl !== undefined) bits.push(`[workflow run and evidence](${meta.runUrl})`)
+  if (meta.reportHtml !== undefined) bits.push(`report ${code(meta.reportHtml)} in the run artifacts`)
   bits.push('self-hosted, BYOK')
   return `<sub>${bits.join(' · ')}</sub>`
 }

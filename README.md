@@ -58,6 +58,16 @@ The comment is not a GitHub review, so on its own it does not satisfy a required
 
 `argus-reviewer verify` runs the lanes you select and writes one `run-manifest.json`, which the PR comment renders.
 
+Beside it, verify writes `report.html`: an offline evidence report with the verdict, each lane, findings with suggestions, the flow step timeline, heals and the spend ledger. It is one self-contained file (inline styles, fonts and icons, no network requests), follows your light or dark setting and prints cleanly. It lands at `argus-reviewer-report/report.html` (or your `report-dir`). The action does not upload it; add an upload step for the report directory, and the PR comment footer names the path inside that artifact:
+
+```yaml
+- uses: actions/upload-artifact@v4
+  if: always()
+  with:
+    name: argus-reviewer-report-${{ github.run_id }}-${{ github.run_attempt }}
+    path: argus-reviewer-report/
+```
+
 | Lane | Select with | What it does |
 |---|---|---|
 | review | default | Reviews the diff and posts findings and a verdict |

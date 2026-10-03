@@ -1,5 +1,6 @@
-import type { RunManifest } from './manifest.js';
+import type { LaneId, LaneStatus, RunManifest } from './manifest.js';
 import { RunReport } from './run.js';
+import { type LaneView, type ProofLevel } from './viewmodel.js';
 export declare const SENTINEL = "<!-- argus-reviewer -->";
 /**
  * Reference renderer for the sticky PR comment (plan U4, R6). NOT wired into
@@ -15,6 +16,11 @@ export interface CommentMeta {
     version: string;
     /** Link to the workflow run page (evidence and artifacts). */
     runUrl?: string;
+    /**
+     * Workspace-relative path of this run's `report.html` (U14). Set only when
+     * the manifest is fresh, so the footer never points at a planted file.
+     */
+    reportHtml?: string;
 }
 /** The subset of code-review.json the comment head reads. */
 export interface CodeReviewInput {
@@ -59,6 +65,31 @@ export interface CommentInput {
     report?: ReportInput;
     reportDir?: string;
 }
+export type Proof = ProofLevel | 'none' | null;
+export interface LaneRow {
+    lane: LaneId;
+    status: LaneStatus;
+    result: string;
+    proof: Proof;
+    spend: string;
+}
+export declare function findingsOf(cr: CodeReviewInput | undefined): NonNullable<CodeReviewInput['findings']>;
+export declare function laneProof(lane: LaneId, status: LaneStatus, cr: CodeReviewInput | undefined): Proof;
+export declare function manifestRow(lane: LaneView, cr: CodeReviewInput | undefined): LaneRow;
+export declare function reproducedCount(cr: CodeReviewInput): number;
+/** Headline status and word, shared by the comment and the HTML report. */
+export declare function verdictOf(ok: boolean | undefined, aggregate: LaneStatus | undefined, cr: CodeReviewInput | undefined): {
+    status: LaneStatus;
+    label: string;
+};
+/** How a lead sentence marks up emphasis, code and plain text. */
+export interface LeadFormat {
+    strong: (s: string) => string;
+    code: (s: unknown) => string;
+    text: (s: unknown) => string;
+}
+/** The verdict line's lead: what the run proved, in one phrase. */
+export declare function verdictLead(rows: LaneRow[], cr: CodeReviewInput | undefined, f?: LeadFormat): string;
 /** First screen of any sticky body: sentinel through the findings summary. */
 export declare function renderCommentHead(input: CommentInput): string;
 export declare function renderMissingKeyComment(meta: CommentMeta): string;

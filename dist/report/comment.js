@@ -31,7 +31,7 @@ function proofText(level) {
         return `${proofMeter(undefined)} none`;
     return `${proofMeter(level)} ${level}`;
 }
-function findingsOf(cr) {
+export function findingsOf(cr) {
     return cr !== undefined && Array.isArray(cr.findings) ? cr.findings : [];
 }
 function bestFindingProof(cr) {
@@ -41,7 +41,7 @@ function bestFindingProof(cr) {
     }
     return PROOF_LEVELS[best] ?? 'suspected';
 }
-function laneProof(lane, status, cr) {
+export function laneProof(lane, status, cr) {
     if (status === 'skipped')
         return null;
     if (status === 'blocked' || status === 'unavailable')
@@ -52,7 +52,7 @@ function laneProof(lane, status, cr) {
         return bestFindingProof(cr);
     return 'exercised';
 }
-function manifestRow(lane, cr) {
+export function manifestRow(lane, cr) {
     if (!lane.selected) {
         return { lane: lane.lane, status: 'skipped', result: 'not selected', proof: null, spend: '' };
     }
@@ -64,7 +64,7 @@ function manifestRow(lane, cr) {
         spend: lane.usage.metered ? formatUsd(lane.usage.costUsd) : 'unmetered',
     };
 }
-function reproducedCount(cr) {
+export function reproducedCount(cr) {
     return typeof cr.provenBlockers === 'number'
         ? cr.provenBlockers
         : findingsOf(cr).filter((f) => f.evidence?.status === 'reproduced').length;
@@ -109,41 +109,49 @@ function laneTable(rows) {
 function isVerdict(v) {
     return typeof v === 'string' && Object.hasOwn(VERDICT_LABEL, v);
 }
-function headline(ok, aggregate, cr) {
+/** Headline status and word, shared by the comment and the HTML report. */
+export function verdictOf(ok, aggregate, cr) {
     const verdict = cr !== undefined && cr.skipped !== true && isVerdict(cr.verdict) ? cr.verdict : undefined;
     if (ok !== true) {
         if (verdict === 'needs_changes')
-            return `${STATUS_GLYPH.failed} ${VERDICT_LABEL.needs_changes}`;
+            return { status: 'failed', label: VERDICT_LABEL.needs_changes };
         const s = aggregate !== undefined && aggregate !== 'passed' && aggregate !== 'skipped' ? aggregate : 'failed';
-        return statusText(s);
+        return { status: s, label: s };
     }
     if (verdict !== undefined)
-        return `${STATUS_GLYPH[VERDICT_STATUS[verdict]]} ${VERDICT_LABEL[verdict]}`;
-    return statusText(aggregate ?? 'passed');
+        return { status: VERDICT_STATUS[verdict], label: VERDICT_LABEL[verdict] };
+    const s = aggregate ?? 'passed';
+    return { status: s, label: s };
+}
+function headline(ok, aggregate, cr) {
+    const { status, label } = verdictOf(ok, aggregate, cr);
+    return `${STATUS_GLYPH[status]} ${label}`;
 }
 const settled = (s) => s === 'passed' || s === 'skipped';
-function verdictLead(rows, cr) {
+const MARKDOWN_LEAD = { strong: (s) => `**${s}**`, code, text: cell };
+/** The verdict line's lead: what the run proved, in one phrase. */
+export function verdictLead(rows, cr, f = MARKDOWN_LEAD) {
     const findings = findingsOf(cr);
     const reviewed = cr !== undefined && cr.skipped !== true;
     if (reviewed) {
         const reproduced = reproducedCount(cr);
         if (reproduced > 0) {
-            const files = new Set(findings.filter((f) => f.evidence?.status === 'reproduced').map((f) => f.file));
-            const where = files.size === 1 ? ` in ${code([...files][0])}` : '';
-            return `**${plural(reproduced, 'finding')} reproduced**${where}`;
+            const files = new Set(findings.filter((x) => x.evidence?.status === 'reproduced').map((x) => x.file));
+            const where = files.size === 1 ? ` in ${f.code([...files][0])}` : '';
+            return `${f.strong(`${plural(reproduced, 'finding')} reproduced`)}${where}`;
         }
     }
     const failing = rows.filter((r) => r.lane !== 'review' && !settled(r.status));
     if (failing.length > 0)
-        return `**${failing.map((r) => `${cell(r.lane)} ${r.status}`).join(', ')}**`;
+        return f.strong(failing.map((r) => `${f.text(r.lane)} ${r.status}`).join(', '));
     if (reviewed && findings.length > 0)
-        return `**${plural(findings.length, 'finding')}, none reproduced**`;
+        return f.strong(`${plural(findings.length, 'finding')}, none reproduced`);
     const review = rows.find((r) => r.lane === 'review');
     if (review !== undefined && !settled(review.status))
-        return `**review ${review.status}**`;
+        return f.strong(`review ${review.status}`);
     if (reviewed)
-        return '**No findings**';
-    return rows.some((r) => r.status !== 'skipped') ? '**All selected lanes passed**' : '**No lane ran**';
+        return f.strong('No findings');
+    return f.strong(rows.some((r) => r.status !== 'skipped') ? 'All selected lanes passed' : 'No lane ran');
 }
 function verdictLine(p) {
     const bits = [verdictLead(p.rows, p.cr)];
@@ -200,6 +208,8 @@ function footer(meta) {
     const bits = [`Argus ${meta.version}`];
     if (meta.runUrl !== undefined)
         bits.push(`[workflow run and evidence](${meta.runUrl})`);
+    if (meta.reportHtml !== undefined)
+        bits.push(`report ${code(meta.reportHtml)} in the run artifacts`);
     bits.push('self-hosted, BYOK');
     return `<sub>${bits.join(' · ')}</sub>`;
 }
