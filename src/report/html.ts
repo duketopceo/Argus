@@ -254,9 +254,9 @@ export function readManifest(text: string | undefined): ManifestState {
   try {
     value = JSON.parse(text)
   } catch {
-    return { state: 'unreadable', detail: 'run-manifest.json did not parse' }
+    return { state: 'unreadable', detail: 'did not parse' }
   }
-  if (!isObj(value)) return { state: 'unreadable', detail: 'run-manifest.json failed validation' }
+  if (!isObj(value)) return { state: 'unreadable', detail: 'failed validation' }
   const lanesIn = isObj(value.lanes) ? value.lanes : {}
   const missing = LANE_IDS.filter((id) => !isLaneManifest(lanesIn[id], id))
   const lanes = Object.fromEntries(
@@ -266,7 +266,7 @@ export function readManifest(text: string | undefined): ManifestState {
   // already vetted, so the two checks cannot drift apart.
   const candidate = { ...value, lanes }
   if (!isRunManifest(candidate)) {
-    return { state: 'unreadable', detail: 'run-manifest.json failed validation' }
+    return { state: 'unreadable', detail: 'failed validation' }
   }
   return { state: 'ok', manifest: candidate, missing }
 }
@@ -358,23 +358,39 @@ ${binding?.status === 'mismatch' ? `<p class="banner t-caution">${glyph('status-
 </section>`
 }
 
+/** One wrapping line of lane facts under the lane row. */
 function laneDetails(view: LaneView): string {
   const u = view.usage
-  return dl([
-    ['Model', view.model !== undefined ? `<code>${esc(view.model)}</code>` : undefined],
-    ['Duration', formatDuration(view.durationMs) !== undefined ? `<span class="data">${formatDuration(view.durationMs)}</span>` : undefined],
-    ['Usage', view.selected && view.status !== 'skipped' ? `<span class="data">${plural(u.calls, 'call')} · ${u.tokens.toLocaleString('en-US')} tokens</span>` : undefined],
-    ['Report', view.reportPath !== undefined ? `<code>${esc(view.reportPath)}</code>` : undefined],
-    ['Summary', view.summary !== undefined && view.reason !== undefined && view.summary !== view.reason ? esc(view.summary) : undefined],
-    ['Head', view.headBinding !== undefined ? `${esc(view.headBinding.status)}: ${esc(view.headBinding.detail)}` : undefined],
-  ])
+  const duration = formatDuration(view.durationMs)
+  const bits = [
+    str(view.model) !== undefined ? `<code>${esc(view.model)}</code>` : undefined,
+    duration !== undefined ? `<span class="data">${duration}</span>` : undefined,
+    view.status !== 'skipped' ? `<span class="data">${plural(u.calls, 'call')}, ${u.tokens.toLocaleString('en-US')} tokens</span>` : undefined,
+    str(view.reportPath) !== undefined ? `<code>${esc(view.reportPath)}</code>` : undefined,
+  ].filter((b) => b !== undefined)
+  const notes = [
+    view.summary !== undefined && view.reason !== undefined && view.summary !== view.reason ? esc(view.summary) : undefined,
+    // A matching binding is already in the header; only a problem earns a line here.
+    view.headBinding !== undefined && view.headBinding.status !== 'match' && view.headBinding.status !== 'not_applicable'
+      ? `Head ${esc(view.headBinding.status)}: ${esc(view.headBinding.detail)}`
+      : undefined,
+  ].filter((b) => b !== undefined)
+  return (
+    (bits.length > 0 ? `<p class="lane-facts">${bits.map((b) => `<span>${b}</span>`).join('')}</p>` : '') +
+    notes.map((n) => `<p class="lane-note">${n}</p>`).join('')
+  )
+}
+
+/** Escaped text with `backtick` spans set as code, as the model writes them. */
+function prose(v: unknown): string {
+  return esc(v).replace(/`([^`\n]+)`/g, '<code>$1</code>')
 }
 
 function lanesSection(c: Ctx): string {
   if (c.manifest === undefined) {
     const sentence =
       c.ms.state === 'unreadable'
-      ? `<strong>Manifest unreadable:</strong> ${esc(c.ms.detail)}, so lane results are unknown. Re-run verify to write a fresh one.`
+      ? `<strong>Manifest unreadable:</strong> <code>run-manifest.json</code> ${esc(c.ms.detail)}, so lane results are unknown. Re-run verify to write a fresh one.`
       : '<strong>No manifest:</strong> this run wrote no <code>run-manifest.json</code>, so lane results are unknown. Run verify to produce one.'
     return `<section id="lanes" aria-labelledby="lanes-h"><h2 id="lanes-h">Lanes</h2>${emptyState('manifest-unreadable', sentence, 'argus-reviewer verify')}</section>`
   }
@@ -383,7 +399,7 @@ function lanesSection(c: Ctx): string {
     const view = c.views[id]
     const resultText =
       row.status === 'unavailable' && row.result === 'evidence missing'
-        ? `<span class="t-muted">unavailable: evidence missing</span>`
+        ? `<span class="t-muted">evidence missing</span>`
         : esc(row.result)
     return `<li class="lane${view?.selected === false ? ' off' : ''}" id="lane-${id}">
 <div class="lane-head">${status(row.status)}<span class="lane-name">${glyph(`lane-${id}`, 'lg')}${id}</span><span class="lane-result">${resultText}</span><span class="lane-proof">${proof(row.proof)}</span><span class="lane-spend data">${esc(row.spend)}</span></div>
@@ -408,7 +424,7 @@ function findingsSection(c: Ctx): string {
   if (c.cr === undefined) {
     const review = c.manifest?.lanes.review
     const sentence =
-      review !== undefined && review.selected
+      c.manifest === undefined || review?.selected === true
         ? 'No code review report is attached to this run.'
         : 'Code review did not run in this verify, so there are no findings to show.'
     return `<section id="findings" aria-labelledby="findings-h">${head()}<p class="note">${sentence}</p></section>`
@@ -446,7 +462,7 @@ function findingsSection(c: Ctx): string {
     ].filter(Boolean)
     return `<li class="finding" id="finding-${i + 1}">
 <div class="finding-head">${sev}${file !== undefined ? `<span class="loc">${fileLink(c, file, line)}${copyButton(`${file}${line !== undefined ? `:${line}` : ''}`, `Copy path ${file}`)}</span>` : ''}<span class="finding-proof">${proof(level)}</span></div>
-<p class="msg">${esc(f.message ?? '')}</p>
+<p class="msg">${prose(f.message ?? '')}</p>
 ${meta.length > 0 ? `<p class="meta">${meta.join(' · ')}</p>` : ''}
 ${evidenceNote}
 ${suggestion !== undefined ? `<details class="suggest"><summary class="control-ish">Suggested change</summary><pre class="diff">${suggestion.split('\n').map((l) => `<span class="add">+ ${esc(l)}</span>`).join('\n')}</pre></details>` : ''}
@@ -481,7 +497,7 @@ function flowSection(c: Ctx): string {
   const h = '<h2 id="flow-h">Flow</h2>'
   const wrap = (body: string) => `<section id="flow" aria-labelledby="flow-h">${h}${body}</section>`
   if (c.missing.includes('flow')) {
-    return wrap(`<p class="note">${status('unavailable', 'unavailable: evidence missing')} The manifest has no readable flow lane record.</p>`)
+    return wrap(`<p class="lane-line">${status('unavailable', 'unavailable: evidence missing')}</p><p class="note">The manifest has no readable flow lane record, so this run's flow result is unknown.</p>`)
   }
   const lane = c.manifest?.lanes.flow
   if (lane !== undefined && !lane.selected) {
@@ -689,6 +705,8 @@ code, .data, .num, .fig, pre {
   font-stretch: 87.5%;
   font-weight: 450;
   font-feature-settings: 'tnum', 'zero';
+  /* Code is quoted, never typeset: <= must not become a ligature. */
+  font-variant-ligatures: none;
 }
 code, .data { font-size: 13px; line-height: 19px; }
 code { overflow-wrap: anywhere; }
@@ -783,8 +801,10 @@ h3 { font: 600 13px/19px var(--sans); color: var(--ink-2); margin: 24px 0 8px; }
 .lane-result { color: var(--ink-2); min-width: 0; overflow-wrap: anywhere; }
 .lane-spend { text-align: right; color: var(--ink-2); }
 .lane.off .lane-name, .lane.off .lane-result { color: var(--ink-3); }
-.lane .kv { margin: 8px 0 0 144px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
-.lane .kv dd { font-size: 13px; line-height: 19px; }
+.lane-facts, .lane-note { margin: 4px 0 0 144px; color: var(--ink-3); font-size: 13px; line-height: 19px; }
+.lane-facts { display: flex; flex-wrap: wrap; gap: 0 16px; }
+.lane-facts code, .lane-facts .data { color: var(--ink-2); font-size: 12px; line-height: 19px; }
+.lane-note { color: var(--ink-2); }
 
 .sev { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 16px; }
 .findings > li { padding: 16px 0; border-top: 1px solid var(--hairline); }
@@ -792,6 +812,7 @@ h3 { font: 600 13px/19px var(--sans); color: var(--ink-2); margin: 24px 0 8px; }
 .finding-head .st { min-width: 72px; }
 .loc { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
 .finding-proof { margin-left: auto; }
+.msg code { background: var(--sunk); padding: 0 4px; border-radius: var(--argus-radius-xs); }
 .msg { margin-top: 8px; color: var(--ink); max-width: 72ch; text-wrap: pretty; }
 .finding .meta, .evidence { margin-top: 4px; }
 .evidence { color: var(--ink-2); font-size: 13px; line-height: 19px; }
@@ -818,6 +839,7 @@ h3 { font: 600 13px/19px var(--sans); color: var(--ink-2); margin: 24px 0 8px; }
 .timeline .node { width: 16px; height: 16px; margin-top: 2px; background: var(--canvas); border-radius: 50%; }
 .timeline .act code { color: var(--ink-2); font-size: 12px; line-height: 16px; }
 .why { color: var(--ink-2); font-size: 13px; line-height: 19px; }
+.step p .chip + code, .step p code.dim { margin-left: 6px; }
 .chip {
   display: inline-block; font: 500 12px/16px var(--sans); padding: 0 6px; border: 1px solid currentColor;
   border-radius: var(--argus-radius-xs); margin-left: 4px; color: var(--ink-3);
@@ -884,7 +906,9 @@ button.copy[data-done] .i-check { display: block; color: var(--passed); }
   .lane-spend { grid-column: 3; }
   .lane-result { grid-column: 1 / -1; }
   .lane-proof { grid-column: 1 / -1; }
-  .lane .kv { margin-left: 0; }
+  .lane-facts, .lane-note { margin-left: 0; }
+  .lane-spend { grid-row: 1; }
+  .lane-head .st, .lane-name { grid-row: 1; }
   .finding-proof { margin-left: 0; }
 }
 @media print {
@@ -917,6 +941,15 @@ button.copy[data-done] .i-check { display: block; color: var(--passed); }
   }
   h2, h3 {
     break-after: avoid;
+  }
+  .scroll {
+    overflow: visible;
+  }
+  .ledger td {
+    white-space: normal;
+  }
+  .ticks {
+    display: none;
   }
   details::details-content {
     content-visibility: visible;

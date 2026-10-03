@@ -192,7 +192,7 @@ describe('HTML evidence report (U14)', () => {
     expect(flow).toContain('unavailable: evidence missing')
     // The other lanes still render from the manifest.
     const lanes = html.slice(html.indexOf('id="lanes"'), html.indexOf('id="findings"'))
-    expect(lanes).toContain('unavailable: evidence missing')
+    expect(lanes).toMatch(/◌ <\/span><span>unavailable<\/span><\/span>[\s\S]*evidence missing/)
     expect(lanes).toContain('expected state verified')
     expect(html).not.toContain('Manifest unreadable')
   })
