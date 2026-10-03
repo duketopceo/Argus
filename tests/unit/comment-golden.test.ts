@@ -48,7 +48,16 @@ function load(name: string): Fixture {
 }
 
 /** Fixtures rendered through a body renderer directly (U4, plus U5's oversize). */
-const RENDERED = ['passed', 'failed', 'mixed-four-lane', 'review-only', 'missing-key', 'hostile', 'oversize']
+const RENDERED = [
+  'passed',
+  'failed',
+  'mixed-four-lane',
+  'review-only',
+  'missing-key',
+  'hostile',
+  'oversize',
+  'dogfood-demo-pr',
+]
 /** U5 manifest states: rendered through the action's body selection (renderSticky). */
 const DEGRADED = ['stale', 'corrupt', 'missing-manifest']
 const ALL = [...RENDERED, ...DEGRADED]
@@ -108,7 +117,10 @@ const EMOJI = /\p{Extended_Pictographic}|\u{FE0F}|[\u{1F1E6}-\u{1F1FF}]/u
 
 describe('comment goldens (U4)', () => {
   it('has a fixture for every planned state and a golden for every rendered one', () => {
-    const names = readdirSync(FIXTURES).map((f) => f.replace(/\.json$/, '')).sort()
+    const names = readdirSync(FIXTURES)
+      .filter((f) => f.endsWith('.json'))
+      .map((f) => f.replace(/\.json$/, ''))
+      .sort()
     expect(names).toEqual([...ALL].sort())
   })
 

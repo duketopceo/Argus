@@ -1,0 +1,147 @@
+<!--
+  Comment frame (plan U16, KTD7). A fragment, not a page: scripts/render-brand.mjs
+  fills the body slot with the comment golden rendered to HTML and drops the
+  result into the hero and social templates. Styled after GitHub's markdown
+  rendering so the figure shows the comment as a PR author meets it: plain
+  text glyphs, no status colors (GitHub markdown has none), folds collapsed.
+  Colors come only from tokens.css.
+-->
+<style>
+  .cf {
+    --cf-mono: var(--argus-font-mono);
+    background: var(--argus-color-surface);
+    border: 1px solid var(--argus-color-hairline);
+    border-radius: var(--argus-radius-md);
+    color: var(--argus-color-ink);
+    font: 400 14px/21px var(--argus-font-sans);
+    text-align: left;
+  }
+  .cf-head {
+    display: flex;
+    align-items: center;
+    gap: var(--argus-space-8);
+    padding: var(--argus-space-8) var(--argus-space-16);
+    background: var(--argus-color-canvas);
+    border-bottom: 1px solid var(--argus-color-hairline);
+    border-radius: var(--argus-radius-md) var(--argus-radius-md) 0 0;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--argus-color-ink-3);
+  }
+  .cf-head b {
+    color: var(--argus-color-ink);
+    font-weight: 600;
+  }
+  .cf-mark,
+  .cf-mark img {
+    display: block;
+    width: 20px;
+    height: 20px;
+    flex: none;
+  }
+  .cf-body {
+    padding: var(--argus-space-16) var(--argus-space-16) var(--argus-space-12);
+  }
+  .cf-body > :first-child {
+    margin-top: 0;
+  }
+  .cf-body > :last-child {
+    margin-bottom: 0;
+  }
+  .cf h3 {
+    margin: 0 0 var(--argus-space-12);
+    font-size: 20px;
+    line-height: 28px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .cf p {
+    margin: 0 0 var(--argus-space-12);
+  }
+  .cf strong {
+    font-weight: 600;
+  }
+  .cf code {
+    font: 450 12px/16px var(--cf-mono);
+    font-stretch: 87.5%;
+    padding: 2px 4px;
+    border-radius: var(--argus-radius-xs);
+    background: var(--argus-color-surface-sunk);
+  }
+  .cf table {
+    border-collapse: collapse;
+    margin: 0 0 var(--argus-space-12);
+    font-size: 13px;
+    line-height: 19px;
+  }
+  .cf th,
+  .cf td {
+    border: 1px solid var(--argus-color-hairline);
+    padding: 5px 12px;
+    white-space: nowrap;
+  }
+  .cf th {
+    font-weight: 600;
+    text-align: left;
+  }
+  .cf th[align='right'],
+  .cf td[align='right'] {
+    text-align: right;
+  }
+  .cf tbody tr:nth-child(2n) {
+    background: var(--argus-color-canvas);
+  }
+  .cf td[align='right'] {
+    font-variant-numeric: tabular-nums;
+    font-family: var(--cf-mono);
+    font-stretch: 87.5%;
+    font-size: 12px;
+    font-weight: 450;
+  }
+  .cf details {
+    margin: 0 0 var(--argus-space-4);
+  }
+  .cf summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: var(--argus-space-8);
+    color: var(--argus-color-ink);
+  }
+  .cf summary::-webkit-details-marker {
+    display: none;
+  }
+  .cf summary::before {
+    content: '';
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 4.5px 0 4.5px 7px;
+    border-color: transparent transparent transparent var(--argus-color-ink-2);
+  }
+  .cf details:last-of-type {
+    margin-bottom: var(--argus-space-12);
+  }
+  .cf sub {
+    vertical-align: baseline;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--argus-color-ink-3);
+  }
+  .cf a {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--argus-color-control-border);
+    text-underline-offset: 2px;
+  }
+</style>
+<div class="cf">
+  <div class="cf-head">
+    <picture class="cf-mark">
+      <source srcset="../export/mark-24-dark.svg" media="(prefers-color-scheme: dark)" />
+      <img src="../export/mark-24-light.svg" alt="" />
+    </picture>
+    <span><b>argus-reviewer</b> commented on the pull request</span>
+  </div>
+  <div class="cf-body">{{body}}</div>
+</div>

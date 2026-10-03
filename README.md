@@ -1,8 +1,9 @@
 # Argus
 
-<p align="center">
-  <img src="docs/assets/social.png" alt="Argus — vision-model E2E testing" width="640" />
-</p>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-dark.png" />
+  <img src="docs/assets/hero-light.png" alt="The Argus sticky comment from a real review run: verdict needs changes, 3 findings with suspected proof and none reproduced, review lane failed, flow lane skipped, metered spend $0.000739." />
+</picture>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/argus-reviewer-e2e"><img src="https://img.shields.io/npm/v/argus-reviewer-e2e" alt="npm version" /></a>

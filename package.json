@@ -48,6 +48,7 @@
     "demo": "node scripts/demo.mjs",
     "tokens": "node scripts/build-tokens.mjs",
     "brand": "node scripts/build-brand.mjs",
+    "render:brand": "node scripts/render-brand.mjs",
     "check:contrast": "node scripts/check-contrast.mjs"
   },
   "devDependencies": {

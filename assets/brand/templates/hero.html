@@ -1,0 +1,190 @@
+<!doctype html>
+<!--
+  README hero, "anatomy of a verdict" (DESIGN.md A11, plan U16).
+  scripts/render-brand.mjs fills the two slots from a real fixture and its
+  comment golden, then screenshots #hero at 2x in light and dark
+  (prefers-color-scheme). Nothing in the comment is typed here.
+-->
+<html lang="en" data-ready="0">
+  <head>
+    <meta charset="utf-8" />
+    <title>Argus hero</title>
+    <link rel="stylesheet" href="../tokens.css" />
+    <link rel="stylesheet" href="../fonts.css" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: var(--argus-color-canvas);
+      }
+      #hero {
+        width: 760px;
+        box-sizing: border-box;
+        padding: 32px 32px 28px 64px;
+        background: var(--argus-color-canvas);
+        color: var(--argus-color-ink);
+        font: 400 14px/21px var(--argus-font-sans);
+        -webkit-font-smoothing: antialiased;
+      }
+      .stage {
+        position: relative;
+      }
+      .overlay {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+      .chip {
+        position: absolute;
+        width: 22px;
+        height: 22px;
+        display: grid;
+        place-items: center;
+        border-radius: var(--argus-radius-xs);
+        background: var(--argus-color-accent);
+        color: var(--argus-color-on-accent);
+        font: 600 12px/1 var(--argus-font-mono);
+        font-stretch: 100%;
+      }
+      .bracket {
+        position: absolute;
+        width: 8px;
+        border: 2px solid var(--argus-color-accent);
+        border-right: 0;
+        border-radius: var(--argus-radius-xs) 0 0 var(--argus-radius-xs);
+        box-sizing: border-box;
+      }
+      .box {
+        position: absolute;
+        border: 2px solid var(--argus-color-accent);
+        border-radius: var(--argus-radius-sm);
+        box-sizing: border-box;
+      }
+      .legend {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--argus-space-24);
+        margin: var(--argus-space-24) 0 0;
+        padding: 0;
+        list-style: none;
+      }
+      .legend li {
+        display: grid;
+        grid-template-columns: 22px minmax(0, 1fr);
+        column-gap: var(--argus-space-12);
+        align-items: start;
+      }
+      .legend .chip {
+        position: static;
+      }
+      .legend h2 {
+        margin: 0 0 var(--argus-space-4);
+        font-size: 16px;
+        line-height: 22px;
+        font-weight: 600;
+      }
+      .legend p {
+        margin: 0;
+        font-size: 15px;
+        line-height: 22px;
+        color: var(--argus-color-ink-2);
+        text-wrap: pretty;
+      }
+      .legend .fig {
+        font-family: var(--argus-font-mono);
+        font-stretch: 87.5%;
+        font-weight: 450;
+        font-size: 13px;
+        color: var(--argus-color-ink);
+      }
+      .note {
+        margin: var(--argus-space-24) 0 0;
+        font-size: 12px;
+        line-height: 16px;
+        font-weight: 500;
+        color: var(--argus-color-ink-3);
+      }
+      .note code {
+        font: 450 12px/16px var(--argus-font-mono);
+        font-stretch: 87.5%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="hero">
+      <div class="stage">
+        <div data-slot="comment"></div>
+        <div class="overlay" aria-hidden="true"></div>
+      </div>
+      <ol class="legend">
+        <li>
+          <span class="chip">1</span>
+          <div>
+            <h2>Verdict and proof</h2>
+            <p>Needs changes. The proof meter shows how far each finding was tested.</p>
+          </div>
+        </li>
+        <li>
+          <span class="chip">2</span>
+          <div>
+            <h2>Lanes</h2>
+            <p>Each lane reports its own status. One that did not run says skipped.</p>
+          </div>
+        </li>
+        <li>
+          <span class="chip">3</span>
+          <div>
+            <h2>Spend</h2>
+            <p>Every model call is metered. This review cost <span class="fig" data-slot="spend"></span>.</p>
+          </div>
+        </li>
+      </ol>
+      <p class="note">From a real run of <code>npm run demo</code> on <code>fixtures/demo-pr</code>. Folds stay collapsed, as on GitHub.</p>
+    </div>
+    <script>
+      // Place the callouts on the rendered comment: 1 brackets the verdict
+      // heading and line, 2 brackets the lane table, 3 boxes the Spend column.
+      document.addEventListener('slots-filled', async () => {
+        try {
+        void document.body.offsetHeight
+        await document.fonts.ready
+        const stage = document.querySelector('.stage')
+        const overlay = document.querySelector('.overlay')
+        const body = stage.querySelector('.cf-body')
+        const h3 = body.querySelector('h3')
+        const verdict = h3.nextElementSibling
+        const table = body.querySelector('table')
+        if (!h3 || !verdict || !table) throw new Error('hero: comment has no verdict or lane table')
+        const base = stage.getBoundingClientRect()
+        const rel = (r) => ({ top: r.top - base.top, bottom: r.bottom - base.top, left: r.left - base.left, right: r.right - base.left })
+        const add = (cls, style, text) => {
+          const el = document.createElement('div')
+          el.className = cls
+          Object.assign(el.style, style)
+          if (text) el.textContent = text
+          overlay.append(el)
+          return el
+        }
+        const GUTTER = -36
+        const bracket = (n, top, bottom) => {
+          add('bracket', { left: `${GUTTER + 26}px`, top: `${top}px`, height: `${bottom - top}px` })
+          add('chip', { left: `${GUTTER}px`, top: `${(top + bottom) / 2 - 11}px` }, String(n))
+        }
+        const head = rel(h3.getBoundingClientRect())
+        const line = rel(verdict.getBoundingClientRect())
+        bracket(1, head.top - 2, line.bottom + 2)
+        const t = rel(table.getBoundingClientRect())
+        bracket(2, t.top, t.bottom)
+        const col = table.rows[0].cells.length - 1
+        const first = rel(table.rows[0].cells[col].getBoundingClientRect())
+        const last = rel(table.rows[table.rows.length - 1].cells[col].getBoundingClientRect())
+        add('box', { left: `${first.left - 4}px`, top: `${first.top - 4}px`, width: `${first.right - first.left + 8}px`, height: `${last.bottom - first.top + 8}px` })
+        add('chip', { left: `${first.right + 12}px`, top: `${(first.top + last.bottom) / 2 - 11}px` }, '3')
+        document.documentElement.dataset.ready = '1'
+        } catch (e) {
+          document.documentElement.dataset.ready = String(e && e.message)
+        }
+      })
+    </script>
+  </body>
+</html>
