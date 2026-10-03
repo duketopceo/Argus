@@ -87,8 +87,8 @@ export function scanDiffForSecrets(diffText) {
 function maskFindingMessage(c, adjudicated) {
     const verdict = adjudicated
         ? 'live-looking credential'
-        : 'secret-shaped literal (unadjudicated — decision model unavailable)';
-    return (`L${c.line}: ${adjudicated ? '🔴' : '🟡'} ${adjudicated ? 'bug' : 'risk'}: ` +
+        : 'secret-shaped literal (unadjudicated: decision model unavailable)';
+    return (`L${c.line}: ${adjudicated ? 'bug' : 'risk'}: ` +
         `${verdict} (${c.patternClass}) added in this PR at \`${c.file}\`. ` +
         `Rotate it and purge it from history.`);
 }
@@ -128,7 +128,7 @@ export async function materializeMergeBaseDiff(opts) {
     return { diff: diff.stdout };
 }
 /**
- * Full lane: scan candidates (capped), Jev-adjudicate when a client and
+ * Full lane: scan candidates (capped), adjudicate with the confidence model when a client and
  * threshold are available, and emit masked findings + audit records.
  * `client === undefined` (decisionModel unset) or any DecisionError →
  * every candidate unadjudicated — regex-only mode, never silence.
@@ -169,7 +169,7 @@ export async function scanSecrets(opts) {
         }
         catch (e) {
             adjudicationFailed = true;
-            debug('secrets', `adjudication failed — degrading to regex-only: ${describeDecisionError(e)}`);
+            debug('secrets', `adjudication failed, degrading to regex-only: ${describeDecisionError(e)}`);
         }
     }
     const findings = [];
@@ -194,7 +194,7 @@ export async function scanSecrets(opts) {
             severity: adjudicated ? 'bug' : 'risk',
             category: 'security',
             message: maskFindingMessage(c, adjudicated),
-            // A Jev-confirmed live secret counts as proven for the review-event
+            // A confidence-model-confirmed live secret counts as proven for the review-event
             // gate — pLive IS the true-positive probability for this finding.
             // Unadjudicated findings carry no p (degrade-open, like U8).
             ...(adjudicated && pLive !== undefined ? { p: pLive } : {}),
@@ -215,8 +215,8 @@ export async function scanSecrets(opts) {
             line: 0,
             severity: 'risk',
             category: 'security',
-            message: `L0: 🟡 risk: ${overflow} secret-shaped literal(s) exceeded the ` +
-                `${MAX_CANDIDATES}-candidate adjudication cap and were not evaluated — ` +
+            message: `L0: risk: ${overflow} secret-shaped literal(s) exceeded the ` +
+                `${MAX_CANDIDATES}-candidate adjudication cap and were not evaluated; ` +
                 'review the diff for secrets manually.',
         });
     }

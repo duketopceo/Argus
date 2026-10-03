@@ -26,8 +26,20 @@ import {
   renderManifestLanes,
   renderReviewOnlyBody,
   run,
-  shortHash,
+  postedDedupKey,
+  normalizeFindingMessage as cjsNormalizeFindingMessage,
+  parseInlineBody as cjsParseInlineBody,
+  fitStatusDescription,
+  INLINE_SENTINEL as CJS_INLINE_SENTINEL,
 } from '../../action/sticky-comment.cjs'
+
+import { renderReviewComments } from '../../src/cli.js'
+import {
+  INLINE_SENTINEL,
+  inlineDedupKey,
+  normalizeFindingMessage,
+  parseInlineBody,
+} from '../../src/review/inline.js'
 
 import { renderManifestComment } from '../../src/report/comment.js'
 import { fixtureLane, fixtureManifest } from '../fixtures/manifest.js'
@@ -103,7 +115,7 @@ describe('action input contract', () => {
     // Lane off → captures present but no section rendered.
     expect(
       renderStickyBody({ ...base }, undefined, undefined, true, inline),
-    ).not.toContain('Exploratory')
+    ).not.toContain('<summary>Exploratory</summary>')
 
     // Lane on → observed findings with collapsed counts.
     const on = renderStickyBody(
@@ -113,8 +125,8 @@ describe('action input contract', () => {
       true,
       inline,
     )
-    expect(on).toContain('🔭 Exploratory')
-    expect(on).toContain('🟡 observed · console error ×3: `seeded console boom`')
+    expect(on).toContain('<summary>Exploratory</summary>')
+    expect(on).toContain('observed · console error ×3: `seeded console boom`')
     expect(on).toContain('do not change the verdict')
 
     // Skip line — unreachable target is explicit, not silent.
@@ -125,7 +137,7 @@ describe('action input contract', () => {
       true,
       inline,
     )
-    expect(skipped).toContain('explore skipped — no page loaded')
+    expect(skipped).toContain('Explore skipped: no page loaded')
 
     // U4b act pass — step/visited/stopReason summary plus its own captures
     // merged with the per-file ones.
@@ -149,8 +161,8 @@ describe('action input contract', () => {
     )
     expect(acted).toContain('explored **7** step(s) across **2** page(s)')
     expect(acted).toContain('stopped: max-steps')
-    expect(acted).toContain('🟡 observed · page error: `TypeError: boom`')
-    expect(acted).toContain('🟡 observed · console error ×3: `seeded console boom`')
+    expect(acted).toContain('observed · page error: `TypeError: boom`')
+    expect(acted).toContain('observed · console error ×3: `seeded console boom`')
   })
 
   it('parses trusted CLI argv without a shell and rejects shell operators', () => {
@@ -198,6 +210,60 @@ describe('action input contract', () => {
     await expect(assertRegularFile(join(root, 'leaf.json'), 'config')).rejects.toThrow(
       /non-symlink/,
     )
+  })
+
+  it('declares Marketplace branding (R25): icon eye, color blue', async () => {
+    const action = await readFile(join(ACTION, 'action.yml'), 'utf8')
+    // Top-level `branding:` block: the key at column 0, its children indented.
+    const block = /^branding:\n((?:[ \t]+.*\n)+)/m.exec(action)
+    expect(block, 'action.yml has no top-level branding block').not.toBeNull()
+    const fields = Object.fromEntries(
+      block![1]!
+        .split('\n')
+        .map((l) => /^\s+([a-z]+):\s*(\S+)\s*$/.exec(l))
+        .filter((m): m is RegExpExecArray => m !== null)
+        .map((m) => [m[1], m[2]]),
+    )
+    expect(fields).toEqual({ icon: 'eye', color: 'blue' })
+  })
+
+  it('a refused runtime lane says what happened and the fix in the job summary (U5, Q10 wording only)', async () => {
+    const action = await readFile(join(ACTION, 'action.yml'), 'utf8')
+    const step = /- name: Reject executable lanes on untrusted pull requests\n[\s\S]*?\n {6}run: \|\n((?: {8}.*\n|\n)+)/.exec(action)
+    expect(step, 'refusal step not found').not.toBeNull()
+    const script = step![1]!
+      .split('\n')
+      .map((l) => l.slice(8))
+      .join('\n')
+      .replaceAll('${{ inputs.run }}', 'true')
+      .replaceAll('${{ inputs.app }}', 'false')
+      .replaceAll('${{ inputs.a0 }}', 'false')
+    const dir = await mkdtemp(join(tmpdir(), 'argus-refuse-'))
+    const runStep = async (env: Record<string, string>) => {
+      const summary = join(dir, `summary-${Object.values(env).join('-')}.md`)
+      await writeFile(summary, '')
+      const code = await execFileAsync('bash', ['-e', '-c', script], {
+        env: { PATH: process.env.PATH ?? '', GITHUB_STEP_SUMMARY: summary, ...env },
+      }).then(
+        () => 0,
+        (e: { code?: number }) => e.code ?? -1,
+      )
+      return { code, text: await readFile(summary, 'utf8') }
+    }
+
+    const fork = await runStep({ EVENT_NAME: 'pull_request', HEAD_FORK: 'true' })
+    expect(fork.code).toBe(1)
+    expect(fork.text).toContain('**Runtime lanes refused:** this pull request comes from a fork')
+    expect(fork.text).toMatch(/^Fix: for fork pull requests, set run: 'false'/m)
+    expect(fork.text).not.toContain('\u2014')
+
+    const target = await runStep({ EVENT_NAME: 'pull_request_target', HEAD_FORK: 'false' })
+    expect(target.code).toBe(1)
+    expect(target.text).toMatch(/^Fix: /m)
+
+    // The trust decision itself is unchanged: a same-repository PR passes silently.
+    const same = await runStep({ EVENT_NAME: 'pull_request', HEAD_FORK: 'false' })
+    expect(same).toEqual({ code: 0, text: '' })
   })
 
   it('uses safe action wiring: pinned bootstrap, no dynamic source evaluation, opt-in runtime install', async () => {
@@ -344,8 +410,9 @@ describe('action input contract', () => {
   })
 })
 
-// U4/R6 — the sticky's scannable top block: verdict + one-line summary +
-// honest counts under the sentinel, ahead of every <details> fold.
+// U4/R6: the sticky's first screen (header, verdict line, lane table,
+// findings summary) carries the verdict and honest counts ahead of every fold.
+// Whole-body layout is pinned by the goldens in comment-golden.test.ts.
 describe('sticky review top block (U4)', () => {
   const runReport = {
     ok: true,
@@ -406,28 +473,30 @@ describe('sticky review top block (U4)', () => {
 
     const body = renderStickyBody(runReport, cr, 'https://github.com/run/1', false, undefined)
 
-    expect(body.indexOf('<!-- argus-reviewer -->')).toBeLessThan(body.indexOf('**Code review:**'))
-    expect(body.indexOf('**Code review:**')).toBeLessThan(body.indexOf('<details>'))
-    expect(body).toContain('**Code review:** 🔴 **needs_changes** — found real problems')
-    expect(body).toContain('🐛 1 · ⚠️ 1 · 💡 1 · ❓ 0')
-    expect(body).toContain('⛔ 1 reproduced')
-    expect(body).not.toContain('◎')
+    expect(body.indexOf('<!-- argus-reviewer -->')).toBeLessThan(body.indexOf('### Argus:'))
+    expect(body.indexOf('### Argus:')).toBeLessThan(body.indexOf('<details>'))
+    expect(body).toContain('### Argus: ⊘ needs changes\n')
+    expect(body).toContain('**1 finding reproduced** in `a.ts`')
+    expect(body).toContain('◆ 1 bug · ◈ 1 risk · ○ 1 nit\n')
+    expect(body.indexOf('◆ 1 bug')).toBeLessThan(body.indexOf('<details>'))
+    expect(body).not.toContain('high-confidence')
   })
 
   it('renders a clean zero-finding block with no proof counts', () => {
     const cr = review({ verdict: 'pass', summary: 'clean diff' })
     const body = renderStickyBody(runReport, cr, 'https://github.com/run/1', true, undefined)
 
-    expect(body).toContain('**Code review:** ✅ **pass** — clean diff')
-    expect(body).toContain('no findings')
-    expect(body).not.toContain('⛔')
-    expect(body).not.toContain('◎')
-    expect(body).not.toMatch(/🔧 \d+ suggestion/)
+    expect(body).toContain('### Argus: ● clean\n')
+    expect(body).toContain('**No findings**')
+    expect(body).toContain('◆ 0 bugs · ◈ 0 risks · ○ 0 nits\n')
+    expect(body).not.toContain('reproduced**')
+    expect(body).not.toContain('high-confidence')
+    expect(body).not.toMatch(/\d+ suggestions? ready/)
   })
 
   it('counts reproduced and p-only findings separately — p alone is never proven', () => {
-    // No serialized counts — exercises the finding-level recount fallback:
-    // the p-only blocker must land under ◎ and never leak into ⛔.
+    // No serialized counts: exercises the finding-level recount fallback.
+    // The p-only blocker counts as high-confidence, never as reproduced.
     const cr = review({
       findings: [
         {
@@ -446,10 +515,10 @@ describe('sticky review top block (U4)', () => {
 
     const body = renderStickyBody(runReport, cr, 'https://github.com/run/1', false, undefined)
 
-    expect(body).toContain('⛔ 1 reproduced')
-    expect(body).toContain('◎ 1 high-confidence')
-    expect(body).not.toContain('⛔ 2')
-    expect(body).not.toContain('◎ 2')
+    expect(body).toContain('**1 finding reproduced** in `a.ts`')
+    expect(body).toContain('· 1 high-confidence')
+    expect(body).not.toContain('2 findings reproduced')
+    expect(body).not.toContain('2 high-confidence')
   })
 
   it('counts only serialized comments that carry a committable suggestion', () => {
@@ -483,8 +552,8 @@ describe('sticky review top block (U4)', () => {
 
     const body = renderStickyBody(runReport, cr, 'https://github.com/run/1', false, undefined)
 
-    expect(body).toContain('🔧 1 suggestion\n')
-    expect(body).not.toContain('🔧 2')
+    expect(body).toContain('· 1 suggestion ready to commit\n')
+    expect(body).not.toContain('2 suggestions')
   })
 
   it('renders the same top block in the review-only body', () => {
@@ -504,8 +573,25 @@ describe('sticky review top block (U4)', () => {
 
     const body = renderReviewOnlyBody(cr, 'https://github.com/run/1', false, undefined)
 
-    expect(body.indexOf('**Code review:**')).toBeLessThan(body.indexOf('<details>'))
-    expect(body).toContain('⛔ 1 reproduced')
+    expect(body.indexOf('**1 finding reproduced**')).toBeLessThan(body.indexOf('<details>'))
+    expect(body).toContain('| – skipped | flow | run lane disabled |  |  |')
+  })
+
+  it('states an inconclusive evidence link once, in Diagnostics, not on every finding (U6)', () => {
+    const NOTE = 'no repo index; run `argus-reviewer index` first'
+    const cr = review({
+      findings: [1, 2, 3].map((line) => ({
+        file: 'a.ts',
+        line,
+        severity: 'bug',
+        message: `boom ${line}`,
+        evidence: { status: 'inconclusive', detail: NOTE },
+      })),
+    })
+    const body = renderReviewOnlyBody(cr, 'https://github.com/run/1', false, undefined)
+    const diagnostics = body.slice(body.indexOf('<summary>Diagnostics</summary>'))
+    expect(body.split('repo index')).toHaveLength(2)
+    expect(diagnostics).toContain(`- CI evidence inconclusive for 3 findings: no repo index; run \`argus-reviewer index\` first`)
   })
 })
 
@@ -545,14 +631,9 @@ describe('action review poster (U3)', () => {
     }
   })
 
-  function comment(path: string, line: number, body: string, suggestion = '') {
-    return {
-      path,
-      line,
-      side: 'RIGHT',
-      body,
-      dedupKey: `${path}:${line}:${body.split('\n')[0]}:${shortHash(suggestion)}`,
-    }
+  // The CLI serializes the key the poster reconstructs from the body (KTD4).
+  function comment(path: string, line: number, body: string) {
+    return { path, line, side: 'RIGHT', body, dedupKey: postedDedupKey({ path, line, body }) as string }
   }
 
   function codeReview(overrides: Record<string, unknown> = {}) {
@@ -713,8 +794,10 @@ describe('action review poster (U3)', () => {
     expect(reviews).toHaveLength(2)
     expect(reviews[0].params.event).toBe('REQUEST_CHANGES')
     expect(reviews[1].params.event).toBe('COMMENT')
-    expect(reviews[1].params.body).toContain('REQUEST_CHANGES downgraded to COMMENT')
-    expect(reviews[1].params.body).toContain('Resource not accessible')
+    expect(reviews[1].params.body).toContain('Posted as a comment instead of requesting changes')
+    // The raw status stays in a collapsed fold, not the readable sentence.
+    expect(reviews[1].params.body).toContain('<details><summary>Diagnostics</summary>')
+    expect(reviews[1].params.body).toContain('GitHub API 403: Resource not accessible')
   })
 
   it('dismisses a prior self CHANGES_REQUESTED before posting', async () => {
@@ -800,7 +883,7 @@ describe('action review poster (U3)', () => {
       '**argus-reviewer bug:** fix this\n\n' +
       '````suggestion\nconst x = 1\n````\n\n' +
       '*Suggested change — review before committing.*'
-    const c = comment('a.ts', 3, body, 'const x = 1')
+    const c = comment('a.ts', 3, body)
     await writeReport(codeReview({ reviewComments: [c] }))
     const { runtime, calls } = makeRuntime({
       pulls: { listFiles: async () => ({ data: [{ filename: 'a.ts', patch: A_TS_PATCH }] }) },
@@ -819,7 +902,7 @@ describe('action review poster (U3)', () => {
       '**argus-reviewer bug:** fix this\n\n' +
       '````suggestion\nconst x = 1\n````\n\n' +
       '*Suggested change — review before committing.*'
-    const c = comment('a.ts', 3, body, 'const x = 1')
+    const c = comment('a.ts', 3, body)
     await writeReport(codeReview({ reviewComments: [c] }))
     const { runtime, calls } = makeRuntime({
       pulls: {
@@ -926,6 +1009,294 @@ describe('action review poster (U3)', () => {
     const status = calls.find((x) => x.method === 'createCommitStatus')
     expect(status!.params.state).toBe('success')
   })
+
+  describe('Ocellus inline comments, review body and status (U6)', () => {
+    const finding = {
+      file: 'a.ts',
+      line: 3,
+      severity: 'bug',
+      category: 'correctness',
+      message: 'L3: 🔴 bug: `user` can be null. Add guard.',
+    }
+    const fresh = () => renderReviewComments([finding], 20).comments[0]!
+    const LEGACY = '**argus-reviewer bug:** L3: 🔴 bug: `user` can be null. Add guard. `correctness`'
+    const onDiff = { listFiles: async () => ({ data: [{ filename: 'a.ts', patch: A_TS_PATCH }] }) }
+
+    it('legacy-to-new: a comment posted before the upgrade still suppresses the new-format re-post', async () => {
+      await writeReport(codeReview({ reviewComments: [fresh()] }))
+      const { runtime, calls } = makeRuntime({
+        pulls: {
+          ...onDiff,
+          listReviewComments: async () => ({ data: [{ path: 'a.ts', line: 3, commit_id: HEAD, body: LEGACY }] }),
+        },
+      })
+      await run(runtime)
+      expect(calls.filter((x) => x.method === 'createReview')).toHaveLength(0)
+    })
+
+    it('a new-format comment already on the head is recognized by its sentinel', async () => {
+      const c = fresh()
+      await writeReport(codeReview({ reviewComments: [c] }))
+      const { runtime, calls } = makeRuntime({
+        pulls: { ...onDiff, listReviewComments: async () => ({ data: [{ path: 'a.ts', line: 3, commit_id: HEAD, body: c.body }] }) },
+      })
+      await run(runtime)
+      expect(calls.filter((x) => x.method === 'createReview')).toHaveLength(0)
+    })
+
+    it('a human comment on the same line is never treated as Argus\'s own', async () => {
+      const c = fresh()
+      const withoutSentinel = c.body.split('\n').slice(1).join('\n')
+      await writeReport(codeReview({ reviewComments: [c] }))
+      const { runtime, calls } = makeRuntime({
+        pulls: {
+          ...onDiff,
+          listReviewComments: async () => ({
+            data: [
+              { path: 'a.ts', line: 3, commit_id: HEAD, body: withoutSentinel },
+              { path: 'a.ts', line: 3, commit_id: HEAD, body: `> ${c.body.split('\n').join('\n> ')}\n\nagreed` },
+              { path: 'a.ts', line: 3, commit_id: HEAD, body: `> ${LEGACY}` },
+            ],
+          }),
+        },
+      })
+      await run(runtime)
+      const reviews = calls.filter((x) => x.method === 'createReview')
+      expect(reviews).toHaveLength(1)
+      expect((reviews[0]!.params.comments as { body: string }[])[0]!.body).toBe(c.body)
+    })
+
+    it('the review body leads with the verdict glyph and word, without emoji or the tool prefix', async () => {
+      await writeReport(
+        codeReview({ reviewEvent: 'request_changes', provenBlockers: 2, highConfidenceBlockers: 1 }),
+      )
+      const { runtime, calls } = makeRuntime()
+      await run(runtime)
+      const body = calls.find((x) => x.method === 'createReview')!.params.body as string
+      expect(body.split('\n')[0]).toBe('<!-- argus-reviewer -->')
+      expect(body.split('\n')[1]).toBe('**Argus: ⊘ needs changes** · 2 reproduced blockers · 1 high-confidence blocker')
+      expect(body).not.toMatch(/\p{Extended_Pictographic}|\u{FE0F}/u)
+      expect(body).not.toContain('\u2014')
+      expect(body).not.toContain('**argus-reviewer**')
+    })
+
+    it('the commit status mirrors the comment verdict line', async () => {
+      await writeReport(
+        codeReview({ findings: [finding], visionCostUsd: 0.00421, verdict: 'needs_changes', ok: false }),
+      )
+      const { runtime, calls } = makeRuntime()
+      await run(runtime)
+      const status = calls.find((x) => x.method === 'createCommitStatus')!
+      expect(status.params.state).toBe('failure')
+      expect(status.params.description).toBe('⊘ needs changes · 1 finding · $0.004210')
+      const sticky = calls.find((x) => x.method === 'createComment')!.params.body as string
+      expect(sticky).toContain('### Argus: ⊘ needs changes')
+    })
+
+    it('a clean review reads as the clean verdict', async () => {
+      await writeReport(codeReview({ verdict: 'pass', findings: [] }))
+      const { runtime, calls } = makeRuntime()
+      await run(runtime)
+      const status = calls.find((x) => x.method === 'createCommitStatus')!
+      expect(status.params.description).toBe('● clean · 0 findings · $0.000000')
+    })
+
+    it('a missing key reads as a skip with the reason', async () => {
+      delete process.env.OPENROUTER_API_KEY
+      const { runtime, calls } = makeRuntime()
+      await run(runtime)
+      expect(calls.find((x) => x.method === 'createCommitStatus')!.params.description).toBe(
+        '– skipped · no OPENROUTER_API_KEY',
+      )
+    })
+
+    it('a long status stays within 140 characters and ends cleanly', () => {
+      const long = fitStatusDescription(['⊘ needs changes', 'x'.repeat(200), '3 findings', '$1.000000'])
+      expect(long.length).toBeLessThanOrEqual(140)
+      expect(long.startsWith('⊘ needs changes')).toBe(true)
+      expect(long).not.toMatch(/ · ?$|\s$/)
+      // Whole segments are dropped before any cut; a single over-long one is cut on a code point.
+      expect(fitStatusDescription(['⊘ needs changes', 'a'.repeat(118), '$0.1'])).toBe(`⊘ needs changes · ${'a'.repeat(118)}`)
+      const cut = fitStatusDescription([`${'◆'.repeat(150)}`])
+      expect([...cut].length).toBeLessThanOrEqual(140)
+      expect(cut.endsWith('…')).toBe(true)
+      expect(cut.length).toBeLessThanOrEqual(140)
+      const astral = fitStatusDescription(['𝐱'.repeat(100)])
+      expect(astral.length).toBeLessThanOrEqual(140)
+      expect(astral).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/)
+      expect(fitStatusDescription(['● clean', '0 findings', '$0.000000'])).toBe('● clean · 0 findings · $0.000000')
+    })
+
+    it('keeps the inline parser, normalizer and key equal to the TS copy (KTD2 parity)', () => {
+      expect(CJS_INLINE_SENTINEL).toBe(INLINE_SENTINEL)
+      const bodies = [
+        LEGACY,
+        fresh().body,
+        renderReviewComments([{ ...finding, severity: 'q', message: '❓ q: why?', suggestion: 'x()' }], 20).comments[0]!.body,
+        renderReviewComments([{ ...finding, severity: 'critical', evidence: { status: 'reproduced', detail: 'd' } }], 20)
+          .comments[0]!.body,
+        '**argus-reviewer nit:** meh',
+        '**argus-reviewer risk:** L1-4: 🟡 risk: retry missing `performance`',
+        'just a human comment',
+        `> ${LEGACY}`,
+        '',
+      ]
+      for (const body of bodies) {
+        expect(cjsParseInlineBody(body)).toEqual(parseInlineBody(body))
+        expect(postedDedupKey({ path: 'a.ts', line: 3, body })).toBe(inlineDedupKey('a.ts', 3, body))
+      }
+      for (const m of ['L42: 🔴 bug: x', '🟡 risk: L2: y', '❓️ q: z', 'plain', 'L1-2: nit: w', '']) {
+        expect(cjsNormalizeFindingMessage(m)).toBe(normalizeFindingMessage(m))
+      }
+    })
+  })
+
+  describe('posting never fails silently (U5, R9)', () => {
+    function withSummary() {
+      const entries: string[] = []
+      const summary = {
+        addRaw(t: string) {
+          entries.push(t)
+          return summary
+        },
+        write: async () => summary,
+      }
+      return { summary, entries }
+    }
+
+    function apiError(status: number, message: string, headers: Record<string, string> = {}) {
+      return Object.assign(new Error(message), { status, response: { headers } })
+    }
+
+    it('finds the sticky on page 2 of 150 comments, updates it and creates none', async () => {
+      await writeReport(codeReview())
+      const all = Array.from({ length: 150 }, (_, i) => ({
+        id: i + 1,
+        body: i === 120 ? '<!-- argus-reviewer -->\nold sticky' : `human comment ${i}`,
+      }))
+      const { runtime, calls } = makeRuntime()
+      runtime.github.rest.issues.listComments = async (params: Record<string, unknown>) => {
+        calls.push({ method: 'listComments', params })
+        const page = (params.page as number | undefined) ?? 1
+        const per = (params.per_page as number | undefined) ?? 30
+        return { data: all.slice((page - 1) * per, page * per) }
+      }
+
+      await run(runtime)
+
+      expect(calls.filter((x) => x.method === 'createComment')).toHaveLength(0)
+      const updates = calls.filter((x) => x.method === 'updateComment')
+      expect(updates).toHaveLength(1)
+      expect(updates[0].params.comment_id).toBe(121)
+    })
+
+    it('a 403 on updateComment writes a permission summary, warns, and still sets the status', async () => {
+      await writeReport(codeReview())
+      const { runtime, calls, warnings } = makeRuntime()
+      const { summary, entries } = withSummary()
+      Object.assign(runtime.core, { summary })
+      runtime.github.rest.issues.listComments = async () => ({
+        data: [{ id: 5, body: '<!-- argus-reviewer -->\nold' }],
+      })
+      runtime.github.rest.issues.updateComment = async () => {
+        throw apiError(403, 'Resource not accessible by integration')
+      }
+
+      await run(runtime)
+
+      const text = entries.join('\n')
+      expect(text).toMatch(/could not update the PR comment/i)
+      expect(text).toMatch(/permission/i)
+      expect(text).toContain('`pull-requests: write`')
+      // The raw API status stays in a Diagnostics fold (R5).
+      expect(text).toContain('<summary>Diagnostics</summary>')
+      expect(text).toContain('GitHub API 403: Resource not accessible by integration')
+      expect(warnings.some((w) => /PR comment/.test(w) && /permission/i.test(w))).toBe(true)
+      expect(warnings.join('\n')).not.toContain('403')
+      expect(calls.filter((x) => x.method === 'createCommitStatus')).toHaveLength(1)
+    })
+
+    it('a 422 on createComment does not throw out of run', async () => {
+      await writeReport(codeReview())
+      const { runtime, calls, warnings } = makeRuntime()
+      Object.assign(runtime.core, { summary: withSummary().summary })
+      runtime.github.rest.issues.createComment = async () => {
+        throw apiError(422, 'Validation Failed')
+      }
+
+      await expect(run(runtime)).resolves.toBeUndefined()
+      expect(warnings.some((w) => /rejected/i.test(w))).toBe(true)
+      expect(calls.filter((x) => x.method === 'createCommitStatus')).toHaveLength(1)
+    })
+
+    it('a rate limit names the reset time', async () => {
+      await writeReport(codeReview())
+      const { runtime } = makeRuntime()
+      const { summary, entries } = withSummary()
+      Object.assign(runtime.core, { summary })
+      runtime.github.rest.issues.createComment = async () => {
+        throw apiError(403, 'API rate limit exceeded', {
+          'x-ratelimit-remaining': '0',
+          'x-ratelimit-reset': String(Date.UTC(2026, 9, 3, 12, 30) / 1000),
+        })
+      }
+
+      await run(runtime)
+
+      expect(entries.join('\n')).toMatch(/rate limit.*2026-10-03T12:30:00Z/i)
+    })
+
+    it('a failed sticky lookup skips the post rather than risk a duplicate, and still sets the status', async () => {
+      await writeReport(codeReview())
+      const { runtime, calls, warnings } = makeRuntime()
+      Object.assign(runtime.core, { summary: withSummary().summary })
+      runtime.github.rest.issues.listComments = async () => {
+        throw apiError(500, 'Server Error')
+      }
+
+      await run(runtime)
+
+      expect(calls.filter((x) => x.method === 'createComment')).toHaveLength(0)
+      expect(warnings.some((w) => /PR comment/.test(w))).toBe(true)
+      expect(calls.filter((x) => x.method === 'createCommitStatus')).toHaveLength(1)
+    })
+
+    it('a failed commit status is reported too, and run still returns', async () => {
+      await writeReport(codeReview())
+      const { runtime, warnings } = makeRuntime()
+      const { summary, entries } = withSummary()
+      Object.assign(runtime.core, { summary })
+      runtime.github.rest.repos.createCommitStatus = async () => {
+        throw apiError(403, 'Resource not accessible by integration')
+      }
+
+      await expect(run(runtime)).resolves.toBeUndefined()
+      expect(entries.join('\n')).toMatch(/could not set the commit status/i)
+      expect(entries.join('\n')).toContain('`statuses: write`')
+      expect(warnings.some((w) => /commit status/.test(w))).toBe(true)
+    })
+
+    it('a missing manifest on a pull_request run is named in the comment', async () => {
+      await writeReport(codeReview())
+      const { runtime, calls } = makeRuntime()
+      Object.assign(runtime.context, { eventName: 'pull_request' })
+
+      await run(runtime)
+
+      const body = calls.find((x) => x.method === 'createComment')!.params.body as string
+      expect(body).toMatch(/^> \*\*No manifest:\*\*.*Fix: /m)
+    })
+
+    it('warnings carry no em-dash (R5)', async () => {
+      await writeReport(codeReview({ headBinding: { intendedSha: 'othersha' } }))
+      const { runtime, warnings } = makeRuntime()
+
+      await run(runtime)
+
+      expect(warnings.length).toBeGreaterThan(0)
+      expect(warnings.join('\n')).not.toContain('\u2014')
+    })
+  })
 })
 
 // U5/AE-C — the PR comment, the TUI, and the dashboard all render the same
@@ -938,12 +1309,13 @@ describe('manifest comment parity (U5)', () => {
   function laneRows(body: string): string[] {
     return body
       .split('\n')
-      .filter((l) => /^\| (review|flow|app|a0) \|/.test(l))
+      .filter((l) => /^\| [^|]+ \| (review|flow|app|a0) \|/.test(l))
   }
+  const meta = { version: '0.0.0' }
 
   it('the action lane block and the shared view-model render identical rows', () => {
     const cjsBody = renderManifestLanes(manifest).join('\n')
-    const tsBody = renderManifestComment(manifest)
+    const tsBody = renderManifestComment(manifest, meta)
     const cjsRows = laneRows(cjsBody)
     const tsRows = laneRows(tsBody)
     expect(cjsRows).toHaveLength(4)
@@ -954,10 +1326,10 @@ describe('manifest comment parity (U5)', () => {
   })
 
   it('the header and cache line agree across renderers', () => {
-    const cjsBody = renderManifestLanes(manifest).join('\n')
-    const tsBody = renderManifestComment(manifest)
+    const cjsBody = renderManifestBody(manifest, undefined, undefined, meta)
+    const tsBody = renderManifestComment(manifest, meta)
     for (const text of [
-      '| Lane | Status | Calls | Cost | Detail |',
+      '| Status | Lane | Result | Proof | Spend |',
       '**Fingerprint cache:** 2 hit(s) · 1 miss(es) · 1 heal(s)',
     ]) {
       expect(cjsBody).toContain(text)
@@ -971,14 +1343,14 @@ describe('manifest comment parity (U5)', () => {
       'line one\nline two | pipe-break ' + 'x'.repeat(250)
     hostile.lanes.flow.reason = 'secret sk-or-v1-leak-here inside'
     const cjsRows = laneRows(renderManifestLanes(hostile).join('\n'))
-    const tsRows = laneRows(renderManifestComment(hostile))
+    const tsRows = laneRows(renderManifestComment(hostile, meta))
     expect(cjsRows).toEqual(tsRows)
     // The token is masked and the pipe is escaped — the raw two-line
     // reason must not break the table row.
     for (const row of tsRows) {
       expect(row).not.toContain('sk-or-v1-leak-here')
     }
-    const appRow = tsRows.find((r) => r.startsWith('| app |')) ?? ''
+    const appRow = tsRows.find((r) => r.includes(' | app | ')) ?? ''
     expect(appRow).toContain('line one line two \\| pipe-break')
     // Five column delimiters; every other pipe must be backslash-escaped.
     expect(appRow.match(/(?<!\\)\|/g)).toHaveLength(6)
@@ -1053,8 +1425,10 @@ describe('manifest comment parity (U5)', () => {
       const sticky = calls.find((c) => c.method === 'createComment')
       expect(sticky).toBeDefined()
       const body = sticky!.params.body as string
-      expect(body).toContain('## argus-reviewer ❌ FAILED')
-      expect(body).toContain('| a0 | 🟡 inconclusive | 0 | unmetered |')
+      expect(body).toContain('### Argus: ⊘ failed\n')
+      expect(body).toContain(
+        '| ◐ inconclusive | a0 | delegation returned — self-reported | ▰▱▱▱ suspected | unmetered |',
+      )
       // The manifest aggregate is the verdict — no run.json exists.
       const status = calls.find((c) => c.method === 'createCommitStatus')
       expect(status!.params.state).toBe('failure')
@@ -1150,7 +1524,8 @@ describe('manifest comment parity (U5)', () => {
       expect(status!.params.state).toBe('failure')
       const sticky = calls.find((c) => c.method === 'createComment')
       const body = sticky!.params.body as string
-      expect(body).toContain('head/run binding does not')
+      // R11: stale is told apart from missing and unreadable, with both SHAs.
+      expect(body).toContain('**Manifest stale:** manifest `fffffff` ≠ head unknown')
       expect(body).not.toContain('| a0 |')
     } finally {
       for (const [k, v] of Object.entries(saved)) {
@@ -1235,7 +1610,8 @@ describe('manifest comment parity (U5)', () => {
       expect(status!.params.state).toBe('failure')
       const sticky = calls.find((c) => c.method === 'createComment')
       const body = sticky!.params.body as string
-      expect(body).toContain('head/run binding does not')
+      expect(body).toContain('**Manifest stale:**')
+      expect(body).toContain('came from another workflow run')
       expect(body).not.toContain('| a0 |')
     } finally {
       for (const [k, v] of Object.entries(saved)) {
@@ -1400,7 +1776,7 @@ describe('manifest comment parity (U5)', () => {
 
       const status = calls.find((c) => c.method === 'createCommitStatus')
       expect(status!.params.state).toBe('success')
-      expect(status!.params.description).toBe('argus-reviewer skipped (no lanes ran)')
+      expect(status!.params.description).toBe('– skipped · no lanes ran')
     } finally {
       for (const [k, v] of Object.entries(saved)) {
         if (v === undefined) Reflect.deleteProperty(process.env, k)

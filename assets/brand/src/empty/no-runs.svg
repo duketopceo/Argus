@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <title>No runs yet</title>
+  <g stroke="#5D6571">
+    <path d="M100.25 24.5A1.25 1.25 0 0 1 101.5 25.75V46A21.5 21.5 0 1 1 80 24.5Z"/>
+    <path d="M24 86H136M24 106H136M40 86V106"/>
+    <path d="M48 96H128" stroke-dasharray="0.5 5"/>
+  </g>
+  <path d="M68.5 45.5Q81.5 47 94.5 45.5" stroke="#2343F5"/>
+</svg>

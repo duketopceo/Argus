@@ -16,6 +16,7 @@ import { existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { DEFAULT_EVAL_BUDGET_USD, DEFAULT_EVAL_MODELS } from '../scripts/eval-plan.mjs'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const fixtureUrl = `file://${join(repo, 'tests/fixtures/index.html')}`
@@ -29,8 +30,8 @@ const flag = (name) => {
   const i = args.indexOf(`--${name}`)
   return i === -1 ? undefined : args[i + 1]
 }
-const models = (flag('models') ?? 'google/gemini-2.5-flash-lite,moonshotai/kimi-k2.5').split(',')
-const budgetUsd = Number(flag('budget') ?? '1')
+const models = (flag('models') ?? DEFAULT_EVAL_MODELS.join(',')).split(',')
+const budgetUsd = Number(flag('budget') ?? String(DEFAULT_EVAL_BUDGET_USD))
 
 if (!process.env.OPENROUTER_API_KEY) {
   console.error('OPENROUTER_API_KEY is required — evals make real vision calls.')

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <title>argus</title>
+  <path d="M20 3.5A0.5 0.5 0 0 1 20.5 4L20.5 12A8.5 8.5 0 1 1 12 3.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+  <circle cx="12.636" cy="11.364" r="4.25" stroke="currentColor" stroke-width="2"/>
+  <circle cx="13.344" cy="10.656" r="1.9" fill="currentColor"/>
+</svg>

@@ -1,0 +1,148 @@
+{
+  "$comment": "Hostile strings: pipes, newlines, backticks, markdown and secret-shaped tokens in every interpolated field.",
+  "body": "manifest",
+  "ok": false,
+  "version": "0.4.0",
+  "runUrl": "https://github.com/acme/shop/actions/runs/123456",
+  "manifest": {
+    "schemaVersion": 1,
+    "runId": "run-123456",
+    "startedAt": "2026-10-02T20:00:00.000Z",
+    "finishedAt": "2026-10-02T20:00:38.100Z",
+    "identity": {
+      "repo": "acme/shop",
+      "pr": "42",
+      "intendedHeadSha": "`](https://evil.example)|sk-or-v1-headleak",
+      "checkoutSha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+      "baseSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "runNonce": "123456"
+    },
+    "lanes": {
+      "review": {
+        "lane": "review",
+        "selected": true,
+        "status": "passed",
+        "startedAt": "2026-10-02T20:00:00.000Z",
+        "finishedAt": "2026-10-02T20:00:21.000Z",
+        "reportPath": "argus-reviewer-report/code-review.json",
+        "model": "evil|model`",
+        "summary": "ok `code` | pipe",
+        "usage": {
+          "provider": "openrouter",
+          "model": "deepseek/deepseek-v4.1-flash",
+          "calls": 3,
+          "tokens": 3100,
+          "costUsd": 0.0021,
+          "metered": true
+        },
+        "budget": {
+          "limitUsd": 1,
+          "spentUsd": 0.0021,
+          "exceeded": false,
+          "maxDurationMs": null,
+          "elapsedMs": 21000,
+          "maxTasks": null,
+          "tasks": 0
+        },
+        "headBinding": {
+          "intendedSha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+          "checkoutSha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+          "status": "match",
+          "source": "github",
+          "detail": "checkout matches the intended PR head"
+        }
+      },
+      "flow": {
+        "lane": "flow",
+        "selected": true,
+        "status": "failed",
+        "startedAt": "2026-10-02T20:00:21.000Z",
+        "finishedAt": "2026-10-02T20:00:38.100Z",
+        "reportPath": "argus-reviewer-report/run.json",
+        "model": "google/gemini-2.5-flash-lite",
+        "usage": {
+          "provider": "openrouter",
+          "model": "google/gemini-2.5-flash-lite",
+          "calls": 2,
+          "tokens": 1800,
+          "costUsd": 0.0008,
+          "metered": true
+        },
+        "budget": {
+          "limitUsd": 1,
+          "spentUsd": 0.0008,
+          "exceeded": false,
+          "maxDurationMs": null,
+          "elapsedMs": 17100,
+          "maxTasks": null,
+          "tasks": 0
+        },
+        "cache": {
+          "hits": 4,
+          "misses": 0,
+          "heals": 0,
+          "staleEntries": 0,
+          "assertionHits": 2,
+          "assertionMisses": 0
+        },
+        "reason": "secret sk-or-v1-leak-here inside"
+      },
+      "app": {
+        "lane": "app",
+        "selected": true,
+        "status": "failed",
+        "startedAt": "2026-10-02T20:00:21.000Z",
+        "finishedAt": "2026-10-02T20:00:38.100Z",
+        "reportPath": "argus-reviewer-report/run.json",
+        "model": "google/gemini-2.5-flash-lite",
+        "usage": {
+          "provider": "openrouter",
+          "model": "google/gemini-2.5-flash-lite",
+          "calls": 2,
+          "tokens": 1800,
+          "costUsd": 0.0008,
+          "metered": true
+        },
+        "budget": {
+          "limitUsd": 1,
+          "spentUsd": 0.0008,
+          "exceeded": false,
+          "maxDurationMs": null,
+          "elapsedMs": 17100,
+          "maxTasks": null,
+          "tasks": 0
+        },
+        "reason": "line one\nline two | pipe-break `tick` ghp_abcdefghijklmnop xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      "a0": {
+        "lane": "a0",
+        "selected": false,
+        "status": "skipped",
+        "usage": {
+          "provider": "unknown",
+          "model": null,
+          "calls": 0,
+          "tokens": 0,
+          "costUsd": 0,
+          "metered": false
+        },
+        "budget": {
+          "limitUsd": 1,
+          "spentUsd": 0,
+          "exceeded": false,
+          "maxDurationMs": null,
+          "elapsedMs": 0,
+          "maxTasks": null,
+          "tasks": 0
+        }
+      }
+    },
+    "aggregate": {
+      "status": "failed",
+      "ok": false,
+      "costUsd": 0.0037,
+      "calls": 7,
+      "tokens": 6700
+    }
+  }
+}

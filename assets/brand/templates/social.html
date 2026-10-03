@@ -1,0 +1,106 @@
+<!doctype html>
+<!--
+  Social preview, 1280x640 (DESIGN.md A10, plan U16). Dark canvas only.
+  Left: lockup, one line, and the spend figure of the run shown. Right 58%:
+  the real verdict comment at 2x type, cropped by the card edge.
+  scripts/render-brand.mjs fills the slots from the same fixture as the hero.
+  No grid texture, no glow, no counts that the run did not produce.
+-->
+<html lang="en" data-ready="0">
+  <head>
+    <meta charset="utf-8" />
+    <title>Argus social card</title>
+    <link rel="stylesheet" href="../tokens.css" />
+    <link rel="stylesheet" href="../fonts.css" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 1280px;
+        height: 640px;
+        overflow: hidden;
+        background: var(--argus-color-canvas);
+      }
+      .card {
+        position: relative;
+        width: 1280px;
+        height: 640px;
+        overflow: hidden;
+        color: var(--argus-color-ink);
+        font-family: var(--argus-font-sans);
+        -webkit-font-smoothing: antialiased;
+      }
+      .left {
+        position: absolute;
+        left: 72px;
+        top: 72px;
+        bottom: 64px;
+        width: 440px;
+        display: flex;
+        flex-direction: column;
+      }
+      .lockup {
+        display: block;
+        width: 168px;
+        height: auto;
+      }
+      h1 {
+        margin: 56px 0 0;
+        font-size: 52px;
+        line-height: 58px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        text-wrap: balance;
+      }
+      .spend {
+        margin-top: auto;
+      }
+      .spend .label {
+        margin: 0 0 8px;
+        font-size: 18px;
+        line-height: 24px;
+        font-weight: 500;
+        color: var(--argus-color-ink-3);
+      }
+      .spend .figure {
+        margin: 0;
+        font: 500 64px/64px var(--argus-font-mono);
+        font-stretch: 100%;
+        font-variant-numeric: tabular-nums slashed-zero;
+        letter-spacing: -0.02em;
+      }
+      .right {
+        position: absolute;
+        left: 538px;
+        top: 72px;
+        width: 640px;
+        transform-origin: 0 0;
+        transform: scale(1.25);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="left">
+        <img class="lockup" src="../export/lockup-dark.svg" alt="argus" />
+        <h1>Reviews your PR, runs your app, shows the receipts.</h1>
+        <div class="spend">
+          <p class="label">Metered spend, real review run</p>
+          <p class="figure" data-slot="spend"></p>
+        </div>
+      </div>
+      <div class="right" data-slot="comment"></div>
+    </div>
+    <script>
+      document.addEventListener('slots-filled', async () => {
+        try {
+        void document.body.offsetHeight
+        await document.fonts.ready
+        document.documentElement.dataset.ready = '1'
+        } catch (e) {
+          document.documentElement.dataset.ready = String(e && e.message)
+        }
+      })
+    </script>
+  </body>
+</html>

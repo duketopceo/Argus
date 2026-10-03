@@ -192,9 +192,10 @@ failing suite cannot block CI indefinitely.
 ## The `verify` lanes — review · flow · app · a0
 
 `argus-reviewer verify` is the product surface: it runs the selected lanes and
-writes `run-manifest.json` into `reportDir` — one evidence contract consumed
-by the PR sticky comment, the `npm run watch` TUI, and the Electron dashboard
-(`npm run app`). Every lane reports an honest status
+writes `run-manifest.json` into `reportDir`, the evidence contract the PR
+sticky comment renders. (A terminal view and a desktop dashboard also read
+it, but they are contributor tools that run only from a clone of this repo;
+the npm package does not ship them.) Every lane reports an honest status
 (`passed`/`failed`/`skipped`/`blocked`/`unavailable`/`inconclusive`), usage,
 budget, and head binding; a lane that could not run says so rather than
 silently no-opping.
@@ -246,9 +247,47 @@ instead. `heal: 'a0'` reuses the same host and caps delegations per run at
 ### Manifest history
 
 Each `verify` run also archives to `<reportDir>/manifests/<runId>.json`,
-bounded by `reportRetention` (default 20, `0` disables). The TUI and
-dashboard render current + archived runs and keep showing the last valid
-manifest if a run is interrupted mid-write.
+bounded by `reportRetention` (default 20, `0` disables). The contributor
+terminal view and dashboard render current and archived runs and keep
+showing the last valid manifest if a run is interrupted mid-write.
+
+### Terminal output, errors and exit codes
+
+`run` and `verify` end with a summary block: the overall status, one row per
+lane with its spend, and the total spend against the budget. Output is
+styled in a terminal and plain when piped. `NO_COLOR=1` or `--no-color`
+turns color off and wins over `FORCE_COLOR=1`, which turns it on for
+non-terminal output such as GitHub Actions logs. `--json`, `--no-color` and
+`--debug` work with every command.
+
+Every error prints three lines: the failed glyph with a summary, the cause,
+and the next command on its own line. With `--json`, the error is one JSON
+object on stdout instead, so a pipe captures it; the exit code is unchanged:
+
+```json
+{"error":{"code":"OPENROUTER_RATE_LIMITED","summary":"code-review: OpenRouter rate limit reached","cause":"...","fix":"sleep 20 && argus-reviewer code-review","retryAfterSeconds":20,"httpStatus":429}}
+```
+
+`code` is stable and comes from this closed set:
+
+| Code | Meaning |
+|---|---|
+| `OPENROUTER_KEY_MISSING` | `OPENROUTER_API_KEY` is not set |
+| `OPENROUTER_KEY_REJECTED` | OpenRouter did not accept the key (401/403) |
+| `OPENROUTER_OUT_OF_CREDIT` | the key has no credit left (402) |
+| `OPENROUTER_RATE_LIMITED` | rate limited (429); `retryAfterSeconds` when the reset is known |
+| `PROVIDER_UNAVAILABLE` | OpenRouter or the upstream model provider is down (5xx) |
+| `CONFIG_INVALID` | the config file could not be loaded or failed validation |
+| `MANIFEST_UNREADABLE` | a run manifest could not be read |
+| `A0_UNREACHABLE` | the Agent Zero CLI or host cannot be reached |
+| `USAGE` | a bad command, flag or argument |
+| `COMMAND_FAILED` | the command failed for another reason; re-run with `--debug` |
+| `INTERNAL` | an unexpected error, an Argus bug; the JSON carries an `issue` link |
+
+Numeric exit codes did not change: 0 is success, 1 is a failed verdict or a
+failed run, and 2 is a usage error the command checks itself. The `code`
+field tells an infrastructure failure from a verdict failure without
+breaking scripts that test the exit code.
 
 ## 6. Register a self-hosted runner
 
@@ -300,34 +339,35 @@ export default defineConfig({
     // on bug|risk findings. Unset → the top-level `severity` list is
     // authoritative (defaults to ['bug']).
     severityGate: 'risk',
-    // Jev adjudication cutoff for the secrets lane: candidates scored
+    // Confidence-model cutoff for the secrets lane: candidates scored
     // below this probability are suppressed (still audited, masked).
     secretsThreshold: 0.3,
-    // Pre-review triage: 'annotate' (default) records Jev risk/area
+    // Pre-review triage: 'annotate' (default) records confidence-model risk/area
     // signals only; 'route' may also swap in `lowRiskModel` on a clear
     // low-risk signal; 'off' skips the lane. Coverage never shrinks —
     // triage picks effort shape, not whether review happens.
     triage: 'annotate',
-    // Cheap code model used only when triage is 'route' AND Jev reads
+    // Cheap code model used only when triage is 'route' AND the confidence model reads
     // the diff as low risk (risk<=2 + deep-review<0.5, backed by real
     // diff evidence). Unset → the configured model always reviews.
     lowRiskModel: 'deepseek/deepseek-v4.1-flash',
     // Required P(false positive) before a nit/q may be suppressed by
-    // Jev adjudication: suppress when p < 1 - findingThreshold.
+    // confidence-model adjudication: suppress when
+    // p < 1 - findingThreshold.
     // Default 1.0 = annotate-only (every finding keeps its `p`, none
     // are dropped). NOTE: polarity is the inverse of secretsThreshold —
     // lower values here suppress MORE, not fewer.
     findingThreshold: 1.0,
     // Let proven blockers escalate the PR review to REQUEST_CHANGES.
-    // "Proven" means sandbox-reproduced, Jev-adjudicated above the
-    // true-positive threshold, or a secrets-lane finding confirmed
-    // live. Set false for a permanently advisory (COMMENT-only)
+    // "Proven" means sandbox-reproduced, adjudicated by the
+    // confidence model above the true-positive threshold, or a
+    // secrets-lane finding confirmed live. Set false for a permanently advisory (COMMENT-only)
     // posture — e.g. while evaluating the tool.
     requestChanges: true,
   },
-  // Jev decision model for all decision lanes (triage, finding
-  // adjudication, secrets). '' disables every Jev call — lanes degrade
-  // open: no triage record, no p scores, regex-only secrets findings.
+  // Confidence model for all decision lanes (triage, finding
+  // adjudication, secrets). '' disables every confidence-model call,
+  // so lanes degrade open: no triage record, no p scores, regex-only secrets findings.
   decisionModel: 'typesafe/jev-1.13-20260917',
 })
 ```
@@ -342,7 +382,7 @@ all severities (severity-sorted, capped by `maxComments`), each carrying
 a committable ```` ```suggestion ```` block when the model proposed a clean
 patch — sanitized, span-bounded, and fenced safely before rendering. The
 review event is `REQUEST_CHANGES` only when a blocker-severity finding is
-proven (reproduced by a sandbox probe, Jev-adjudicated above threshold,
+proven (reproduced by a sandbox probe, adjudicated by the confidence model above threshold,
 or a secrets-lane hit confirmed live); everything else posts as `COMMENT`.
 A stale request-changes review from Argus is dismissed automatically on
 the next run once the blockers clear. If GitHub rejects the event (the
@@ -357,14 +397,26 @@ the probe lane, no finding can be proven, so the event is always
 head binding matches the PR head before posting, so a stale or planted
 `code-review.json` can never produce comments or a blocking review.
 
-### Local demo (`npm run demo`)
+### Local demo (`npm run demo`, contributors)
 
-To see the whole pipeline without a PR: `npm run demo` materializes
-`fixtures/demo-pr` (a real seeded bug + a doc-shaped key + a live-format
-key) into a temp repo and runs `code-review --fixture` against it — the
-real chunking, model review, secrets scan, and Jev adjudication, zero
-GitHub API calls. Run `npm run watch` in a second terminal to stream the
-stage lines live. Requires `OPENROUTER_API_KEY` (BYOK, real model calls).
+From a clone of this repo, `npm run demo` shows the whole pipeline without a
+PR. It materializes `fixtures/demo-pr` (a real seeded bug, a doc-shaped key
+and a live-format key) into a temp repo and runs `code-review --fixture`
+against it: the real chunking, model review, secrets scan and
+confidence-model adjudication, with zero GitHub API calls. Run
+`npm run watch` in a second terminal to stream the stage lines live. Requires `OPENROUTER_API_KEY` (BYOK, real model calls).
+
+### README casts (`npm run demo:record`, contributors)
+
+The terminal casts in the README are VHS tapes in `assets/demo/`. After
+`npm run build`, `npm run demo:record` replays each one in a clean
+environment (a temp `HOME`, a minimal `PATH`, no API key; it refuses to start
+if `OPENROUTER_API_KEY` is set) and writes `docs/assets/demo/<tape>.gif`. The
+`run` and `verify` casts replay `fixtures/demo-cache/checkout.flow.json`, a
+flow cache seeded with zero model calls, so they cost $0. Pass `--seed` to
+re-seed it if the replay stops matching (for example after a font or
+browser change). Requires `vhs`, `ttyd`, `ffmpeg`, `gifski` and
+`woff2_decompress`.
 
 ### Sandbox probes (opt-in, requires Docker)
 

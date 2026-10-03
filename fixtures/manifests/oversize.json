@@ -1,0 +1,845 @@
+{
+  "$comment": "A review with 60 long findings and two large probe sources: the rendered body exceeds the 20 KB comment budget (U5 collapses folds).",
+  "body": "full",
+  "ok": false,
+  "version": "0.4.0",
+  "runUrl": "https://github.com/acme/shop/actions/runs/123456",
+  "report": {
+    "ok": false,
+    "durationMs": 21400,
+    "totals": {
+      "tests": 2,
+      "passed": 1,
+      "failed": 1,
+      "visionCalls": 3,
+      "visionCostUsd": 0.0009,
+      "sandboxSeconds": 9.2,
+      "budgetExceeded": false,
+      "cacheHits": 1,
+      "cacheMisses": 2,
+      "cacheHeals": 0,
+      "callsByModel": {
+        "google/gemini-2.5-flash-lite": 3
+      },
+      "costByModel": {
+        "google/gemini-2.5-flash-lite": 0.0009
+      }
+    },
+    "tests": [
+      {
+        "name": "checkout applies discount",
+        "file": "tests/checkout.test.ts",
+        "ok": true,
+        "visionCalls": 2,
+        "visionCostUsd": 0.0006,
+        "healEvents": [],
+        "asserts": [
+          {
+            "question": "total shows the discounted price",
+            "verdict": "pass",
+            "reasoning": "total reads $90.00"
+          }
+        ]
+      },
+      {
+        "name": "login form",
+        "file": "tests/login.test.ts",
+        "ok": false,
+        "visionCalls": 1,
+        "visionCostUsd": 0.0003,
+        "failureMessage": "assert failed",
+        "healEvents": [],
+        "asserts": [
+          {
+            "question": "login form is visible",
+            "verdict": "fail",
+            "reasoning": "no form found on the page"
+          }
+        ]
+      }
+    ],
+    "artifacts": {
+      "videos": [
+        "argus-reviewer-report/videos/login.webm"
+      ]
+    },
+    "config": {
+      "budgetUsd": 0.05
+    }
+  },
+  "codeReview": {
+    "ok": false,
+    "skipped": false,
+    "verdict": "needs_changes",
+    "summary": "Two reproduced correctness bugs in the discount path; one unawaited cart mutation.",
+    "model": "deepseek/deepseek-v4.1-flash",
+    "tokens": 4200,
+    "visionCostUsd": 0.0031,
+    "findings": [
+      {
+        "file": "src/module-0/handler-with-a-long-name.ts",
+        "line": 1,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 0: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-1/handler-with-a-long-name.ts",
+        "line": 2,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 1: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-2/handler-with-a-long-name.ts",
+        "line": 3,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 2: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-3/handler-with-a-long-name.ts",
+        "line": 4,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 3: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-4/handler-with-a-long-name.ts",
+        "line": 5,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 4: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-5/handler-with-a-long-name.ts",
+        "line": 6,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 5: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-6/handler-with-a-long-name.ts",
+        "line": 7,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 6: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-7/handler-with-a-long-name.ts",
+        "line": 8,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 7: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-8/handler-with-a-long-name.ts",
+        "line": 9,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 8: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-9/handler-with-a-long-name.ts",
+        "line": 10,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 9: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-10/handler-with-a-long-name.ts",
+        "line": 11,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 10: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-11/handler-with-a-long-name.ts",
+        "line": 12,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 11: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-12/handler-with-a-long-name.ts",
+        "line": 13,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 12: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-13/handler-with-a-long-name.ts",
+        "line": 14,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 13: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-14/handler-with-a-long-name.ts",
+        "line": 15,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 14: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-15/handler-with-a-long-name.ts",
+        "line": 16,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 15: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-16/handler-with-a-long-name.ts",
+        "line": 17,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 16: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-17/handler-with-a-long-name.ts",
+        "line": 18,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 17: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-18/handler-with-a-long-name.ts",
+        "line": 19,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 18: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-19/handler-with-a-long-name.ts",
+        "line": 20,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 19: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-20/handler-with-a-long-name.ts",
+        "line": 21,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 20: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-21/handler-with-a-long-name.ts",
+        "line": 22,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 21: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-22/handler-with-a-long-name.ts",
+        "line": 23,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 22: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-23/handler-with-a-long-name.ts",
+        "line": 24,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 23: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-24/handler-with-a-long-name.ts",
+        "line": 25,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 24: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-25/handler-with-a-long-name.ts",
+        "line": 26,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 25: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-26/handler-with-a-long-name.ts",
+        "line": 27,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 26: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-27/handler-with-a-long-name.ts",
+        "line": 28,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 27: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-28/handler-with-a-long-name.ts",
+        "line": 29,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 28: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-29/handler-with-a-long-name.ts",
+        "line": 30,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 29: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-30/handler-with-a-long-name.ts",
+        "line": 31,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 30: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-31/handler-with-a-long-name.ts",
+        "line": 32,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 31: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-32/handler-with-a-long-name.ts",
+        "line": 33,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 32: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-33/handler-with-a-long-name.ts",
+        "line": 34,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 33: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-34/handler-with-a-long-name.ts",
+        "line": 35,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 34: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-35/handler-with-a-long-name.ts",
+        "line": 36,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 35: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-36/handler-with-a-long-name.ts",
+        "line": 37,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 36: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-37/handler-with-a-long-name.ts",
+        "line": 38,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 37: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-38/handler-with-a-long-name.ts",
+        "line": 39,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 38: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-39/handler-with-a-long-name.ts",
+        "line": 40,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 39: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-40/handler-with-a-long-name.ts",
+        "line": 41,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 40: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-41/handler-with-a-long-name.ts",
+        "line": 42,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 41: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-42/handler-with-a-long-name.ts",
+        "line": 43,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 42: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-43/handler-with-a-long-name.ts",
+        "line": 44,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 43: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-44/handler-with-a-long-name.ts",
+        "line": 45,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 44: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-45/handler-with-a-long-name.ts",
+        "line": 46,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 45: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-46/handler-with-a-long-name.ts",
+        "line": 47,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 46: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-47/handler-with-a-long-name.ts",
+        "line": 48,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 47: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-48/handler-with-a-long-name.ts",
+        "line": 49,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 48: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-49/handler-with-a-long-name.ts",
+        "line": 50,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 49: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-50/handler-with-a-long-name.ts",
+        "line": 51,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 50: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-51/handler-with-a-long-name.ts",
+        "line": 52,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 51: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-52/handler-with-a-long-name.ts",
+        "line": 53,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 52: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-53/handler-with-a-long-name.ts",
+        "line": 54,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 53: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-54/handler-with-a-long-name.ts",
+        "line": 55,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 54: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-55/handler-with-a-long-name.ts",
+        "line": 56,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 55: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-56/handler-with-a-long-name.ts",
+        "line": 57,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 56: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-57/handler-with-a-long-name.ts",
+        "line": 58,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 57: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-58/handler-with-a-long-name.ts",
+        "line": 59,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 58: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      },
+      {
+        "file": "src/module-59/handler-with-a-long-name.ts",
+        "line": 60,
+        "severity": "risk",
+        "category": "correctness",
+        "p": 0.75,
+        "message": "Finding 59: the handler reads a field that may be undefined on the retry path and then writes it back without a guard; the handler reads a field that may be undefined on the retry path and then writes it back without a guard; ",
+        "evidence": {
+          "status": "corroborated",
+          "detail": "static trace through the retry path and the write-back and the write-back and the write-back and the write-back and the write-back and the write-back "
+        }
+      }
+    ],
+    "reviewComments": [
+      {
+        "path": "src/discount.ts",
+        "line": 19,
+        "side": "RIGHT",
+        "dedupKey": "k1",
+        "body": "**argus-reviewer bug:** Loop bound reads one past the end.\n\n````suggestion\nfor (let i = 0; i < events.length; i++) {\n````"
+      },
+      {
+        "path": "src/discount.ts",
+        "line": 42,
+        "side": "RIGHT",
+        "dedupKey": "k2",
+        "body": "**argus-reviewer bug:** A 100% coupon makes the total negative."
+      }
+    ],
+    "provenBlockers": 0,
+    "highConfidenceBlockers": 20,
+    "reviewEvent": "request_changes",
+    "headBinding": {
+      "intendedSha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+      "checkoutSha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+      "status": "match",
+      "source": "github",
+      "detail": "checkout matches the intended PR head"
+    },
+    "triage": {
+      "risk": 4,
+      "needsDeepReview": 0.82,
+      "topRiskArea": "src/discount.ts",
+      "mode": "annotate"
+    },
+    "probes": [
+      {
+        "path": "tests/argus-probes/oversize-0.test.ts",
+        "outcome": "reproduced",
+        "content": "import { it, expect } from 'vitest'\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\n"
+      },
+      {
+        "path": "tests/argus-probes/oversize-1.test.ts",
+        "outcome": "reproduced",
+        "content": "import { it, expect } from 'vitest'\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\nit('case', () => { expect(1).toBe(1) })\n"
+      }
+    ]
+  }
+}

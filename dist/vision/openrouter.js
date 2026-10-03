@@ -1,4 +1,5 @@
 import { debug } from '../debug.js';
+import { classifyHttpStatus, CliError, pickProviderError } from '../ui/errors.js';
 import { makeCallCost } from './cost.js';
 /**
  * Per-request timeout for OpenRouter calls. A hung connection otherwise
@@ -64,7 +65,20 @@ export class OpenRouterClient {
                 errors.push(err);
             }
         }
-        throw new Error(`OpenRouter completion failed for all candidate models: ${errors.map((e) => e.message).join('; ')}`);
+        const prefix = 'OpenRouter completion failed for all candidate models';
+        // When every candidate failed for a provider/account reason, keep the
+        // class (R15) so the CLI can name it and offer the matching fix.
+        const classified = pickProviderError(errors);
+        if (classified !== undefined) {
+            throw new CliError(classified.code, classified.message, {
+                cause: classified,
+                ...(classified.retryAfterSeconds !== undefined
+                    ? { retryAfterSeconds: classified.retryAfterSeconds }
+                    : {}),
+                ...(classified.httpStatus !== undefined ? { httpStatus: classified.httpStatus } : {}),
+            });
+        }
+        throw new Error(`${prefix}: ${errors.map((e) => e.message).join('; ')}`);
     }
     async reconcile(id) {
         const res = await this._request(`https://openrouter.ai/api/v1/generation?id=${encodeURIComponent(id)}`, {
@@ -115,7 +129,8 @@ export class OpenRouterClient {
             body: JSON.stringify(body),
         });
         if (!res.ok) {
-            throw new Error(`OpenRouter request failed: ${res.status} ${res.statusText}`);
+            throw (classifyHttpStatus(res.status, res.headers) ??
+                new Error(`OpenRouter request failed: ${res.status} ${res.statusText}`));
         }
         return (await res.json());
     }

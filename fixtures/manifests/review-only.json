@@ -1,0 +1,57 @@
+{
+  "$comment": "Code review only (action input run: 'false'): no run.json by design, no manifest.",
+  "body": "review-only",
+  "ok": false,
+  "version": "0.4.0",
+  "runUrl": "https://github.com/acme/shop/actions/runs/123456",
+  "codeReview": {
+    "ok": false,
+    "skipped": false,
+    "verdict": "needs_changes",
+    "summary": "One reproduced off-by-one in the pager.",
+    "model": "deepseek/deepseek-v4.1-flash",
+    "tokens": 1900,
+    "visionCostUsd": 0.0014,
+    "findings": [
+      {
+        "file": "src/pager.ts",
+        "line": 12,
+        "severity": "bug",
+        "category": "correctness",
+        "p": 0.91,
+        "message": "Last page is skipped when the count divides evenly.",
+        "evidence": {
+          "status": "reproduced",
+          "detail": "probe fails on head"
+        },
+        "suggestion": "return Math.ceil(total / size)"
+      },
+      {
+        "file": "src/pager.ts",
+        "line": 30,
+        "severity": "nit",
+        "category": "style",
+        "message": "Prefer `const` here."
+      }
+    ],
+    "reviewComments": [
+      {
+        "path": "src/pager.ts",
+        "line": 12,
+        "side": "RIGHT",
+        "dedupKey": "k1",
+        "body": "**argus-reviewer bug:** Last page is skipped.\n\n````suggestion\nreturn Math.ceil(total / size)\n````"
+      }
+    ],
+    "provenBlockers": 1,
+    "highConfidenceBlockers": 0,
+    "reviewEvent": "request_changes",
+    "headBinding": {
+      "intendedSha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+      "checkoutSha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+      "status": "match",
+      "source": "github",
+      "detail": "checkout matches the intended PR head"
+    }
+  }
+}

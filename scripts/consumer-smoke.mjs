@@ -6,7 +6,7 @@
 // Usage: node scripts/consumer-smoke.mjs <path-to-tarball>
 
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -59,6 +59,26 @@ function assertConfigLoads(cwd, label, env = {}) {
   console.log(`PASS ${label}: config loads, code-review skips cleanly`)
 }
 
+function assertReportRenders(cwd, label) {
+  // U14: verify writes report.html from an installed tarball, where no
+  // assets/ directory exists, so fonts and the glyph sprite must come from
+  // the compiled module. All lanes off: no model call, no network.
+  const res = run('npx', ['argus-reviewer', 'verify', '--no-review'], cwd, { OPENROUTER_API_KEY: '' })
+  const path = join(cwd, 'argus-reviewer-report', 'report.html')
+  if (existsSync(join(cwd, 'node_modules', 'argus-reviewer-e2e', 'assets'))) {
+    console.error(`FAIL ${label}: the tarball ships assets/, so this check proves nothing`)
+    process.exit(1)
+  }
+  const html = existsSync(path) ? readFileSync(path, 'utf8') : ''
+  const fonts = (html.match(/url\(data:font\/woff2;base64,/g) ?? []).length
+  if (fonts < 3 || !html.includes('<symbol id="status-passed"')) {
+    console.error(`FAIL ${label}: report.html missing or without embedded fonts/sprite (exit ${res.code})`)
+    console.error(res.out.slice(0, 2000))
+    process.exit(1)
+  }
+  console.log(`PASS ${label}: report.html renders from the tarball (${Math.round(html.length / 1024)} KB, ${fonts} fonts)`)
+}
+
 for (const moduleType of ['commonjs', 'module']) {
   const dir = mkdtempSync(join(tmpdir(), `argus-consumer-${moduleType}-`))
   try {
@@ -81,6 +101,7 @@ for (const moduleType of ['commonjs', 'module']) {
     }
 
     assertConfigLoads(dir, moduleType)
+    assertReportRenders(dir, moduleType)
 
     // Leg 2: disable module-syntax detection — the context where the 0.1.0
     // config-load bug bites (Node treats the typeless package as CommonJS and

@@ -1,5 +1,9 @@
 import { readFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { join, relative } from 'node:path'
+
+import { writeAtomicText } from '../fsutil.js'
+import { renderReportHtml, REPORT_HTML } from '../report/html.js'
 
 import {
   aggregateLanes,
@@ -454,6 +458,42 @@ export async function runVerify(input: VerifyInput): Promise<VerifyResult> {
     aggregate,
   }
   return { manifest, exitCode: aggregate.ok ? 0 : 1 }
+}
+
+/** Package version for report footers; dist/ and src/ both sit two levels deep. */
+export function argusVersion(): string {
+  try {
+    return (createRequire(import.meta.url)('../../package.json') as { version: string }).version
+  } catch {
+    return 'unknown'
+  }
+}
+
+/**
+ * Write the offline HTML evidence report (U14) beside run-manifest.json.
+ * Lane reports are read only when the manifest points at them: a runner that
+ * threw leaves `reportPath` unset, and its stale file must not reach the
+ * report (same contract as the manifest's own reads).
+ */
+export async function writeEvidenceReport(
+  reportDir: string,
+  manifest: RunManifest,
+  meta: { version?: string; runUrl?: string } = {},
+): Promise<string> {
+  const [codeReview, run] = await Promise.all([
+    manifest.lanes.review.reportPath !== undefined ? readJson<unknown>(join(reportDir, 'code-review.json')) : undefined,
+    manifest.lanes.flow.reportPath !== undefined ? readJson<unknown>(join(reportDir, 'run.json')) : undefined,
+  ])
+  const html = renderReportHtml({
+    manifestText: JSON.stringify(manifest),
+    codeReview,
+    run,
+    version: meta.version ?? argusVersion(),
+    ...(meta.runUrl !== undefined ? { runUrl: meta.runUrl } : {}),
+  })
+  const path = join(reportDir, REPORT_HTML)
+  await writeAtomicText(path, html)
+  return path
 }
 
 function ctxError(message: string): void {

@@ -1,300 +1,189 @@
 #!/usr/bin/env node
-// argus-reviewer watch — local-only TUI: PRs, checks, workflow runs, evals,
-// journals. No deps; reads `gh` CLI + local artifacts via scripts/collect.mjs.
-// `npm run watch`. Keys: r refresh · e run eval · q quit. Auto-refresh 30s.
+// argus watch: contributor-only local TUI (not shipped in the npm package).
+// Verify run, code review, PRs and workflow runs, live log, evals. No deps;
+// reads `gh` and local artifacts via scripts/collect.mjs. `npm run watch`.
+//
+// Keys: r refresh, e eval (opens a spend confirm; only y runs it), ? help,
+// q quit. Refreshes every 30s and backs off while collect keeps failing.
+// When stdout is not a TTY it prints one snapshot and exits.
+//
+// Frames come from scripts/tui/render.mjs (pure) and reach the terminal
+// through scripts/tui/screen.mjs (alternate screen, per-line diff redraw).
 
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
+import { colorEnabled, createStyler } from '../dist/ui/style.js'
 import { collect, ROOT, safe } from './collect.mjs'
+import { evalPlan, evalSpendSince } from './eval-plan.mjs'
 import { createLiveTailer } from './tail-live.mjs'
+import { reduceKey } from './tui/keys.mjs'
+import { renderFrame, renderSnapshot } from './tui/render.mjs'
+import { createScreen } from './tui/screen.mjs'
 
 const REFRESH_MS = 30_000
-const MAX_W = 100
+const MAX_BACKOFF_MS = 5 * 60_000
+// Relative ages in the header and Live pane go stale between polls; a cheap
+// tick keeps them true. The differ rewrites only rows whose text changed.
+const AGE_TICK_MS = 10_000
 
-const C = {
-  reset: '\x1b[0m',
-  dim: '\x1b[2m',
-  bold: '\x1b[1m',
-  cyan: '\x1b[36m',
-  green: '\x1b[32m',
-  red: '\x1b[31m',
-  yellow: '\x1b[33m',
-}
-const paint = (s, c) => `${c}${s}${C.reset}`
-const ok = (s) => paint(s, C.green)
-const bad = (s) => paint(s, C.red)
-const warn = (s) => paint(s, C.yellow)
+const out = process.stdout
+const style = createStyler(colorEnabled({ env: process.env, isTTY: Boolean(out.isTTY) }))
 
-// Every lane status gets an explicit paint — a missing key used to render
-// a literal "undefined" prefix for inconclusive/skipped lanes.
-const STATUS_PAINT = {
-  passed: ok,
-  failed: bad,
-  blocked: warn,
-  unavailable: warn,
-  inconclusive: warn,
-  skipped: (s) => paint(s, C.dim),
-}
-
-const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '')
-const trunc = (s, w = MAX_W - 4) => (strip(s).length > w ? `${strip(s).slice(0, w - 1)}…` : s)
-
-function hr(title) {
-  const line = `── ${title} `
-  return paint(line + '─'.repeat(Math.max(0, MAX_W - strip(line).length)), C.dim)
-}
-
-const state = {
-  prs: [],
-  prChecks: {},
-  runs: [],
-  evalDoc: '',
-  journal: undefined,
-  evalRunning: false,
-  evalLog: [],
+const model = {
+  data: undefined,
+  lastOkAt: undefined,
+  // Set while collect keeps failing: the last good data stays on screen.
+  failure: undefined,
   live: [],
-  review: undefined,
-  error: '',
-  updatedAt: new Date(),
+  eval: { running: false, startedAt: undefined, log: [], exit: undefined, note: '', confirm: undefined },
+  overlay: undefined,
 }
 
-async function fetchData() {
+let delay = REFRESH_MS
+
+async function refresh() {
   try {
-    Object.assign(state, await collect())
-    state.error = undefined
+    model.data = await collect()
+    model.lastOkAt = Date.now()
+    model.failure = undefined
+    delay = REFRESH_MS
   } catch (e) {
-    // A rejected poll is a bad tick, not a dead watcher — surface it and
-    // keep the interval alive rather than letting the rejection crash us.
-    state.error = `collect failed: ${e instanceof Error ? e.message : String(e)}`
+    // A failed poll is a bad tick, not a dead watcher: keep the last frame,
+    // say how stale it is, and back off.
+    delay = Math.min(delay * 2, MAX_BACKOFF_MS)
+    model.failure = {
+      error: `collect failed: ${safe(e instanceof Error ? e.message : String(e))}`,
+      at: Date.now(),
+      retryInMs: delay,
+    }
   }
-  state.updatedAt = new Date()
 }
 
-function checkIcon(c) {
-  if (c.state === 'SUCCESS') return ok('✓')
-  if (c.state === 'FAILURE' || c.bucket === 'fail') return bad('✗')
-  if (c.state === 'PENDING' || c.bucket === 'pending') return warn('…')
-  return paint('·', C.dim)
+// --- non-TTY: one snapshot (R17) -------------------------------------------
+
+if (!out.isTTY) {
+  await refresh()
+  model.live = model.data?.live ?? []
+  // Piped stdout has no width; use the terminal's (via stderr) when there is one.
+  const cols = out.columns ?? process.stderr.columns ?? (Number(process.env.COLUMNS) || 100)
+  out.write(renderSnapshot(model, { cols, style, now: Date.now() }))
+  process.exit(model.data === undefined ? 1 : 0)
 }
 
-function render() {
-  const out = []
-  out.push(
-    paint('argus-reviewer watch', C.bold + C.cyan) +
-      paint(`  ${state.updatedAt.toLocaleTimeString()}  r refresh · e eval · q quit`, C.dim),
-  )
-  if (state.error) out.push(bad(`  ${state.error}`))
-  out.push('')
+// --- interactive -------------------------------------------------------------
 
-  out.push(hr('Pull Requests'))
-  if (state.prs.length === 0) out.push(paint('  none open', C.dim))
-  for (const p of state.prs) {
-    const checks = state.prChecks[p.number] ?? []
-    const line = `  ${paint(`#${p.number}`, C.cyan)} ${trunc(p.title, 52)}`
-    const verdict = p.reviewDecision === 'CHANGES_REQUESTED' ? bad('changes')
-      : p.reviewDecision === 'APPROVED' ? ok('approved')
-      : paint((p.mergeStateStatus ?? '').toLowerCase(), C.dim)
-    out.push(`${line}  ${verdict}`)
-    for (const c of checks.slice(0, 6)) {
-      out.push(`     ${checkIcon(c)} ${trunc(c.name, 40)}`)
-    }
-  }
-  out.push('')
+const screen = createScreen(out)
 
-  out.push(hr('Workflow Runs'))
-  for (const r of state.runs) {
-    const icon = r.conclusion === 'success' ? ok('✓')
-      : r.conclusion === 'failure' ? bad('✗')
-      : r.status === 'in_progress' || r.status === 'queued' ? warn('…')
-      : paint('·', C.dim)
-    const age = Math.round((Date.now() - new Date(r.createdAt).getTime()) / 60000)
-    out.push(`  ${icon} ${trunc(r.displayTitle, 46)} ${paint(`${r.workflowName} · ${r.headBranch} · ${age}m`, C.dim)}`)
-  }
-  out.push('')
+function draw() {
+  screen.draw(renderFrame(model, { cols: out.columns ?? 80, rows: out.rows ?? 24, style, now: Date.now() }))
+}
 
-  out.push(hr('Latest Eval'))
-  if (state.evalDoc) {
-    for (const l of state.evalDoc.split('\n').slice(0, 14)) out.push(`  ${trunc(l)}`)
-  } else {
-    out.push(paint('  no docs/evals/*.md yet — press e to run', C.dim))
-  }
-  if (state.evalRunning || state.evalLog.length > 0) {
-    out.push('')
-    out.push(hr(`Eval ${state.evalRunning ? 'running…' : 'finished'}`))
-    for (const l of state.evalLog.slice(-8)) out.push(`  ${trunc(l)}`)
-  }
-  out.push('')
+let pollTimer
+function schedulePoll() {
+  clearTimeout(pollTimer)
+  pollTimer = setTimeout(async () => {
+    await refresh()
+    draw()
+    schedulePoll()
+  }, delay)
+}
 
-  out.push(hr('Latest Journal'))
-  const j = state.journal
-  if (j) {
-    out.push(`  run ${paint(j.runId ?? '?', C.cyan)}  ok=${j.ok ? ok('true') : bad('false')}  cost=$${(j.costUsd ?? 0).toFixed(4)}`)
-    const errs = (j.errors ?? []).slice(-4)
-    for (const e of errs) out.push(`  ${bad('err')} ${trunc(`${e.phase ?? ''} ${e.message ?? e}`, 80)}`)
-  } else {
-    out.push(paint('  no journal entries in .argus-reviewer-cache/', C.dim))
-  }
-  out.push('')
-
-  // Verify workspace — the same run-manifest.json the comment and
-  // dashboard render (R18): aggregate + lane status words, never
-  // color-only, compact fallback rather than a second contract. When the
-  // collector projected the shared RunView we render it directly.
-  out.push(hr('Verify'))
-  const ws = state.workspace ?? { runs: [], corrupt: 0 }
-  if (ws.degraded) out.push(warn(`  ${ws.degraded}`))
-  if (ws.corrupt > 0 && !ws.degraded) {
-    out.push(warn(`  ${ws.corrupt} manifest file(s) unreadable — skipped`))
-  }
-  const cur = ws.current
-  if (!cur) {
-    out.push(paint(`  no runs yet — argus-reviewer verify writes run-manifest.json`, C.dim))
-  } else {
-    const agg = cur.aggregate ?? {}
-    const aggPaint = STATUS_PAINT[agg.status] ?? warn
-    const aggLabel = cur.view?.statusIcon !== undefined
-      ? `${cur.view.statusIcon} ${agg.status}`
-      : (agg.status ?? '?')
-    out.push(
-      `  ${aggPaint(aggLabel)}  ${paint(cur.runId ?? '', C.cyan)}  ` +
-        `${agg.calls ?? 0} call(s)  $${(agg.costUsd ?? 0).toFixed(6)}`,
-    )
-    // LaneViews arrive in canonical order (skipped included); raw records
-    // fall back to the same explicit LANE_IDS order.
-    const lanes = cur.view?.lanes ??
-      ['review', 'flow', 'app', 'a0'].map((id) => cur.lanes?.[id]).filter(Boolean)
-    const skipped = []
-    for (const lane of lanes) {
-      if (!lane.selected) {
-        skipped.push(lane.lane)
-        continue
-      }
-      const paintFn = STATUS_PAINT[lane.status] ?? ((s) => paint(s, C.dim))
-      const usage = lane.usage ?? {}
-      const cost = usage.metered === true ? `$${(usage.costUsd ?? 0).toFixed(6)}` : 'unmetered'
-      const label =
-        lane.statusIcon !== undefined ? `${lane.statusIcon} ${lane.status}` : lane.status
-      const detail = lane.reason ?? lane.summary ?? ''
-      const head = lane.headBinding
-        ? `  head ${lane.headBinding.status === 'match' ? ok('match') : warn(lane.headBinding.status)}`
-        : ''
-      out.push(
-        `    ${paintFn(label)}  ${String(lane.lane).padEnd(6)}  ` +
-          `${usage.calls ?? 0} call(s) ${cost} ${paint(lane.model ?? '', C.dim)}${head}` +
-          `${detail ? `  ${trunc(detail, 48)}` : ''}`,
-      )
-    }
-    if (skipped.length > 0) out.push(paint(`    skipped: ${skipped.join(', ')}`, C.dim))
-    if (ws.runs.length > 1) {
-      out.push(paint(`    ${ws.runs.length} run(s) in history`, C.dim))
-    }
-  }
-  out.push('')
-
-  out.push(hr('Code Review'))
-  const rv = state.review
-  if (rv) {
-    const v = rv.verdict === 'needs_changes' ? bad(rv.verdict)
-      : rv.verdict === 'approve' || rv.verdict === 'pass' ? ok(rv.verdict)
-      : warn(rv.verdict)
-    out.push(
-      `  ${v}  ${rv.findings} finding(s)  $${(rv.costUsd ?? 0).toFixed(4)}  ` +
-        paint(`${rv.tokens}tok · ${rv.model}${rv.budgetExceeded ? ' · budget exceeded' : ''}`, C.dim),
-    )
-  } else {
-    out.push(paint('  no code-review.json in argus-reviewer-report/ yet', C.dim))
-  }
-  out.push('')
-
-  out.push(hr('Live'))
-  if (state.live.length === 0) {
-    out.push(paint('  no live.ndjson yet — starts when an argus command runs', C.dim))
-  }
-  for (const e of state.live.slice(-12)) {
-    const t = new Date(e.ts).toLocaleTimeString()
-    const lvl = e.level === 'error' ? bad(e.source) : paint(e.source, C.cyan)
-    out.push(`  ${paint(t, C.dim)} ${lvl} ${trunc(e.msg, 72)}`)
-  }
-  out.push('')
-
-  process.stdout.write(`\x1b[2J\x1b[H${out.join('\n')}\n`)
+let quitting = false
+function quit(code = 0) {
+  if (quitting) return
+  quitting = true
+  screen.leave()
+  if (process.stdin.isTTY) process.stdin.setRawMode(false)
+  process.exit(code)
 }
 
 function runEval() {
-  if (state.evalRunning) return
+  if (model.eval.running) return
   if (!process.env.OPENROUTER_API_KEY) {
-    state.evalLog.push(warn('OPENROUTER_API_KEY not set — export it and retry'))
-    render()
+    model.eval.note = 'eval not started: OPENROUTER_API_KEY is not set. Export it, then press e.'
+    draw()
     return
   }
-  state.evalRunning = true
-  state.evalLog = []
+  const startedAt = Date.now()
+  model.eval = { ...model.eval, running: true, startedAt, log: [], exit: undefined, note: '' }
+  let lastStderr = ''
+  const lines = (d) => String(d).split(/\r?\n/).map((l) => safe(l).trimEnd()).filter(Boolean)
   const child = spawn('node', ['evals/run.mjs'], { cwd: ROOT, env: process.env })
   child.stdout.on('data', (d) => {
-    state.evalLog.push(...String(d).trim().split('\n'))
-    render()
+    model.eval.log.push(...lines(d))
+    model.eval.log = model.eval.log.slice(-50)
+    draw()
   })
   child.stderr.on('data', (d) => {
-    state.evalLog.push(...String(d).trim().split('\n').map((l) => bad(l)))
-    render()
+    const ls = lines(d)
+    if (ls.length > 0) lastStderr = ls[ls.length - 1]
+    model.eval.log.push(...ls)
+    model.eval.log = model.eval.log.slice(-50)
+    draw()
   })
-  // 'error' with no listener throws — a spawn ENOENT (node missing from a
+  // 'error' with no listener throws: a spawn ENOENT (node missing from a
   // bare PATH) must not crash the TUI.
   child.on('error', (err) => {
-    state.evalRunning = false
-    state.evalLog.push(bad(`eval spawn failed: ${err.message}`))
-    render()
+    model.eval.running = false
+    model.eval.exit = { code: null, signal: undefined, lastStderr: `spawn failed: ${safe(err.message)}`, spendUsd: 0 }
+    draw()
   })
-  child.on('close', async (code) => {
-    state.evalRunning = false
-    state.evalLog.push(code === 0 ? ok('eval finished') : bad(`eval exited ${code}`))
-    await fetchData()
-    render()
+  child.on('close', async (code, signal) => {
+    if (!model.eval.running) return
+    model.eval.running = false
+    model.eval.exit = { code, signal: signal ?? undefined, lastStderr, spendUsd: evalSpendSince(ROOT, startedAt) }
+    await refresh()
+    draw()
   })
 }
 
-async function main() {
-  await fetchData()
-  render()
-  // Stream live.ndjson between refreshes — argus commands (code-review,
-  // run, debug) append stage lines here while they work.
-  createLiveTailer(join(ROOT, '.argus-reviewer-cache/live.ndjson'), {
-    onLine: (e) => {
-      state.live.push({
-        ts: e.ts ?? Date.now(),
-        source: safe(e.source),
-        level: safe(e.level),
-        msg: safe(e.msg),
-      })
-      if (state.live.length > 50) state.live = state.live.slice(-50)
-      render()
-    },
-  }).start(2000)
-  const timer = setInterval(async () => {
-    await fetchData()
-    render()
-  }, REFRESH_MS)
-  timer.unref()
-
-  if (process.stdin.isTTY) {
-    process.stdin.setRawMode(true)
-    process.stdin.resume()
-    process.stdin.on('data', async (key) => {
-      const k = key.toString()
-      if (k === 'q' || k === '\u0003') {
-        process.stdout.write('\x1b[2J\x1b[H')
-        process.exit(0)
-      }
-      if (k === 'r') {
-        await fetchData()
-        render()
-      }
-      if (k === 'e') runEval()
-    })
+async function onKey(key) {
+  const { ui, effect } = reduceKey(model, key, { evalPlan: () => evalPlan(ROOT) })
+  model.eval = ui.eval
+  model.overlay = ui.overlay
+  if (effect === 'quit') return quit(0)
+  if (effect === 'run-eval') return runEval()
+  if (effect === 'refresh') {
+    await refresh()
+    schedulePoll()
   }
+  draw()
 }
 
-main().catch((e) => {
-  console.error(`watch: ${e.message}`)
+process.on('exit', () => screen.leave())
+process.on('SIGTERM', () => quit(143))
+process.on('SIGHUP', () => quit(129))
+process.on('uncaughtException', (e) => {
+  screen.leave()
+  console.error(`watch: ${e instanceof Error ? e.stack : String(e)}`)
   process.exit(1)
 })
+
+screen.enter()
+draw()
+await refresh()
+draw()
+schedulePoll()
+setInterval(draw, AGE_TICK_MS).unref()
+out.on('resize', () => {
+  screen.invalidate()
+  draw()
+})
+
+// Stream live.ndjson between refreshes: argus commands (code-review, run,
+// debug) append stage lines here while they work.
+createLiveTailer(join(ROOT, '.argus-reviewer-cache/live.ndjson'), {
+  onLine: (e) => {
+    model.live.push({ ts: e.ts ?? Date.now(), source: safe(e.source), level: safe(e.level), msg: safe(e.msg) })
+    if (model.live.length > 50) model.live = model.live.slice(-50)
+    draw()
+  },
+}).start(2000)
+
+if (process.stdin.isTTY) {
+  process.stdin.setRawMode(true)
+  process.stdin.resume()
+  process.stdin.on('data', (key) => {
+    onKey(key.toString())
+  })
+}
