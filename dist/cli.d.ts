@@ -109,6 +109,8 @@ interface CodeReviewReport {
     scope?: ReviewScope;
     /** Findings dropped by deterministic validation, with reasons. */
     validation?: ValidationAudit;
+    /** Test-file findings capped at nit (bug/risk with no non-test citation). */
+    testFileCapped?: number;
     calls: CallCost[];
     visionCostUsd: number;
     tokens: number;

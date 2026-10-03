@@ -700,6 +700,9 @@ function diagnosticsFold(manifest, report, codeReview) {
       const parts = Object.entries(val.byReason ?? {}).map(([k, n]) => `${n} ${LABEL[k] ?? cell(k)}`)
       items.push(`Findings dropped by validation: ${val.dropped} (${parts.join(', ')})`)
     }
+    if (typeof codeReview.testFileCapped === 'number' && codeReview.testFileCapped > 0) {
+      items.push(`Test-file findings capped at nit: ${codeReview.testFileCapped}`)
+    }
     const t = codeReview.triage
     if (t) {
       if (t.unadjudicated === true) {

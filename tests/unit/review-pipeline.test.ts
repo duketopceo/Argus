@@ -73,3 +73,21 @@ describe('finding validation', () => {
     expect(r.report.verdict).toBe('pass')
   })
 })
+
+describe('test-file handling', () => {
+  it('caps a test-file bug at nit and lets the verdict follow', async () => {
+    const client = new ScriptedClient([
+      reply([
+        { file: 'tests/a.test.ts', line: 1, severity: 'bug', category: 'correctness', message: 'L1: assertion restates behavior' },
+      ]),
+    ])
+    const r = await runReview({
+      head: { 'src/a.ts': 'x\n', 'tests/a.test.ts': 'expect(1).toBe(1)\n' },
+      client,
+    })
+    expect(r.report.findings[0].severity).toBe('nit')
+    expect(r.report.verdict).toBe('approve')
+    expect(r.report.testFileCapped).toBe(1)
+    expect(client.prompts[0]).toContain('assertions describe expected behavior')
+  })
+})
