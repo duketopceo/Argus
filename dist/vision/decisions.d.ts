@@ -1,3 +1,4 @@
+import { type ErrorCode } from '../ui/errors.js';
 import type { CallCost, ProviderValue } from './cost.js';
 /**
  * Pinned confidence-model slug — the alias `~typesafe/jev-latest` drifts silently and
@@ -9,7 +10,12 @@ export type DecisionErrorKind = 'auth' | 'validation' | 'rate_limited' | 'overlo
 export declare class DecisionError extends Error {
     readonly kind: DecisionErrorKind;
     readonly retryable: boolean;
-    constructor(kind: DecisionErrorKind, message: string, retryable: boolean);
+    /** CLI error class (src/ui/errors.ts) when the failure has one: key, credit, rate, provider. */
+    readonly code?: ErrorCode | undefined;
+    readonly retryAfterSeconds?: number | undefined;
+    constructor(kind: DecisionErrorKind, message: string, retryable: boolean, 
+    /** CLI error class (src/ui/errors.ts) when the failure has one: key, credit, rate, provider. */
+    code?: ErrorCode | undefined, retryAfterSeconds?: number | undefined);
 }
 export interface NoulQuestion {
     type: 'noul';

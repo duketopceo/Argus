@@ -1,4 +1,5 @@
 import { debug } from '../debug.js';
+import { classifyHttpStatus } from '../ui/errors.js';
 import { makeDecisionsCallCost } from './cost.js';
 /**
  * Pinned confidence-model slug — the alias `~typesafe/jev-latest` drifts silently and
@@ -14,10 +15,16 @@ const MAX_SCORE_LEVELS = 10;
 export class DecisionError extends Error {
     kind;
     retryable;
-    constructor(kind, message, retryable) {
+    code;
+    retryAfterSeconds;
+    constructor(kind, message, retryable, 
+    /** CLI error class (src/ui/errors.ts) when the failure has one: key, credit, rate, provider. */
+    code, retryAfterSeconds) {
         super(message);
         this.kind = kind;
         this.retryable = retryable;
+        this.code = code;
+        this.retryAfterSeconds = retryAfterSeconds;
         this.name = 'DecisionError';
     }
 }
@@ -98,23 +105,26 @@ function validateAnswers(questions, answers) {
     }
     return out;
 }
-function classifyStatus(status) {
-    if (status === 401 || status === 403) {
-        return new DecisionError('auth', `decide: HTTP ${status} — check OPENROUTER_API_KEY`, false);
-    }
+/**
+ * HTTP status to a typed DecisionError. `kind` and `retryable` drive the
+ * retry loop and stay as they were; the CLI class (`code`) and its message
+ * come from the shared classifier in src/ui/errors.ts.
+ */
+function classifyStatus(status, headers) {
+    const shared = classifyHttpStatus(status, headers);
+    const make = (kind, fallback, retryable) => new DecisionError(kind, shared !== undefined ? `decide: ${shared.message}` : fallback, retryable, shared?.code, shared?.retryAfterSeconds);
+    if (status === 401 || status === 403)
+        return make('auth', `decide: HTTP ${status}, check OPENROUTER_API_KEY`, false);
     if (status === 400 || status === 404 || status === 422) {
-        return new DecisionError('validation', `decide: HTTP ${status} — request rejected`, false);
+        return make('validation', `decide: HTTP ${status}, request rejected`, false);
     }
-    if (status === 429) {
-        return new DecisionError('rate_limited', 'decide: HTTP 429 rate limited', true);
-    }
-    if (status === 503) {
-        return new DecisionError('overloaded', 'decide: HTTP 503 provider overloaded', true);
-    }
-    if (status >= 500) {
-        return new DecisionError('server_error', `decide: HTTP ${status}`, true);
-    }
-    return new DecisionError('unexpected', `decide: HTTP ${status}`, false);
+    if (status === 429)
+        return make('rate_limited', 'decide: HTTP 429 rate limited', true);
+    if (status === 503)
+        return make('overloaded', 'decide: HTTP 503 provider overloaded', true);
+    if (status >= 500)
+        return make('server_error', `decide: HTTP ${status}`, true);
+    return make('unexpected', `decide: HTTP ${status}`, false);
 }
 function retryDelayMs(res) {
     const retryAfterMs = res.headers.get('retry-after-ms');
@@ -178,10 +188,10 @@ export class DecisionClient {
                     body: JSON.stringify(body),
                 });
                 if (!res.ok) {
-                    const err = classifyStatus(res.status);
+                    const err = classifyStatus(res.status, res.headers);
                     if (err.retryable && attempt === 0) {
                         const delay = retryDelayMs(res);
-                        debug('decisions', `${err.kind} — retrying in ${delay}ms`);
+                        debug('decisions', `${err.kind}, retrying in ${delay}ms`);
                         await new Promise((r) => setTimeout(r, delay));
                         continue;
                     }
@@ -215,7 +225,7 @@ export class DecisionClient {
                 if (err.name === 'AbortError') {
                     lastErr = new DecisionError('timeout', `decide: timed out after ${this._timeoutMs}ms`, true);
                     if (attempt === 0) {
-                        debug('decisions', 'timeout — retrying once');
+                        debug('decisions', 'timeout, retrying once');
                         continue;
                     }
                     break;
