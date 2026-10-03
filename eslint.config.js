@@ -33,8 +33,8 @@ export default tseslint.config(
     },
   },
   {
-    // Electron renderer runs in a browser context.
-    files: ['electron/renderer.js'],
+    // The desk front end (electron/ui/) runs in a browser context.
+    files: ['electron/ui/**/*.js'],
     languageOptions: {
       globals: globals.browser,
     },

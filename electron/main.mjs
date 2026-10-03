@@ -1,16 +1,27 @@
 // argus-reviewer dash — local-only Electron dashboard over scripts/collect.mjs.
 // `npm run app`. Reads gh CLI + local artifacts; renderer polls via IPC.
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeTheme, net, protocol } from 'electron'
 import { spawn } from 'node:child_process'
 import { statSync } from 'node:fs'
 import { open } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, join } from 'node:path'
 import { collect, ROOT } from '../scripts/collect.mjs'
 import { evalPlan, fmtUsd, formatEvalPlan } from '../scripts/eval-plan.mjs'
-import { APP_ICON, APP_TITLE, appVersion } from './app-meta.mjs'
+import { APP_ICON, APP_TITLE, appVersion, canvasColor, DESK_SCHEME, DESK_URL, evalRefusal } from './app-meta.mjs'
+import { deskFile, mimeOf } from './desk-files.mjs'
+
+// The desk UI (electron/ui/) loads from a privileged app scheme rather than
+// file://, so ES modules, the SVG sprites (<use href="…svg#id">) and the
+// fonts resolve same-origin under the unchanged CSP ('self'). Registration
+// must happen before 'ready', so it runs before any top-level await below.
+protocol.registerSchemesAsPrivileged([
+  { scheme: DESK_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } },
+])
 
 const HERE = dirname(fileURLToPath(import.meta.url))
+// Report dir the latest collect saw; /report/ serves flow screenshots from it.
+let reportDir
 // The CLI honours config.cacheDir / --cache-dir; the dashboard must tail the
 // same directory or a custom cache dir produces no Live Log output.
 let LIVE_LOG = join(ROOT, '.argus-reviewer-cache/live.ndjson')
@@ -102,9 +113,10 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1180,
     height: 860,
-    minWidth: 900,
-    minHeight: 600,
-    backgroundColor: '#0d1117',
+    minWidth: 720,
+    minHeight: 560,
+    // Paint the token canvas before first frame so the window never flashes.
+    backgroundColor: canvasColor(nativeTheme.shouldUseDarkColors),
     title: APP_TITLE,
     icon: APP_ICON,
     webPreferences: {
@@ -114,10 +126,14 @@ function createWindow() {
       sandbox: false,
     },
   })
-  win.loadFile(join(HERE, 'index.html'))
+  win.loadURL(DESK_URL)
 }
 
-ipcMain.handle('collect', () => collect())
+ipcMain.handle('collect', async () => {
+  const state = await collect()
+  reportDir = state.workspace?.reportDir || undefined
+  return state
+})
 
 // The renderer shows this plan (models, cases, estimate, budget cap) in a
 // confirm dialog before it may call run-eval. evalPlan never throws.
@@ -127,14 +143,9 @@ ipcMain.handle('eval-plan', () => {
 })
 
 ipcMain.handle('run-eval', (_e, opts) => {
-  // Evals spend real OpenRouter credit — refuse unless the user confirmed.
-  if (opts?.confirmed !== true) {
-    return { ok: false, msg: 'Eval not started: it needs to be confirmed first.' }
-  }
-  if (evalChild) return { ok: false, msg: 'An eval is already running.' }
-  if (!process.env.OPENROUTER_API_KEY) {
-    return { ok: false, msg: 'OPENROUTER_API_KEY is not set. Export it and restart the dashboard.' }
-  }
+  // Evals spend real OpenRouter credit: refuse unless the user confirmed.
+  const refusal = evalRefusal(opts, { running: evalChild !== undefined, env: process.env })
+  if (refusal !== undefined) return { ok: false, msg: refusal }
   evalChild = spawn('node', ['evals/run.mjs'], { cwd: ROOT, env: process.env })
   const send = (stream, d) => {
     for (const l of String(d).split('\n').filter(Boolean)) {
@@ -157,6 +168,14 @@ ipcMain.handle('run-eval', (_e, opts) => {
 })
 
 app.whenReady().then(() => {
+  protocol.handle(DESK_SCHEME, async (req) => {
+    const url = new URL(req.url)
+    const file = url.host === 'desk' ? deskFile(url.pathname, { reportDir }) : undefined
+    if (file === undefined) return new Response('not found', { status: 404 })
+    const res = await net.fetch(pathToFileURL(file).href)
+    if (!res.ok) return new Response('not found', { status: 404 })
+    return new Response(res.body, { headers: { 'content-type': mimeOf(file) } })
+  })
   // macOS takes the dock icon from the app bundle; in dev there is none.
   app.dock?.setIcon(APP_ICON)
   createWindow()
