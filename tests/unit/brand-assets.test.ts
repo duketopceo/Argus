@@ -258,6 +258,75 @@ describe('empty-state illustrations (U9, DESIGN.md A13)', () => {
   })
 })
 
+describe('motion (U9, DESIGN.md A14, section 6.5)', () => {
+  const css = readFileSync(join(ROOT, 'assets/brand/motion.css'), 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  )
+  /** The body of the first block opened by `head`, braces balanced. */
+  const block = (src: string, head: string) => {
+    const start = src.indexOf('{', src.indexOf(head))
+    let depth = 0
+    for (let i = start; i < src.length; i++) {
+      depth += src[i] === '{' ? 1 : src[i] === '}' ? -1 : 0
+      if (!depth) return src.slice(start + 1, i)
+    }
+    throw new Error(`unclosed ${head}`)
+  }
+  const reduce = block(css, '@media (prefers-reduced-motion: reduce)')
+  const outside = css.replace(reduce, '')
+  const rules = (src: string) =>
+    [...src.matchAll(/([^{}@]+)\{([^{}]*)\}/g)].map(([, sel, body]) => ({
+      selectors: sel.split(',').map((x) => x.trim()),
+      body,
+    }))
+  const keyframes = [...css.matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1])
+
+  it('defines only the A14 web motions: scan, blink-to-state and tally tick', () => {
+    expect(keyframes.sort()).toEqual(
+      ['argus-lid-close', 'argus-lid-open', 'argus-scan', 'argus-tally-roll'].sort(),
+    )
+  })
+
+  it('times every animation with a section 6.5 motion token', () => {
+    const animated = rules(outside).filter((r) => /(^|;|\s)animation\s*:/.test(r.body))
+    expect(animated.length).toBeGreaterThanOrEqual(keyframes.length)
+    for (const { selectors, body } of animated) {
+      const value = /animation\s*:([^;]+);/.exec(body)![1]
+      expect(value, selectors.join()).toMatch(/var\(--argus-motion-(?:scan|state|panel|instant)\)/)
+      expect(value, selectors.join()).not.toMatch(/\d(?:ms|s)\b/)
+    }
+    for (const k of keyframes) expect(outside).toMatch(new RegExp(`animation:[^;]*\\b${k}\\b`))
+    expect(outside).toMatch(/--argus-motion-scan:\s*1600ms/)
+  })
+
+  it('neutralizes every animation and zeroes every motion token under prefers-reduced-motion', () => {
+    const stilled = rules(reduce)
+      .filter((r) => /animation\s*:\s*none/.test(r.body))
+      .flatMap((r) => r.selectors)
+    for (const { selectors, body } of rules(outside))
+      if (/(^|;|\s)animation\s*:/.test(body))
+        for (const sel of selectors) expect(stilled, sel).toContain(sel)
+    for (const t of ['instant', 'state', 'panel', 'scan'])
+      expect(reduce).toMatch(new RegExp(`--argus-motion-${t}:\\s*0ms`))
+    // Running falls back to the static half-lid, resolve to an instant swap.
+    expect(reduce).toMatch(/\.argus-scan__lid\s*\{[^}]*display:\s*inline/)
+    expect(reduce).toMatch(/\.argus-blink__from[^{]*\{[^}]*display:\s*none/)
+  })
+
+  it('ships the terminal spinner as four single-cell glyphs at 120 ms (A14c)', () => {
+    const spinner = JSON.parse(readFileSync(join(ROOT, 'assets/brand/spinner.json'), 'utf8'))
+    expect(spinner.intervalMs).toBe(120)
+    expect(spinner.frames).toEqual(['◌', '◍', '◎', '◉'])
+    for (const f of spinner.frames as string[]) {
+      expect([...f].length, f).toBe(1)
+      // Geometric Shapes defaults to text presentation: one cell, never emoji.
+      const cp = f.codePointAt(0)!
+      expect(cp >= 0x25a0 && cp <= 0x25ff, f).toBe(true)
+    }
+  })
+})
+
 // ---- Fonts (U10, DESIGN.md A15, plan KTD8) ----------------------------------
 
 const FONT_DIR = join(ROOT, 'assets/brand/fonts')
