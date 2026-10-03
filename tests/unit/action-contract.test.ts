@@ -215,6 +215,45 @@ describe('action input contract', () => {
     expect(fields).toEqual({ icon: 'eye', color: 'blue' })
   })
 
+  it('a refused runtime lane says what happened and the fix in the job summary (U5, Q10 wording only)', async () => {
+    const action = await readFile(join(ACTION, 'action.yml'), 'utf8')
+    const step = /- name: Reject executable lanes on untrusted pull requests\n[\s\S]*?\n {6}run: \|\n((?: {8}.*\n|\n)+)/.exec(action)
+    expect(step, 'refusal step not found').not.toBeNull()
+    const script = step![1]!
+      .split('\n')
+      .map((l) => l.slice(8))
+      .join('\n')
+      .replaceAll('${{ inputs.run }}', 'true')
+      .replaceAll('${{ inputs.app }}', 'false')
+      .replaceAll('${{ inputs.a0 }}', 'false')
+    const dir = await mkdtemp(join(tmpdir(), 'argus-refuse-'))
+    const runStep = async (env: Record<string, string>) => {
+      const summary = join(dir, `summary-${Object.values(env).join('-')}.md`)
+      await writeFile(summary, '')
+      const code = await execFileAsync('bash', ['-e', '-c', script], {
+        env: { PATH: process.env.PATH ?? '', GITHUB_STEP_SUMMARY: summary, ...env },
+      }).then(
+        () => 0,
+        (e: { code?: number }) => e.code ?? -1,
+      )
+      return { code, text: await readFile(summary, 'utf8') }
+    }
+
+    const fork = await runStep({ EVENT_NAME: 'pull_request', HEAD_FORK: 'true' })
+    expect(fork.code).toBe(1)
+    expect(fork.text).toContain('**Runtime lanes refused:** this pull request comes from a fork')
+    expect(fork.text).toMatch(/^Fix: for fork pull requests, set run: 'false'/m)
+    expect(fork.text).not.toContain('\u2014')
+
+    const target = await runStep({ EVENT_NAME: 'pull_request_target', HEAD_FORK: 'false' })
+    expect(target.code).toBe(1)
+    expect(target.text).toMatch(/^Fix: /m)
+
+    // The trust decision itself is unchanged: a same-repository PR passes silently.
+    const same = await runStep({ EVENT_NAME: 'pull_request', HEAD_FORK: 'false' })
+    expect(same).toEqual({ code: 0, text: '' })
+  })
+
   it('uses safe action wiring: pinned bootstrap, no dynamic source evaluation, opt-in runtime install', async () => {
     const action = await readFile(join(ACTION, 'action.yml'), 'utf8')
     expect(action).toContain('argus-version:')
@@ -946,6 +985,153 @@ describe('action review poster (U3)', () => {
     const status = calls.find((x) => x.method === 'createCommitStatus')
     expect(status!.params.state).toBe('success')
   })
+
+  describe('posting never fails silently (U5, R9)', () => {
+    function withSummary() {
+      const entries: string[] = []
+      const summary = {
+        addRaw(t: string) {
+          entries.push(t)
+          return summary
+        },
+        write: async () => summary,
+      }
+      return { summary, entries }
+    }
+
+    function apiError(status: number, message: string, headers: Record<string, string> = {}) {
+      return Object.assign(new Error(message), { status, response: { headers } })
+    }
+
+    it('finds the sticky on page 2 of 150 comments, updates it and creates none', async () => {
+      await writeReport(codeReview())
+      const all = Array.from({ length: 150 }, (_, i) => ({
+        id: i + 1,
+        body: i === 120 ? '<!-- argus-reviewer -->\nold sticky' : `human comment ${i}`,
+      }))
+      const { runtime, calls } = makeRuntime()
+      runtime.github.rest.issues.listComments = async (params: Record<string, unknown>) => {
+        calls.push({ method: 'listComments', params })
+        const page = (params.page as number | undefined) ?? 1
+        const per = (params.per_page as number | undefined) ?? 30
+        return { data: all.slice((page - 1) * per, page * per) }
+      }
+
+      await run(runtime)
+
+      expect(calls.filter((x) => x.method === 'createComment')).toHaveLength(0)
+      const updates = calls.filter((x) => x.method === 'updateComment')
+      expect(updates).toHaveLength(1)
+      expect(updates[0].params.comment_id).toBe(121)
+    })
+
+    it('a 403 on updateComment writes a permission summary, warns, and still sets the status', async () => {
+      await writeReport(codeReview())
+      const { runtime, calls, warnings } = makeRuntime()
+      const { summary, entries } = withSummary()
+      Object.assign(runtime.core, { summary })
+      runtime.github.rest.issues.listComments = async () => ({
+        data: [{ id: 5, body: '<!-- argus-reviewer -->\nold' }],
+      })
+      runtime.github.rest.issues.updateComment = async () => {
+        throw apiError(403, 'Resource not accessible by integration')
+      }
+
+      await run(runtime)
+
+      const text = entries.join('\n')
+      expect(text).toMatch(/could not update the PR comment/i)
+      expect(text).toMatch(/permission/i)
+      expect(text).toContain('`pull-requests: write`')
+      // The raw API status stays in a Diagnostics fold (R5).
+      expect(text).toContain('<summary>Diagnostics</summary>')
+      expect(text).toContain('GitHub API 403: Resource not accessible by integration')
+      expect(warnings.some((w) => /PR comment/.test(w) && /permission/i.test(w))).toBe(true)
+      expect(warnings.join('\n')).not.toContain('403')
+      expect(calls.filter((x) => x.method === 'createCommitStatus')).toHaveLength(1)
+    })
+
+    it('a 422 on createComment does not throw out of run', async () => {
+      await writeReport(codeReview())
+      const { runtime, calls, warnings } = makeRuntime()
+      Object.assign(runtime.core, { summary: withSummary().summary })
+      runtime.github.rest.issues.createComment = async () => {
+        throw apiError(422, 'Validation Failed')
+      }
+
+      await expect(run(runtime)).resolves.toBeUndefined()
+      expect(warnings.some((w) => /rejected/i.test(w))).toBe(true)
+      expect(calls.filter((x) => x.method === 'createCommitStatus')).toHaveLength(1)
+    })
+
+    it('a rate limit names the reset time', async () => {
+      await writeReport(codeReview())
+      const { runtime } = makeRuntime()
+      const { summary, entries } = withSummary()
+      Object.assign(runtime.core, { summary })
+      runtime.github.rest.issues.createComment = async () => {
+        throw apiError(403, 'API rate limit exceeded', {
+          'x-ratelimit-remaining': '0',
+          'x-ratelimit-reset': String(Date.UTC(2026, 9, 3, 12, 30) / 1000),
+        })
+      }
+
+      await run(runtime)
+
+      expect(entries.join('\n')).toMatch(/rate limit.*2026-10-03T12:30:00Z/i)
+    })
+
+    it('a failed sticky lookup skips the post rather than risk a duplicate, and still sets the status', async () => {
+      await writeReport(codeReview())
+      const { runtime, calls, warnings } = makeRuntime()
+      Object.assign(runtime.core, { summary: withSummary().summary })
+      runtime.github.rest.issues.listComments = async () => {
+        throw apiError(500, 'Server Error')
+      }
+
+      await run(runtime)
+
+      expect(calls.filter((x) => x.method === 'createComment')).toHaveLength(0)
+      expect(warnings.some((w) => /PR comment/.test(w))).toBe(true)
+      expect(calls.filter((x) => x.method === 'createCommitStatus')).toHaveLength(1)
+    })
+
+    it('a failed commit status is reported too, and run still returns', async () => {
+      await writeReport(codeReview())
+      const { runtime, warnings } = makeRuntime()
+      const { summary, entries } = withSummary()
+      Object.assign(runtime.core, { summary })
+      runtime.github.rest.repos.createCommitStatus = async () => {
+        throw apiError(403, 'Resource not accessible by integration')
+      }
+
+      await expect(run(runtime)).resolves.toBeUndefined()
+      expect(entries.join('\n')).toMatch(/could not set the commit status/i)
+      expect(entries.join('\n')).toContain('`statuses: write`')
+      expect(warnings.some((w) => /commit status/.test(w))).toBe(true)
+    })
+
+    it('a missing manifest on a pull_request run is named in the comment', async () => {
+      await writeReport(codeReview())
+      const { runtime, calls } = makeRuntime()
+      Object.assign(runtime.context, { eventName: 'pull_request' })
+
+      await run(runtime)
+
+      const body = calls.find((x) => x.method === 'createComment')!.params.body as string
+      expect(body).toMatch(/^> \*\*No manifest:\*\*.*Fix: /m)
+    })
+
+    it('warnings carry no em-dash (R5)', async () => {
+      await writeReport(codeReview({ headBinding: { intendedSha: 'othersha' } }))
+      const { runtime, warnings } = makeRuntime()
+
+      await run(runtime)
+
+      expect(warnings.length).toBeGreaterThan(0)
+      expect(warnings.join('\n')).not.toContain('\u2014')
+    })
+  })
 })
 
 // U5/AE-C — the PR comment, the TUI, and the dashboard all render the same
@@ -1173,7 +1359,8 @@ describe('manifest comment parity (U5)', () => {
       expect(status!.params.state).toBe('failure')
       const sticky = calls.find((c) => c.method === 'createComment')
       const body = sticky!.params.body as string
-      expect(body).toContain('head/run binding does not')
+      // R11: stale is told apart from missing and unreadable, with both SHAs.
+      expect(body).toContain('**Manifest stale:** manifest `fffffff` ≠ head unknown')
       expect(body).not.toContain('| a0 |')
     } finally {
       for (const [k, v] of Object.entries(saved)) {
@@ -1258,7 +1445,8 @@ describe('manifest comment parity (U5)', () => {
       expect(status!.params.state).toBe('failure')
       const sticky = calls.find((c) => c.method === 'createComment')
       const body = sticky!.params.body as string
-      expect(body).toContain('head/run binding does not')
+      expect(body).toContain('**Manifest stale:**')
+      expect(body).toContain('came from another workflow run')
       expect(body).not.toContain('| a0 |')
     } finally {
       for (const [k, v] of Object.entries(saved)) {

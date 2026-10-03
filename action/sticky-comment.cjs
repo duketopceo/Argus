@@ -376,13 +376,53 @@ function packageVersion() {
   return require('../package.json').version
 }
 
-/** The shared layout. `folds` is a list of [title, bodyLines]. */
+/** KTD12: the comment budget (DESIGN.md 10), well under GitHub's 65,536-char cap. */
+const COMMENT_BUDGET_BYTES = 20 * 1024
+
+/** Fold keys in the order they collapse when a body is over budget (KTD12),
+ *  then the remaining folds so the post never fails on length (R10). */
+const COLLAPSE_ORDER = ['diagnostics', 'spend', 'heals', 'findings', 'explore', 'tests']
+
+/** One-line pointer that replaces a collapsed fold. Lines in `keep` (the
+ *  hidden `@argus persist` payload) survive the collapse. */
+function collapsedFold(title, keep) {
+  return [
+    `<details><summary>${title}: omitted to keep this comment under 20 KB</summary>` +
+      'The full detail is in the report files and the workflow run linked below.</details>',
+    '',
+    ...keep.flatMap((k) => [k, '']),
+  ]
+}
+
+/** The shared layout. `folds` is a list of [title, bodyLines, {key, keep}].
+ *  Notices (one quoted line each) sit between the findings summary and the
+ *  folds. Length is measured after the full render; while over budget, folds
+ *  collapse to a pointer in COLLAPSE_ORDER. */
 function layout({ status, verdict, rows, summary, folds, meta, runUrl }) {
-  const lines = [SENTINEL, `### Argus: ${status}`, '', verdict, '', ...laneTable(rows), '', summary, '']
-  for (const [title, body] of folds) fold(lines, title, body)
-  lines.push(footer(meta, runUrl))
-  lines.push('')
-  return lines.join('\n')
+  const budget = typeof meta.budgetBytes === 'number' ? meta.budgetBytes : COMMENT_BUDGET_BYTES
+  const notices = Array.isArray(meta.notices) ? meta.notices : []
+  const collapsed = new Set()
+  const render = () => {
+    const lines = [SENTINEL, `### Argus: ${status}`, '', verdict, '', ...laneTable(rows), '', summary, '']
+    for (const n of notices) lines.push(`> ${n}`, '')
+    for (const [title, body, opts = {}] of folds) {
+      if (body.length === 0) continue
+      if (collapsed.has(opts.key)) lines.push(...collapsedFold(title, opts.keep ?? []))
+      else fold(lines, title, body)
+    }
+    lines.push(footer(meta, runUrl))
+    lines.push('')
+    return lines.join('\n')
+  }
+  let body = render()
+  for (const key of COLLAPSE_ORDER) {
+    if (Buffer.byteLength(body) <= budget) break
+    const present = folds.some(([, b, opts = {}]) => opts.key === key && b.length > 0)
+    if (!present) continue
+    collapsed.add(key)
+    body = render()
+  }
+  return body
 }
 
 // --- folds ---------------------------------------------------------------------
@@ -461,11 +501,30 @@ function findingsFold(codeReview, inlinePlan) {
       body.push('')
     }
   }
-  if (typeof codeReview.persistPayload === 'string' && codeReview.persistPayload.length < 32768) {
-    body.push(codeReview.persistPayload)
+  const payload = persistPayloadOf(codeReview)
+  if (payload !== undefined) {
+    body.push(payload)
     body.push('')
   }
   return body
+}
+
+/** The hidden `@argus persist` payload, which must reach the posted body even
+ *  when the Findings fold collapses: the persist command parses it back. */
+function persistPayloadOf(codeReview) {
+  return codeReview && typeof codeReview.persistPayload === 'string' && codeReview.persistPayload.length < 32768
+    ? codeReview.persistPayload
+    : undefined
+}
+
+/** Findings fold entry for layout(): collapsible, keeping the persist payload. */
+function findingsEntry(codeReview, inlinePlan) {
+  const payload = persistPayloadOf(codeReview)
+  return [
+    `Findings (${findingsOf(codeReview).length})`,
+    findingsFold(codeReview, inlinePlan),
+    { key: 'findings', keep: payload !== undefined ? [payload] : [] },
+  ]
 }
 
 function assertionStatus(verdict) {
@@ -734,9 +793,9 @@ function renderManifestBody(manifest, codeReview, runUrl, meta = {}) {
     rows,
     summary: findingsLine(codeReview, NO_REVIEW_ATTACHED),
     folds: [
-      [`Findings (${findingsOf(codeReview).length})`, findingsFold(codeReview, undefined)],
-      ['Spend ledger', spendFold(manifest, undefined, codeReview)],
-      ['Diagnostics', diagnosticsFold(manifest, undefined, codeReview)],
+      findingsEntry(codeReview, undefined),
+      ['Spend ledger', spendFold(manifest, undefined, codeReview), { key: 'spend' }],
+      ['Diagnostics', diagnosticsFold(manifest, undefined, codeReview), { key: 'diagnostics' }],
     ],
     meta,
     runUrl,
@@ -765,12 +824,12 @@ function renderBody(report, codeReview, runUrl, ok, inlinePlan, manifest, meta =
     rows,
     summary: findingsLine(codeReview),
     folds: [
-      [`Findings (${findingsOf(codeReview).length})`, findingsFold(codeReview, inlinePlan)],
-      [`Tests (${report.tests?.length ?? 0})`, testsFold(report)],
-      [`Heals (${heals.length}): review before merging`, healsFold(heals)],
-      ['Exploratory', exploreFold(report)],
-      ['Spend ledger', spendFold(manifest, report, codeReview)],
-      ['Diagnostics', diagnosticsFold(manifest, report, codeReview)],
+      findingsEntry(codeReview, inlinePlan),
+      [`Tests (${report.tests?.length ?? 0})`, testsFold(report), { key: 'tests' }],
+      [`Heals (${heals.length}): review before merging`, healsFold(heals), { key: 'heals' }],
+      ['Exploratory', exploreFold(report), { key: 'explore' }],
+      ['Spend ledger', spendFold(manifest, report, codeReview), { key: 'spend' }],
+      ['Diagnostics', diagnosticsFold(manifest, report, codeReview), { key: 'diagnostics' }],
     ],
     meta,
     runUrl,
@@ -797,13 +856,195 @@ function renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan, manifest, meta
     rows,
     summary: findingsLine(codeReview),
     folds: [
-      [`Findings (${findingsOf(codeReview).length})`, findingsFold(codeReview, inlinePlan)],
-      ['Spend ledger', spendFold(manifest, undefined, codeReview)],
-      ['Diagnostics', diagnosticsFold(manifest, undefined, codeReview)],
+      findingsEntry(codeReview, inlinePlan),
+      ['Spend ledger', spendFold(manifest, undefined, codeReview), { key: 'spend' }],
+      ['Diagnostics', diagnosticsFold(manifest, undefined, codeReview), { key: 'diagnostics' }],
     ],
     meta,
     runUrl,
   })
+}
+
+// --- manifest states (R11) -------------------------------------------------------
+// A manifest is ok, missing, unreadable (did not parse or failed validation)
+// or stale (bound to another head or another run). Each degraded state is
+// named in the comment with a fix; a stale one shows both SHAs.
+
+/** A git SHA shortened for display, or undefined when the field is not 7-40
+ *  hex characters: a tampered manifest cannot plant text in the banner. */
+function shortSha(sha) {
+  return typeof sha === 'string' && /^[0-9a-f]{7,40}$/i.test(sha) ? sha.slice(0, 7) : undefined
+}
+
+/**
+ * Classify run-manifest.json. `raw` is the file text, or undefined when the
+ * file is absent. The manifest decides the status only when it validates like
+ * a real manifest AND binds this run's head AND this run's nonce; residue and
+ * plants fall through to whatever serialized evidence survived the same gate.
+ */
+function resolveManifest(raw, { headSha, nonce }) {
+  if (raw === undefined) return { state: 'missing' }
+  let parsed
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return { state: 'unreadable', reason: 'parse' }
+  }
+  if (!validManifest(parsed)) return { state: 'unreadable', reason: 'invalid' }
+  const manifestSha = parsed.identity?.intendedHeadSha
+  const otherHead = manifestSha !== headSha
+  const otherRun = nonce !== undefined && nonce !== '' && parsed.identity?.runNonce !== nonce
+  if (otherHead || otherRun) {
+    return { state: 'stale', manifestSha: shortSha(manifestSha), headSha: shortSha(headSha), sameHead: !otherHead }
+  }
+  return { state: 'ok', manifest: parsed }
+}
+
+function shaText(short) {
+  return short === undefined ? 'unknown' : code(short)
+}
+
+const VERIFY_STEP = '"Run selected Argus lanes"'
+
+/** Lead, consequence and fix for a degraded manifest state. */
+function manifestStateCopy(ms) {
+  switch (ms.state) {
+    case 'missing':
+      return {
+        lead: '**No manifest:** the verify step wrote no `run-manifest.json`',
+        fix: `Fix: open the ${VERIFY_STEP} step log to see where it stopped, then re-run the workflow.`,
+      }
+    case 'unreadable':
+      return {
+        lead:
+          ms.reason === 'parse'
+            ? '**Manifest unreadable:** `run-manifest.json` did not parse'
+            : '**Manifest unreadable:** `run-manifest.json` failed validation',
+        fix: `Fix: re-run the workflow. If it happens again, check the ${VERIFY_STEP} step log.`,
+      }
+    case 'stale':
+      return {
+        lead: ms.sameHead
+          ? `**Manifest stale:** the manifest for head ${shaText(ms.headSha)} came from another workflow run`
+          : `**Manifest stale:** manifest ${shaText(ms.manifestSha)} ≠ head ${shaText(ms.headSha)}`,
+        fix: 'Fix: re-run the workflow on the current head.',
+      }
+    default:
+      return undefined
+  }
+}
+
+/** Whether a missing manifest is worth naming: only runs that had a verify
+ *  step write one. `@argus` mention runs (issue_comment) never do. */
+function manifestExpected(ms, eventName) {
+  return ms.state !== 'missing' || eventName !== 'issue_comment'
+}
+
+/** Body for a run whose manifest is degraded and whose run.json is absent:
+ *  nothing trustworthy says how the lanes went, so the status fails closed. */
+function renderManifestStateBody(ms, codeReview, runUrl, meta = {}) {
+  const copy = manifestStateCopy(ms)
+  return layout({
+    status: statusText('failed'),
+    verdict: `${copy.lead}${ms.state === 'missing' ? '' : ', so it was ignored'}. The commit status fails closed.`,
+    rows: [reviewLaneRow(codeReview)],
+    summary: copy.fix,
+    folds: [findingsEntry(codeReview, undefined)],
+    meta,
+    runUrl,
+  })
+}
+
+/** Ignored-evidence notice: a report whose head/run binding does not match. */
+function staleEvidenceNotice(file) {
+  return `A \`${file}\` was found but its head/run binding does not match this run, so it was ignored.`
+}
+
+/**
+ * Pick and render the sticky body for one run. `ev` carries what main() read:
+ * hasKey, runDisabled, eventName, report, codeReview, manifestState, inlinePlan,
+ * ok, reportDir, staleEvidence, runUrl.
+ */
+function renderSticky(ev, meta = {}) {
+  const runUrl = ev.runUrl
+  if (!ev.hasKey) return renderMissingKeyBody({ ...meta, runUrl })
+  const ms = ev.manifestState ?? { state: 'missing' }
+  const manifest = ms.state === 'ok' ? ms.manifest : undefined
+  const named = ms.state !== 'ok' && manifestExpected(ms, ev.eventName)
+  const notices = []
+  if (named) {
+    const copy = manifestStateCopy(ms)
+    notices.push(`${copy.lead}, so lanes come from the individual reports. ${copy.fix}`)
+  }
+  for (const file of ev.staleEvidence ?? []) notices.push(staleEvidenceNotice(file))
+  const withNotices = { ...meta, notices }
+  if (ev.runDisabled) {
+    return renderReviewOnlyBody(ev.codeReview, runUrl, ev.ok, ev.inlinePlan, manifest, withNotices)
+  }
+  if (ev.report === undefined) {
+    if (manifest !== undefined) return renderManifestBody(manifest, ev.codeReview, runUrl, withNotices)
+    const rest = { ...meta, notices: notices.slice(named ? 1 : 0) }
+    if (named) return renderManifestStateBody(ms, ev.codeReview, runUrl, rest)
+    return renderNoReportBody(ev.reportDir, runUrl, rest)
+  }
+  return renderBody(ev.report, ev.codeReview, runUrl, ev.ok, ev.inlinePlan, manifest, withNotices)
+}
+
+// --- GitHub write failures (R9) ---------------------------------------------------
+// A failed write never fails silently: the reason goes to the job summary
+// and a warning, and the commit status is still attempted.
+
+function headerOf(e, name) {
+  const h = e?.response?.headers
+  return h && typeof h === 'object' ? h[name] : undefined
+}
+
+/** Plain-words reason and fix for a failed GitHub API call. HTTP codes stay
+ *  in the Diagnostics part (R5). */
+function describeApiError(e, scope) {
+  const status = e?.status
+  const remaining = headerOf(e, 'x-ratelimit-remaining')
+  const message = String(e?.message ?? 'unknown error')
+  if (status === 429 || String(remaining) === '0' || /rate limit/i.test(message)) {
+    const reset = Number(headerOf(e, 'x-ratelimit-reset'))
+    const at = Number.isFinite(reset) && reset > 0
+      ? new Date(reset * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z')
+      : undefined
+    return {
+      reason: 'GitHub API rate limit reached',
+      fix: at !== undefined ? `The limit resets at ${at}; re-run the workflow after that.` : 'Re-run the workflow later.',
+    }
+  }
+  if (status === 401 || status === 403) {
+    return {
+      reason: 'permission denied',
+      fix: `Give the workflow \`${scope}\` permission. Pull requests from forks get a read-only token.`,
+    }
+  }
+  if (status === 404) {
+    return { reason: 'not found', fix: 'The token cannot see this pull request or comment; check the workflow token.' }
+  }
+  if (status === 422) {
+    return { reason: 'GitHub rejected the request as invalid', fix: 'Re-run the workflow; if it repeats, open an issue with the job log.' }
+  }
+  return { reason: 'GitHub API error', fix: 'Re-run the workflow; if it repeats, check the GitHub status page.' }
+}
+
+/** Report one failed write to the job summary and as a warning. Never throws. */
+async function reportWriteFailure(what, e, scope) {
+  const { reason, fix } = describeApiError(e, scope)
+  const diagnostic = maskSecrets(`GitHub API ${e?.status ?? 'error'}: ${String(e?.message ?? 'unknown error')}`)
+  core.warning(`Argus could not ${what}: ${reason}. ${fix}`)
+  try {
+    await core.summary
+      .addRaw(
+        `### Argus could not ${what}\n\n${reason[0].toUpperCase()}${reason.slice(1)}. ${fix}\n\n` +
+          `<details><summary>Diagnostics</summary>\n\n${diagnostic}\n\n</details>\n\n`,
+      )
+      .write()
+  } catch (summaryErr) {
+    core.warning(`job summary write failed: ${summaryErr?.message ?? 'unknown error'}`)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -909,7 +1150,7 @@ async function planInlineComments(pr, codeReview) {
     core.warning(
       `code-review.json head binding ` +
         `(${codeReview.headBinding?.intendedSha ?? 'missing'}) does not match ` +
-        `PR head ${pr.head.sha} — skipping inline review`,
+        `PR head ${pr.head.sha}; skipping inline review`,
     )
     return undefined
   }
@@ -966,7 +1207,7 @@ async function planInlineComments(pr, codeReview) {
       highConfidenceBlockers: codeReview.highConfidenceBlockers ?? 0,
     }
   } catch (e) {
-    core.warning(`review planning failed: ${e.message} — sticky still posts`)
+    core.warning(`review planning failed: ${e.message}; the sticky comment still posts`)
     return undefined
   }
 }
@@ -1086,7 +1327,34 @@ async function postInlineComments(pr, plan) {
       break
     }
   }
-  core.warning(`review post failed: ${lastErr?.message ?? 'unknown error'} — sticky still posts`)
+  core.warning(`review post failed: ${lastErr?.message ?? 'unknown error'}; the sticky comment still posts`)
+}
+
+/** Create or update the one sticky comment (R9). The lookup reads every page,
+ *  so a PR with more than 100 comments still has one sticky. A failed lookup
+ *  skips the post rather than risk a duplicate sticky. */
+async function postSticky(owner, repo, pr, body) {
+  let existing
+  try {
+    const comments = await listAll((p) => github.rest.issues.listComments(p), {
+      owner,
+      repo,
+      issue_number: pr.number,
+    })
+    existing = comments.find((c) => c.body && c.body.includes(SENTINEL))
+  } catch (e) {
+    await reportWriteFailure('find the existing PR comment, so it did not post one', e, 'pull-requests: read')
+    return
+  }
+  try {
+    if (existing) {
+      await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body })
+    } else {
+      await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body })
+    }
+  } catch (e) {
+    await reportWriteFailure(existing ? 'update the PR comment' : 'post the PR comment', e, 'pull-requests: write')
+  }
 }
 
 async function main() {
@@ -1105,6 +1373,7 @@ async function main() {
   let report
   let codeReview
   let manifest
+  let manifestState = { state: 'missing' }
   // Every evidence file is run-scoped. GITHUB_RUN_ID is not knowable when a
   // commit or a planted file is authored (freshness, not secrecy — it is
   // public once the run exists), so a file that cannot present this run's
@@ -1135,23 +1404,15 @@ async function main() {
     } catch {
       codeReview = undefined
     }
+    let raw
     try {
-      const raw = fs.readFileSync(path.join(reportDir, 'run-manifest.json'), 'utf8')
-      const parsed = JSON.parse(raw)
-      // The manifest decides the status only when it validates like a real
-      // manifest AND binds this run's head AND this run's nonce — residue
-      // and plants fall through to whatever serialized evidence survived
-      // the same gate.
-      const expectedSha = pr ? pr.head.sha : context.sha
-      const stale =
-        validManifest(parsed) &&
-        (parsed.identity?.intendedHeadSha !== expectedSha ||
-          (expectedNonce !== '' && parsed.identity?.runNonce !== expectedNonce))
-      manifest = validManifest(parsed) && !stale ? parsed : undefined
-      if (stale) staleEvidence.push('run-manifest.json')
-    } catch {
-      manifest = undefined
+      raw = fs.readFileSync(path.join(reportDir, 'run-manifest.json'), 'utf8')
+    } catch (e) {
+      // Absent is "missing"; any other read error is "unreadable".
+      raw = e && e.code === 'ENOENT' ? undefined : ''
     }
+    manifestState = resolveManifest(raw, { headSha: pr ? pr.head.sha : context.sha, nonce: expectedNonce })
+    manifest = manifestState.state === 'ok' ? manifestState.manifest : undefined
   }
 
   // Missing code-review.json after a continue-on-error step means the review
@@ -1179,48 +1440,21 @@ async function main() {
   // postInlineComments a no-op with no API calls.
   const inlinePlan = hasKey ? await planInlineComments(pr, codeReview) : undefined
   if (pr) await postInlineComments(pr, inlinePlan)
-  const baseBody = !hasKey
-    ? renderMissingKeyBody({ runUrl })
-    : runDisabled
-      ? renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan, manifest)
-      : report === undefined
-        ? manifest !== undefined
-          ? renderManifestBody(manifest, codeReview, runUrl)
-          : renderNoReportBody(reportDir, runUrl)
-        : renderBody(report, codeReview, runUrl, ok, inlinePlan, manifest)
-  // Bound-mismatched evidence is ignored for the verdict — name each one in
-  // the comment so residue never reads as a silent downgrade of evidence.
-  let body = baseBody
-  for (const file of staleEvidence) {
-    body +=
-      `\n\n> A \`${file}\` was found but its head/run binding does not ` +
-      'match this run, so it was ignored.'
-  }
+  const body = renderSticky({
+    hasKey,
+    runDisabled,
+    eventName: context.eventName,
+    report,
+    codeReview,
+    manifestState,
+    inlinePlan,
+    ok,
+    reportDir,
+    staleEvidence,
+    runUrl,
+  })
 
-  if (pr) {
-    const { data: comments } = await github.rest.issues.listComments({
-      owner,
-      repo,
-      issue_number: pr.number,
-      per_page: 100,
-    })
-    const existing = comments.find((c) => c.body && c.body.includes(SENTINEL))
-    if (existing) {
-      await github.rest.issues.updateComment({
-        owner,
-        repo,
-        comment_id: existing.id,
-        body,
-      })
-    } else {
-      await github.rest.issues.createComment({
-        owner,
-        repo,
-        issue_number: pr.number,
-        body,
-      })
-    }
-  }
+  if (pr) await postSticky(owner, repo, pr, body)
 
   const sha = pr ? pr.head.sha : context.sha
   // Commit statuses have no 'neutral'; a 'pending' skip would wedge a
@@ -1232,15 +1466,19 @@ async function main() {
         ? 'argus-reviewer skipped (no OPENROUTER_API_KEY)'
         : 'argus-reviewer skipped (no lanes ran)'
       : `argus-reviewer ${conclusion}`
-  await github.rest.repos.createCommitStatus({
-    owner,
-    repo,
-    sha,
-    state,
-    description,
-    context: 'argus-reviewer',
-    target_url: runUrl,
-  })
+  try {
+    await github.rest.repos.createCommitStatus({
+      owner,
+      repo,
+      sha,
+      state,
+      description,
+      context: 'argus-reviewer',
+      target_url: runUrl,
+    })
+  } catch (e) {
+    await reportWriteFailure('set the commit status', e, 'statuses: write')
+  }
 
   core.setOutput('conclusion', conclusion)
 }
@@ -1268,6 +1506,10 @@ module.exports = {
   renderManifestLanes,
   renderMissingKeyBody,
   renderNoReportBody,
+  renderManifestStateBody,
+  renderSticky,
+  resolveManifest,
+  COMMENT_BUDGET_BYTES,
   planInlineComments,
   postInlineComments,
   shortHash,

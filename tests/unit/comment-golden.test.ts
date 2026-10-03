@@ -37,7 +37,8 @@ interface Fixture extends CommentInput {
   version: string
   runUrl: string
   prHeadSha?: string
-  manifestRaw?: string
+  /** File text of run-manifest.json; null means the file is absent. */
+  manifestRaw?: string | null
   inlinePlan?: unknown
 }
 
@@ -45,11 +46,36 @@ function load(name: string): Fixture {
   return JSON.parse(readFileSync(join(FIXTURES, `${name}.json`), 'utf8')) as Fixture
 }
 
-/** Fixtures U4 renders to goldens. stale/corrupt/oversize feed U5's degraded states. */
-const RENDERED = ['passed', 'failed', 'mixed-four-lane', 'review-only', 'missing-key', 'hostile']
+/** Fixtures rendered through a body renderer directly (U4, plus U5's oversize). */
+const RENDERED = ['passed', 'failed', 'mixed-four-lane', 'review-only', 'missing-key', 'hostile', 'oversize']
+/** U5 manifest states: rendered through the action's body selection (renderSticky). */
+const DEGRADED = ['stale', 'corrupt', 'missing-manifest']
+const ALL = [...RENDERED, ...DEGRADED]
+
+const BUDGET = 20 * 1024
+const RUN_NONCE = '123456'
 
 function renderCjs(f: Fixture): string {
   const meta = { version: f.version, runUrl: f.runUrl }
+  if (f.manifestRaw !== undefined || f.prHeadSha !== undefined) {
+    const raw = f.manifestRaw === null ? undefined : (f.manifestRaw ?? JSON.stringify(f.manifest))
+    const manifestState = sticky.resolveManifest(raw, { headSha: f.prHeadSha, nonce: RUN_NONCE })
+    return sticky.renderSticky(
+      {
+        hasKey: true,
+        runDisabled: false,
+        eventName: 'pull_request',
+        report: f.report,
+        codeReview: f.codeReview,
+        manifestState,
+        ok: f.ok,
+        reportDir: 'argus-reviewer-report',
+        staleEvidence: [],
+        runUrl: f.runUrl,
+      },
+      meta,
+    ) as string
+  }
   switch (f.body) {
     case 'missing-key':
       return sticky.renderMissingKeyBody(meta) as string
@@ -82,12 +108,10 @@ const EMOJI = /\p{Extended_Pictographic}|\u{FE0F}|[\u{1F1E6}-\u{1F1FF}]/u
 describe('comment goldens (U4)', () => {
   it('has a fixture for every planned state and a golden for every rendered one', () => {
     const names = readdirSync(FIXTURES).map((f) => f.replace(/\.json$/, '')).sort()
-    expect(names).toEqual(
-      [...RENDERED, 'stale', 'corrupt', 'oversize'].sort(),
-    )
+    expect(names).toEqual([...ALL].sort())
   })
 
-  it.each(RENDERED)('%s renders exactly its golden', (name) => {
+  it.each(ALL)('%s renders exactly its golden', (name) => {
     const body = renderCjs(load(name))
     const path = join(GOLDENS, `${name}.md`)
     if (UPDATE || !existsSync(path)) {
@@ -97,7 +121,7 @@ describe('comment goldens (U4)', () => {
     expect(body).toBe(readFileSync(path, 'utf8'))
   })
 
-  it.each(RENDERED)('%s follows the R6 grammar with a first screen of at most 12 lines', (name) => {
+  it.each(ALL)('%s follows the R6 grammar with a first screen of at most 12 lines', (name) => {
     const body = renderCjs(load(name))
     const lines = body.split('\n')
     expect(lines[0]).toBe(SENTINEL)
@@ -113,8 +137,13 @@ describe('comment goldens (U4)', () => {
     while (content[i]?.startsWith('| ')) i++
     expect(i).toBeGreaterThan(4)
     const summary = content[i]!
-    expect(summary).not.toMatch(/^(<details>|<sub>)/)
-    expect(content[i + 1]).toMatch(/^(<details>|<sub>)/)
+    expect(summary).not.toMatch(/^(<details>|<sub>|> )/)
+    // Optional notices (manifest state, ignored evidence) sit between the
+    // findings summary and the folds, one quoted line each.
+    let j = i + 1
+    while (content[j]?.startsWith('> ')) j++
+    expect(content[j]).toMatch(/^(<details>|<sub>)/)
+    expect(Buffer.byteLength(body)).toBeLessThanOrEqual(BUDGET)
     const screen = firstScreen(body).slice(1).filter((l) => l !== '')
     expect(screen.length).toBeLessThanOrEqual(12)
     // Footer is last: version, run link, self-hosted BYOK.
@@ -124,7 +153,7 @@ describe('comment goldens (U4)', () => {
     )
   })
 
-  it.each(RENDERED)('%s contains no emoji and no em-dash', (name) => {
+  it.each(ALL)('%s contains no emoji and no em-dash', (name) => {
     const body = renderCjs(load(name))
     for (const [n, line] of body.split('\n').entries()) {
       expect(EMOJI.test(line), `L${n + 1}: ${line}`).toBe(false)
@@ -237,8 +266,138 @@ describe('comment goldens (U4)', () => {
       expect(() => JSON.parse(f.manifestRaw!)).toThrow()
     })
 
-    it('oversize: the full body exceeds the 20 KB comment budget', () => {
-      expect(Buffer.byteLength(renderCjs(load('oversize')))).toBeGreaterThan(20 * 1024)
+    it('oversize: the uncollapsed body exceeds the 20 KB comment budget', () => {
+      const f = load('oversize')
+      const meta = { version: f.version, runUrl: f.runUrl, budgetBytes: Infinity }
+      const full = sticky.renderBody(f.report, f.codeReview, f.runUrl, f.ok, f.inlinePlan, f.manifest, meta) as string
+      expect(Buffer.byteLength(full)).toBeGreaterThan(BUDGET)
     })
+  })
+})
+
+describe('comment error and degraded states (U5)', () => {
+  const summaryOf = (body: string) =>
+    [...body.matchAll(/<summary>([^<]*)<\/summary>/g)].map((m) => m[1])
+
+  it('stale: shows both short SHAs and the re-run fix, never the stale lanes', () => {
+    const body = renderCjs(load('stale'))
+    expect(body).toContain('### Argus: ⊘ failed\n')
+    expect(body).toContain('**Manifest stale:** manifest `a1b2c3d` ≠ head `fffffff`')
+    expect(body).toMatch(/^Fix: re-run the workflow/m)
+    // The ignored manifest's lanes and spend never render.
+    expect(body).not.toContain('| a0 |')
+    expect(body).not.toContain('$0.002900')
+  })
+
+  it('stale: a head SHA field holding planted text renders "unknown"', () => {
+    const f = load('stale')
+    const planted = structuredClone(f.manifest!)
+    planted.identity.intendedHeadSha = '[click](https://evil.example) `x`'
+    const state = sticky.resolveManifest(JSON.stringify(planted), { headSha: f.prHeadSha, nonce: RUN_NONCE })
+    expect(state).toMatchObject({ state: 'stale', manifestSha: undefined, headSha: 'fffffff' })
+    const body = sticky.renderSticky(
+      { hasKey: true, runDisabled: false, eventName: 'pull_request', manifestState: state, ok: false, staleEvidence: [], runUrl: f.runUrl },
+      { version: f.version, runUrl: f.runUrl },
+    ) as string
+    expect(body).toContain('manifest unknown ≠ head `fffffff`')
+    expect(body).not.toContain('evil.example')
+    expect(body).not.toContain('click')
+  })
+
+  it('corrupt: the "manifest unreadable" banner with a fix line, not an empty body', () => {
+    const body = renderCjs(load('corrupt'))
+    expect(body).toContain('**Manifest unreadable:**')
+    expect(body).toMatch(/^Fix: /m)
+    expect(body).toContain('<sub>Argus 0.4.0')
+  })
+
+  it('a manifest that parses but fails validation is unreadable too', () => {
+    const state = sticky.resolveManifest('{"schemaVersion":2}', { headSha: 'a'.repeat(40), nonce: '1' })
+    expect(state).toEqual({ state: 'unreadable', reason: 'invalid' })
+  })
+
+  it('missing: the "no manifest" banner with a fix line, not an empty body', () => {
+    const body = renderCjs(load('missing-manifest'))
+    expect(body).toContain('**No manifest:**')
+    expect(body).toMatch(/^Fix: /m)
+    expect(body).toContain('<sub>Argus 0.4.0')
+  })
+
+  it('a missing manifest on issue_comment (no verify step) renders the no-report body, no banner', () => {
+    const body = sticky.renderSticky(
+      {
+        hasKey: true,
+        runDisabled: false,
+        eventName: 'issue_comment',
+        manifestState: sticky.resolveManifest(undefined, { headSha: 'a'.repeat(40), nonce: '1' }),
+        ok: false,
+        reportDir: 'argus-reviewer-report',
+        staleEvidence: [],
+        runUrl: 'https://github.com/run/1',
+      },
+      { version: '0.4.0' },
+    ) as string
+    expect(body).toContain('**No report:**')
+    expect(body).not.toContain('No manifest')
+  })
+
+  it('a degraded manifest beside surviving reports adds one notice line, not a new body', () => {
+    const f = load('failed')
+    const body = sticky.renderSticky(
+      {
+        hasKey: true,
+        runDisabled: false,
+        eventName: 'pull_request',
+        report: f.report,
+        codeReview: f.codeReview,
+        manifestState: sticky.resolveManifest('{"trunc', { headSha: 'a'.repeat(40), nonce: '1' }),
+        ok: f.ok,
+        staleEvidence: ['run.json'],
+        runUrl: f.runUrl,
+      },
+      { version: f.version, runUrl: f.runUrl },
+    ) as string
+    const notices = body.split('\n').filter((l) => l.startsWith('> '))
+    expect(notices).toHaveLength(2)
+    expect(notices[0]).toMatch(/^> \*\*Manifest unreadable:\*\*.*Fix: /)
+    expect(notices[1]).toContain('`run.json`')
+    // Footer stays last (R6).
+    expect(body.trimEnd().split('\n').at(-1)).toMatch(/^<sub>/)
+  })
+
+  it('oversize: under 20 KB with Diagnostics and Spend ledger collapsed, then Findings, footer links the run', () => {
+    const body = renderCjs(load('oversize'))
+    expect(Buffer.byteLength(body)).toBeLessThanOrEqual(BUDGET)
+    const collapsed = body.split('\n').filter((l) => /^<details><summary>.*omitted.*<\/details>$/.test(l))
+    expect(collapsed.map((l) => /<summary>([^:<]*)/.exec(l)![1])).toEqual([
+      'Findings (60)',
+      'Spend ledger',
+      'Diagnostics',
+    ])
+    expect(summaryOf(body)).toContain('Tests (2)')
+    expect(body).toContain('[workflow run and evidence](https://github.com/acme/shop/actions/runs/123456)')
+  })
+
+  it('collapses in the fixed order and stops once under budget: Findings stay open', () => {
+    const f = load('failed')
+    // Diagnostics alone overflows: 120 long trace entries.
+    const trace = Object.fromEntries(Array.from({ length: 120 }, (_, i) => [`k${i}`, 'v'.repeat(180)]))
+    const report = { ...f.report, trace }
+    const meta = { version: f.version, runUrl: f.runUrl }
+    const full = sticky.renderBody(report, f.codeReview, f.runUrl, f.ok, undefined, undefined, { ...meta, budgetBytes: Infinity }) as string
+    expect(Buffer.byteLength(full)).toBeGreaterThan(BUDGET)
+    const body = sticky.renderBody(report, f.codeReview, f.runUrl, f.ok, undefined, undefined, meta) as string
+    expect(Buffer.byteLength(body)).toBeLessThanOrEqual(BUDGET)
+    expect(body).toMatch(/^<details><summary>Diagnostics: omitted/m)
+    expect(summaryOf(body)).toEqual(expect.arrayContaining(['Findings (1)', 'Spend ledger', 'Tests (2)']))
+  })
+
+  it('keeps the @argus persist payload when the Findings fold collapses', () => {
+    const f = load('oversize')
+    const payload = '<!-- argus-probe-persist ' + 'A'.repeat(64) + ' -->'
+    const cr = { ...f.codeReview, persistPayload: payload }
+    const body = sticky.renderBody(f.report, cr, f.runUrl, f.ok, undefined, undefined, { version: f.version, runUrl: f.runUrl }) as string
+    expect(body).toMatch(/^<details><summary>Findings \(60\): omitted/m)
+    expect(body.split(payload)).toHaveLength(2)
   })
 })
