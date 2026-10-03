@@ -29,6 +29,7 @@
     0 0 0 1px color-mix(in srgb, var(--argus-color-ink) 6%, transparent);
   --scrim: color-mix(in srgb, var(--argus-color-ink) 32%, transparent);
   --row: 32px;
+  --skeleton: var(--argus-color-surface-sunk);
   color-scheme: light;
 }
 
@@ -37,6 +38,8 @@
     /* Dark elevation is value steps only (6.4); the hairline frames overlays. */
     --overlay: 0 0 0 1px var(--argus-color-hairline);
     --scrim: color-mix(in srgb, var(--argus-color-surface-sunk) 72%, transparent);
+    /* sunk sits below canvas in dark; a skeleton must read above it. */
+    --skeleton: var(--argus-color-raised);
     color-scheme: dark;
   }
 }
@@ -538,7 +541,7 @@ h2[tabindex='-1']:focus-visible {
 .skeleton {
   height: var(--row);
   border-radius: var(--argus-radius-sm);
-  background: var(--sunk);
+  background: var(--skeleton);
 }
 
 /* ---- layout --------------------------------------------------------------- */
@@ -708,6 +711,10 @@ main:focus {
   border: 1px solid var(--hairline);
   border-radius: var(--argus-radius-md);
   background: var(--surface);
+}
+
+.runhead:empty {
+  display: none;
 }
 
 .runhead-title {

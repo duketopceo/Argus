@@ -186,7 +186,8 @@ export async function captureWeb(opts, log = console.log) {
       if (spec) await fixture.installBridgeStub(page, spec.data)
       await page.goto(url, { waitUntil: 'load' })
       if (spec) {
-        await page.waitForFunction(() => document.documentElement.dataset.desk === 'ready')
+        if (spec.ready === false) await page.waitForTimeout(spec.settleMs ?? 0)
+        else await page.waitForFunction(() => document.documentElement.dataset.desk === 'ready')
         await page.evaluate(() => document.fonts.ready)
         if (spec.view) await page.click(`.tab[data-view="${spec.view}"]`)
         await page.mouse.move(0, viewportHeight(width) - 1) // no hover styling in shots

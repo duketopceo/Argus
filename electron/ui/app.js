@@ -140,8 +140,9 @@ function render() {
     $('view-runs').classList.toggle('no-runs', runs.all.length === 0 && desk.panels.runs.status !== 'loading')
   })
   region('lanes', `${runsKey}|${ui.selLane}`, () => {
-    renderLanes({ ...ctx, run, selectLane })
-    renderInspector({ ...ctx, lane })
+    const loading = desk.panels.runs.status === 'loading'
+    renderLanes({ ...ctx, run, selectLane, loading })
+    renderInspector({ ...ctx, lane, loading })
   })
   region('heals', panelKey(desk.panels.heals) + JSON.stringify(s?.heals ?? null), () =>
     renderHeals($('heals'), { ...ctx, panel: desk.panels.heals }),
@@ -173,7 +174,7 @@ function renderTopbar() {
   const b = $('banner')
   const stale = status === 'stale'
   const at = desk.lastGoodAt
-  updated.textContent = at === undefined ? 'Loading' : stale ? `Last good ${lastGoodClock(at)}` : `Updated ${lastGoodClock(at)}`
+  updated.textContent = at === undefined ? '' : stale ? `Last good ${lastGoodClock(at)}` : `Updated ${lastGoodClock(at)}`
   updated.dataset.tone = stale ? 'caution' : ''
   for (const tag of document.querySelectorAll('[data-asof]')) {
     tag.textContent = stale && at !== undefined ? `as of ${lastGoodClock(at)}` : ''

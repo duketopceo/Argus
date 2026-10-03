@@ -140,7 +140,8 @@ export function renderLanes(ctx) {
   head.replaceChildren()
   if (!run) {
     $('lanes-h').textContent = 'Lanes'
-    head.append(el('p', 'muted pad', 'Select a run to see its lanes.'))
+    // While the first answer is pending the run list carries the loading state.
+    if (!ctx.loading) head.append(el('p', 'muted pad', 'Select a run to see its lanes.'))
     return
   }
   $('lanes-h').textContent = 'Lanes'
@@ -202,7 +203,7 @@ export function renderInspector(ctx) {
   d.replaceChildren()
   $('insp-h').textContent = lane ? `Lane: ${lane.lane}` : 'Inspector'
   if (!lane) {
-    d.append(el('p', 'muted pad', 'Select a lane to inspect its evidence.'))
+    if (!ctx.loading) d.append(el('p', 'muted pad', 'Select a lane to inspect its evidence.'))
     return
   }
   const group = (title) => {

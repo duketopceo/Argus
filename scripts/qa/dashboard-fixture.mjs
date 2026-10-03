@@ -175,7 +175,8 @@ export const partialState = {
 /**
  * Dashboard states the harness captures, by name. `data` drives the stub
  * bridge (`state`, or `reject` to make collect fail, after `failAfter`
- * successes); `view` picks the tab; `setup` runs after load.
+ * successes, or `delayMs` to hold the answer back); `view` picks the tab;
+ * `setup` runs after load; `ready: false` captures before the first answer.
  */
 export const DASHBOARD_STATES = {
   filled: { data: { state: clean } },
@@ -191,6 +192,8 @@ export const DASHBOARD_STATES = {
       await page.keyboard.press('Enter')
     },
   },
+  // Loading: collect has not answered after 1.5s (skeleton plus elapsed time).
+  loading: { data: { state: clean, delayMs: 600_000 }, ready: false, settleMs: 1500 },
   empty: { data: { state: emptyState } },
   nokey: { data: { state: { ...emptyState, keyPresent: false } } },
   partial: { data: { state: partialState } },
@@ -256,6 +259,7 @@ export async function installBridgeStub(page, spec = seededState, plan = seededP
     g.argus = {
       collect: async () => {
         g.__collectCalls++
+        if (data.delayMs) await new Promise((r) => setTimeout(r, data.delayMs))
         // __collectFails: a message forces a failure, null forces success.
         const scripted = data.reject !== undefined && g.__collectCalls > (data.failAfter ?? 0) ? data.reject : undefined
         const fail = g.__collectFails === undefined ? scripted : (g.__collectFails ?? undefined)
