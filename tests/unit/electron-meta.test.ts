@@ -35,3 +35,12 @@ describe('run-eval IPC guard (PR #111, kept by U13)', async () => {
     expect(evalRefusal({ confirmed: true }, { running: false, env: {} })).toMatch(/OPENROUTER_API_KEY is not set/)
   })
 })
+
+describe('desk window background', async () => {
+  // @ts-expect-error plain-node electron helper — no type declarations
+  const { canvasColor } = await import('../../electron/app-meta.mjs')
+  it('paints the canvas token for each theme before first frame', () => {
+    expect(canvasColor(false)).toBe('#F4F5F7')
+    expect(canvasColor(true)).toBe('#0C0E12')
+  })
+})

@@ -154,6 +154,7 @@ export function loadingRows(label, n = 3) {
   box.setAttribute('aria-busy', 'true')
   box.append(el('span', 'sr-only', label))
   for (let i = 0; i < n; i++) box.append(el('div', 'skeleton'))
+  box.append(el('p', 'elapsed dim'))
   return box
 }
 

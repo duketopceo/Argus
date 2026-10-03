@@ -209,9 +209,8 @@ export function parseEvalDoc(md) {
       blocks.push({ type: 'list', items })
       continue
     }
-    const prev = blocks[blocks.length - 1]
-    if (prev?.type === 'text' && lines[i - 1]?.trim()) prev.text += ` ${cell(line)}`
-    else blocks.push({ type: 'text', text: cell(line) })
+    // Eval docs put one fact per line (suite, budget cap); keep them apart.
+    blocks.push({ type: 'text', text: cell(line) })
   }
   return blocks
 }

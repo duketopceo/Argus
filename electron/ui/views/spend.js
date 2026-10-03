@@ -6,7 +6,7 @@ import { renderPanel } from './panel.js'
 
 function budgetLine(budgetUsd) {
   return Number.isFinite(budgetUsd)
-    ? `Run budget: ${usd6(budgetUsd)} per run (argus-reviewer.config.ts).`
+    ? `Run budget: ${usdTotal(budgetUsd)} per run (argus-reviewer.config.ts).`
     : 'No run budget is set in argus-reviewer.config.ts; each lane keeps its own cap.'
 }
 
@@ -18,7 +18,7 @@ function tally(spent, limit) {
   ticks.setAttribute('aria-hidden', 'true')
   const on = Math.min(20, Math.round(ratio * 20))
   for (let i = 0; i < 20; i++) ticks.append(el('i', i < on ? 'on' : ''))
-  box.append(ticks, el('span', 'data', `latest run spent ${usd6(spent)} of ${usd6(limit)}${ratio > 1 ? ' (exceeded)' : ''}`))
+  box.append(ticks, el('span', 'data', `latest run spent ${usdTotal(spent)} of ${usdTotal(limit)}${ratio > 1 ? ' (exceeded)' : ''}`))
   return box
 }
 

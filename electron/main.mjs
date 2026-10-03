@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, join } from 'node:path'
 import { collect, ROOT } from '../scripts/collect.mjs'
 import { evalPlan, fmtUsd, formatEvalPlan } from '../scripts/eval-plan.mjs'
-import { APP_ICON, APP_TITLE, appVersion, DESK_SCHEME, DESK_URL, evalRefusal } from './app-meta.mjs'
+import { APP_ICON, APP_TITLE, appVersion, canvasColor, DESK_SCHEME, DESK_URL, evalRefusal } from './app-meta.mjs'
 import { deskFile, mimeOf } from './desk-files.mjs'
 
 // The desk UI (electron/ui/) loads from a privileged app scheme rather than
@@ -116,7 +116,7 @@ function createWindow() {
     minWidth: 720,
     minHeight: 560,
     // Paint the token canvas before first frame so the window never flashes.
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0C0E12' : '#F4F5F7',
+    backgroundColor: canvasColor(nativeTheme.shouldUseDarkColors),
     title: APP_TITLE,
     icon: APP_ICON,
     webPreferences: {

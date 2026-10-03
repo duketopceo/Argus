@@ -5,10 +5,10 @@
 import { $, announce, banner, button, el } from './dom.js'
 import { KEYMAP, keyAction } from './keys.js'
 import { formatAge, lanesOf, runStatus, verifyKey, verifyRuns } from './model.js'
-import { initialDesk, overallStatus, reduceDesk } from './states.js'
+import { autoRetryDelay, initialDesk, overallStatus, reduceDesk } from './states.js'
 import { renderHeals } from './views/heals.js'
 import { lastGoodClock } from './views/panel.js'
-import { renderEvals, renderEvalStatus, renderJournals, renderPrs, renderWorkflows } from './views/repo.js'
+import { renderEvals, renderEvalStatus, renderJournals, renderPrs, renderWorkflows, sparkline } from './views/repo.js'
 import { renderInspector, renderLanes, renderRunList } from './views/runs.js'
 import { renderSpend } from './views/spend.js'
 
@@ -45,22 +45,46 @@ function runsModel() {
 }
 
 let inflight
+let retryAttempt = 0
+let retryTimer
 function refresh() {
   if (inflight) return inflight
+  clearTimeout(retryTimer)
+  const btn = $('refresh')
+  btn.setAttribute('aria-busy', 'true')
+  btn.querySelector('.label').textContent = 'Refreshing…'
   inflight = (async () => {
     try {
       const s = await bridge.collect()
+      retryAttempt = 0
       dispatch({ type: 'data', state: s, at: now() })
     } catch (e) {
       dispatch({ type: 'reject', error: e?.message ?? String(e), at: now() })
+      // Transient failures retry on their own (1s, 2s, 4s), then wait for
+      // Retry or the next poll.
+      const wait = autoRetryDelay(retryAttempt++)
+      if (wait !== undefined) retryTimer = setTimeout(refresh, wait)
     } finally {
       inflight = undefined
+      btn.removeAttribute('aria-busy')
+      btn.querySelector('.label').textContent = 'Refresh'
     }
   })()
   return inflight
 }
 
+// Loading over a second says how long it has taken (checklist A.3 2).
+const started = now()
+const loadingClock = setInterval(() => {
+  const secs = Math.floor((now() - started) / 1000)
+  if (desk.lastGoodAt !== undefined || desk.error !== undefined) return clearInterval(loadingClock)
+  for (const n of document.querySelectorAll('.loading .elapsed')) {
+    n.textContent = secs >= 1 ? `Reading the workspace and asking gh, ${secs}s so far` : ''
+  }
+}, 1000)
+
 function retry() {
+  retryAttempt = 0
   dispatch({ type: 'retry' })
   return refresh()
 }
@@ -111,9 +135,10 @@ function render() {
   const lane = lanes[ui.selLane]
   const ctx = { state: s, now: now(), retry, ui }
   const runsKey = `${panelKey(desk.panels.runs)}|${verifyKey(ws)}|${ui.filter}|${ui.selRun}`
-  region('runlist', runsKey, () =>
-    renderRunList({ ...ctx, panel: desk.panels.runs, runs, selectRun }),
-  )
+  region('runlist', runsKey, () => {
+    renderRunList({ ...ctx, panel: desk.panels.runs, runs, selectRun })
+    $('view-runs').classList.toggle('no-runs', runs.all.length === 0 && desk.panels.runs.status !== 'loading')
+  })
   region('lanes', `${runsKey}|${ui.selLane}`, () => {
     renderLanes({ ...ctx, run, selectLane })
     renderInspector({ ...ctx, lane })
@@ -304,9 +329,10 @@ function switchView(name, { focus = true } = {}) {
   }
   if (name !== 'runs') closeInspector({ restore: false })
   if (focus) $(`${name}-h`)?.focus()
-  // A canvas drawn while hidden has no width; redraw on show.
-  if (name === 'repo') ui.keys.journals = undefined
   render()
+  // A canvas drawn while hidden has no width; redraw it on show.
+  const spark = document.querySelector('#journals canvas')
+  if (name === 'repo' && spark) sparkline(spark, state()?.journals ?? [])
 }
 for (const t of document.querySelectorAll('.tab')) {
   t.addEventListener('click', () => switchView(t.dataset.view, { focus: false }))
@@ -424,7 +450,7 @@ async function openEvalConfirm() {
   confirmReturn = document.activeElement
   run.disabled = true
   run.textContent = 'Run eval'
-  body.replaceChildren(el('div', 'dim', 'Working out what will run...'))
+  body.replaceChildren(el('div', 'dim', 'Working out what will run…'))
   if (!dlg.open) dlg.showModal()
   $('eccancel').focus()
   let plan

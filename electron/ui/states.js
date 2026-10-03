@@ -116,3 +116,15 @@ export function overallStatus(desk) {
   }
   return worst
 }
+
+const BACKOFF_MS = [1000, 2000, 4000]
+
+/**
+ * Delay before automatic retry `attempt` (0-based) after a failed refresh:
+ * 1s, 2s, 4s with +/-20% jitter, then undefined (manual Retry and the
+ * 30s poll take over). Collect only reads, so retrying is idempotent.
+ */
+export function autoRetryDelay(attempt, rand = Math.random()) {
+  const base = BACKOFF_MS[attempt]
+  return base === undefined ? undefined : Math.round(base * (0.8 + 0.4 * rand))
+}

@@ -30,3 +30,9 @@ export function evalRefusal(opts, { running, env }) {
   if (!env.OPENROUTER_API_KEY) return 'OPENROUTER_API_KEY is not set. Export it and restart the desk.'
   return undefined
 }
+
+/** Window background before first paint: the theme's canvas token. */
+export function canvasColor(dark) {
+  const tokens = JSON.parse(readFileSync(new URL('../assets/brand/tokens.json', import.meta.url), 'utf8'))
+  return tokens.color[dark ? 'dark' : 'light'].canvas.$value.hex
+}

@@ -136,6 +136,9 @@ async function keyboardPass(page, max = 60) {
       const label = (e.getAttribute('aria-label') || e.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 48)
       return { desc: `${e.tagName.toLowerCase()}${id}${cls}`, label, visible: outline || ring }
     })
+    // A modal dialog hands Tab to the browser chrome (body) between cycles;
+    // when that happens on the very first press, keep going once.
+    if (!stop && i === 0) continue
     if (!stop || stop.seen) break
     stops.push(stop)
   }
@@ -173,6 +176,10 @@ export async function captureWeb(opts, log = console.log) {
         colorScheme: theme,
         reducedMotion: 'reduce',
         deviceScaleFactor: 1,
+        // The deuteranopia filter is a data: SVG, which a page CSP such as
+        // the desk's (default-src 'self') blocks. Only filtered captures
+        // bypass it; plain captures run under the real policy.
+        bypassCSP: Boolean(opts.filter),
       })
       const page = await context.newPage()
       const spec = isDashboard ? fixture.DASHBOARD_STATES[state] : undefined
@@ -182,7 +189,11 @@ export async function captureWeb(opts, log = console.log) {
         await page.waitForFunction(() => document.documentElement.dataset.desk === 'ready')
         await page.evaluate(() => document.fonts.ready)
         if (spec.view) await page.click(`.tab[data-view="${spec.view}"]`)
+        await page.mouse.move(0, viewportHeight(width) - 1) // no hover styling in shots
         if (spec.setup) await spec.setup(page, { width, theme })
+        // Let sprite <use> references and late layout settle before the shot.
+        await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+        await page.waitForTimeout(100)
       }
       return { context, page }
     }

@@ -190,3 +190,16 @@ describe('classifyPanels', () => {
     expect(panels.heals.detail).toBe('2026-09-30T20.json')
   })
 })
+
+describe('autoRetryDelay', async () => {
+  const { autoRetryDelay } = await import('../../electron/ui/states.js')
+
+  it('backs off 1s, 2s, 4s with jitter, then leaves it to Retry and the poll', () => {
+    expect(autoRetryDelay(0, 0.5)).toBe(1000)
+    expect(autoRetryDelay(1, 0.5)).toBe(2000)
+    expect(autoRetryDelay(2, 0.5)).toBe(4000)
+    expect(autoRetryDelay(3, 0.5)).toBeUndefined()
+    expect(autoRetryDelay(0, 0)).toBe(800)
+    expect(autoRetryDelay(0, 1)).toBe(1200)
+  })
+})

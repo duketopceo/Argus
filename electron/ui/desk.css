@@ -23,8 +23,11 @@
   --caution: var(--argus-color-caution);
   --sans: var(--argus-font-sans);
   --mono: var(--argus-font-mono);
-  --overlay: 0 8px 24px -8px rgb(14 17 22 / 0.18), 0 0 0 1px rgb(14 17 22 / 0.06);
-  --scrim: rgb(14 17 22 / 0.32);
+  /* 6.4 overlay token; ink-derived so no stray hex enters the desk. */
+  --overlay:
+    0 8px 24px -8px color-mix(in srgb, var(--argus-color-ink) 18%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--argus-color-ink) 6%, transparent);
+  --scrim: color-mix(in srgb, var(--argus-color-ink) 32%, transparent);
   --row: 32px;
   color-scheme: light;
 }
@@ -33,7 +36,7 @@
   :root {
     /* Dark elevation is value steps only (6.4); the hairline frames overlays. */
     --overlay: 0 0 0 1px var(--argus-color-hairline);
-    --scrim: rgb(0 0 0 / 0.55);
+    --scrim: color-mix(in srgb, var(--argus-color-surface-sunk) 72%, transparent);
     color-scheme: dark;
   }
 }
@@ -59,7 +62,6 @@ body {
   background: var(--canvas);
   color: var(--ink);
   font: 400 14px/21px var(--sans);
-  font-feature-settings: 'tnum';
   -webkit-font-smoothing: antialiased;
   min-width: 0;
   overflow-x: hidden;
@@ -321,6 +323,10 @@ h2[tabindex='-1']:focus-visible {
   min-height: 28px;
 }
 
+.btn[aria-busy='true'] {
+  cursor: progress;
+}
+
 .btn.copy[data-done='copied'] {
   color: var(--passed);
 }
@@ -437,6 +443,12 @@ h2[tabindex='-1']:focus-visible {
   font-weight: 600;
 }
 
+/* The tone colors the title only; commands and detail stay ink. */
+.inline-banner.tone-caution,
+.inline-banner.tone-failed {
+  color: var(--ink);
+}
+
 .inline-banner.tone-caution strong {
   color: var(--caution);
 }
@@ -508,6 +520,21 @@ h2[tabindex='-1']:focus-visible {
   padding: 8px 0;
 }
 
+/* Under 100 ms show nothing; the skeleton appears only if loading lasts. */
+.loading {
+  animation: appear-late 0ms 100ms both;
+}
+
+@keyframes appear-late {
+  from {
+    visibility: hidden;
+  }
+}
+
+.loading .elapsed:empty {
+  display: none;
+}
+
 .skeleton {
   height: var(--row);
   border-radius: var(--argus-radius-sm);
@@ -545,6 +572,21 @@ main:focus {
   border-left: 1px solid var(--hairline);
 }
 
+/* No runs at all: the empty state takes the whole view, not a 280px column. */
+.view-runs.no-runs {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.view-runs.no-runs .pane-lanes,
+.view-runs.no-runs .pane-inspector,
+.view-runs.no-runs .filter {
+  display: none;
+}
+
+.view-runs.no-runs .empty {
+  padding-top: 64px;
+}
+
 .pane-inspector {
   background: var(--raised);
 }
@@ -569,34 +611,40 @@ main:focus {
 }
 
 .filter {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 32px;
-  padding: 0 8px;
+  position: relative;
+  display: block;
   margin-bottom: 12px;
-  border: 1px solid var(--control);
-  border-radius: var(--argus-radius-sm);
-  background: var(--surface);
   color: var(--ink-3);
 }
 
-.filter:focus-within {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+.filter .icon {
+  position: absolute;
+  left: 9px;
+  top: 8px;
+  pointer-events: none;
+}
+
+.filter kbd {
+  position: absolute;
+  right: 8px;
+  top: 7px;
+  pointer-events: none;
 }
 
 .filter input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  background: transparent;
+  display: block;
+  width: 100%;
+  height: 32px;
+  padding: 0 36px 0 32px;
+  border: 1px solid var(--control);
+  border-radius: var(--argus-radius-sm);
+  background: var(--surface);
   color: var(--ink);
   font: 400 14px/21px var(--sans);
 }
 
-.filter input:focus {
-  outline: none;
+.filter input::-webkit-search-cancel-button {
+  display: none;
 }
 
 .filter input::placeholder {
@@ -693,8 +741,12 @@ main:focus {
   column-gap: 12px;
 }
 
-.lanerow.unselected {
-  opacity: 0.72;
+/* Unselected lanes stay in canonical order, dimmed by tone, not opacity,
+   so their text keeps AA contrast. */
+.lanerow.unselected .lane-id,
+.lanerow.unselected .why,
+.lanerow.unselected .word {
+  color: var(--ink-3);
 }
 
 .lane-id {
@@ -781,7 +833,6 @@ main:focus {
 .ticks i {
   width: 3px;
   height: 12px;
-  border-radius: 1px;
   background: var(--hairline);
 }
 
@@ -812,7 +863,7 @@ main:focus {
   width: 100%;
   height: auto;
   aspect-ratio: 16 / 10;
-  object-fit: cover;
+  object-fit: contain;
   border: 1px solid var(--hairline);
   border-radius: var(--argus-radius-md);
   background: var(--sunk);
@@ -966,6 +1017,11 @@ main:focus {
 
 .table tr:last-child td {
   border-bottom: 0;
+}
+
+.table th.num {
+  font-family: var(--sans);
+  font-stretch: 100%;
 }
 
 .table .num {

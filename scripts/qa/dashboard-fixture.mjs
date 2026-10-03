@@ -181,7 +181,12 @@ export const DASHBOARD_STATES = {
   filled: { data: { state: clean } },
   inspector: {
     data: { state: clean },
-    setup: async (page) => {
+    setup: async (page, { width }) => {
+      // Phone panes drill down: open the run first, then the lane.
+      if (width <= 720) {
+        await page.locator('#veruns .runrow').first().focus()
+        await page.keyboard.press('Enter')
+      }
       await page.locator('#velanes .lanerow').nth(1).focus()
       await page.keyboard.press('Enter')
     },

@@ -1,7 +1,7 @@
 // Repo view (DESIGN.md 7.4): the maintainer panels. Pull requests and
 // workflow runs come from `gh`, whose missing or signed-out state is its own
 // panel state, never an empty list. Evals render as real tables.
-import { banner, button, el, emptyState, statusTag, table, use, CHROME } from '../dom.js'
+import { banner, button, el, emptyState, statusTag, table } from '../dom.js'
 import { parseEvalDoc, usd6 } from '../model.js'
 import { ageSpan } from './runs.js'
 import { renderPanel } from './panel.js'
@@ -257,12 +257,12 @@ export function renderJournals(box, ctx) {
   const latest = el('div', 'latest')
   const j = state.journal
   if (j) {
-    latest.append(el('h4', 'doc-h', `Latest: ${j.runId}`))
-    const errs = (j.errors ?? []).slice(-6)
-    if (errs.length === 0) latest.append(el('p', 'muted', 'No errors recorded.'))
-    for (const e of errs) {
+    const all = j.errors ?? []
+    latest.append(el('h4', 'doc-h', `Latest: ${j.runId}, ${all.length} error${all.length === 1 ? '' : 's'}`))
+    if (all.length === 0) latest.append(el('p', 'muted', 'No errors recorded.'))
+    for (const e of all.slice(-6)) {
       const row = el('div', 'errrow')
-      row.append(use(CHROME, 'close', 'icon tone-failed'), el('span', 'data', e.phase ?? e.stage ?? 'error'), el('span', '', String(e.message ?? e)))
+      row.append(el('span', 'data', e.phase ?? e.stage ?? 'error'), el('span', '', String(e.message ?? e)))
       latest.append(row)
     }
   }
