@@ -20,9 +20,4 @@ export default defineConfig({
   // back to budgetUsd). Point it at disposable targets only — clicks and
   // form submits have real side effects.
   // explore: { enabled: true, maxSteps: 20, budgetUsd: 0.25 },
-  // Optional: Agent Zero detected at https://agent0.bartlettdash.com. Nothing below runs unless
-  // you ask for it — both stays commented until you opt in deliberately.
-  //   a0: { url: "https://agent0.bartlettdash.com" },  // enables `verify --a0` (self-reported, unmetered)
-  //   heal: 'a0',                             // escalates a failed heal to the A0 host
-
 })
