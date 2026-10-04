@@ -1,7 +1,7 @@
 ---
 version: 0.1-draft
 name: Argus design system ("Ocellus")
-status: research + spec. Nothing in this file is implemented yet.
+status: implemented. Comment grammar, glyph vocabulary, brand assets, and the CLI, TUI, desk, report and launch-video surfaces ship via the Ocellus program (docs/plans/2026-10-02-2316-feat-ocellus-redesign-plan.md).
 date: 2026-10-02
 description: >
   Design direction, audit, asset plan and full system spec for Argus
@@ -755,10 +755,22 @@ written. The next command goes on its own line so it's easy to copy.
 offers a free dry-run (`verify --review --dry-run`, 0 provider calls) that
 renders a sample comment into the terminal.
 
-### 7.9 Check run text (S3). P1
+### 7.9 Commit status (S3). P1
 
-The title equals the comment's verdict line. The summary equals the lane
-table. Today it's generic, and it should mirror the comment exactly.
+The surface is a commit status, not a check run: `context: argus-reviewer`,
+`target_url` = the workflow run page. A check run would need `checks: write`,
+which fork tokens lack.
+
+The description mirrors the comment's verdict line in compact form —
+`<glyph> <verdict> · <n> findings · $<total>` — built from the same sources
+as the sticky header. GitHub caps descriptions at 140 characters, so
+trailing segments drop whole (` · `-joined), and a lone overflowing first
+segment truncates on a code-point boundary with an ellipsis.
+
+State mapping: a `failure` conclusion posts `failure`; everything else —
+including `skip` — posts `success` with the label carrying the nuance.
+Commit statuses have no `neutral`, and a `pending` skip would wedge a
+required check forever.
 
 ---
 

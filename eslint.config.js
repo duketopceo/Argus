@@ -3,7 +3,7 @@ import globals from 'globals'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules', 'coverage', 'action/*.mjs', 'evals/work', 'evals/results'] },
+  { ignores: ['dist', 'node_modules', 'coverage', 'action/*.mjs', 'evals/work', 'evals/results', 'launch'] },
   {
     languageOptions: {
       globals: globals.node,

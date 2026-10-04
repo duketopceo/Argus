@@ -1,0 +1,22 @@
+{
+  "name": "argus-launch-video",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Argus launch video — 'The witness'. Isolated Remotion project; never shipped in the npm package.",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts ArgusLaunch out/argus-launch.mp4",
+    "render:proto": "remotion render src/index.ts ArgusLaunchProto out/argus-proto.mp4",
+    "qc": "bash scripts/qc.sh"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.532",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "remotion": "4.0.532"
+  },
+  "devDependencies": {
+    "@types/react": "19.0.0",
+    "typescript": "5.8.3"
+  }
+}

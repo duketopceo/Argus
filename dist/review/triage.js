@@ -60,13 +60,13 @@ function buildTriageQuestions() {
         },
         [Q.risk]: {
             type: 'score',
-            instructions: 'blast radius if this PR merges broken — pick the closest rubric level.',
+            instructions: 'blast radius if this PR merges broken – pick the closest rubric level.',
             criteria: [
-                'cosmetic only — docs, comments, formatting, metadata',
-                'minor — internal-only paths, limited blast radius',
-                'moderate — user-visible defects plausible',
-                'high — security-sensitive or data-handling paths touched',
-                'severe — auth, billing, or data-loss surface',
+                'cosmetic only – docs, comments, formatting, metadata',
+                'minor – internal-only paths, limited blast radius',
+                'moderate – user-visible defects plausible',
+                'high – security-sensitive or data-handling paths touched',
+                'severe – auth, billing, or data-loss surface',
             ],
         },
         [Q.area]: {
@@ -111,7 +111,7 @@ export async function triagePr(opts) {
         return rec;
     }
     catch (e) {
-        debug('triage', `adjudication failed — degrading to annotate: ${describeDecisionError(e)}`);
+        debug('triage', `adjudication failed – degrading to annotate: ${describeDecisionError(e)}`);
         return { mode: opts.mode, model: opts.model ?? JEV_DEFAULT_MODEL, unadjudicated: true };
     }
 }
@@ -137,7 +137,7 @@ export function routeModel(opts) {
     if (rec.risk <= 2 && rec.needsDeepReview < 0.5) {
         return {
             model: opts.lowRiskModel,
-            reason: `low risk — risk=${rec.risk}, needsDeepReview=${rec.needsDeepReview.toFixed(2)}`,
+            reason: `low risk – risk=${rec.risk}, needsDeepReview=${rec.needsDeepReview.toFixed(2)}`,
         };
     }
     return {

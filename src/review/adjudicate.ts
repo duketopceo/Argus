@@ -137,7 +137,7 @@ export async function adjudicateFindings<T extends AdjudicableFinding>(opts: {
       })
     } catch (e) {
       adjudicationFailed = true
-      debug('adjudicate', `decision call failed — no suppression: ${describeDecisionError(e)}`)
+      debug('adjudicate', `decision call failed – no suppression: ${describeDecisionError(e)}`)
     }
   }
 

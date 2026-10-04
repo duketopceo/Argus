@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import { LANE_STATUSES } from '../../src/report/manifest.js'
 import {
-  LANE_STATUS_ICON,
   LANE_STATUS_LABEL,
   PROOF_LEVELS,
   proofMeter,
@@ -36,12 +35,6 @@ describe('Ocellus status vocabulary (DESIGN.md section 6.7)', () => {
   it('never lets two statuses share a glyph', () => {
     const glyphs = Object.values(STATUS_GLYPH)
     expect(new Set(glyphs).size).toBe(glyphs.length)
-  })
-
-  it('keeps the legacy LANE_STATUS_ICON export until U13', () => {
-    for (const status of LANE_STATUSES) {
-      expect(LANE_STATUS_ICON[status]).toBeTruthy()
-    }
   })
 })
 
