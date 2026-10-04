@@ -9,24 +9,23 @@ mode: pipeline (non-interactive)
 
 # feat: GitHub App onboarding for Argus
 
-## Status (2026-10-04)
+## Status as of 2026-10-04 (evening)
 
-Verified against `gh pr list -R duketopceo/Argus` and `git log origin/main` (main at `53cccef`). The plan itself is on main (#115). v0.4.0 is released (tag and GitHub release 2026-10-04; changelog dated 2026-10-03) and includes the GitHub App install docs and the opt-in approval wiring in the `init` scaffold (#116), which is a separate, smaller path from this plan.
+Verified against `gh pr list -R duketopceo/Argus` and `git ls-tree origin/main` (main at `b9c19a4`). The plan itself is on main (#115). v0.4.0 is released and v0.4.1 (scaffold pin correctness, #129 and #130) is on main. The v0.4.0 tag move (`c91fbd5` to `1f6bdc3`) awaits the user. The GitHub App install docs and opt-in approval wiring in the `init` scaffold (#116) are a separate, smaller path from this plan.
 
-**Done on main:** none of U1 to U9.
+**Done on main:** none of U1 to U9 (no `src/onboarding/` or `app/worker/` on main; U1 to U5 exist only on open PR branches).
 
-**Open PRs (stack order; drafts unless noted):**
-- #121 chunked review and OpenRouter batch mode (base main) -> #124 bake-off defaults, separate batch model, request timeout (base #121 branch) -> #125 `init --pr` (U1 + U2, base #124 branch) -> #126 onboarding docs and App boundary (U3, base #125 branch).
-- #123 reviewer model bake-off results (base main, independent).
-- #122 OCR static-analysis lane plan (docs only, base main, ready for review, not a unit of this plan).
+**In review (all open):** U1 + U2 in #125 (base #124 branch); U3 in #126 (base #125 branch); U4 + U5 in #131 (base main, not a draft, changes requested). The repo requires 1 review to merge.
 
-**In progress:** a default per-run budget cap of $1 (approved by the user; open as draft #127, outside this plan's units).
+**Todo:** U6 (needs #125's scaffold module on main first), U7, and optional U8, U9.
 
-**Next:** Phase 2 (U4 Worker skeleton, signature verification and replay guard; U5 App auth; U6 onboarding PR on install; U7 manifest-flow self-registration and deploy docs). Phase 2 should wait until U1 to U3 have shipped and some demand is measured, per Sequencing. Phase 3 (U8, U9) stays optional.
+**Reviewer work outside this plan's units (open):** #121 chunked review and batch mode (base main) -> #124 bake-off defaults (base #121) -> #125 -> #126 -> #127 $1 default budget cap (base #126 branch); #123 bake-off evals (base main, independent). Stack: #121 -> #124 -> #125 -> #126 -> #127.
 
-**Blocked on the user:** the pipeline-mode open questions below (notably the Q5 gate for any hosted key) before Phase 3; no Phase 1 blocker.
+**Merged since the morning status:** #122 (OCR static-lane plan, docs only), #128 (previous plan status), #129 and #130 (v0.4.1).
 
-**Recommended merge order:** #123, then #121, #124, #125, #126 in that order (retarget each to main after its parent merges), with #122 at any point. Cut a release after #126 so the onboarding path is installable, then measure demand before starting U4.
+**Blocked on the user:** the pipeline-mode open questions below (notably the Q5 gate for any hosted key) before Phase 3; the v0.4.0 tag move. No Phase 1 blocker beyond review.
+
+**Recommended merge order:** #123, then #121, #124, #125, #126 in that order (retarget each to main after its parent merges), with #131 after #125 lands if U6 builds on it. Cut a release after #126 so the onboarding path is installable, then measure demand before starting U6.
 
 ## Verdict
 
@@ -108,27 +107,27 @@ Each unit is one PR. Units U1 to U3 are Phase 1 (no hosting); U4 to U7 are Phase
 
 ### Phase 1: CLI
 
-- U1. **Extract the scaffold generator** [status: in PR #125]
+- U1. **Extract the scaffold generator** [status: in review (PR #125, base #124 branch)]
   - Goal: move `INIT_WORKFLOW`, `INIT_MENTION_WORKFLOW`, config and smoke test templates out of `src/cli.ts` into `src/onboarding/scaffold.ts` as a pure function returning `{path, content}[]` plus a checklist. Behavior of `init` unchanged.
   - Files: `src/onboarding/scaffold.ts` (new), `src/cli.ts`, `dist/` rebuild, `tests/unit/onboarding-scaffold.test.ts`
   - Tests: golden output equals current `init` output; workflow keeps `persist-credentials: false`, pinned action SHA, minimal `permissions`; no `pull_request_target`.
-- U2. **`init --pr`** [status: in PR #125]
+- U2. **`init --pr`** [status: in review (PR #125, base #124 branch)]
   - Goal: `argus-reviewer init --pr [--repo owner/name] [--branch argus/onboarding]` creates the branch, commits scaffold files via the Git Data/Contents API (or local `git` + `gh pr create`), opens a PR whose body has the secrets checklist, what-is-sent-to-provider statement, default budget, and how to stop. Refuses to overwrite existing files; idempotent if the branch or PR exists. Never reads or transmits `OPENROUTER_API_KEY`.
   - Files: `src/cli.ts`, `src/onboarding/pr.ts`, `tests/unit/init-pr.test.ts` (injected `exec`/fetch via `CliDeps`)
   - Dependencies: U1.
-- U3. **Docs and README onboarding path** [status: in PR #126]
+- U3. **Docs and README onboarding path** [status: in review (PR #126, base #125 branch)]
   - Goal: README "Get started" leads with `npx argus-reviewer init --pr`; add `docs/onboarding.md` describing the three paths (CLI, App, self-hosted App) and the secret checklist. Add a SECURITY.md paragraph stating the App/Worker boundary (R3).
   - Dependencies: U2.
 
 ### Phase 2: App and webhook Worker
 
-- U4. **Worker skeleton, signature verification, replay guard** [status: todo (next)]
+- U4. **Worker skeleton, signature verification, replay guard** [status: in review (PR #131, base main)]
   - Goal: `app/worker/` (own `package.json`, excluded from the published tarball and root lint/tsconfig as `launch/` is in Ocellus) with `POST /webhook`: raw-body HMAC-SHA256 constant-time verify, `X-GitHub-Delivery` dedupe window (best effort), body size cap, 401 on any failure, no body logging.
   - Tests: GitHub's published test vector (secret `It's a Secret to Everybody`, payload `Hello, World!`, signature `sha256=757107ea...3e17`), tampered body, missing header, wrong content type, oversize body.
-- U5. **App auth: JWT and installation token** [status: todo]
+- U5. **App auth: JWT and installation token** [status: in review (PR #131, base main)]
   - Goal: RS256 JWT with WebCrypto (`iat` backdated 60 s, `exp` under 10 min), exchange for an installation token restricted to the single repo and the minimal permission set; token never persisted or logged. Private key lives only in a Worker secret.
   - Tests: JWT claims, key import from PKCS8, token request body restricts `repositories` and `permissions`, redaction of tokens in error paths.
-- U6. **Onboarding PR on install** [status: todo]
+- U6. **Onboarding PR on install** [status: todo (needs #125 scaffold module merged)]
   - Goal: handle `installation.created` and `installation_repositories.added`; per repo skip archived, forked, and repos with `.github/workflows/argus-reviewer.yml`; create branch, commit scaffold (shared module, U1), open the PR. Uses the Contents/Git Data API only. Measure CPU time and subrequests against free limits.
   - Tests: mocked GitHub API; idempotency (branch exists, PR exists); fork/archived skip; fan-out cap of N repos per delivery with remainder noted in logs (50-subrequest limit).
   - Dependencies: U4, U5.

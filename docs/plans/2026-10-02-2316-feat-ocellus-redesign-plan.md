@@ -11,11 +11,11 @@ deepened: 2026-10-02
 
 # Ocellus Redesign - Plan
 
-## Status (2026-10-04)
+## Status as of 2026-10-04 (evening)
 
-Verified against `gh pr list -R duketopceo/Argus` and `git log origin/main` (main at `53cccef`). The program shipped as v0.4.0: #113 (Ocellus redesign across comment, CLI, TUI, desk and report) and #116 (U18 launch film "The witness" and DoD tail) are merged, #112 (this spec and plan) is merged, and the v0.4.0 release is published. Unit status below comes from those PR titles and the changelog, not a unit-by-unit code audit.
+Verified against `gh pr list -R duketopceo/Argus` and `git log origin/main` (main at `b9c19a4`; unit evidence rechecked: tokens, `src/ui`, `scripts/qa`, `electron`, `src/report/html.ts`, `assets/brand`, `assets/demo` and `launch` are present on main, `src/desk` is absent). The program shipped as v0.4.0: #113 (Ocellus redesign across comment, CLI, TUI, desk and report) and #116 (U18 launch film "The witness" and DoD tail) are merged, #112 (this spec and plan) is merged, and the v0.4.0 release is published; v0.4.1 (#129, #130) is also on main. The v0.4.0 tag move (`c91fbd5` to `1f6bdc3`) awaits the user. Unit status below comes from those PR titles and the changelog, not a unit-by-unit code audit.
 
-**Done:** U1 to U14 and U16 to U18. **Deferred:** U15 (`argus-reviewer desk` packaging), gated on Q2; the changelog states the desk app and terminal UI remain contributor tools, so U15 is not started. **Open PRs:** none for this plan. **In progress:** none. **Blocked on the user:** Q2 (ship desk to consumers or keep contributor-only). Follow-on work lives in `docs/plans/2026-10-04-0002-feat-github-app-onboarding-plan.md` and open PRs #121 to #126.
+**Done:** U1 to U14 and U16 to U18. **Deferred:** U15 (`argus-reviewer desk` packaging), gated on Q2; the changelog states the desk app and terminal UI remain contributor tools, so U15 is not started. **Open PRs:** none for this plan. **In progress:** none. **Blocked on the user:** Q2 (ship desk to consumers or keep contributor-only). Follow-on work lives in `docs/plans/2026-10-04-0002-feat-github-app-onboarding-plan.md` and open PRs #121 to #127 and #131.
 
 ## Goal Capsule
 
