@@ -64,7 +64,7 @@ Verified against `src/config.ts` and `src/onboarding/scaffold.ts`.
 
 | Setting | Default |
 |---|---|
-| Budget | The scaffolded `argus-reviewer.config.ts` sets `budgetUsd: 1`, a $1 per-run cap. Replays served from the cache cost $0. The action input `budget-usd` (env `ARGUS_BUDGET_USD`) overrides it. Without a config value the core default is unset. |
+| Budget | The scaffolded `argus-reviewer.config.ts` sets `budgetUsd: 1`, a $1 per-run cap. Replays served from the cache cost $0. The same $1 cap is now the built-in default, so a config without `budgetUsd` is capped too. The action input `budget-usd` (env `ARGUS_BUDGET_USD`) overrides it; raise it with a larger number, or set `0` to run uncapped (Argus logs a warning). |
 | Review model (realtime) | `code_model: 'deepseek/deepseek-v4-flash'` |
 | Batch model | `review.batchModel`, default `deepseek/deepseek-v4.1-flash:batch` (or `<code_model>:batch` when that model is known to have a batch endpoint) |
 | Review mode | `review.mode`: `realtime` (default) or `batch`. Also `--mode` and `ARGUS_REVIEW_MODE`. |

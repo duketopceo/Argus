@@ -6,6 +6,20 @@ pre-1.0; breaking changes may ship without a major bump until `1.0.0`.
 ## [Unreleased]
 
 ### Changed
+- **Every run is capped at $1 by default.** `budgetUsd` now resolves to `1`
+  (USD per run) instead of unset, and `codeReviewBudgetUsd` follows it unless
+  set. Before, a repo without the init scaffold ran uncapped. The cap covers
+  realtime review chunks, synthesis, the flow (vision) lane, explore, the app
+  lane, and triage/secrets decisions. Raise it with `budgetUsd: 5` in config,
+  `ARGUS_BUDGET_USD=5`, or the action input `budget-usd: 5`. Disable it
+  explicitly with `0` (`budgetUsd: 0`, `ARGUS_BUDGET_USD=0`, `budget-usd: 0`);
+  uncapped runs log `warning: spend cap disabled ... UNCAPPED`. Invalid or
+  negative values keep the $1 cap. Untrusted PR config cannot change the cap.
+  Batch review (`review.mode: batch`) now sizes the batch against the
+  remaining budget before submitting: a conservative token-based estimate
+  trims the batch to the chunks that fit, and the rest run realtime with the
+  per-chunk gate (a batch cannot be stopped once submitted). The run summary
+  line now reads `total $X of $Y budget`.
 - **Default review models changed** (from the reviewer model bake-off, #123).
   Realtime `code_model` is now `deepseek/deepseek-v4-flash` (was
   `deepseek/deepseek-v4.1-flash`): about $0.0001 per demo review, recall 1.00

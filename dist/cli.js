@@ -6,7 +6,7 @@ import { basename, extname, isAbsolute, join, relative, resolve } from 'node:pat
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { bindSession, renderTestFile, takeTests, td, test as registerTest, TdSession, } from './api.js';
-import { checkRequestTimeoutMs, DEFAULT_RECORD_STEP_CAP, loadConfig, resolveBatchModel, resolveBlockSeverities, resolveConfig, resolveMaxComments, sanitizeExpectation, unknownProviderSlugs, } from './config.js';
+import { checkRequestTimeoutMs, applyBudgetSetting, DEFAULT_BUDGET_USD, DEFAULT_RECORD_STEP_CAP, loadConfig, parseBudgetSetting, resolveBatchModel, resolveBlockSeverities, resolveConfig, resolveMaxComments, sanitizeExpectation, UNCAPPED_WARNING, unknownProviderSlugs, } from './config.js';
 import { debug, setLiveDir } from './debug.js';
 import { defaultExec, detectEnvironment, resolveA0Host } from './detect.js';
 import { BrowserDriver } from './driver/browser.js';
@@ -48,6 +48,7 @@ import { OpenRouterClient } from './vision/openrouter.js';
 import { Ledger } from './vision/ledger.js';
 import { selectionFromFlags } from './pipeline/contracts.js';
 import { MENTION_HELP, mayRunMention, parseMention, postIssueComment, } from './mention.js';
+import { affordableBatchPrefix } from './pipeline/budget.js';
 import { runVerify, writeEvidenceReport } from './pipeline/verify.js';
 import { APP_LANE_DEFAULT_TIMEOUT_MS, APP_LANE_REPORT, runAppLane, } from './pipeline/app.js';
 import { CliError, errorJson, renderError, toCliError } from './ui/errors.js';
@@ -568,13 +569,15 @@ async function cmdRun(args, ctx, deps) {
         config.cacheDir = resolve(ctx.cwd, values['cache-dir']);
     }
     const envBudget = ctx.env.ARGUS_BUDGET_USD;
-    if (envBudget !== undefined && envBudget !== '') {
-        const parsed = Number(envBudget);
-        if (Number.isFinite(parsed) && parsed > 0)
-            config.budgetUsd = parsed;
-        else
-            ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`);
+    const envSetting = parseBudgetSetting(envBudget);
+    if (envSetting.kind === 'invalid') {
+        ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`);
     }
+    const applied = applyBudgetSetting(envSetting);
+    if (applied !== 'keep')
+        config.budgetUsd = applied;
+    if (config.budgetUsd === undefined)
+        ctx.err(UNCAPPED_WARNING);
     const liveDir = resolve(ctx.cwd, config.cacheDir ?? '.argus-reviewer-cache');
     // liveLog's mkdir is non-recursive by design — create a custom nested
     // cache dir (and ancestors) here once so the first live write lands.
@@ -1504,7 +1507,7 @@ async function cmdCodeReview(args, ctx, deps) {
     }
     const model = config.code_model ?? config.model;
     const runNonce = runNonceFrom(ctx.env);
-    debug('code-review', `repo=${repo ?? 'none'} pr=${pr ?? 'none'} model=${model} budget=${config.codeReviewBudgetUsd ?? 'unlimited'}`);
+    debug('code-review', `repo=${repo ?? 'none'} pr=${pr ?? 'none'} model=${model} budget=${config.codeReviewBudgetUsd ?? 'UNCAPPED'}`);
     const skip = async (reason) => {
         ctx.out(`code-review: skipping: ${reason}`);
         stage(`skipped — ${reason}`);
@@ -1547,14 +1550,16 @@ async function cmdCodeReview(args, ctx, deps) {
     const prNum = pr;
     const ghToken = token;
     const envBudget = ctx.env.ARGUS_BUDGET_USD;
-    if (envBudget !== undefined && envBudget !== '') {
-        const parsed = Number(envBudget);
-        if (Number.isFinite(parsed) && parsed > 0)
-            config.codeReviewBudgetUsd = parsed;
-        else
-            ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`);
+    const envSetting = parseBudgetSetting(envBudget);
+    if (envSetting.kind === 'invalid') {
+        ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`);
     }
+    const appliedBudget = applyBudgetSetting(envSetting);
+    if (appliedBudget !== 'keep')
+        config.codeReviewBudgetUsd = appliedBudget;
     const budget = config.codeReviewBudgetUsd;
+    if (budget === undefined)
+        ctx.err(UNCAPPED_WARNING);
     const [allFiles, index] = await Promise.all([
         fixture !== undefined
             ? Promise.resolve(fixture.files)
@@ -1682,40 +1687,56 @@ async function cmdCodeReview(args, ctx, deps) {
                 batchRecord = { used: false, chunks: chunks.length, fellBack: 'client has no batch support' };
             }
             else {
-                stage(`submitting ${chunks.length} chunk(s) as a batch, poll deadline ${Math.round(config.review.batchTimeoutMs / 1000)}s`);
-                try {
-                    const batchModel = resolveBatchModel(reviewModel, config.review.batchModel);
-                    stage(`batch model ${batchModel}`);
-                    const items = await client.completeBatch({
-                        model: batchModel,
-                        requests: chunks.map((chunk, i) => ({
-                            customId: `chunk-${i}`,
-                            messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles),
-                            schema: CODE_REVIEW_SCHEMA,
-                            provider: config.provider,
-                        })),
-                        kind: 'code',
-                        deadlineMs: config.review.batchTimeoutMs,
-                    });
-                    items.forEach((item, i) => {
-                        if (item.result !== undefined)
-                            batched.set(i, item.result);
-                    });
-                    batchRecord = {
-                        used: true,
-                        chunks: chunks.length,
-                        retriedRealtime: chunks.length - batched.size,
-                    };
-                    if (batched.size < chunks.length) {
-                        ctx.err(`code-review: ${chunks.length - batched.size} batch request(s) failed; running those chunks realtime`);
+                const allRequests = chunks.map((chunk, i) => ({
+                    customId: `chunk-${i}`,
+                    messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles),
+                    schema: CODE_REVIEW_SCHEMA,
+                    provider: config.provider,
+                }));
+                // A submitted batch cannot be stopped, so size it against the
+                // remaining budget first (conservative token-based estimate). Chunks
+                // past the prefix run realtime below, where the per-chunk budget
+                // gate applies.
+                const fit = affordableBatchPrefix(allRequests, budget, ledger.visionCostUsd);
+                const requests = allRequests.slice(0, fit);
+                if (fit < allRequests.length) {
+                    ctx.err(fit === 0
+                        ? `code-review: batch skipped: projected cost of ${allRequests.length} chunk(s) exceeds the $${budget} budget; using realtime with budget checks`
+                        : `code-review: batch limited to ${fit} of ${allRequests.length} chunk(s): projected cost exceeds the $${budget} budget; the rest run realtime with budget checks`);
+                }
+                if (fit === 0) {
+                    batchRecord = { used: false, chunks: chunks.length, fellBack: 'projected batch cost exceeds budget' };
+                }
+                else
+                    try {
+                        stage(`submitting ${requests.length} chunk(s) as a batch, poll deadline ${Math.round(config.review.batchTimeoutMs / 1000)}s`);
+                        const batchModel = resolveBatchModel(reviewModel, config.review.batchModel);
+                        stage(`batch model ${batchModel}`);
+                        const items = await client.completeBatch({
+                            model: batchModel,
+                            requests,
+                            kind: 'code',
+                            deadlineMs: config.review.batchTimeoutMs,
+                        });
+                        items.forEach((item, i) => {
+                            if (item.result !== undefined)
+                                batched.set(i, item.result);
+                        });
+                        batchRecord = {
+                            used: true,
+                            chunks: chunks.length,
+                            retriedRealtime: chunks.length - batched.size,
+                        };
+                        if (batched.size < chunks.length) {
+                            ctx.err(`code-review: ${chunks.length - batched.size} batch request(s) failed; running those chunks realtime`);
+                        }
                     }
-                }
-                catch (e) {
-                    const reason = e.message;
-                    debug('code-review', `batch failed: ${reason}`);
-                    ctx.err(`code-review: batch failed (${reason}); falling back to realtime`);
-                    batchRecord = { used: false, chunks: chunks.length, fellBack: reason };
-                }
+                    catch (e) {
+                        const reason = e.message;
+                        debug('code-review', `batch failed: ${reason}`);
+                        ctx.err(`code-review: batch failed (${reason}); falling back to realtime`);
+                        batchRecord = { used: false, chunks: chunks.length, fellBack: reason };
+                    }
             }
         }
         const reviewedChunks = new Set();
@@ -1762,7 +1783,10 @@ async function cmdCodeReview(args, ctx, deps) {
         let summary;
         let verdict;
         let finalFindings = allFindings;
-        if (chunks.length > 1 && !ledger.budgetExceeded) {
+        // Synthesis is paid too: project it at the mean chunk cost.
+        const synthAllowed = !ledger.budgetExceeded &&
+            (reviewedChunks.size === 0 || ledger.canSpend(chunkSpend / reviewedChunks.size));
+        if (chunks.length > 1 && synthAllowed) {
             try {
                 debug('code-review', 'synthesis');
                 stage('synthesizing chunk findings');
@@ -2179,22 +2203,24 @@ async function cmdVerify(args, ctx, deps) {
     const trace = parseOpenRouterTrace(ctx.env);
     const git = await gitInfo(ctx.cwd);
     const envBudget = envOr(ctx.env.ARGUS_BUDGET_USD);
-    let actionBudget;
-    if (envBudget !== undefined) {
-        const parsed = Number(envBudget);
-        if (Number.isFinite(parsed) && parsed > 0)
-            actionBudget = parsed;
-        else
-            ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`);
+    const envSetting = parseBudgetSetting(envBudget);
+    if (envSetting.kind === 'invalid') {
+        ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`);
     }
+    // 'keep' → fall back to config; otherwise the env value (undefined = unlimited)
+    const appliedBudget = applyBudgetSetting(envSetting);
+    const hasEnvBudget = appliedBudget !== 'keep';
+    const envCap = appliedBudget === 'keep' ? undefined : appliedBudget;
     const budgets = {};
-    const reviewBudget = actionBudget ?? config.codeReviewBudgetUsd;
-    const flowBudget = actionBudget ?? config.budgetUsd;
+    const reviewBudget = hasEnvBudget ? envCap : config.codeReviewBudgetUsd;
+    const flowBudget = hasEnvBudget ? envCap : config.budgetUsd;
     if (reviewBudget !== undefined)
         budgets.review = { limitUsd: reviewBudget };
     if (flowBudget !== undefined)
         budgets.flow = { limitUsd: flowBudget };
-    const appBudget = config.app.budgetUsd ?? actionBudget ?? config.budgetUsd;
+    const appBudget = config.app.budgetUsd ?? (hasEnvBudget ? envCap : config.budgetUsd);
+    if (selection.app && appBudget === undefined)
+        ctx.err(UNCAPPED_WARNING);
     budgets.app = {
         ...(appBudget !== undefined ? { limitUsd: appBudget } : {}),
         maxDurationMs: config.app.timeoutMs ?? APP_LANE_DEFAULT_TIMEOUT_MS,
@@ -2658,7 +2684,7 @@ async function cmdInitPr(values, ctx, deps) {
             exec: deps.exec ?? defaultExec,
             repo: values.repo,
             branch,
-            budgetUsd: resolveConfig({}).budgetUsd ?? 1,
+            budgetUsd: DEFAULT_BUDGET_USD,
         });
         ctx.out(result.kind === 'existing'
             ? `onboarding PR already open for ${result.repo} (${result.branch}): ${result.url}`
@@ -2760,7 +2786,7 @@ async function cmdInit(args, ctx, deps) {
     // R19: name what leaves the machine, the default spend posture, and
     // the stop path before the user runs anything. Kept verbatim (DESIGN 7.8).
     ctx.out('');
-    for (const line of scaffoldChecklist(dm.budgetUsd ?? 1))
+    for (const line of scaffoldChecklist(DEFAULT_BUDGET_USD))
         ctx.out(line);
     ctx.out('');
     ctx.out(style.bold('3. Run the default lane (code review)'));

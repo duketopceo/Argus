@@ -125,11 +125,17 @@ export interface Config {
    */
   decisionModel: string | undefined
   /**
-   * Hard budget for the `argus-reviewer code-review` lane. When set, the
-   * review stops early if the cumulative OpenRouter cost exceeds this cap.
+   * Hard budget for the `argus-reviewer code-review` lane. Unset follows
+   * `budgetUsd` (default $1/run); `0` runs the review lane uncapped. After
+   * resolveConfig `undefined` means explicitly unlimited.
    */
   codeReviewBudgetUsd: number | undefined
   provider: ProviderRules
+  /**
+   * Per-run spend cap in USD. Default `DEFAULT_BUDGET_USD` ($1). `0` is the
+   * explicit unlimited switch (every command logs a warning). After
+   * resolveConfig `undefined` means explicitly unlimited — never "unset".
+   */
   budgetUsd: number | undefined
   target: Target | undefined
   cacheDir: string | undefined
@@ -344,6 +350,37 @@ export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review'
 
 export const DEFAULT_RECORD_STEP_CAP = 40
 
+/** Built-in per-run spend cap (USD) when nothing else is configured. */
+export const DEFAULT_BUDGET_USD = 1
+
+/** Logged by every paid command when the cap was explicitly disabled. */
+export const UNCAPPED_WARNING =
+  'warning: spend cap disabled (budgetUsd/ARGUS_BUDGET_USD = 0): this run is UNCAPPED; model spend is unbounded'
+
+export type BudgetSetting =
+  | { kind: 'unset' }
+  | { kind: 'invalid' }
+  | { kind: 'unlimited' }
+  | { kind: 'cap'; usd: number }
+
+/** Parse ARGUS_BUDGET_USD / the `budget-usd` action input: `0` = unlimited. */
+export function parseBudgetSetting(raw: string | undefined): BudgetSetting {
+  if (raw === undefined || raw.trim() === '') return { kind: 'unset' }
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 0) return { kind: 'invalid' }
+  return n === 0 ? { kind: 'unlimited' } : { kind: 'cap', usd: n }
+}
+
+/**
+ * Apply an env/action budget setting. Returns the new cap (`undefined` =
+ * unlimited) or `'keep'` when the setting is unset/invalid.
+ */
+export function applyBudgetSetting(s: BudgetSetting): number | undefined | 'keep' {
+  if (s.kind === 'cap') return s.usd
+  if (s.kind === 'unlimited') return undefined
+  return 'keep'
+}
+
 export const DEFAULT_EXPLORE: Explore = {
   enabled: false,
   maxSteps: 20,
@@ -379,7 +416,7 @@ const defaults: Config = {
   provider: {
     ignore: ['siliconflow', 'novitaai', 'atlascloud', 'streamlake', 'chutes'],
   },
-  budgetUsd: undefined,
+  budgetUsd: DEFAULT_BUDGET_USD,
   target: undefined,
   cacheDir: undefined,
   testsDir: undefined,
@@ -572,6 +609,24 @@ export function resolveConfig(input: ConfigInput = {}): Config {
     if (bad !== undefined) throw new Error(`review.${bad}`)
   }
   const resolved: Config = { ...defaults, ...input, provider, sandbox, explore, app, review }
+  // 0 = explicit unlimited; anything not a finite non-negative number
+  // (mis-typed, negative, null) degrades to the default cap, never to unlimited.
+  const rawBudget = input.budgetUsd
+  resolved.budgetUsd =
+    rawBudget === undefined
+      ? DEFAULT_BUDGET_USD
+      : typeof rawBudget === 'number' && Number.isFinite(rawBudget) && rawBudget >= 0
+        ? rawBudget === 0
+          ? undefined
+          : rawBudget
+        : DEFAULT_BUDGET_USD
+  const rawReviewBudget = input.codeReviewBudgetUsd
+  resolved.codeReviewBudgetUsd =
+    typeof rawReviewBudget === 'number' && Number.isFinite(rawReviewBudget) && rawReviewBudget > 0
+      ? rawReviewBudget
+      : rawReviewBudget === 0
+        ? undefined
+        : resolved.budgetUsd
   resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP)
   // Retention is a non-negative integer (0 = keep none) — a mis-typed or
   // negative bound degrades to unset, never to "keep everything".

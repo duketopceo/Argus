@@ -1112,8 +1112,9 @@ export default { model: 'hostile/model' }
     expect(config.provider.only).toBeUndefined()
     expect(config.openrouter).toBeUndefined()
     expect(config.severity).toEqual(['bug'])
-    expect(config.codeReviewBudgetUsd).toBeUndefined()
-    expect(config.budgetUsd).toBeUndefined()
+    // A PR can neither lower its own cap nor disable it (codeReviewBudgetUsd: 0).
+    expect(config.codeReviewBudgetUsd).toBe(1)
+    expect(config.budgetUsd).toBe(1)
     expect(config.target).toBeUndefined()
     expect(config.pageSetup).toBeUndefined()
     expect(config.testsDir).toBeUndefined()

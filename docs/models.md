@@ -45,7 +45,7 @@ these on untrusted `pull_request` runs):
   `src/review/packs.ts`): rubric blocks that tune recall toward security
   defects, performance costs, or debloat. Same severity gate and dedup as
   unlensed findings.
-- `ARGUS_BUDGET_USD="0.25"` — hard per-review dollar cap
+- `ARGUS_BUDGET_USD="0.25"` — hard per-run dollar cap (default $1; `0` = unlimited, with a warning)
 
 In `argus-reviewer.config.ts` the same knobs are `code_model` and
 `review.profiles` — trusted checkouts only.

@@ -19,7 +19,7 @@ export default defineConfig({
   model: 'google/gemini-2.5-flash-lite',
   escalation_model: 'anthropic/claude-sonnet-4',
   code_model: 'deepseek/deepseek-v4-flash',
-  budgetUsd: 1.0,
+  budgetUsd: 1.0,   // per-run cap in USD (built-in default 1; 0 = unlimited, logs a warning)
   target: {
     // command: 'npm run dev' if the target needs a local server started
     url: 'https://your-app.example.com',
@@ -169,8 +169,11 @@ more than one). The summary says `Reviewed all N chunks (X of Y files)`, and
 `code-review.json` carries the same numbers in `scope.chunksTotal`,
 `scope.chunksReviewed` and `scope.unreviewedFiles`.
 
-Spend is metered per chunk. Before each chunk after the first, the run checks
-the budget (`codeReviewBudgetUsd` or `ARGUS_BUDGET_USD`) against the mean chunk
+Spend is metered per chunk and capped at $1 per run by default
+(`budgetUsd`; `codeReviewBudgetUsd` overrides it for this lane, and
+`ARGUS_BUDGET_USD` / the action input `budget-usd` override both; `0` means
+unlimited and logs an `UNCAPPED` warning). Before each chunk after the first,
+the run checks the budget against the mean chunk
 cost so far; if the next chunk is not expected to fit, it stops without
 spending and the summary reads `Reviewed 3 of 7 chunks (...); N file(s) were
 not reviewed`.
@@ -202,9 +205,13 @@ read from each batch response's usage and recorded in the same ledger as
 realtime calls. The final synthesis call (multi-chunk PRs) always runs realtime.
 `code-review.json` carries `batch: { used, chunks, retriedRealtime?, fellBack? }`.
 
-Budget caveat: a batch is submitted whole, so `codeReviewBudgetUsd` cannot stop
-it mid-way the way it stops realtime chunks; the spend is metered once the
-results arrive.
+Budget: a batch is submitted whole and cannot be stopped mid-way, so Argus
+sizes it first. It estimates each chunk's worst-case cost from its token count
+at a deliberately high price (about $3 per million input tokens plus a 4000
+token output allowance) and submits only the chunks that fit in the remaining
+budget. The rest run realtime under the per-chunk gate; if none fit, the batch
+is skipped with a `batch skipped: projected cost` line. Actual spend is still
+metered from provider usage when results arrive.
 
 ### Agent Zero delegation (optional)
 
