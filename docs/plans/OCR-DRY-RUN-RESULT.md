@@ -33,9 +33,9 @@ Ruled out with direct calls against the same key:
 | `/v1/chat/completions`, gpt-6-luna | 1s |
 | `/v1/messages` (Anthropic shape, what ocr uses) + `tools` | 2.7s, correct `tool_use` block |
 
-So the gateway serves both the chat-completions and Anthropic lanes, streams
-tool calls correctly, and is fast. **OCR's hang is in its own agentic loop,
-not in the model provider.**
+So the gateway responded on both lanes, and the `/v1/messages` probe returned
+a `tool_use` block in 2.7s. These probes do not establish streaming behavior
+or rule out the provider as the cause of OCR's hang.
 
 ## Two config mistakes I made first (for the record)
 
