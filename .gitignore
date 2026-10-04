@@ -19,3 +19,5 @@ evals/review-quality/results/*.judge.json
 
 # ce-optimize local experiment state
 .context/
+launch/out/
+launch/public/captures/

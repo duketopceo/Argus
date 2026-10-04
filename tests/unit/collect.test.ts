@@ -184,3 +184,130 @@ describe('archiveManifest', () => {
     expect(existsSync(join(reports, 'evil.json'))).toBe(false)
   })
 })
+
+describe('collect gh source state (U12)', () => {
+  const savedPath = process.env.PATH
+
+  afterEach(() => {
+    process.env.PATH = savedPath
+  })
+
+  async function fakeGh(script: string): Promise<string> {
+    const bin = join(dir, 'bin')
+    await mkdir(bin, { recursive: true })
+    await writeFile(join(bin, 'gh'), `#!/bin/sh\n${script}\n`, { mode: 0o755 })
+    return bin
+  }
+
+  it('reports gh missing as a typed state, not an empty PR list', async () => {
+    const empty = join(dir, 'empty-bin')
+    await mkdir(empty, { recursive: true })
+    process.env.PATH = empty
+    const state = await collect(dir)
+    expect(state.sources.gh.state).toBe('missing')
+    expect(state.prs).toEqual([])
+  })
+
+  it('reports a signed-out gh as unauthenticated', async () => {
+    process.env.PATH = await fakeGh(
+      "echo 'To get started with GitHub CLI, please run:  gh auth login' >&2\nexit 4",
+    )
+    const state = await collect(dir)
+    expect(state.sources.gh.state).toBe('unauthenticated')
+  })
+
+  it('reports any other gh failure as error with its first line', async () => {
+    process.env.PATH = await fakeGh("echo 'HTTP 502: bad gateway' >&2\nexit 1")
+    const state = await collect(dir)
+    expect(state.sources.gh.state).toBe('error')
+    expect(state.sources.gh.detail).toMatch(/HTTP 502/)
+  })
+
+  it('reports ok when gh answers', async () => {
+    process.env.PATH = `${await fakeGh("echo '[]'")}:${savedPath}`
+    const state = await collect(dir)
+    expect(state.sources.gh.state).toBe('ok')
+  })
+})
+
+describe('collect desk sources (U13)', () => {
+  const journal = (runId: string, healed: boolean) => ({
+    schemaVersion: 1,
+    runId,
+    ok: true,
+    costUsd: 0.001,
+    startedAt: '2026-09-30T20:00:00.000Z',
+    tests: [
+      {
+        name: 'landing loads',
+        file: 'e2e/landing.test.ts',
+        ok: true,
+        steps: [
+          { instruction: 'click "Sign in"', action: 'click', ok: true, ...(healed ? { healed: true } : {}), model: 'm/x' },
+        ],
+        asserts: [],
+      },
+    ],
+    errors: [],
+  })
+
+  it('lists healed steps from recent journals, newest first', async () => {
+    const jdir = join(dir, '.argus-reviewer-cache/journal')
+    await writeJson(join(jdir, '2026-09-29.json'), journal('older', true))
+    await writeJson(join(jdir, '2026-09-30.json'), journal('newer', true))
+    await writeJson(join(jdir, '2026-10-01.json'), journal('clean', false))
+    const state = await collect(dir)
+    expect(state.heals.map((h: { runId: string }) => h.runId)).toEqual(['newer', 'older'])
+    expect(state.heals[0]).toMatchObject({ test: 'landing loads', instruction: 'click "Sign in"', model: 'm/x' })
+    expect(state.sources.journal.state).toBe('ok')
+  })
+
+  it('names an unreadable journal file instead of dropping it silently', async () => {
+    const jdir = join(dir, '.argus-reviewer-cache/journal')
+    await writeJson(join(jdir, '2026-09-30.json'), journal('ok', true))
+    await mkdir(jdir, { recursive: true })
+    await writeFile(join(jdir, '2026-10-01.json'), '{"half', 'utf8')
+    const state = await collect(dir)
+    expect(state.sources.journal).toEqual({ state: 'error', detail: '2026-10-01.json' })
+    expect(state.heals).toHaveLength(1)
+  })
+
+  it('reports whether a model key is present, never its value', async () => {
+    const saved = process.env.OPENROUTER_API_KEY
+    try {
+      process.env.OPENROUTER_API_KEY = 'sk-or-test-value'
+      const on = await collect(dir)
+      expect(on.keyPresent).toBe(true)
+      expect(JSON.stringify(on)).not.toContain('sk-or-test-value')
+      delete process.env.OPENROUTER_API_KEY
+      expect((await collect(dir)).keyPresent).toBe(false)
+    } finally {
+      if (saved === undefined) delete process.env.OPENROUTER_API_KEY
+      else process.env.OPENROUTER_API_KEY = saved
+    }
+  })
+
+  it('carries the configured run budget for the Spend view', async () => {
+    await writeJson(join(dir, 'argus-reviewer.config.json'), { repo: 'x/y', budgetUsd: 2.5 })
+    expect((await collect(dir)).budgetUsd).toBe(2.5)
+  })
+
+  it('attaches flow screenshots only when both files sit beside the lane report', async () => {
+    const out = join(dir, 'argus-reviewer-report')
+    const m = fixtureManifest({ runId: 'shots' })
+    m.lanes.flow.reportPath = join(out, 'flow', 'run.json')
+    await writeJson(join(out, 'run-manifest.json'), m)
+    let w = await workspaceOf(dir)
+    expect((w.current as unknown as { lanes: Record<string, { screenshots?: unknown }> }).lanes.flow.screenshots).toBeUndefined()
+    await mkdir(join(out, 'flow'), { recursive: true })
+    await writeFile(join(out, 'flow', 'before.png'), 'png')
+    await writeFile(join(out, 'flow', 'after.png'), 'png')
+    // Bump the manifest so nothing cached hides the new files.
+    await writeJson(join(out, 'run-manifest.json'), { ...m, finishedAt: '2026-10-01T00:00:00.000Z' })
+    w = await workspaceOf(dir)
+    expect((w.current as unknown as { lanes: Record<string, { screenshots?: unknown }> }).lanes.flow.screenshots).toEqual({
+      before: 'report/flow/before.png',
+      after: 'report/flow/after.png',
+    })
+  })
+})

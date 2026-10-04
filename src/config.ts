@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url'
 
+import { DEFAULT_REVIEW_EXCLUDE } from './review/scope.js'
 import { isReviewProfile, type ReviewProfile } from './review/packs.js'
 import type { Trust } from './trust.js'
 import { JEV_DEFAULT_MODEL } from './vision/decisions.js'
@@ -117,7 +118,7 @@ export interface Config {
    */
   code_model: string | undefined
   /**
-   * OpenRouter Decisions API model for typed adjudication (Jev). Defaults
+   * OpenRouter Decisions API model for typed adjudication (the confidence model). Defaults
    * to the pinned `typesafe/jev-1.13-20260917` — alias slugs like
    * `~typesafe/jev-latest` drift silently and thresholds are calibrated
    * to a version. Set to `''` to disable adjudication (regex-only mode).
@@ -236,7 +237,7 @@ export interface Config {
   app: AppLane
   /**
    * Code-review policy knobs. Always populated after `resolveConfig`.
-   * `secretsThreshold`: Jev `noul` probability at/above which a
+   * `secretsThreshold`: confidence-model `noul` probability at/above which a
    * secret-shaped diff literal is reported as a finding (below →
    * suppressed but audit-recorded). Default 0.3 — tune after dogfooding.
    * `maxComments`: cap on inline review comments posted per run
@@ -244,18 +245,18 @@ export interface Config {
    * `severityGate`: consumer-facing alias over `severity` — 'bug'
    * fails on bugs only, 'risk' fails on bug|risk. Unset → `severity`
    * list is authoritative.
-   * `triage`: Jev pre-review lane — 'off' no call, 'annotate' (default)
+   * `triage`: confidence-model pre-review lane — 'off' no call, 'annotate' (default)
    * records risk/deep-review/area into the report + sticky, 'route'
    * additionally swaps the code model to `lowRiskModel` on low-risk
-   * diffs. Jev routes/annotates, never gates — coverage is constant.
+   * diffs. The confidence model routes/annotates, never gates — coverage is constant.
    * `lowRiskModel`: the cheap code-model slug 'route' falls to; unset →
    * route keeps `code_model` (annotate-equivalent).
    * `findingThreshold`: P(false-positive) required to suppress a nit/q
-   * finding after Jev adjudication — 1.0 (default) is annotate-only,
+   * finding after confidence-model adjudication — 1.0 (default) is annotate-only,
    * lowering it suppresses progressively more low-confidence nits.
    * bug/risk are never suppressed.
    * `requestChanges`: allow the review event to escalate to
-   * REQUEST_CHANGES for proven blockers (probe-reproduced or Jev
+   * REQUEST_CHANGES for proven blockers (probe-reproduced or confidence-model
    * high-confidence). Default true — set false for advisory-only posting.
    * `profiles`: named review lenses appended to the review prompt
    * ('security'|'perf'|'debloat' — see src/review/packs.ts). Unknown names
@@ -270,6 +271,12 @@ export interface Config {
     findingThreshold: number
     requestChanges: boolean
     profiles: ReviewProfile[]
+    /**
+     * Glob list of changed paths kept out of the review input. A configured
+     * list replaces the defaults (generated, fixture, golden, vendored
+     * paths); `[]` excludes nothing.
+     */
+    exclude: string[]
   }
 }
 
@@ -349,6 +356,7 @@ const defaults: Config = {
     findingThreshold: 1.0,
     requestChanges: true,
     profiles: [],
+    exclude: [...DEFAULT_REVIEW_EXCLUDE],
   },
 }
 
@@ -464,7 +472,7 @@ export function resolveConfig(input: ConfigInput = {}): Config {
   const rawReview = typeof input.review === 'object' && input.review !== null ? input.review : {}
   const review = { ...defaults.review, ...rawReview }
   // Thresholds must be probabilities — anything else (NaN, >1,
-  // negative) would silently suppress or flood the Jev lanes.
+  // negative) would silently suppress or flood the confidence-model lanes.
   review.secretsThreshold = prob01(review.secretsThreshold, defaults.review.secretsThreshold)
   review.maxComments =
     typeof review.maxComments === 'number' &&
@@ -491,6 +499,11 @@ export function resolveConfig(input: ConfigInput = {}): Config {
   review.profiles = Array.isArray(rawReview.profiles)
     ? [...new Set(rawReview.profiles.filter(isReviewProfile))]
     : []
+  review.exclude =
+    Array.isArray(rawReview.exclude) &&
+    rawReview.exclude.every((g) => typeof g === 'string' && g !== '')
+      ? [...rawReview.exclude]
+      : [...DEFAULT_REVIEW_EXCLUDE]
   const resolved: Config = { ...defaults, ...input, provider, sandbox, explore, app, review }
   resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP)
   // Retention is a non-negative integer (0 = keep none) — a mis-typed or
@@ -581,7 +594,7 @@ export async function loadConfig(cwd: string, opts: LoadConfigOpts): Promise<Con
       // legit consumer debugging "why is my config ignored") is invisible.
       try {
         if ((await fs.stat(path.join(cwd, `${name}.ts`))).isFile()) {
-          opts.note?.(`config: ${name}.ts ignored — untrusted checkouts load JSON config only`)
+          opts.note?.(`config: ${name}.ts ignored – untrusted checkouts load JSON config only`)
         }
       } catch {
         // no .ts candidate — nothing to note
@@ -601,7 +614,7 @@ export async function loadConfig(cwd: string, opts: LoadConfigOpts): Promise<Con
           const parsed = JSON.parse(raw) as ConfigInput
           if (untrusted) {
             opts.note?.(
-              `config: ${name}.json loaded untrusted — honoring ${[...UNTRUSTED_CONFIG_KEYS].join(', ')} only`,
+              `config: ${name}.json loaded untrusted – honoring ${[...UNTRUSTED_CONFIG_KEYS].join(', ')} only`,
             )
             return finish(filterUntrustedConfig(parsed))
           }

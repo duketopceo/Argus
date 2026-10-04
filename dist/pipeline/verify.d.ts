@@ -30,3 +30,15 @@ export interface VerifyResult {
  * start, not the run's.
  */
 export declare function runVerify(input: VerifyInput): Promise<VerifyResult>;
+/** Package version for report footers; dist/ and src/ both sit two levels deep. */
+export declare function argusVersion(): string;
+/**
+ * Write the offline HTML evidence report (U14) beside run-manifest.json.
+ * Lane reports are read only when the manifest points at them: a runner that
+ * threw leaves `reportPath` unset, and its stale file must not reach the
+ * report (same contract as the manifest's own reads).
+ */
+export declare function writeEvidenceReport(reportDir: string, manifest: RunManifest, meta?: {
+    version?: string;
+    runUrl?: string;
+}): Promise<string>;

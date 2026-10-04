@@ -3,7 +3,7 @@ import globals from 'globals'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules', 'coverage', 'action/*.mjs', 'evals/work', 'evals/results'] },
+  { ignores: ['dist', 'node_modules', 'coverage', 'action/*.mjs', 'evals/work', 'evals/results', 'launch'] },
   {
     languageOptions: {
       globals: globals.node,
@@ -33,8 +33,8 @@ export default tseslint.config(
     },
   },
   {
-    // Electron renderer runs in a browser context.
-    files: ['electron/renderer.js'],
+    // The desk front end (electron/ui/) runs in a browser context.
+    files: ['electron/ui/**/*.js'],
     languageOptions: {
       globals: globals.browser,
     },
@@ -42,9 +42,16 @@ export default tseslint.config(
   {
     // e2e scripts are node entrypoints that inject browser-context
     // functions into Playwright pages — they need both global sets.
-    files: ['tests/e2e/**'],
+    files: ['tests/e2e/**', 'scripts/qa/**'],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },
+    },
+  },
+  {
+    // Brand template scripts (assets/brand/templates/) run inside a browser page.
+    files: ['assets/**/*.{js,mjs}'],
+    languageOptions: {
+      globals: globals.browser,
     },
   },
   {

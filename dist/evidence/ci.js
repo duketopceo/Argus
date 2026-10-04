@@ -28,18 +28,18 @@ export async function ghGet(url, token, ctx) {
             },
         });
         if (!res.ok) {
-            ctx.err(`evidence: github ${res.status} ${res.statusText} — ${url}`);
+            ctx.err(`evidence: github ${res.status} ${res.statusText} – ${url}`);
             return undefined;
         }
         return await res.json();
     }
     catch (e) {
         if (e instanceof Error && e.name === 'AbortError') {
-            ctx.err(`evidence: github request timed out — ${url}`);
+            ctx.err(`evidence: github request timed out – ${url}`);
         }
         else {
             // DNS/socket/protocol failures — same contract: undefined, never throw.
-            ctx.err(`evidence: github request failed — ${url} (${e.message})`);
+            ctx.err(`evidence: github request failed – ${url} (${e.message})`);
         }
         return undefined;
     }
@@ -70,11 +70,11 @@ export async function ghWrite(method, url, token, ctx, body) {
         });
         const data = await res.json().catch(() => undefined);
         if (!res.ok)
-            ctx.err(`evidence: github ${method} ${res.status} ${res.statusText} — ${url}`);
+            ctx.err(`evidence: github ${method} ${res.status} ${res.statusText} – ${url}`);
         return { status: res.status, data };
     }
     catch (e) {
-        ctx.err(`evidence: github ${method} failed — ${url} (${e instanceof Error && e.name === 'AbortError' ? 'timeout' : e.message})`);
+        ctx.err(`evidence: github ${method} failed – ${url} (${e instanceof Error && e.name === 'AbortError' ? 'timeout' : e.message})`);
         return { status: 0, data: undefined };
     }
     finally {

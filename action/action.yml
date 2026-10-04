@@ -1,6 +1,9 @@
 name: argus-reviewer
 description: Run the argus-reviewer harness and post a sticky PR comment with cost and evidence.
 author: duketopceo
+branding:
+  icon: eye
+  color: blue
 inputs:
   openrouter-api-key:
     description: OpenRouter API key (BYOK). All vision calls are billed through this key.
@@ -44,7 +47,7 @@ inputs:
     default: argus-reviewer-report
     required: false
   sandbox:
-    description: Enable the B.2 probe lane — authored test probes for unexercised findings run in a hardened Docker container (no network, no secrets, read-only fs). Enable-only — 'false' does not override a config-enabled lane. Requires Docker on the runner; forced off on pull_request_target.
+    description: Enable the B.2 probe lane: authored test probes for unexercised findings run in a hardened Docker container (no network, no secrets, read-only fs). Enable-only: 'false' does not override a config-enabled lane. Requires Docker on the runner; forced off on pull_request_target.
     default: 'false'
     required: false
   max-comments:
@@ -52,11 +55,11 @@ inputs:
     default: ''
     required: false
   code-model:
-    description: Optional OpenRouter model slug for code review (e.g. openai/gpt-5-mini). Wins over the checkout's config code_model — including on pull_request events, where PR config never executes.
+    description: Optional OpenRouter model slug for code review (e.g. openai/gpt-5-mini). Wins over the checkout's config code_model, including on pull_request events, where PR config never executes.
     default: ''
     required: false
   review-profiles:
-    description: Optional comma-separated review lenses appended to the review prompt — security, perf, debloat (e.g. 'security,perf'). Wins over the checkout's config review.profiles.
+    description: Optional comma-separated review lenses appended to the review prompt: security, perf, debloat (e.g. 'security,perf'). Wins over the checkout's config review.profiles.
     default: ''
     required: false
   install-consumer-dependencies:
@@ -70,9 +73,9 @@ inputs:
   app:
     description: >-
       Enable the application task lane (`verify --app`): a directed task
-      plus an expected-state check against your running app — never free
+      plus an expected-state check against your running app, never free
       exploration. Requires `app-task`; `app-url` wins over the config's
-      target.url. Executable lane — refused on fork PRs and
+      target.url. Executable lane: refused on fork PRs and
       pull_request_target by the runtime-lane gate.
     default: 'false'
     required: false
@@ -81,7 +84,7 @@ inputs:
     default: ''
     required: false
   app-url:
-    description: URL the flow/app/a0 lanes target — wins over the config's target.url. Passed as --url.
+    description: URL the flow/app/a0 lanes target; wins over the config's target.url. Passed as --url.
     default: ''
     required: false
   app-expect-text:
@@ -101,7 +104,7 @@ inputs:
       Opt-in Agent Zero escalation lane (`verify --a0`): delegates the
       configured task to your self-hosted A0 host inside a sanitized,
       allowlisted child environment. The lane reports `inconclusive` even
-      on agent-reported success — live verification is not proven (#53) —
+      on agent-reported success (live verification is not proven, #53),
       and `unavailable` when the host/CLI is missing. Bounded to 1 task
       and the configured timeout.
     default: 'false'
@@ -120,7 +123,7 @@ inputs:
   approval-evidence:
     description: >-
       The test command(s) an approval stands on, cited verbatim in the review
-      body — e.g. 'python -m unittest discover -s tests && ruff check .'.
+      body, e.g. 'python -m unittest discover -s tests && ruff check .'.
       Required whenever approval-token is supplied: the lane refuses to submit
       an approval that cites no command, so an approver is always re-runnable.
       Ignored when approval-token is empty.
@@ -198,32 +201,47 @@ runs:
         EVENT_NAME: ${{ github.event_name }}
         HEAD_FORK: ${{ github.event.pull_request.head.repo.fork }}
       run: |
-        if [ "$EVENT_NAME" = "pull_request_target" ]; then
-          echo "Argus runtime lanes are disabled for pull_request_target." >&2
+        # Each refusal says what happened and what to do, in the log and in
+        # the job summary, because no PR comment is posted on this path.
+        refuse() {
+          echo "$1" >&2
+          {
+            echo '### Argus: ⊖ blocked'
+            echo
+            echo "**Runtime lanes refused:** $1"
+            echo
+            echo "Fix: $2"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
           exit 1
+        }
+        REVIEW_ONLY="set run: 'false' and leave app, a0 and install-consumer-dependencies off; the code review lane still runs."
+        if [ "$EVENT_NAME" = "pull_request_target" ]; then
+          refuse "Argus runtime lanes do not run on pull_request_target, which carries write credentials beside PR code." \
+            "use the pull_request event for runtime lanes, or $REVIEW_ONLY"
         fi
         if [ "$EVENT_NAME" = "pull_request" ] && [ "$HEAD_FORK" != "false" ]; then
-          echo "Argus runtime lanes require a same-repository PR or an explicitly trusted workflow." >&2
-          exit 1
+          refuse "this pull request comes from a fork, and runtime lanes execute PR code, so they need a same-repository PR or an explicitly trusted workflow." \
+            "for fork pull requests, $REVIEW_ONLY"
         fi
         if [ "$EVENT_NAME" = "issue_comment" ]; then
-          # issue_comment checks out the BASE ref, never the PR head —
+          # issue_comment checks out the BASE ref, never the PR head;
           # consumer deps on the base tree are trusted. The replay `run`
           # lane is still meaningless here (it would test the base app
           # against a head diff); @argus record covers that case.
           if [ "${{ inputs.run }}" != "false" ]; then
-            echo "Argus run lane is disabled on issue_comment — use '@argus record'." >&2
-            exit 1
+            refuse "the run lane is disabled on issue_comment, which checks out the base branch, not the PR head." \
+              "comment '@argus record' on the pull request instead."
           fi
           if [ "${{ inputs.app }}" = "true" ] || [ "${{ inputs.a0 }}" = "true" ]; then
-            echo "Argus app/a0 lanes are disabled on issue_comment — they verify a head checkout." >&2
-            exit 1
+            refuse "the app and a0 lanes are disabled on issue_comment; they verify a checkout of the PR head." \
+              "run those lanes from a pull_request workflow."
           fi
           exit 0
         fi
         if [ "$EVENT_NAME" != "pull_request" ] && [ "$EVENT_NAME" != "" ]; then
-          echo "Argus runtime lanes are disabled for unlisted CI events: $EVENT_NAME" >&2
-          exit 1
+          refuse "runtime lanes do not run on the $EVENT_NAME event, which is not on the trusted list." \
+            "run them from a pull_request workflow, or $REVIEW_ONLY"
         fi
 
     - name: Install consumer dependencies for explicit runtime lanes
@@ -253,7 +271,7 @@ runs:
       run: node "$ARGUS_ACTION_PATH/cli.mjs" index
 
     - name: Dispatch @argus mention
-      # issue_comment runs never check out the PR head — the workflow
+      # issue_comment runs never check out the PR head; the workflow
       # checks out the base ref and `mention` dispatches whitelisted
       # commands (review/record/persist/help). Results still land in the
       # report dir for the sticky post step below.

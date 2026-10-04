@@ -27,8 +27,8 @@ const REPORT = join(WORK, 'report')
 // Values are concatenated so no credential-shaped literal sits in this
 // file statically (push protection scans committed content).
 const SUBS = {
-  __ARGUS_DEMO_DOC_KEY__: `AKIA${'IOSFODNN7EXAMPLE'}`, // AWS docs example — Jev should suppress
-  __ARGUS_DEMO_LIVE_KEY__: `sk_live_${'51Qfake00DEMO7xK2mNvT9rLp'}`, // fake but live-shaped — Jev should hedge/flag
+  __ARGUS_DEMO_DOC_KEY__: `AKIA${'IOSFODNN7EXAMPLE'}`, // AWS docs example; the confidence model should suppress it
+  __ARGUS_DEMO_LIVE_KEY__: `sk_live_${'51Qfake00DEMO7xK2mNvT9rLp'}`, // fake but live-shaped; the confidence model should hedge or flag it
 }
 
 function git(args) {
@@ -57,13 +57,13 @@ function copyTree(src, dst, { substitute = false } = {}) {
 function main() {
   if (!process.env.OPENROUTER_API_KEY) {
     console.error(
-      'demo: OPENROUTER_API_KEY is not set — the demo runs the real review pipeline (BYOK).\n' +
+      'demo: OPENROUTER_API_KEY is not set. The demo runs the real review pipeline (BYOK).\n' +
         '      export OPENROUTER_API_KEY=sk-or-... and re-run `npm run demo`.',
     )
     process.exit(1)
   }
   if (!existsSync(join(ROOT, 'dist/cli.js'))) {
-    console.error('demo: dist/cli.js missing — run `npm run build` first.')
+    console.error('demo: dist/cli.js is missing. Run `npm run build` first.')
     process.exit(1)
   }
 
@@ -76,9 +76,9 @@ function main() {
   git(['branch', 'argus-fixture-base'])
   copyTree(join(FIXTURE, 'head'), REPO, { substitute: true })
   git(['add', '-A'])
-  git(['commit', '-m', 'pr head — seeded bug + credentials'])
+  git(['commit', '-m', 'pr head: seeded bug and credentials'])
 
-  console.log('demo: tip — run `npm run watch` in another terminal to follow stages live\n')
+  console.log('demo: tip: run `npm run watch` in another terminal to follow stages live\n')
   const child = spawn(
     process.execPath,
     [join(ROOT, 'dist/cli.js'), 'code-review', '--fixture', REPO, '--report-dir', REPORT],
@@ -99,12 +99,12 @@ function main() {
             `${recs.filter((x) => !x.adjudicated).length} unadjudicated`,
         )
       } else if (r.secretsScan?.skipped) {
-        console.log(`  secrets:   skipped — ${r.secretsScan.skipped}`)
+        console.log(`  secrets:   skipped (${r.secretsScan.skipped})`)
       }
       console.log(`  cost:      $${(r.visionCostUsd ?? 0).toFixed(6)} · ${r.tokens ?? 0} tok · model ${r.model}`)
       console.log(`  report:    ${relative(ROOT, join(REPORT, 'code-review.json'))}`)
     } catch {
-      console.log(`demo: review finished — see ${relative(ROOT, REPORT)}/`)
+      console.log(`demo: review finished. See ${relative(ROOT, REPORT)}/`)
     }
     rmSync(REPO, { recursive: true, force: true }) // temp repo served its purpose; report stays
   })

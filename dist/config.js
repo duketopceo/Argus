@@ -1,4 +1,5 @@
 import { pathToFileURL } from 'node:url';
+import { DEFAULT_REVIEW_EXCLUDE } from './review/scope.js';
 import { isReviewProfile } from './review/packs.js';
 import { JEV_DEFAULT_MODEL } from './vision/decisions.js';
 export const DEFAULT_RECORD_STEP_CAP = 40;
@@ -65,6 +66,7 @@ const defaults = {
         findingThreshold: 1.0,
         requestChanges: true,
         profiles: [],
+        exclude: [...DEFAULT_REVIEW_EXCLUDE],
     },
 };
 export function defineConfig(input) {
@@ -173,7 +175,7 @@ export function resolveConfig(input = {}) {
     const rawReview = typeof input.review === 'object' && input.review !== null ? input.review : {};
     const review = { ...defaults.review, ...rawReview };
     // Thresholds must be probabilities — anything else (NaN, >1,
-    // negative) would silently suppress or flood the Jev lanes.
+    // negative) would silently suppress or flood the confidence-model lanes.
     review.secretsThreshold = prob01(review.secretsThreshold, defaults.review.secretsThreshold);
     review.maxComments =
         typeof review.maxComments === 'number' &&
@@ -200,6 +202,11 @@ export function resolveConfig(input = {}) {
     review.profiles = Array.isArray(rawReview.profiles)
         ? [...new Set(rawReview.profiles.filter(isReviewProfile))]
         : [];
+    review.exclude =
+        Array.isArray(rawReview.exclude) &&
+            rawReview.exclude.every((g) => typeof g === 'string' && g !== '')
+            ? [...rawReview.exclude]
+            : [...DEFAULT_REVIEW_EXCLUDE];
     const resolved = { ...defaults, ...input, provider, sandbox, explore, app, review };
     resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP);
     // Retention is a non-negative integer (0 = keep none) — a mis-typed or
@@ -279,7 +286,7 @@ export async function loadConfig(cwd, opts) {
             // legit consumer debugging "why is my config ignored") is invisible.
             try {
                 if ((await fs.stat(path.join(cwd, `${name}.ts`))).isFile()) {
-                    opts.note?.(`config: ${name}.ts ignored — untrusted checkouts load JSON config only`);
+                    opts.note?.(`config: ${name}.ts ignored – untrusted checkouts load JSON config only`);
                 }
             }
             catch {
@@ -299,7 +306,7 @@ export async function loadConfig(cwd, opts) {
                     const raw = await fs.readFile(file, 'utf8');
                     const parsed = JSON.parse(raw);
                     if (untrusted) {
-                        opts.note?.(`config: ${name}.json loaded untrusted — honoring ${[...UNTRUSTED_CONFIG_KEYS].join(', ')} only`);
+                        opts.note?.(`config: ${name}.json loaded untrusted – honoring ${[...UNTRUSTED_CONFIG_KEYS].join(', ')} only`);
                         return finish(filterUntrustedConfig(parsed));
                     }
                     return finish(parsed);

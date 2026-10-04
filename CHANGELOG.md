@@ -3,19 +3,87 @@
 All notable changes to argus-reviewer are documented here. The project is
 pre-1.0; breaking changes may ship without a major bump until `1.0.0`.
 
+## [0.4.0] - 2026-10-03
+
+A redesign and a quieter reviewer. Argus now looks and reads the same
+everywhere, and review comments carry fewer false alarms.
+
+### Changed
+- **One visual language everywhere.** The PR comment, inline review
+  comments, commit status, CLI output, terminal UI, desk app and the
+  offline `report.html` share one emoji-free design: the same words, the
+  same severity labels, the same layout. Evidence reports open offline
+  with no network requests.
+- **Readable errors.** CLI failures are classified with a stable code, a
+  plain summary and a fix line saying what to run next. With `--json`, the
+  error is printed as one JSON object on stdout (it used to go to stderr),
+  so a pipe captures it.
+- **Quieter reviewer.** Files that are generated or fixtures are skipped by
+  default (`review.exclude` changes the list), findings that point outside
+  the diff are dropped, and findings
+  in test files are capped so they cannot crowd out real issues.
+- **Spend confirmations.** Paid eval runs show the estimated cost and ask
+  before spending anything, in the CLI and in the terminal UI.
+- Inline review comments use a new format. Comments posted by older
+  versions are still recognised, so upgrading does not repost them.
+
+### Added
+- Brand assets: logo, mark and social images, with a reproducible
+  `npm run brand` build.
+- A new README with a hero image and demo recordings.
+- A launch film, "The witness", under `launch/` in the repository. It is
+  not part of the npm package.
+- `docs/github-app.md` + a commented opt-in block in the `init` scaffold:
+  create and install your own GitHub App so Argus can submit APPROVE /
+  REQUEST_CHANGES — token minted per run via
+  `actions/create-github-app-token`, no webhook, no hosted service. The
+  scaffolded action pin now tracks the latest release.
+
+### Notes
+- The desk app and the terminal UI remain contributor tools in the
+  repository. They are not shipped in the npm package.
+
+## [0.3.1] — 2026-10-01
+
+### Added
+- `ARGUS_CODE_MODEL` env override for the review model (#96).
+
+## [0.3.0] — 2026-09-30
+
+### Added
+- **CodeRabbit-style review surface** (#92): inline suggestions with
+  `suggestion` blocks and a gated `REQUEST_CHANGES` verdict.
+- **Formal GitHub review lane** (#91): Argus can submit an APPROVE /
+  REQUEST_CHANGES review so its verdict satisfies
+  `require_approving_reviews` (see `docs/approval-token.md`).
+- **Head-bound four-lane verification** (#88): review, flow, app, and a0
+  lanes all bind their verdict to the PR head SHA.
+- `code-review --fixture <dir>` offline review against a local fixture.
+
+### Fixed
+- Budget float drift tripping the USD cap (#89).
+- `cacheDir` default — `record` persisted nothing and wrote empty test
+  files (#85).
+- CI: `ARGUS_TRUSTED` scoped to non-PR events — the env override beats fork
+  detection, so it must not be set on `pull_request` (#83).
+
+### Docs
+- README rewritten for clean install + onboarding (#86); AGENTS.md added
+  (#90).
+
 ## [0.2.0] — 2026-09-21
 
 ### Added
-- **Jev-everywhere — triage, adjudication, probe targeting (U7–U9)** (#70):
-  - PR triage (`triage` report field): Jev pre-review signals — area/risk
-    classification that annotates and routes findings but never gates the
-    deterministic severity verdict
+- **Confidence model in every lane: triage, adjudication, probe targeting** (#70):
+  - PR triage (`triage` report field): confidence-model pre-review signals,
+    an area and risk classification that annotates and routes findings but
+    never gates the deterministic severity verdict
   - Secrets adjudication (`secretsScan` report field): candidate secrets
     found in the diff are adjudicated by a decision model before surfacing
   - Finding adjudication: typed decision records for model verdicts,
     fail-open on decision-API errors
-  - Probe targeting: Jev routes probe generation toward adjudicated
-    findings
+  - Probe targeting: the confidence model routes probe generation toward
+    adjudicated findings
 - `code-review --fixture <dir>`: review a local fixture repo
   (`argus-fixture-base` ref as merge base) — enables offline dogfooding
   and demos without a GitHub PR (#70)
@@ -23,7 +91,7 @@ pre-1.0; breaking changes may ship without a major bump until `1.0.0`.
   support review-only invocation (#70)
 - Live observability: `live.ndjson` event stream, `scripts/tail-live.mjs`
   watcher, scripted demo via `scripts/demo.mjs` (#70)
-- `review` config block for Jev lane tuning (#70)
+- `review` config block for confidence-model lane tuning (#70)
 
 ### Security
 - **Config-execution trust gate** (#64, fixes #58): executable config

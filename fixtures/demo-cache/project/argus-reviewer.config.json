@@ -1,0 +1,8 @@
+{
+  "model": "google/gemini-2.5-flash-lite",
+  "budgetUsd": 1,
+  "target": { "command": "node app/serve.mjs 4319", "url": "http://127.0.0.1:4319/", "readyTimeoutMs": 10000 },
+  "testsDir": "e2e",
+  "cacheDir": ".argus-reviewer-cache",
+  "reportDir": "argus-reviewer-report"
+}

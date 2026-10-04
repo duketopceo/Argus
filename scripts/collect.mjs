@@ -3,7 +3,7 @@
 import { execFile } from 'node:child_process'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 
 const exec = promisify(execFile)
@@ -23,6 +23,20 @@ async function gh(args, cwd) {
 // chars so a malicious branch name or commit msg can't inject escapes.
 export function safe(s) {
   return String(s ?? '').replace(/[\x00-\x1f\x7f]/g, ' ').replace(/\x1b/g, ' ')
+}
+
+/**
+ * Classify a failed `gh` call into a typed source state so surfaces can say
+ * "GitHub CLI not found" or "not signed in" instead of "none open".
+ */
+export function ghSourceState(err) {
+  if (err?.code === 'ENOENT') return { state: 'missing' }
+  const text = `${err?.stderr ?? ''}\n${err?.message ?? ''}`
+  if (/gh auth login|not logged in|authentication required|GH_TOKEN/i.test(text)) {
+    return { state: 'unauthenticated' }
+  }
+  const first = String(err?.stderr ?? '').trim().split('\n')[0] || safe(err?.message).split('\n')[0]
+  return { state: 'error', detail: safe(first) }
 }
 
 // --- run-manifest layer ----------------------------------------------------
@@ -212,15 +226,23 @@ async function resolveReportDir(root) {
   const cached = _reportDir.get(root)
   if (cached !== undefined && cached.key === key) return cached.dir
   let dir
+  let budgetUsd
   try {
     const { loadConfig } = await import(new URL('../dist/config.js', import.meta.url).href)
     const cfg = await loadConfig(root, { trust: 'trusted' })
     dir = cfg.reportDir ? resolve(root, cfg.reportDir) : join(root, 'argus-reviewer-report')
+    budgetUsd = Number.isFinite(cfg.budgetUsd) ? cfg.budgetUsd : undefined
   } catch {
     dir = join(root, 'argus-reviewer-report')
   }
-  _reportDir.set(root, { key, dir })
+  _reportDir.set(root, { key, dir, budgetUsd })
   return dir
+}
+
+/** Run budget from the config (`budgetUsd`), shown by the desk Spend view. */
+async function configBudget(root) {
+  await resolveReportDir(root)
+  return _reportDir.get(root)?.budgetUsd
 }
 
 async function readManifest(path, vm) {
@@ -248,6 +270,26 @@ function withView(manifest, vm) {
 // Archived manifests are immutable once written — cache sanitized results
 // by mtime+size so a poll re-reads only the current run-manifest.json.
 const _archiveCache = new Map()
+
+// Flow-lane before/after screenshots: `before.png` and `after.png` beside
+// the lane's report file, inside the report dir. The desk loads them through
+// its `report/` path (KTD9 bridge), so only report-dir-relative paths leave
+// here, never absolute ones.
+function withScreenshots(run, reportDir, root) {
+  const flow = run?.lanes?.flow
+  if (typeof flow?.reportPath !== 'string' || !flow.reportPath) return run
+  const dir = dirname(resolve(root, flow.reportPath))
+  const rel = relative(reportDir, dir)
+  if (rel.startsWith('..') || resolve(reportDir, rel) !== dir) return run
+  if (!existsSync(join(dir, 'before.png')) || !existsSync(join(dir, 'after.png'))) return run
+  const prefix = rel ? `report/${rel.split(sep).join('/')}/` : 'report/'
+  const screenshots = { before: `${prefix}before.png`, after: `${prefix}after.png` }
+  const lanes = { ...run.lanes, flow: { ...flow, screenshots } }
+  const view = run.view?.lanes
+    ? { ...run.view, lanes: run.view.lanes.map((l) => (l.lane === 'flow' ? { ...l, screenshots } : l)) }
+    : run.view
+  return { ...run, lanes, ...(view ? { view } : {}) }
+}
 
 async function readArchivedManifest(path, vm, mask) {
   let st
@@ -303,12 +345,13 @@ async function collectManifests(root) {
     if (run === undefined) workspace.corrupt += 1
     else archived.push(run)
   }
+  for (let i = 0; i < archived.length; i++) archived[i] = withScreenshots(archived[i], reportDir, root)
   workspace.runs = archived
 
   const currentPath = join(reportDir, 'run-manifest.json')
   const currentRaw = await readManifest(currentPath, vm)
   if (currentRaw !== undefined) {
-    workspace.current = withView(sanitizeManifest(currentRaw, mask), vm)
+    workspace.current = withScreenshots(withView(sanitizeManifest(currentRaw, mask), vm), reportDir, root)
   } else if (existsSync(currentPath)) {
     workspace.corrupt += 1
     // Retain the last valid manifest rather than going blank mid-write.
@@ -316,7 +359,7 @@ async function collectManifests(root) {
     workspace.degraded =
       workspace.current === undefined
         ? 'run-manifest.json is unreadable'
-        : 'run-manifest.json unreadable — showing last valid run'
+        : 'run-manifest.json unreadable, showing the last valid run'
   } else {
     workspace.current = archived[archived.length - 1]
   }
@@ -357,6 +400,15 @@ async function collectNow(root) {
       corrupt: 0,
       degraded: undefined,
     },
+    // Typed per-source state: `gh` can be ok, missing, unauthenticated or
+    // error, so an empty PR list is never mistaken for "none open".
+    sources: { gh: { state: 'ok' }, journal: { state: 'ok' } },
+    // Healed steps from recent journals, newest first (desk Heals view).
+    heals: [],
+    // Whether a model key is set (never its value): the desk shows the
+    // no-key state instead of an empty list on panels that need one.
+    keyPresent: Boolean(process.env.OPENROUTER_API_KEY),
+    budgetUsd: undefined,
     error: '',
     updatedAt: new Date().toISOString(),
   }
@@ -387,6 +439,7 @@ async function collectNow(root) {
       )
       state.prChecks = Object.fromEntries(checks)
     } catch (e) {
+      state.sources.gh = ghSourceState(e)
       state.error = `gh: ${safe(e.message).split('\n')[0]}`
     }
   }
@@ -408,10 +461,27 @@ async function collectNow(root) {
       state.journalFiles = files.length
       const recent = files.slice(-20)
       let lastParsed
+      const unreadable = []
       for (const f of recent) {
         try {
           const j = JSON.parse(await readFile(join(journalDir, f), 'utf8'))
           lastParsed = j
+          const runId = safe(j.runId ?? f.replace(/\.json$/, ''))
+          for (const t of Array.isArray(j.tests) ? j.tests : []) {
+            for (const step of Array.isArray(t?.steps) ? t.steps : []) {
+              if (step?.healed !== true) continue
+              state.heals.unshift({
+                runId,
+                at: safe(j.startedAt),
+                test: safe(t.name),
+                file: safe(t.file),
+                instruction: safe(step.instruction),
+                action: safe(step.action),
+                model: safe(step.model),
+                ok: step.ok === true,
+              })
+            }
+          }
           state.journals.push({
             runId: safe(j.runId ?? f.replace(/\.json$/, '')),
             ok: !!j.ok,
@@ -419,7 +489,13 @@ async function collectNow(root) {
             steps: Array.isArray(j.steps) ? j.steps.length : 0,
             errors: (j.errors ?? []).length,
           })
-        } catch { /* partial write */ }
+        } catch {
+          // A partial write or a corrupt file: name it, never drop it silently.
+          unreadable.push(f)
+        }
+      }
+      if (unreadable.length > 0) {
+        state.sources.journal = { state: 'error', detail: safe(unreadable[unreadable.length - 1]) }
       }
       state.journalFile = recent[recent.length - 1]
       // Reuse the loop's last parse — and sanitize the rendered fields like
@@ -476,7 +552,11 @@ async function collectNow(root) {
     } catch { /* partial write */ }
   }
 
-  await Promise.all([ghSection(), fileSections(), reviewSection()])
+  const budgetSection = async () => {
+    state.budgetUsd = await configBudget(root)
+  }
+
+  await Promise.all([ghSection(), fileSections(), reviewSection(), budgetSection()])
   state.workspace = await workspaceP
   return state
 }

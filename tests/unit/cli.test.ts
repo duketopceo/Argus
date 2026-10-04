@@ -718,7 +718,9 @@ describe('argus-reviewer CLI', () => {
     })
     expect(code).toBe(0)
     const text = out.lines.join('\n')
-    expect(text).toContain('✗ export OPENROUTER_API_KEY')
+    // U11: the missing key is a failed row, and the fix sits on its own line.
+    expect(text).toContain('⊘ openrouter key  not set')
+    expect(out.lines.map((l) => l.trim())).toContain('export OPENROUTER_API_KEY=sk-or-...')
     expect(text).toContain('sent to provider')
     expect(text).toContain('default budget')
     expect(text).toContain('how to stop')
@@ -750,7 +752,7 @@ describe('argus-reviewer CLI', () => {
     expect(workflow).toContain('ref: ${{ github.event.pull_request.head.sha || github.sha }}')
     expect(workflow).toMatch(/actions\/checkout@[0-9a-f]{40} # v7/)
     expect(workflow).toMatch(
-      /duketopceo\/Argus\/action@[0-9a-f]{40} # v0\.2\.0/,
+      /duketopceo\/Argus\/action@[0-9a-f]{40} # v0\.4\.0/,
     )
     // Second run without --force skips rather than overwriting
     const out2 = capture()
@@ -961,6 +963,10 @@ describe('argus-reviewer mention', () => {
       expect(code).toBe(0)
       expect(replies).toHaveLength(1)
       expect(replies[0]).toContain('no reproduced probes')
+      // U6 (R4, R5): the reply names the proof level in words, no emoji or em-dash.
+      expect(replies[0]).toContain('reproduced probe carries the payload')
+      expect(replies[0]).not.toMatch(/\p{Extended_Pictographic}|\u{FE0F}/u)
+      expect(replies[0]).not.toContain('\u2014')
     } finally {
       globalThis.fetch = original
     }

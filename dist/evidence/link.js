@@ -64,7 +64,7 @@ export function linkFindings(findings, index, checkRuns) {
             evidence = { status: 'inconclusive', detail: 'could not fetch CI check-runs' };
         }
         else if (reachable === undefined) {
-            evidence = { status: 'inconclusive', detail: 'no repo index — run `argus-reviewer index` first' };
+            evidence = { status: 'inconclusive', detail: 'no repo index; run `argus-reviewer index` first' };
         }
         else if (typeof f.file !== 'string' || !reachable.has(f.file)) {
             evidence = {

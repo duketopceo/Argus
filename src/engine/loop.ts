@@ -37,7 +37,7 @@ export interface VisionClient {
   }): Promise<{ id: string; content: string; cost: CallCost; model: string }>
 }
 
-export interface TestDriverApi {
+export interface UiDriverApi {
   click(x: number, y: number): Promise<Observation>
   type(text: string): Promise<Observation>
   pressKeys(keys: string[]): Promise<Observation>
@@ -152,7 +152,7 @@ export class Engine {
 
   async record(
     instruction: string,
-    tdApi: TestDriverApi = this._opts.actions,
+    uiApi: UiDriverApi = this._opts.actions,
     options: RecordOptions = {},
   ): Promise<RunResult> {
     this._visionCalls = 0
@@ -201,7 +201,7 @@ export class Engine {
       }
 
       const resolved = await this._resolveAction(action)
-      const nextObservation = await this._executeAction(tdApi, action)
+      const nextObservation = await this._executeAction(uiApi, action)
       const fingerprint = await this._buildFingerprint(
         instruction,
         action,
@@ -823,20 +823,20 @@ export class Engine {
   }
 
   private async _executeAction(
-    tdApi: TestDriverApi,
+    uiApi: UiDriverApi,
     action: ProposedAction | ActionPayload,
   ): Promise<Observation> {
     switch (action.action) {
       case 'click':
-        return tdApi.click(Number.isFinite(action.x) ? (action.x as number) : 0, Number.isFinite(action.y) ? (action.y as number) : 0)
+        return uiApi.click(Number.isFinite(action.x) ? (action.x as number) : 0, Number.isFinite(action.y) ? (action.y as number) : 0)
       case 'type':
-        return tdApi.type(action.text ?? '')
+        return uiApi.type(action.text ?? '')
       case 'pressKeys':
-        return tdApi.pressKeys(action.keys ?? [])
+        return uiApi.pressKeys(action.keys ?? [])
       case 'scroll':
-        return tdApi.scroll(action.dx ?? 0, action.dy ?? 0)
+        return uiApi.scroll(action.dx ?? 0, action.dy ?? 0)
       case 'wait':
-        return tdApi.wait(action.ms ?? 0)
+        return uiApi.wait(action.ms ?? 0)
       default:
         return this._opts.driver.observe({ grid: true })
     }

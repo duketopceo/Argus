@@ -17,24 +17,65 @@ export const LANE_STATUS_LABEL = {
     unavailable: 'unavailable',
     inconclusive: 'inconclusive',
 };
-/** One glyph per status — terminal/comment-safe, color-independent. */
-export const LANE_STATUS_ICON = {
-    passed: '✓',
-    failed: '✗',
-    skipped: '—',
-    blocked: '⛔',
-    unavailable: '⚠',
-    inconclusive: '~',
+/*
+ * Ocellus vocabulary (DESIGN.md section 6.7, A4, A5). Text surfaces use these
+ * glyphs: each is a single-cell, text-presentation code point, never emoji.
+ * A status is always shown as glyph plus its LANE_STATUS_LABEL word.
+ * `action/sticky-comment.cjs` keeps its own copy, guarded by parity tests.
+ */
+/** Status glyph per lane status; no two statuses share one. */
+export const STATUS_GLYPH = {
+    passed: '●',
+    failed: '⊘',
+    skipped: '–',
+    blocked: '⊖',
+    unavailable: '◌',
+    inconclusive: '◐',
 };
-/** Comment-flavored emoji per status — same ordering contract as the glyph. */
-export const LANE_STATUS_EMOJI = {
-    passed: '✅',
-    failed: '❌',
-    skipped: '⚪',
-    blocked: '⛔',
-    unavailable: '⚠️',
-    inconclusive: '🟡',
+/** Proof strength, weakest to strongest (A4 ladder). */
+export const PROOF_LEVELS = ['suspected', 'corroborated', 'exercised', 'reproduced'];
+const PROOF_NOTCH_FILLED = '▰';
+const PROOF_NOTCH_EMPTY = '▱';
+/**
+ * Four-notch meter: one filled notch per ladder step reached. Any other
+ * value (an evidence status outside the ladder, a missing level) is the
+ * empty meter, so a renderer never throws on unexpected input.
+ */
+export function proofMeter(level) {
+    const filled = PROOF_LEVELS.indexOf(level ?? '') + 1;
+    return PROOF_NOTCH_FILLED.repeat(filled) + PROOF_NOTCH_EMPTY.repeat(PROOF_LEVELS.length - filled);
+}
+/** Finding severities as the review pipeline emits them (`q` is a question). */
+export const SEVERITIES = ['bug', 'risk', 'nit', 'q'];
+/** Geometric, shape-only severity glyphs (A5). */
+export const SEVERITY_GLYPH = {
+    bug: '◆',
+    risk: '◈',
+    nit: '○',
+    q: '□',
 };
+export const SEVERITY_LABEL = {
+    bug: 'bug',
+    risk: 'risk',
+    nit: 'nit',
+    q: 'question',
+};
+/** Review verdicts as the synthesis step emits them. */
+export const VERDICTS = ['approve', 'needs_changes', 'pass'];
+/** Verdicts reuse status glyphs, so there is no third vocabulary. */
+export const VERDICT_STATUS = {
+    approve: 'passed',
+    needs_changes: 'failed',
+    pass: 'passed',
+};
+export const VERDICT_LABEL = {
+    approve: 'approve',
+    needs_changes: 'needs changes',
+    pass: 'clean',
+};
+export function verdictGlyph(verdict) {
+    return STATUS_GLYPH[VERDICT_STATUS[verdict]];
+}
 function laneDurationMs(lane) {
     if (lane.startedAt === undefined || lane.finishedAt === undefined)
         return undefined;
@@ -47,7 +88,7 @@ export function laneView(lane) {
         selected: lane.selected,
         status: lane.status,
         statusLabel: LANE_STATUS_LABEL[lane.status],
-        statusIcon: LANE_STATUS_ICON[lane.status],
+        statusIcon: STATUS_GLYPH[lane.status],
         summary: lane.summary,
         reason: lane.reason,
         reportPath: lane.reportPath,
@@ -70,7 +111,7 @@ export function manifestToRunView(manifest) {
         finishedAt: manifest.finishedAt,
         status: manifest.aggregate.status,
         statusLabel: LANE_STATUS_LABEL[manifest.aggregate.status],
-        statusIcon: LANE_STATUS_ICON[manifest.aggregate.status],
+        statusIcon: STATUS_GLYPH[manifest.aggregate.status],
         ok: manifest.aggregate.ok,
         costUsd: manifest.aggregate.costUsd,
         calls: manifest.aggregate.calls,
@@ -129,30 +170,36 @@ export function isRunManifest(value) {
     }
     if (m.lanes === undefined || m.lanes === null || typeof m.lanes !== 'object')
         return false;
-    for (const id of LANE_IDS) {
-        const lane = m.lanes[id];
-        if (lane === undefined || lane === null || typeof lane !== 'object')
+    return LANE_IDS.every((id) => isLaneManifest(m.lanes[id], id));
+}
+/**
+ * One lane record the view-model can render. Exported so a surface that
+ * degrades per lane (the HTML report) applies the same check as the whole-
+ * manifest guard.
+ */
+export function isLaneManifest(value, id) {
+    if (value === undefined || value === null || typeof value !== 'object')
+        return false;
+    const lane = value;
+    if (lane.lane !== id || typeof lane.status !== 'string')
+        return false;
+    if (!LANE_STATUSES.includes(lane.status))
+        return false;
+    if (typeof lane.selected !== 'boolean')
+        return false;
+    // usage/budget are dereferenced by laneView — a guard that certifies a
+    // shape it doesn't check is a lying guard. `typeof null === 'object'`,
+    // so a null here must be rejected before the field reads, not crash
+    // inside the guard.
+    if (lane.usage === null || lane.usage === undefined || typeof lane.usage !== 'object') {
+        return false;
+    }
+    for (const n of [lane.usage.calls, lane.usage.tokens, lane.usage.costUsd]) {
+        if (typeof n !== 'number' || !Number.isFinite(n))
             return false;
-        if (lane.lane !== id || typeof lane.status !== 'string')
-            return false;
-        if (!LANE_STATUSES.includes(lane.status))
-            return false;
-        if (typeof lane.selected !== 'boolean')
-            return false;
-        // usage/budget are dereferenced by laneView — a guard that certifies a
-        // shape it doesn't check is a lying guard. `typeof null === 'object'`,
-        // so a null here must be rejected before the field reads, not crash
-        // inside the guard.
-        if (lane.usage === null || lane.usage === undefined || typeof lane.usage !== 'object') {
-            return false;
-        }
-        for (const n of [lane.usage.calls, lane.usage.tokens, lane.usage.costUsd]) {
-            if (typeof n !== 'number' || !Number.isFinite(n))
-                return false;
-        }
-        if (lane.budget === null || lane.budget === undefined || typeof lane.budget !== 'object') {
-            return false;
-        }
+    }
+    if (lane.budget === null || lane.budget === undefined || typeof lane.budget !== 'object') {
+        return false;
     }
     return true;
 }
@@ -184,7 +231,7 @@ export function formatUsd(n) {
 }
 export function formatDuration(ms) {
     if (ms === undefined || !Number.isFinite(ms))
-        return '—';
+        return '–';
     if (ms < 1000)
         return `${Math.round(ms)}ms`;
     return `${(ms / 1000).toFixed(1)}s`;

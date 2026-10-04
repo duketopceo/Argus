@@ -50,7 +50,7 @@ export interface PrMeta {
    * timeline fetch failed (the gate fails closed either way).
    */
   labelApprovedAt: string | undefined
-  /** PR title/body — triage state only (untrusted text; feeds Jev, never gates). */
+  /** PR title/body — triage state only (untrusted text; feeds the confidence model, never gates). */
   title: string | undefined
   body: string | undefined
 }
@@ -76,16 +76,16 @@ export async function ghGet(url: string, token: string, ctx: Ctx): Promise<unkno
       },
     })
     if (!res.ok) {
-      ctx.err(`evidence: github ${res.status} ${res.statusText} — ${url}`)
+      ctx.err(`evidence: github ${res.status} ${res.statusText} – ${url}`)
       return undefined
     }
     return await res.json()
   } catch (e) {
     if (e instanceof Error && e.name === 'AbortError') {
-      ctx.err(`evidence: github request timed out — ${url}`)
+      ctx.err(`evidence: github request timed out – ${url}`)
     } else {
       // DNS/socket/protocol failures — same contract: undefined, never throw.
-      ctx.err(`evidence: github request failed — ${url} (${(e as Error).message})`)
+      ctx.err(`evidence: github request failed – ${url} (${(e as Error).message})`)
     }
     return undefined
   } finally {
@@ -121,11 +121,11 @@ export async function ghWrite(
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     })
     const data = await res.json().catch(() => undefined)
-    if (!res.ok) ctx.err(`evidence: github ${method} ${res.status} ${res.statusText} — ${url}`)
+    if (!res.ok) ctx.err(`evidence: github ${method} ${res.status} ${res.statusText} – ${url}`)
     return { status: res.status, data }
   } catch (e) {
     ctx.err(
-      `evidence: github ${method} failed — ${url} (${
+      `evidence: github ${method} failed – ${url} (${
         e instanceof Error && e.name === 'AbortError' ? 'timeout' : (e as Error).message
       })`,
     )

@@ -1,12 +1,12 @@
 /**
  * U7 PR triage lane — one batched `decide` call before chunk review
  * produces a typed-probability triage record (the pace two-round
- * pattern). Jev routes and annotates, never gates: every chunk is still
+ * pattern). The confidence model routes and annotates, never gates: every chunk is still
  * reviewed by a code model and the deterministic verdict stays
  * authoritative. `decide` failure degrades open — the record lands with
  * `unadjudicated` and routing keeps the configured (strong) model.
  *
- * PR title/body in `state` are untrusted text — Jev is the only
+ * PR title/body in `state` are untrusted text — the confidence model is the only
  * consumer; they never reach the verdict path.
  */
 import { debug } from '../debug.js';
@@ -60,13 +60,13 @@ function buildTriageQuestions() {
         },
         [Q.risk]: {
             type: 'score',
-            instructions: 'blast radius if this PR merges broken — pick the closest rubric level.',
+            instructions: 'blast radius if this PR merges broken – pick the closest rubric level.',
             criteria: [
-                'cosmetic only — docs, comments, formatting, metadata',
-                'minor — internal-only paths, limited blast radius',
-                'moderate — user-visible defects plausible',
-                'high — security-sensitive or data-handling paths touched',
-                'severe — auth, billing, or data-loss surface',
+                'cosmetic only – docs, comments, formatting, metadata',
+                'minor – internal-only paths, limited blast radius',
+                'moderate – user-visible defects plausible',
+                'high – security-sensitive or data-handling paths touched',
+                'severe – auth, billing, or data-loss surface',
             ],
         },
         [Q.area]: {
@@ -111,7 +111,7 @@ export async function triagePr(opts) {
         return rec;
     }
     catch (e) {
-        debug('triage', `adjudication failed — degrading to annotate: ${describeDecisionError(e)}`);
+        debug('triage', `adjudication failed – degrading to annotate: ${describeDecisionError(e)}`);
         return { mode: opts.mode, model: opts.model ?? JEV_DEFAULT_MODEL, unadjudicated: true };
     }
 }
@@ -137,7 +137,7 @@ export function routeModel(opts) {
     if (rec.risk <= 2 && rec.needsDeepReview < 0.5) {
         return {
             model: opts.lowRiskModel,
-            reason: `low risk — risk=${rec.risk}, needsDeepReview=${rec.needsDeepReview.toFixed(2)}`,
+            reason: `low risk – risk=${rec.risk}, needsDeepReview=${rec.needsDeepReview.toFixed(2)}`,
         };
     }
     return {

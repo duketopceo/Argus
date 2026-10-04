@@ -1,6 +1,7 @@
+import { type ErrorCode } from '../ui/errors.js';
 import type { CallCost, ProviderValue } from './cost.js';
 /**
- * Pinned Jev slug — the alias `~typesafe/jev-latest` drifts silently and
+ * Pinned confidence-model slug — the alias `~typesafe/jev-latest` drifts silently and
  * adjudication thresholds are calibrated to a version. The alias stays
  * usable via `config.decisionModel` for experimentation.
  */
@@ -9,7 +10,12 @@ export type DecisionErrorKind = 'auth' | 'validation' | 'rate_limited' | 'overlo
 export declare class DecisionError extends Error {
     readonly kind: DecisionErrorKind;
     readonly retryable: boolean;
-    constructor(kind: DecisionErrorKind, message: string, retryable: boolean);
+    /** CLI error class (src/ui/errors.ts) when the failure has one: key, credit, rate, provider. */
+    readonly code?: ErrorCode | undefined;
+    readonly retryAfterSeconds?: number | undefined;
+    constructor(kind: DecisionErrorKind, message: string, retryable: boolean, 
+    /** CLI error class (src/ui/errors.ts) when the failure has one: key, credit, rate, provider. */
+    code?: ErrorCode | undefined, retryAfterSeconds?: number | undefined);
 }
 export interface NoulQuestion {
     type: 'noul';
@@ -52,7 +58,7 @@ export declare const isChoiceAnswer: (a: DecisionAnswer) => a is ChoiceAnswer;
 export declare const isScoreAnswer: (a: DecisionAnswer) => a is ScoreAnswer;
 /** Short error label for lane debug lines: DecisionError kind, else message. */
 export declare function describeDecisionError(e: unknown): string;
-/** Shared per-call batch cap for the Jev lanes (secrets, findings, triage). */
+/** Shared per-call batch cap for the confidence-model lanes (secrets, findings, triage). */
 export declare const MAX_CANDIDATES = 50;
 export interface DecisionClientOptions {
     apiKey: string;

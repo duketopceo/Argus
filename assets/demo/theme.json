@@ -1,0 +1,23 @@
+{
+  "name": "Ocellus Dark",
+  "background": "#0C0E12",
+  "foreground": "#E8EBF0",
+  "cursor": "#7D91FF",
+  "selection": "#272C34",
+  "black": "#14171C",
+  "red": "#FF6E6A",
+  "green": "#3CCF94",
+  "yellow": "#F0B03C",
+  "blue": "#7D91FF",
+  "magenta": "#7D91FF",
+  "cyan": "#B4BBC6",
+  "white": "#B4BBC6",
+  "brightBlack": "#8A929E",
+  "brightRed": "#FF6E6A",
+  "brightGreen": "#3CCF94",
+  "brightYellow": "#F0B03C",
+  "brightBlue": "#7D91FF",
+  "brightMagenta": "#7D91FF",
+  "brightCyan": "#E8EBF0",
+  "brightWhite": "#E8EBF0"
+}

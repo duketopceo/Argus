@@ -5,6 +5,7 @@ import { BrowserDriver } from './driver/browser.js';
 import { VisionClient } from './engine/loop.js';
 import { type PrMeta } from './evidence/ci.js';
 import { type Evidence } from './evidence/link.js';
+import { type ValidationAudit } from './review/validate.js';
 import { type SecretsScanResult } from './review/secrets.js';
 import { type TriageRecord } from './review/triage.js';
 import { type FindingAdjudicationAudit } from './review/adjudicate.js';
@@ -25,6 +26,13 @@ export interface CliDeps {
     exec?: ExecFn;
     /** Inject the host reachability probe (tests stub a0 detection). */
     probe?: ProbeFn;
+    /**
+     * Whether output goes to a terminal. Defaults to process.stdout.isTTY
+     * when `out` is not injected, and to false when it is.
+     */
+    isTTY?: boolean;
+    /** Terminal width for the summary block (default process.stdout.columns, else 80). */
+    columns?: number;
 }
 export declare function main(argv: string[], deps?: CliDeps): Promise<number>;
 interface PrFile {
@@ -38,7 +46,7 @@ export interface ReviewFinding {
     severity: string;
     category?: string;
     message: string;
-    /** U8 — Jev true-positive probability (absent = unadjudicated). */
+    /** U8: confidence-model true-positive probability (absent = unadjudicated). */
     p?: number;
     /** R1 — committable replacement lines for the commented range (parse-bounded). */
     suggestion?: string;
@@ -54,7 +62,7 @@ export interface ReviewComment {
     start_side?: 'RIGHT';
     side: 'RIGHT';
     body: string;
-    /** R10 — path:line:bodyFirstLine:hash8(suggestion); a corrected suggestion re-posts. */
+    /** KTD4: path:line:severity:normalizedMessage:hash8(suggestion); a corrected suggestion re-posts. */
     dedupKey: string;
 }
 /** Per-finding audit record for a finding the post-parse filters removed. */
@@ -65,6 +73,16 @@ export interface DroppedFinding {
     category?: string;
     message: string;
     reason: 'outside-diff' | 'revert-nit';
+}
+export interface ReviewScope {
+    /** Changed files in the PR with a patch. */
+    totalFiles: number;
+    /** Files that reached the review model. */
+    reviewedFiles: number;
+    /** Files kept out by `review.exclude`. */
+    excludedFiles: number;
+    /** Up to 5 excluded paths, for the Diagnostics line. */
+    excludedSample: string[];
 }
 interface CodeReviewReport {
     ok: boolean;
@@ -78,7 +96,7 @@ interface CodeReviewReport {
     reviewEvent: 'comment' | 'request_changes';
     /** Blocker-severity findings a sandbox probe reproduced. */
     provenBlockers: number;
-    /** Blocker-severity findings at/above the Jev P(true-positive) gate. */
+    /** Blocker-severity findings at/above the confidence-model P(true-positive) gate. */
     highConfidenceBlockers: number;
     /** KTD3 — eligibility-filtered, severity-sorted, sanitized, capped. */
     reviewComments: ReviewComment[];
@@ -92,7 +110,7 @@ interface CodeReviewReport {
     secretsScan?: SecretsScanResult | {
         skipped: string;
     };
-    /** U7 triage record — Jev pre-review signals (annotate/route, never gates). */
+    /** U7 triage record: confidence-model pre-review signals (annotate/route, never gates). */
     triage?: TriageRecord;
     /** U8 adjudication audit — per-finding p + suppressed records. */
     findingAdjudication?: FindingAdjudicationAudit;
@@ -104,6 +122,12 @@ interface CodeReviewReport {
     droppedFindings?: DroppedFinding[];
     /** Synthesis verdict when it diverges from the post-filter derived verdict. */
     modelVerdict?: 'pass' | 'needs_changes' | 'approve';
+    /** How much of the PR the review covered, and what was left out. */
+    scope?: ReviewScope;
+    /** Findings dropped by deterministic validation, with reasons. */
+    validation?: ValidationAudit;
+    /** Test-file findings capped at nit (bug/risk with no non-test citation). */
+    testFileCapped?: number;
     calls: CallCost[];
     visionCostUsd: number;
     tokens: number;
@@ -198,7 +222,7 @@ export declare function filterToDiffLines(findings: readonly ReviewFinding[], ra
     dropped: ReviewFinding[];
 };
 /**
- * R3/KTD2 — Jev P(true-positive) at/above which a blocker-severity finding
+ * R3/KTD2: confidence-model P(true-positive) at/above which a blocker-severity finding
  * counts as proven for the REQUEST_CHANGES gate. This is a different axis
  * from `review.findingThreshold` (P(false-positive) for nit/q suppression)
  * — never reuse that knob. 0.7: high-confidence without demanding
@@ -212,7 +236,7 @@ export declare const P_TRUE_POSITIVE_THRESHOLD = 0.7;
  * code-review.json; posters read `reviewEvent`, never recompute.
  * Unadjudicated blockers (no p, not reproduced) never escalate —
  * degrade-open by design. The two counts overlap deliberately: a
- * reproduced AND Jev-confident finding is reported under both.
+ * reproduced AND high-confidence finding is reported under both.
  */
 export declare function computeReviewEvent(findings: ReviewFinding[], blockSeverities: string[], allowRequestChanges: boolean): {
     reviewEvent: 'comment' | 'request_changes';

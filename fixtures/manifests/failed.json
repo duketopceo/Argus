@@ -1,0 +1,98 @@
+{
+  "$comment": "Full run without a manifest: the flow lane fails, the code review approves with one nit.",
+  "body": "full",
+  "ok": false,
+  "version": "0.4.0",
+  "runUrl": "https://github.com/acme/shop/actions/runs/123456",
+  "report": {
+    "ok": false,
+    "durationMs": 21400,
+    "totals": {
+      "tests": 2,
+      "passed": 1,
+      "failed": 1,
+      "visionCalls": 3,
+      "visionCostUsd": 0.0009,
+      "sandboxSeconds": 9.2,
+      "budgetExceeded": false,
+      "cacheHits": 1,
+      "cacheMisses": 2,
+      "cacheHeals": 0,
+      "callsByModel": {
+        "google/gemini-2.5-flash-lite": 3
+      },
+      "costByModel": {
+        "google/gemini-2.5-flash-lite": 0.0009
+      }
+    },
+    "tests": [
+      {
+        "name": "checkout applies discount",
+        "file": "tests/checkout.test.ts",
+        "ok": true,
+        "visionCalls": 2,
+        "visionCostUsd": 0.0006,
+        "healEvents": [],
+        "asserts": [
+          {
+            "question": "total shows the discounted price",
+            "verdict": "pass",
+            "reasoning": "total reads $90.00"
+          }
+        ]
+      },
+      {
+        "name": "login form",
+        "file": "tests/login.test.ts",
+        "ok": false,
+        "visionCalls": 1,
+        "visionCostUsd": 0.0003,
+        "failureMessage": "assert failed",
+        "healEvents": [],
+        "asserts": [
+          {
+            "question": "login form is visible",
+            "verdict": "fail",
+            "reasoning": "no form found on the page"
+          }
+        ]
+      }
+    ],
+    "artifacts": {
+      "videos": [
+        "argus-reviewer-report/videos/login.webm"
+      ]
+    },
+    "config": {
+      "budgetUsd": 0.05
+    }
+  },
+  "codeReview": {
+    "ok": true,
+    "skipped": false,
+    "verdict": "approve",
+    "summary": "The change is small and reads correctly; one naming nit.",
+    "model": "deepseek/deepseek-v4.1-flash",
+    "tokens": 2400,
+    "visionCostUsd": 0.0012,
+    "findings": [
+      {
+        "file": "src/login.ts",
+        "line": 14,
+        "severity": "nit",
+        "category": "naming",
+        "message": "Rename `x` to `attempts` for clarity."
+      }
+    ],
+    "reviewComments": [],
+    "provenBlockers": 0,
+    "highConfidenceBlockers": 0,
+    "headBinding": {
+      "intendedSha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+      "checkoutSha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+      "status": "match",
+      "source": "github",
+      "detail": "checkout matches the intended PR head"
+    }
+  }
+}

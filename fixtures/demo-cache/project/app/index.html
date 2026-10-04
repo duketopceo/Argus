@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Demo shop</title>
+  <style>
+    body { font-family: sans-serif; padding: 2rem; color: #0E1116; background: #F4F5F7; }
+    main { max-width: 28rem; background: #FFFFFF; padding: 1.5rem; border: 1px solid #D3D8DF; border-radius: 8px; }
+    button { padding: 0.6rem 1.2rem; font-size: 1rem; background: #2343F5; color: #FFFFFF; border: 0; border-radius: 6px; }
+    #status { margin-top: 1rem; color: #3A414C; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Your cart</h1>
+    <p>1 x Field notebook, $12.00</p>
+    <button id="place-order">Place order</button>
+    <p id="status">Order not placed yet</p>
+  </main>
+  <script>
+    document.getElementById('place-order').addEventListener('click', () => {
+      document.getElementById('status').textContent = 'Order confirmed. Thanks!'
+    })
+  </script>
+</body>
+</html>

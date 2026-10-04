@@ -107,7 +107,7 @@ export interface Config {
      */
     code_model: string | undefined;
     /**
-     * OpenRouter Decisions API model for typed adjudication (Jev). Defaults
+     * OpenRouter Decisions API model for typed adjudication (the confidence model). Defaults
      * to the pinned `typesafe/jev-1.13-20260917` — alias slugs like
      * `~typesafe/jev-latest` drift silently and thresholds are calibrated
      * to a version. Set to `''` to disable adjudication (regex-only mode).
@@ -231,7 +231,7 @@ export interface Config {
     app: AppLane;
     /**
      * Code-review policy knobs. Always populated after `resolveConfig`.
-     * `secretsThreshold`: Jev `noul` probability at/above which a
+     * `secretsThreshold`: confidence-model `noul` probability at/above which a
      * secret-shaped diff literal is reported as a finding (below →
      * suppressed but audit-recorded). Default 0.3 — tune after dogfooding.
      * `maxComments`: cap on inline review comments posted per run
@@ -239,18 +239,18 @@ export interface Config {
      * `severityGate`: consumer-facing alias over `severity` — 'bug'
      * fails on bugs only, 'risk' fails on bug|risk. Unset → `severity`
      * list is authoritative.
-     * `triage`: Jev pre-review lane — 'off' no call, 'annotate' (default)
+     * `triage`: confidence-model pre-review lane — 'off' no call, 'annotate' (default)
      * records risk/deep-review/area into the report + sticky, 'route'
      * additionally swaps the code model to `lowRiskModel` on low-risk
-     * diffs. Jev routes/annotates, never gates — coverage is constant.
+     * diffs. The confidence model routes/annotates, never gates — coverage is constant.
      * `lowRiskModel`: the cheap code-model slug 'route' falls to; unset →
      * route keeps `code_model` (annotate-equivalent).
      * `findingThreshold`: P(false-positive) required to suppress a nit/q
-     * finding after Jev adjudication — 1.0 (default) is annotate-only,
+     * finding after confidence-model adjudication — 1.0 (default) is annotate-only,
      * lowering it suppresses progressively more low-confidence nits.
      * bug/risk are never suppressed.
      * `requestChanges`: allow the review event to escalate to
-     * REQUEST_CHANGES for proven blockers (probe-reproduced or Jev
+     * REQUEST_CHANGES for proven blockers (probe-reproduced or confidence-model
      * high-confidence). Default true — set false for advisory-only posting.
      * `profiles`: named review lenses appended to the review prompt
      * ('security'|'perf'|'debloat' — see src/review/packs.ts). Unknown names
@@ -265,6 +265,12 @@ export interface Config {
         findingThreshold: number;
         requestChanges: boolean;
         profiles: ReviewProfile[];
+        /**
+         * Glob list of changed paths kept out of the review input. A configured
+         * list replaces the defaults (generated, fixture, golden, vendored
+         * paths); `[]` excludes nothing.
+         */
+        exclude: string[];
     };
 }
 export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review' | 'explore' | 'app'>> & {
