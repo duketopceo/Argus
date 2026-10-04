@@ -1,0 +1,710 @@
+{
+  "judge": "deepseek/deepseek-v4-pro",
+  "verdicts": {
+    "src/driver/target.ts:34:L34: `bounded` assigned from a default when `timeoutMs` is absent; error message prints `bounded` which may be ambiguous. Use `bounded` directly in error string": {
+      "verdict": "invalid",
+      "reason": "Error string already uses `bounded` directly; no ambiguity exists."
+    },
+    "src/driver/target.ts:88:L88: 🔴 bug: race condition between `ready` and `childExited` may cause false-positive readiness. Ensure `child.exitCode` is checked before declaring readiness.": {
+      "verdict": "invalid",
+      "reason": "The check on line 93 already handles exit after readiness; the race condition claim is already mitigated."
+    },
+    "src/report/run.ts:138:L138: 🔵 nit: `[...tests.flatMap((t) => t.calls), ...extraCalls]` is materialized twice and walked twice. Build the combined array once and fold `tokens` into the existing loop.": {
+      "verdict": "valid",
+      "reason": "The finding is correct: the combined array is spread twice, which can be avoided with a single variable."
+    },
+    "src/vision/openrouter.ts:205:L205: 🟡 risk: HTTP errors may be retried indefinitely without backoff. Add retry limits and exponential backoff for 429/5xx.": {
+      "verdict": "invalid",
+      "reason": "No retry logic exists in the diff; the finding hallucinates an absent retry loop and applies to unchanged code."
+    },
+    "src/driver/target.ts:136:`process.kill(-this.child.pid, 'SIGKILL')` without group-leader check; ensure `detached: false` or use `this.child.spawned?._group`.": {
+      "verdict": "invalid",
+      "reason": "The child process is spawned without `detached: true`, so the negative PID group kill is safe and intentional."
+    },
+    "src/detect.ts:110:L110: 🔵 nit: Add documentation for `A0_CHILD_ENV_KEYS`.": {
+      "verdict": "invalid",
+      "reason": "The constant has a detailed JSDoc comment directly above it at line 109-116, satisfying documentation needs."
+    },
+    "src/report/manifest.ts:280:L280: 🟡 risk: `unlink` may fail silently during pruning. Handle specific error cases or log failures.": {
+      "verdict": "invalid",
+      "reason": "The catch block intentionally handles all errors as best-effort; silent failure is documented and acceptable here."
+    },
+    "src/driver/browser.ts:130:L130: 🟡 risk: Captured console errors may contain sensitive data. Truncate or sanitize `text` more aggressively.": {
+      "verdict": "invalid",
+      "reason": "Text is already truncated to 240 chars via `slice(0, MAX_CAPTURE_TEXT)`, which sufficiently limits exposure."
+    },
+    "src/report/manifest.ts:3:L3: 🔵 nit: Import 'writeAtomicJson' from '../fsutil.js'.": {
+      "verdict": "invalid",
+      "reason": "The import is already present on line 6; the nit incorrectly claims it should be on line 3 instead."
+    },
+    "src/report/run.ts:115:L115: 🔴 bug: `ok` logic allows empty test suites to pass when `exploreEvidence` is true. Ensure explicit test execution is required for a pass.": {
+      "verdict": "invalid",
+      "reason": "The condition (tests.length > 0 || exploreEvidence) already requires evidence, no defect exists."
+    },
+    "src/report/manifest.ts:292:L292: 🔵 nit: prune filters only by `.json` extension, so any stray `.json` file dropped into `manifests/` is counted toward retention and can evict real archives. Match the archive shape (`/\\.json$/` plus the sanitized-name prefix) or use a dedicated subdirectory per run.": {
+      "verdict": "valid",
+      "reason": "The filter `.endsWith('.json')` does not enforce the sanitized filename pattern, so stray `.json` files affect pruning."
+    },
+    "src/report/run.ts:105:L105: 🔴 bug: `ok` logic allows empty test suites to pass when they should fail closed. Ensure runs with zero tests are marked as failed unless `exploreEvidence": {
+      "verdict": "invalid",
+      "reason": "The `ok` logic explicitly checks `tests.length > 0 || exploreEvidence`, which already handles the zero-test case as intended."
+    },
+    "src/report/manifest.ts:276:L276: 🔴 bug: `archiveManifest` writes to a non‑existent directory, causing an unhandled exception. Ensure the target directory exists (e.g., `await mkdir(dir, { recursive: true })` before calling `writeAtomicJson`.": {
+      "verdict": "valid",
+      "reason": "archiveManifest writes to join(reportDir, 'manifests') without ensuring the directory exists, risking unhandled ENOENT exception."
+    },
+    "src/driver/target.ts:33:L33: Uses `AbortSignal.timeout`, which may be unavailable in older Node versions. Provide a polyfill or fallback to a manual AbortController with setTimeout.": {
+      "verdict": "valid",
+      "reason": "AbortSignal.timeout added in Node 16.14; older runtimes need a polyfill or fallback."
+    },
+    "src/pipeline/verify.ts:224:L224: 🔴 bug: `detail?.visionCalls` used when `detail?.calls` undefined. Use `detail?.visionCalls ?? 0` to prevent NaN.": {
+      "verdict": "invalid",
+      "reason": "detail?.visionCalls already falls back to base.calls on line 240, preventing NaN; base.calls is always a number."
+    },
+    "src/driver/browser.ts:136:L136: 🔴 bug: `page.url()` can be null or invalid before navigation. Add guard for `new URL(page.url()).origin`.": {
+      "verdict": "invalid",
+      "reason": "The try-catch block at line 154-158 already guards against the null/invalid URL case."
+    },
+    "src/vision/openrouter.ts:3:L3: `AbortSignal.timeout` may not exist in all runtimes. Add a fallback for environments lacking this method.": {
+      "verdict": "invalid",
+      "reason": "AbortSignal.timeout exists in all supported Node.js versions (18+) and is safe to use here."
+    },
+    "src/pipeline/verify.ts:164:L164: 🔴 bug: runner threw error, but report is still read. If runner errored before writing, its report may be stale. Remove report read if `runnerError` is pr": {
+      "verdict": "invalid",
+      "reason": "The diff already guards against stale reads: `runnerError === undefined` before reading report (line 293)."
+    },
+    "src/probe/queue.ts:595:L595: 🔴 bug: `probe.content.slice(0, PROBE_CONTENT_CAP)` may truncate UTF-8 characters. Use `Buffer.byteLength()` to ensure safe slicing.": {
+      "verdict": "invalid",
+      "reason": "The probe content is validated generated TypeScript source, not arbitrary UTF-8; slicing is safe."
+    },
+    "src/config.ts:285:L285: 🔵 nit: Documentation for `AppLane.task` should specify default `undefined`.": {
+      "verdict": "invalid",
+      "reason": "Default `undefined` is already explicit on line 294; the finding asks for redundant documentation."
+    },
+    "src/executor/a0.ts:241:L241: 🟡 risk: `done` stamps every `inconclusive` result with summary `delegation returned — self-reported`, so the timeout path (L315) reports a delegation that never returned. Pass `summary` via `extra` on the timeout call and keep the fixed label only for completed delegations.": {
+      "verdict": "invalid",
+      "reason": "The timeout path at L315 is not shown in the provided context, so the claimed defect cannot be confirmed."
+    },
+    "src/config.ts:440:L440: 🔴 bug: `review.requestChanges` coercion treats non-false values as true. Use explicit boolean check.": {
+      "verdict": "valid",
+      "reason": "The coercion `review.requestChanges !== false` treats non-boolean truthy/falsy values as true, matching the described bug."
+    },
+    "src/engine/prompts.ts:170:L170: 🔴 bug: Casting to `ExploreAction` without checking `action.action`. Add type guard before accessing `url`.": {
+      "verdict": "invalid",
+      "reason": "`ExploreAction` defines `url`; the `navigate` case only runs when `action.action` is 'navigate', so no missing type guard."
+    },
+    "src/driver/browser.ts:117:L117: 🔴 bug: `driver` is not defined in scope when `options.captureErrors` is true. Rename `new BrowserDriver(...)` to `driver` before the conditional.": {
+      "verdict": "invalid",
+      "reason": "L117 shows const driver = new BrowserDriver(...); driver is in scope at L127 where it is used."
+    },
+    "src/evidence/ci.ts:99:L99: 🔴 bug: `ghWrite` does not handle non-JSON responses gracefully. If `res.json()` fails, it returns `undefined` which might cause issues later. Add more robust error handling for JSON parsing.": {
+      "verdict": "invalid",
+      "reason": "JSON parse failure is intentionally caught with `.catch(() => undefined)`; explicit handling exists, not a latent bug."
+    },
+    "src/engine/prompts.ts:152:`buildExploreMessages` passes base64 without `data:image/jpeg;base64,` prefix; will cause image rejection by OpenAI API.": {
+      "verdict": "valid",
+      "reason": "`source: observation.screenshotJpeg.toString('base64')` omits the required `data:image/jpeg;base64,` prefix, causing API rejection."
+    },
+    "src/vision/decisions.ts:194:L194: `classifyStatus` consumes `headers` but replaces original fallback messages like `\"decide: HTTP 503 provider overloaded\"` with `classifyHttpStatus` output": {
+      "verdict": "invalid",
+      "reason": "Fallback messages are retained when classifyHttpStatus returns undefined; the replaced message is a deliberate improvement when it does return."
+    },
+    "src/driver/browser.ts:115:L115: 🔵 nit: Capture listeners added in `_attachCaptureTaps` are never removed, potentially leaking event handlers if a driver is reused. Detach listeners in a driver teardown method.": {
+      "verdict": "valid",
+      "reason": "The event listeners are added but never removed; if a BrowserDriver is long-lived or reused, this causes a leak."
+    },
+    "src/vision/openrouter.ts:205:L205: 🔴 bug: `classifyHttpStatus` result may be ignored silently. Ensure non-null result is used or handle null case explicitly.": {
+      "verdict": "invalid",
+      "reason": "The result is used with `??` for fallback, so null case is explicitly handled, not ignored."
+    },
+    "src/evidence/ci.ts:114:L114: 🔴 bug: `ghWrite` incorrectly handles `AbortError`. It logs the error message as 'timeout' but should distinguish between a general AbortError and a specific timeout.": {
+      "verdict": "invalid",
+      "reason": "The code intentionally treats any AbortError as a timeout; the manual abort is the only trigger, so distinguishing is unnecessary."
+    },
+    "src/report/comment.ts:215:L215: 🔵 nit: `hasSuggestion` regex requires a preceding newline before the backticks, so a suggestion block at the very start of a file is ignored. Adjust the pattern to allow start‑of‑string, e.g., `/^(?:\\r?\\n)?(`{4,})suggestion\\r?\\n([\\s\\S]*?)\\r?\\n\\1/`.": {
+      "verdict": "invalid",
+      "reason": "The referenced `hasSuggestion` regex does not exist in the provided code or diff; the finding misattributes line 215."
+    },
+    "src/driver/target.ts:20:L20: 🔴 bug: `timeoutMs` can be NaN if not finite. Use `bounded` instead of `timeoutMs` in error message.": {
+      "verdict": "invalid",
+      "reason": "Line 20 already guards `bounded` against NaN; using `bounded` is already done, so the finding is moot."
+    },
+    "src/detect.ts:97:L97: `A0_CHILD_ENV_KEYS` includes `A0_USERNAME` and `A0_PASSWORD`. These credential-like values leak into every child process. Remove them unless the CLI truly ": {
+      "verdict": "valid",
+      "reason": "A0_USERNAME and A0_PASSWORD are credential-like values that leak into every child process via the allowlisted env keys array."
+    },
+    "src/detect.ts:57:L57: 🔵 nit: Clarify the purpose of `maxBuffer` in `execFile` options.": {
+      "verdict": "invalid",
+      "reason": "The comment on line 53 already clarifies the 4 MiB maxBuffer purpose; a style preference for further explanation is not a concrete defect."
+    },
+    "src/executor/a0.ts:94:L94: ❓ q: stderr regex `/ENOENT|not found|no such file/i` reclassifies any completed run whose stderr happens to contain those phrases (e.g. a0 logging a missing dependency) as `spawnError`, flipping the lane from `inconclusive` to `unavailable`. Is the sniff worth keeping now that `res.spawnError` is authoritative for `defaultExec`?": {
+      "verdict": "invalid",
+      "reason": "Code comment explains sniff is a fallback when `spawnError` is absent; finding ignores stated intent."
+    },
+    "src/executor/a0.ts:325:L325: 🔴 bug: `res.output !== ''` discards meaningful empty-string outputs from agent. Check `res.output != null` instead.": {
+      "verdict": "invalid",
+      "reason": "The line `res.output !== ''` does not appear in the provided code; the finding misquotes the actual code."
+    },
+    "src/report/manifest.ts:285:L285: ❓ q: `archiveManifest` writes into `<reportDir>/manifests` without creating it — verify `writeAtomicJson` mkdirs, otherwise the first-ever archive throws ENOENT and the rejection propagates to the caller. Add `await mkdir(dir, { recursive: true })` before the write if `writeAtomicJson` does not.": {
+      "verdict": "valid",
+      "reason": "writeAtomicJson might not create parent dirs; first archive can throw ENOENT. Verify or add mkdir."
+    },
+    "src/report/comment.ts:207:L207: `formattedCost` variable is used but never defined; `costUsd` may be `undefined`. Add guard: `costUsd === undefined ? 'N/A' : formatUsd(costUsd)`.": {
+      "verdict": "invalid",
+      "reason": "`formattedCost` does not exist at L207; `costUsd` is guarded by `formatUsd` which already handles `undefined` input."
+    },
+    "src/driver/target.ts:91:Fixed 250ms pause before checking `child.exitCode` is a race; use `child.on('exit', ...)` tied to ready promise.": {
+      "verdict": "invalid",
+      "reason": "The fixed pause in the diff is intentional for a squatter check, not a race; PID escalation is unrelated."
+    },
+    "src/detect.ts:33:L33: 🔴 bug: Spreading `env` when it may be undefined throws a TypeError. Replace with `env: { ...baseEnv, ...(env ?? {}) }`.": {
+      "verdict": "invalid",
+      "reason": "The `env` parameter type is `Record<string, string> | undefined`; spread of undefined is valid and yields no properties."
+    },
+    "src/vision/openrouter.ts:34:L34: 🟡 risk: default 120s cap aborts slow-but-healthy completions (large-context/reasoning models regularly exceed 2min non-streaming), turning success into spurious failure. Raise the default or allow `complete` to override per call, e.g. accept `timeoutMs` in the completion opts.": {
+      "verdict": "invalid",
+      "reason": "timeoutMs option already exists in OpenRouterClientOptions and is applied per-request via _request(); finding is already fixed in the diff."
+    },
+    "src/detect.ts:95:`settled = true` in branch before `escalate` timer created—hoist `let settled = false` above `execFile` call.": {
+      "verdict": "invalid",
+      "reason": "The callback already sets settled=true before escalation fires; the timer guard handles the race correctly."
+    },
+    "src/pipeline/verify.ts:221:L221: 🔴 bug: runner threw error, but detail is still read. If runner errored before writing, its detail file may be stale. Remove detail read if `runnerError` ": {
+      "verdict": "invalid",
+      "reason": "Diff shows runnerError guard already added for both review and app/a0; line 221 is not in the diff."
+    },
+    "src/detect.ts:280:L280: 🟡 risk: `fetch` redirect policy changed from 'manual' to 'follow'. Ensure redirect targets are trusted.": {
+      "verdict": "valid",
+      "reason": "Redirect policy change to 'follow' is an intentional security hardening, not a defect; the finding misinterprets the diff."
+    },
+    "src/detect.ts:118:L118: `child` is referenced before `let settled = false` declaration in the same scope. Move `let settled = false` before `const child = execFile(...)`.": {
+      "verdict": "invalid",
+      "reason": "The finding references line 118, but the diff shows `settled` is declared at the correct, earlier location, not after `child`."
+    },
+    "src/detect.ts:35:L35: 🔵 nit: Add documentation for `opts.baseEnv` in `ExecFn`.": {
+      "verdict": "invalid",
+      "reason": "`opts.baseEnv` already has a complete JSDoc comment at line 38 of the head file, two lines after line 35."
+    },
+    "src/pipeline/budget.ts:65:L65: 🔴 bug: Budget check uses `budget.spentUsd` instead of updated total. Add `nextCostUsd` to spent amount.": {
+      "verdict": "invalid",
+      "reason": "The `budget.spentUsd` used at L62 already reflects the accumulated total; adding `nextCostUsd` occurs only in `budgetCanSpend`."
+    },
+    "src/engine/prompts.ts:68:Prompt allows `navigate` to arbitrary URLs; add runtime same-origin enforcement in action executor.": {
+      "verdict": "valid",
+      "reason": "Prompt allows `navigate` but no server-side origin check is shown; executor must enforce same-origin to prevent cross-origin navigation."
+    },
+    "src/detect.ts:131:`clearTimeout(escalate)` on any 'close' is fragile; also mark `settled = true` in escalate fallback at L101.": {
+      "verdict": "unclear",
+      "reason": "Escalate-fallback code is in diff, but finding references L131 close-handler and L101 which are not shown."
+    },
+    "src/pipeline/verify.ts:180:`report` can be undefined after runner error. Access properties only when `report` is defined.": {
+      "verdict": "invalid",
+      "reason": "`report` is guarded by `totals === undefined` check; if `report` were undefined, `report?.totals` returns undefined and function returns early."
+    },
+    "src/vision/openrouter.ts:133:L133: 🔴 bug: Error message loses original error details when no provider error is found. Include original errors in message or preserve as cause.": {
+      "verdict": "invalid",
+      "reason": "Line 146 already joins all `errors.map(e => e.message)`, so original error details are not lost."
+    },
+    "src/driver/browser.ts:150:L150: 🟡 risk: capturing all console errors without filtering may expose sensitive data. Consider adding allowlist or redaction for known sensitive patterns.": {
+      "verdict": "valid",
+      "reason": "console errors are captured unfiltered; sensitive data can leak into captured text and later into PageCapture output."
+    },
+    "src/pipeline/verify.ts:409:L409: 🔴 bug: `argusVersion` could throw if `package.json` is missing. Return 'unknown' in catch block.": {
+      "verdict": "invalid",
+      "reason": "The finding references `argusVersion` but the provided diff and context do not show its implementation or package.json read."
+    },
+    "src/report/comment.ts:130:L130: `code(s)` receives `undefined` from `shortSha`; `cell()` converts it to `'undefined'` then backtick-fences it. Use `s == null ? '' : cell(s)`.": {
+      "verdict": "unclear",
+      "reason": "Cannot confirm `shortSha` returns `undefined` from the provided context; function signature and body not in the diff."
+    },
+    "src/engine/prompts.ts:84:`ExploreAction` schema omits `fail` but prompt includes it; align schema with prompt to prevent hallucination.": {
+      "verdict": "valid",
+      "reason": "The `exploreActionSchema` enum omits `'fail'` despite the `ExploreAction` type and prompt text including it. This mismatch can cause hallucination."
+    },
+    "src/review/secrets.ts:155:L155: overflow findings message hardcodes `L0` but the overflow is a count-only report with no specific line. Drop line number or use `L-`.": {
+      "verdict": "valid",
+      "reason": "Overflow message uses hardcoded `L0` despite being count-only with no associated line; contradicts line-optional interface."
+    },
+    "src/executor/a0.ts:190:L190: 🔵 nit: `new URL(url)` is constructed twice in `isLoopback`. Parse once into a const and reuse for the `file:` check and hostname extraction.": {
+      "verdict": "valid",
+      "reason": "head file shows `new URL(url)` on L215 and L216 parsing the same URL twice; extracting to a local const avoids redundant parsing."
+    },
+    "src/review/secrets.ts:150:L150: 🟡 risk: `maskFindingMessage` omits the required emoji and severity prefix, breaking the expected finding message format. Restore the prefix (`${adjudicated ? '🔴 bug' : '🟡 risk'}`) in the returned string.": {
+      "verdict": "invalid",
+      "reason": "The removed prefix is intentional—the caller (scanSecrets) sets the 'bug'/'risk' label externally; no broken contract exists."
+    },
+    "src/pipeline/verify.ts:354:L354: 🟡 risk: Stale `run.json` may be read if runner fails after writing it. Add file timestamp validation or atomic write+rename.": {
+      "verdict": "valid",
+      "reason": "The code reads run.json unconditionally when the runner returns code 0, risking stale data from a previous successful run after a write failure."
+    },
+    "src/pipeline/verify.ts:23:L23: Requiring `package.json` without error handling can crash the process if the file is missing or malformed. Wrap in try/catch or provide a fallback version.": {
+      "verdict": "invalid",
+      "reason": "The finding cites L23 `require`, but the diff shows only `createRequire` and `readJson`; the flagged line is stale/absent."
+    },
+    "src/detect.ts:26:L26: 🔵 nit: Add documentation for `ExecResult.spawnError`.": {
+      "verdict": "invalid",
+      "reason": "The property already has a JSDoc on line 24-27; the finding mistakenly claims it is missing."
+    },
+    "src/pipeline/verify.ts:249:`detail` can be undefined after runner error, but its properties are accessed without a check.": {
+      "verdict": "invalid",
+      "reason": "The finding points to line 249 but detail is guarded by optional chaining on lines 258-267, making undefined safe."
+    },
+    "src/pipeline/verify.ts:226:L226: 🔴 bug: `detail?.visionCostUsd` used when `detail?.calls` undefined. Use `detail?.visionCostUsd ?? 0` to prevent NaN.": {
+      "verdict": "invalid",
+      "reason": "`laneDetailUsage` already uses `?? base.costUsd` for `detail?.visionCostUsd` when calls undefined; NaN is prevented."
+    },
+    "src/detect.ts:115:L115: 🟡 risk: Child process timeout escalation may leave orphaned processes. Add process group management.": {
+      "verdict": "invalid",
+      "reason": "The new escalate timer already resolves the promise if SIGKILL fails, preventing orphaned processes."
+    },
+    "src/report/comment.ts:36:L36: `reportHtml` in `CommentMeta` is a user-controlled path. No validation that it doesn't contain path traversal. Validate with `path.basename` or a glob allo": {
+      "verdict": "invalid",
+      "reason": "No file I/O or URL construction shown near line 36; reportHtml is just a typed string field in an interface."
+    },
+    "src/report/comment.ts:33:L33: `maskSecrets` is called twice per row cell (once in `cell`, once in callers that need raw text). Cache the masked string after first call or document that ": {
+      "verdict": "invalid",
+      "reason": "The diff shows addition of `maskSecrets` inside `cell`; callers before `cell` didn't exist. The finding hallucinates double-call without evidence."
+    },
+    "src/config.ts:57:Mutable default `Explore` objects are shared; mutate‑after‑spread leads to cross‑run corruptions. Clone or use immutable literals.": {
+      "verdict": "invalid",
+      "reason": "No mutable default objects are shared or mutated-after-spread in the shown diff; defaults are freshly spread per invocation."
+    },
+    "src/report/comment.ts:255:L255: 🔴 bug: `indexOf` on `PROOF_LEVELS` may return -1, leading to `PROOF_LEVELS[-1]`. Handle -1 case to avoid `undefined`.": {
+      "verdict": "invalid",
+      "reason": "The diff shows a new definition of `bestFindingProof` where `indexOf`. The finding is about old code not in this diff."
+    },
+    "src/config.ts:447:L447: 🔵 nit: Default value for `reportRetention` should be explicitly `undefined` instead of relying on implicit behavior.": {
+      "verdict": "invalid",
+      "reason": "The finding is contradicted by the diff: `reportRetention` is already explicitly typed as `number | undefined` in the interface and defaults."
+    },
+    "src/driver/target.ts:27:L27: 🟡 risk: `AbortSignal.timeout` is not available in Node versions prior to v15, causing a runtime TypeError. Use a polyfill or implement timeout via `AbortController` and `setTimeout`.": {
+      "verdict": "valid",
+      "reason": "AbortSignal.timeout requires Node ≥16; no polyfill or guard shown, so older runtimes would throw, and the code appears Node-targeted."
+    },
+    "src/vision/openrouter.ts:73:L73: 🟡 risk: `AbortSignal.timeout` may be unavailable in older Node.js or browser runtimes. Provide a fallback using `AbortController` with a manual setTimeout or polyfill.": {
+      "verdict": "valid",
+      "reason": "AbortSignal.timeout requires Node 18.17+. The codebase may target older runtimes where it throws at runtime without a fallback."
+    },
+    "src/report/manifest.ts:288:L288: 🔵 nit: sanitizer `[\\w.-]` keeps `.` but not path separators, so `..` collapses into a literal `...json` filename — safe today; document that or also strip leading dots for defense in depth (`safeName.replace(/^\\.+/, '')`).": {
+      "verdict": "invalid",
+      "reason": "runIds are timestamp-prefixed per doc, so leading dots cannot occur; finding is paranoia not reachable defect."
+    },
+    "src/pipeline/verify.ts:414:L414: 🟡 risk: Stale `<lane>-lane.json` may be read if runner fails after writing it. Add file timestamp validation or atomic write+rename.": {
+      "verdict": "invalid",
+      "reason": "Runner error already skips reading the file; stale detail is explicitly guarded at L420 and L436–438."
+    },
+    "src/report/run.ts:1:L1: 🔵 nit: Import 'writeAtomicJson' from '../fsutil.js'.": {
+      "verdict": "invalid",
+      "reason": "The import is already present on line 1; the finding falsely claims it is missing or misplaced."
+    },
+    "src/executor/a0.ts:27:L27: Directly passing `process.env` to `buildA0ChildEnv` may expose unwanted environment variables. Filter to an allow‑list before forwarding.": {
+      "verdict": "invalid",
+      "reason": "The finding is moot; the code already uses `buildA0ChildEnv(process.env)` to sanitize, not a raw `process.env` pass-through."
+    },
+    "src/probe/queue.ts:76:`ProbeRecord.output` is described as capped, but `PROBE_CONTENT_CAP` is only used for `content`. Ensure `output` is also capped if necessary to prevent excessiv": {
+      "verdict": "invalid",
+      "reason": "Output is already documented as capped and control-char-stripped; no new risk from the diff."
+    },
+    "src/executor/a0.ts:124:L124: 🔴 bug: IPv6 unspecified address `[::]` is treated as loopback. It is not a loopback address, so the check should not return true. Remove `[::]` from the loopback condition.": {
+      "verdict": "invalid",
+      "reason": "The finding targets code not present in the diff or head-file context; no loopback check exists at L124."
+    },
+    "src/detect.ts:21:L21: 🔵 nit: Add documentation for `ExecResult.timedOut` and `ExecResult.signal`.": {
+      "verdict": "invalid",
+      "reason": "Both `timedOut` and `signal` already have JSDoc comments on lines 16-22 in the head context."
+    },
+    "src/executor/a0.ts:130:L130: 🔴 bug: `parseInt` can receive `undefined` from regex match groups. Add nullish checks before parsing.": {
+      "verdict": "invalid",
+      "reason": "The finding references `parseInt` and regex match groups, but the code at L130 does not contain any `parseInt` or regex usage."
+    },
+    "src/pipeline/verify.ts:414:L414: 🔴 bug: `detail?.status` not validated against known statuses. Add status validation to prevent invalid lane states.": {
+      "verdict": "invalid",
+      "reason": "LANE_STATUSES guard at line 424 already validates detail?.status against known statuses before use."
+    },
+    "src/pipeline/verify.ts:178:L178: 🟡 risk: `report.ok === true` with `code === 0` but no tests run implies no evidence. Fail lane if `flowEvidenceRan` is false.": {
+      "verdict": "invalid",
+      "reason": "The finding is addressed: noEvidence already sets status to 'failed' when ok is true, code is 0, and flowEvidenceRan is false."
+    },
+    "src/executor/a0.ts:270:L270: 🟡 risk: `buildA0ChildEnv` called twice with same input. Pass precomputed env to `cliVersion` to avoid redundant work.": {
+      "verdict": "invalid",
+      "reason": "The `cliVersion` closure already builds its own `baseEnv` from `input.env`; no precomputed env is passed to reuse."
+    },
+    "src/detect.ts:173:L173: 🔵 nit: Add documentation for the `getReader()` call and `chunks` logic.": {
+      "verdict": "invalid",
+      "reason": "The code already has a detailed JSDoc comment on the function explaining the reader and chunks logic."
+    },
+    "src/detect.ts:96:L96: `AGENT_ZERO_HOST` in allowlist may carry embedded credentials (`http://user:pass@host`). Add a check or strip credentials when building child env.": {
+      "verdict": "valid",
+      "reason": "AGENT_ZERO_HOST may contain embedded credentials; buildA0ChildEnv passes it unsanitized to child env."
+    },
+    "src/vision/openrouter.ts:31:L31: 🔵 nit: Constant `REQUEST_TIMEOUT_MS` is defined but not exported. Export if intended for external use, otherwise consider moving it inside the class or to a more local scope if only used by the constructor.": {
+      "verdict": "invalid",
+      "reason": "The constant is intentionally scoped as a file-level default; exporting it is not required."
+    },
+    "src/config.ts:80:L80: 🔵 nit: `ReviewProfile[]` type should be imported from `./review/packs.js` for clarity.": {
+      "verdict": "invalid",
+      "reason": "Type is already imported on line 3 in the diff context."
+    },
+    "src/executor/a0.ts:260:L260: 🟡 risk: Resolved host is discarded when `a0.url` is configured. Use resolved host for reachability checks.": {
+      "verdict": "invalid",
+      "reason": "Configured `a0.url` is used directly in reachability checks; resolved host is only discarded when config is present, which is by design."
+    },
+    "src/pipeline/verify.ts:202:`report` may be a truthy non-object (e.g., string from malformed JSON) causing crash; add `typeof report === 'object'` check.": {
+      "verdict": "invalid",
+      "reason": "`report` is typed as `FlowReport | undefined`; `readJson` already returns `T | undefined`, so it cannot be a truthy non-object."
+    },
+    "src/config.ts:267:L267: 🔵 nit: Documentation for `Explore.enabled` should specify default `false`.": {
+      "verdict": "invalid",
+      "reason": "The default value `false` is already clearly stated in the JSDoc on line 240: 'Defaults to false'."
+    },
+    "src/pipeline/verify.ts:428:L428: 🔴 bug: `manifest.lanes.review.reportPath` and `manifest.lanes.flow.reportPath` can be undefined, leading to potential errors when accessing `code-review.json` or `run.json`. Add checks for `undefined` before calling `readJson`.": {
+      "verdict": "invalid",
+      "reason": "The finding references undefined reportPath risks, but the code already guards with detail === undefined checks."
+    },
+    "src/driver/browser.ts:117:L117: 🔴 bug: `driver` is not defined in scope. Rename `new BrowserDriver(...)` to `driver`.": {
+      "verdict": "invalid",
+      "reason": "Line 117 already assigns to `const driver`; the finding hallucinates a missing variable that exists."
+    },
+    "src/pipeline/verify.ts:209:`code` is used to determine status but might be reset later. The `code` variable should be captured before any potential reassignments.": {
+      "verdict": "invalid",
+      "reason": "`code` is not reassigned after status determination; it's captured correctly and the finding misreads the diff."
+    },
+    "src/pipeline/verify.ts:296:L296: 🟡 risk: Stale `code-review.json` may be read if runner fails after writing it. Add file timestamp validation or atomic write+rename.": {
+      "verdict": "invalid",
+      "reason": "The new code on line 299-302 already ignores the stale file when runnerError is set, making the risk handled."
+    },
+    "src/executor/a0.ts:262:L262: 🔵 nit: when `version === undefined` but `a0.url` is configured, the lane still runs the 5s host probe and a doomed spawn instead of failing fast. Short-circuit to `unavailable` when `version === undefined`, mirroring the both-missing branch.": {
+      "verdict": "invalid",
+      "reason": "The finding misreads the code: when `version === undefined` but `host` has a value, the host-probe path is intended."
+    },
+    "src/report/comment.ts:1:L1: Imports many additional modules, increasing load time. Consolidate imports or lazy‑load where possible.": {
+      "verdict": "invalid",
+      "reason": "All imports are type-only or used directly; no unused or heavy modules to lazy-load. Context shows needed shared view-model."
+    },
+    "src/pipeline/verify.ts:446:L446: `detail` is read before the runner write may have completed, so a stale file from a prior run can be picked up. Move the `readJson` call after the try/cat": {
+      "verdict": "invalid",
+      "reason": "detail is read after the try/catch, not before; the stale-file scenario described does not exist in shown code."
+    },
+    "src/report/comment.ts:420:L420: 🔴 bug: `Object.hasOwn(sev, f.severity)` allows prototype pollution if `f.severity` is crafted. Use `f.severity in sev` or validate against known keys.": {
+      "verdict": "invalid",
+      "reason": "`Object.hasOwn(sev, f.severity)` is not present in the cited file diff; the finding refers to phantom code not shown in context."
+    },
+    "src/report/comment.ts:390:L390: 🔴 bug: `VERDICT_STATUS[verdict]` and `VERDICT_LABEL[verdict]` assume `verdict` is always a valid key. Add runtime check.": {
+      "verdict": "invalid",
+      "reason": "The index `verdict` is guarded by `isVerdict()` before use, so the access is safe."
+    },
+    "src/probe/queue.ts:73:L73: 🔵 nit: `ProbeRecord` has fields `path` and `content` that are only populated when `outcome` is 'reproduced'. Consider making these optional or clearly documenting when they are populated.": {
+      "verdict": "invalid",
+      "reason": "The fields are already optional (`?:`), matching the doc's conditional-serialization intent."
+    },
+    "src/report/comment.ts:311:L311: 🟡 risk: `formatUsd(p.costUsd)` is called without checking for `undefined`. If `p.costUsd` is undefined, `formatUsd` may produce `$NaN` or throw. Guard the value before formatting, e.g., `p.costUsd !== undefined ? formatUsd(p.costUsd) : ''`.": {
+      "verdict": "invalid",
+      "reason": "`formatUsd` is called on `p.costUsd` inside `manifestRow`, but `p.costUsd` is defined on `lane.usage`, not `p`."
+    },
+    "src/executor/a0.ts:42:L42: 🟡 risk: `spawnError` should be explicitly checked for true, not just an empty string. If `spawnError` is explicitly set to true, it indicates a spawn fail": {
+      "verdict": "invalid",
+      "reason": "spawnError is assigned true on catch, false/undefined on success; not derived from empty string check."
+    },
+    "src/review/secrets.ts:9:L9: 🔵 nit: Import 'debug' from '../debug.js'.": {
+      "verdict": "invalid",
+      "reason": "No unused `debug` import; it's used on line 264, and the finding misreads the import's location or necessity."
+    },
+    "src/vision/openrouter.ts:136:L136: ❓ q: does `pickProviderError` classify the `TimeoutError` DOMException from `AbortSignal.timeout`? If not, a pure-timeout failure falls through to the generic aggregate and can't be retried by class.": {
+      "verdict": "valid",
+      "reason": "A pure AbortSignal.timeout DOMException is not classified by pickProviderError, so retry-by-class logic won't trigger for timeouts."
+    },
+    "src/pipeline/verify.ts:237:L237: 🔴 bug: `laneStart` for app/a0 lanes is called without `startedAt`, losing lane start time data. Add the missing `startedAt` argument.": {
+      "verdict": "invalid",
+      "reason": "`laneStart` is not called with `startedAt` anywhere in the shown diff; the argument was intentionally removed."
+    },
+    "src/vision/openrouter.ts:130:L130: 🔵 nit: The error message for failing completion attempts could be more specific, e.g., including the models that failed. The new `pickProviderError` logic is good, but the fallback `Error` message might be improved.": {
+      "verdict": "invalid",
+      "reason": "The fallback Error message already includes model names via `errors.map(e => e.message).join('; ')`; adding models would be redundant style advice."
+    },
+    "src/report/manifest.ts:282:L282: `safeName` uses `replace(/[^\\w.-]/g, '-')` which still allows `..` after transformation (e.g., `foo/../bar` → `foo..-bar`). Add check for `..` or use a st": {
+      "verdict": "valid",
+      "reason": "`..` in `runId` could cause directory traversal after sanitization, yielding unexpected file paths."
+    },
+    "src/detect.ts:115:L115: 🔴 bug: `Buffer.concat(chunks)` receives Uint8Array elements, causing a TypeError. Convert each chunk to a Buffer first, e.g. `Buffer.concat(chunks.map(c => Buffer.from(c)))`.": {
+      "verdict": "valid",
+      "reason": "In a Node.js environment (diff), Buffer.concat with Uint8Array elements throws TypeError; explicit Buffer conversion required."
+    },
+    "src/engine/prompts.ts:82:L82: 🔵 nit: `exploreActionSchema` enum omits `done` from `strict` schema property constraints while `ExploreAction.action` union includes `done` — wait, `done` is present; but `fail` in the `ExploreAction` union has no prompt line and no schema entry, so a model can never emit it and the type is dead weight in the vocabulary union. Drop `fail` from `ExploreAction` or document who sets it.": {
+      "verdict": "invalid",
+      "reason": "'fail' is listed in the enum on line 91, contradicts claim it has no schema entry; the finding misreads the code."
+    },
+    "src/vision/openrouter.ts:76:L76: 🔵 nit: The `_request` method is private and only used internally. This is fine, but consider if it could be made more general if other methods might need similar request logic with timeout.": {
+      "verdict": "invalid",
+      "reason": "The finding is a style/suggestion comment, not a concrete defect or risk requiring a fix."
+    },
+    "src/executor/a0.ts:83:L83: 🔵 nit: bare `undefined` positional arg for cwd in the `exec` call obscures the signature. Use an options object or named `cwd` parameter on `ExecFn` if the seam allows.": {
+      "verdict": "unclear",
+      "reason": "Cannot see ExecFn signature or whether undefined is intentional/idiomatic for optional positional cwd."
+    },
+    "src/report/comment.ts:265:L265: 🔴 bug: `PROOF_LEVELS.indexOf` can return -1, leading to `PROOF_LEVELS[-1]`. Guard against negative indices.": {
+      "verdict": "invalid",
+      "reason": "PROOF_LEVELS is non-empty and fallback is ?? 'suspected' in bestFindingProof, so -1 is impossible."
+    },
+    "src/executor/a0.ts:122:L122: 🔴 bug: IPv6 loopback check compares `host` to `'[::1]'` and `'[::]'`. `URL.hostname` strips brackets, so the comparison never matches. Compare to `'::1'` (and drop `'[::]'`).": {
+      "verdict": "invalid",
+      "reason": "The finding references line 122, which contains only a closing brace; no IPv6 loopback comparison exists."
+    },
+    "src/config.ts:57:L57: `Explore.maxSteps` can remain undefined after merging defaults, causing later code to assume a number. Ensure it always has a numeric default.": {
+      "verdict": "invalid",
+      "reason": "The type is non-optional `number`; `resolveConfig` merges with `DEFAULT_EXPLORE` which includes `maxSteps: 20`, so it's always defined."
+    },
+    "src/pipeline/verify.ts:181:`flowEvidenceRan` accesses `report.explore?.enabled` without full object guard; simplify to early return then check.": {
+      "verdict": "invalid",
+      "reason": "`report.explore?.enabled` guards `skipped` access safely; no missing guard here."
+    },
+    "src/executor/a0.ts:130:L130: 🔴 bug: IPv4‑mapped IPv6 regex includes brackets (`/^\\[::ffff:...\\]$/`). `URL.hostname` does not contain brackets, so IPv4‑mapped loopback addresses are not detected. Remove the surrounding `\\[` and `\\]` from the pattern.": {
+      "verdict": "invalid",
+      "reason": "The finding points to line 130 which contains no regex at all—the regex is in isLoopback on later lines, and URL.hostname handling there already strips brackets."
+    },
+    "src/executor/a0.ts:227:L227: `cliVersion` passes `buildA0ChildEnv(input.env)` to exec, but `deps.cli` may be a relative path resolved in the child's cwd. Document that `cli` must be a": {
+      "verdict": "invalid",
+      "reason": "Finding claims the diff has a `cliVersion` risk at line 227, but line 227 is inside `isLoopback`, not relevant exec code."
+    },
+    "src/report/comment.ts:86:Explicit cast with `indexOf` may access `PROOF_LEVELS[-1]` returning `undefined`; use explicit mapping instead.": {
+      "verdict": "invalid",
+      "reason": "PROOF_LEVELS is typed readonly string[], indexOf a valid value never returns -1; fallback handles unmatched input."
+    },
+    "src/driver/target.ts:23:L23: 🟡 risk: `timeoutMs` <= 0 is silently replaced with the default 30 000 ms, which may hide caller intent. Preserve zero/negative values or explicitly reject them.": {
+      "verdict": "invalid",
+      "reason": "The fallback to default is intentional and documented in the JSDoc; silently coercing invalid input is a deliberate design choice."
+    },
+    "src/detect.ts:134:L134: 🔵 nit: Add documentation for `buildA0ChildEnv`.": {
+      "verdict": "invalid",
+      "reason": "`buildA0ChildEnv` already has an adequate JSDoc comment (`/** Build… */`) right above its definition, so the finding is redundant."
+    },
+    "src/pipeline/verify.ts:224:L224: 🔴 bug: `laneDetailUsage` falls back to `base.model` when `detail?.model` is nullish, but `base` is derived from `emptyUsage(provider)` which may not matc": {
+      "verdict": "invalid",
+      "reason": "base is derived from emptyUsage(provider) which always matches lane; model fallback is correct for provider-appropriate default."
+    },
+    "src/config.ts:71:`budgetUsd` may be set to Infinity or NaN or non‑numeric values that bypass budget checks … ": {
+      "verdict": "invalid",
+      "reason": "budgetUsd is validated at resolveConfig: only finite >0 numbers pass, else undefined; NaN/Infinity/non-numeric are dropped."
+    },
+    "src/report/comment.ts:122:L122: `cell(s ?? '')` coerces `undefined` to `'undefined'`. Replace `s ?? ''` with `s === undefined ? '' : String(s)`.": {
+      "verdict": "invalid",
+      "reason": "`cell` already calls `String(s ?? '')`, so coercion to 'undefined' string is intentional and documented behavior."
+    },
+    "src/detect.ts:164:L164: 🔵 nit: Add documentation for `redirect: 'follow'` in `fetch` options.": {
+      "verdict": "invalid",
+      "reason": "The comment block on lines 152–158 already documents the redirect behavior and its rationale in detail."
+    },
+    "src/driver/browser.ts:136:L136: 🔴 bug: `page.url()` can return 'null' origin, which is not a valid URL. Treat 'null' origin explicitly.": {
+      "verdict": "invalid",
+      "reason": "The `pageOrigin !== 'null'` guard explicitly handles the case when the origin is 'null', making the finding moot."
+    },
+    "src/report/run.ts:119:L119-133: 🔵 nit: `buildRunReport` grew three trailing positional optionals including a boolean — call sites become unreadable (`buildRunReport(tests, t, d, [], true, nonce)`). Take an options object `{ extraCalls, exploreEvidence, runNonce }`.": {
+      "verdict": "invalid",
+      "reason": "The diff already refactors the signature to include those optionals with clear documentation; readability objection is style-only nit."
+    },
+    "src/report/comment.ts:350:L350: 🔵 nit: `files` can contain `undefined` when a reproduced finding has no `file`, so `files.size === 1` renders the lead as `N findings reproduced in \\`\\``. Filter out undefined files (`.filter((file) => file !== undefined)`) before the size check.": {
+      "verdict": "valid",
+      "reason": "The code uses `x.file` which can be undefined for reproduced findings, causing an empty string in the lead sentence."
+    },
+    "src/driver/browser.ts:148:L148: 🔴 bug: `requestfailed` also fires for aborted requests — navigation-cancelled fetches and teardown-time aborts report `net::ERR_ABORTED`, so every route change and `context.close()` pollutes captures with non-failures. Skip when `req.failure()?.errorText` is `net::ERR_ABORTED` (and `net::ERR_TIMED_OUT` on page close).": {
+      "verdict": "valid",
+      "reason": "`requestfailed` fires on ERR_ABORTED/ERR_TIMED_OUT, so navigation/close aborts incorrectly become captured failures."
+    },
+    "src/report/comment.ts:403:L403: 🟡 risk: `m[2] !== ''` assumes `m` is non-null. Add null check for `m` before accessing `m[2]`.": {
+      "verdict": "invalid",
+      "reason": "Line 403 accesses `manifest?.identity.intendedHeadSha`, not `m[2]`. The finding misreads the code."
+    },
+    "src/report/run.ts:3:L3: 🔵 nit: Import 'HealEvent', 'TdAssertRecord', 'TdStepRecord' from '../api.js'.": {
+      "verdict": "invalid",
+      "reason": "L3 imports are used by TestReport fields; the finding is contradicted by the visible code context."
+    },
+    "src/detect.ts:67:L67: `env` can be `undefined` and passed as `{ ...baseEnv, ...undefined }` – fine, but if `opts.baseEnv` is supplied and `env` is `undefined`, `env` becomes `un": {
+      "verdict": "invalid",
+      "reason": "The diff explicitly adds opts?.baseEnv optional handling; undefined env spread is explicitly supported and harmless."
+    },
+    "src/driver/target.ts:91:L91: 🔵 nit: unconditional 250ms sleep runs even when `childExited` won the race (child already dead) — wasted delay before an inevitable throw. Track the race winner and only defer when `ready` won.": {
+      "verdict": "invalid",
+      "reason": "The sleep is deliberately needed to surface late child exits after ready wins the race; tracking the winner misses this intent."
+    },
+    "src/vision/openrouter.ts:82:L82: 🔵 nit: `_request` spread clobbers any `init.signal`, so a caller-supplied AbortSignal is silently ignored. Compose signals (`AbortSignal.any([init.signal, AbortSignal.timeout(this._timeoutMs)])`) or document that `init.signal` is unsupported.": {
+      "verdict": "valid",
+      "reason": "The spread places `signal` last, so `init.signal` overwrites the timeout instead of being discarded; finding is backwards."
+    },
+    "src/driver/target.ts:31:L31: 🔴 bug: `timeoutMs` can be non-finite or zero, leading to incorrect deadline calculation. Ensure `bounded` is always a positive finite number.": {
+      "verdict": "invalid",
+      "reason": "Line 20 already guards with Number.isFinite and > 0 before returning bounded; zero/non-finite values fall back."
+    },
+    "src/report/manifest.ts:73:L73: 🔵 nit: Interface 'RunIdentity' should be defined before use.": {
+      "verdict": "invalid",
+      "reason": "`RunIdentity` is defined at line 80, after `LaneManifest` at line 63, not before—the finding is stylistically pedantic, not a defect."
+    },
+    "src/pipeline/verify.ts:215:L215: 🔴 bug: `laneStart` for the flow lane omits the `startedAt` argument, causing inaccurate start timestamps. Include `startedAt` when invoking `laneStart`.": {
+      "verdict": "invalid",
+      "reason": "The diff and context show `laneStart(lanes.flow)` is correctly called without `startedAt`; the old version accepted it, the new one doesn't."
+    },
+    "src/report/comment.ts:277:L277: 🟡 risk: `laneProof` returns `'suspected'` for `inconclusive` status but `'exercised'` for other lanes without checking evidence. Clarify intent or align ": {
+      "verdict": "invalid",
+      "reason": "`laneProof` for status `inconclusive` explicitly returns `'suspected'`; other lanes without evidence correctly default to `'exercised'`—no inconsistency exists."
+    },
+    "src/evidence/ci.ts:139:L139: 🔴 bug: `fetchPrMeta` incorrectly assigns `baseSha` when `mergeBase` is undefined. It should default to `baseSha` only if `mergeBase` is truly unavailable and not just an empty string or null.": {
+      "verdict": "unclear",
+      "reason": "Cannot see line 139 baseSha assignment logic in provided diff; the finding references code outside the shown context."
+    },
+    "src/pipeline/verify.ts:458:L458: `detail` is used to set `reportPath` even when the runner threw (line 453 sets `detail` to `undefined` on error). Add `runnerError === undefined` guard be": {
+      "verdict": "invalid",
+      "reason": "The find points to line 458 which is blank in the provided head file; the referenced detail/reportPath logic is not present in the diff context."
+    },
+    "src/pipeline/budget.ts:66:L66: 🔴 bug: `budget.spentUsd > budget.limitUsd + USD_EPSILON` should be `budget.spentUsd + nextCostUsd > budget.limitUsd + USD_EPSILON`. Fix budget check logic": {
+      "verdict": "invalid",
+      "reason": "The code already correctly checks that the new total (spent + next) won't exceed the limit; the finding claims it does not, which is false."
+    },
+    "src/vision/openrouter.ts:138:L138: 🟡 risk: classified CliError message drops the aggregate `errors` detail, so a mixed multi-model failure surfaces as a single provider message with no per-candidate context. Include the joined messages in the CliError message or set `cause` to an aggregate Error.": {
+      "verdict": "invalid",
+      "reason": "The finding misreads line 138; when classified exists, only one matching provider error is used, not an aggregate of all errors."
+    },
+    "src/report/comment.ts:254:L254: 🔴 bug: `PROOF_LEVELS` is cast to `readonly string[]` but may contain non-string values. Ensure all elements are strings or filter non-strings.": {
+      "verdict": "invalid",
+      "reason": "PROOF_LEVELS is a `const` array of string literals; the cast `as readonly string[]` is always safe and contains only strings."
+    },
+    "src/report/comment.ts:91:`bestFindingProof` returns `'suspected'` when no findings exist; return `'none'` when findings list is empty.": {
+      "verdict": "invalid",
+      "reason": "bestFindingProof correctly returns 'suspected' as fallback; 'none' would conflict with existing 'suspected' semantics for empty findings."
+    },
+    "src/report/manifest.ts:281:`writeAtomicJson` will fail if directory does not exist; call `mkdir(dir, {recursive: true})` before writing.": {
+      "verdict": "valid",
+      "reason": "writeAtomicJson doesn't create directories; archiveManifest lacks mkdir(dir, {recursive:true}) before writing, causing failure on first run."
+    },
+    "src/review/secrets.ts:43:L43: new `p` field on findings re-exports `pLive` which was extracted from a confidence-model response. Ensure `p` is omitted entirely for suppressed candidates": {
+      "verdict": "invalid",
+      "reason": "The code conditionally adds `p` only when `adjudicated` is true; suppressed candidates are never adjudicated, so `p` is already omitted."
+    },
+    "src/report/comment.ts:299:L299: 🟡 risk: `P_FALLBACK_GATE = 0.7` is a magic constant duplicated across the action and `src/cli.ts` with only a comment to keep them in sync; any one drifting silently changes which findings count as high-confidence. Move it to a shared module and import it in all three sites.": {
+      "verdict": "valid",
+      "reason": "The constant 0.7 is defined at L283 but the finding identifies duplication with other files; a maintainer would want DRY."
+    },
+    "src/detect.ts:109:L109: `settled = true` inside the execFile callback is hoisted – `settled` is declared after `execFile` returns. Move `let settled = false` to before `execFile`": {
+      "verdict": "invalid",
+      "reason": "`let settled = false` is hoisted; closure captures the variable, not its initial position. No timing defect exists."
+    },
+    "src/config.ts:441:L441: 🔴 bug: `resolved.a0` destructuring assumes object existence. Add null check before destructuring.": {
+      "verdict": "invalid",
+      "reason": "Finding references non-existent `resolved.a0`; the code at L441 is `const rawExplore = ...`, which has no destructuring or null-check issue."
+    },
+    "src/pipeline/verify.ts:354:L354: 🟡 risk: `noEvidence` check allows flow to fail when no tests ran. Ensure report includes test count validation.": {
+      "verdict": "invalid",
+      "reason": "The `noEvidence` check already fails closed and updates status/reason; no missing test-count validation in the report output."
+    },
+    "src/report/manifest.ts:1:L1: 🔵 nit: Import 'readdir', 'unlink' from 'node:fs/promises'. Import 'join' from 'node:path'.": {
+      "verdict": "invalid",
+      "reason": "The import paths ('node:fs/promises', 'node:path') match standard Node.js conventions and appear syntactically correct."
+    },
+    "src/report/manifest.ts:60:L60: 🔵 nit: Interface 'CacheSummary' should be defined before use.": {
+      "verdict": "invalid",
+      "reason": "Interface CacheSummary is defined at line 54, before its use at line 77—order is correct."
+    },
+    "src/engine/prompts.ts:210:L210: 🔴 bug: `describeAction` does not handle `fail` action type from `ExploreAction`. Add case for `fail` to prevent undefined behavior.": {
+      "verdict": "valid",
+      "reason": "`describeAction` is called for ExploreAction including `fail`, but the switch lacks a `fail` case, causing silent fallback to `action.action`."
+    },
+    "src/vision/decisions.ts:1:L1: 🔵 nit: Import 'debug' from '../debug.js'.": {
+      "verdict": "invalid",
+      "reason": "The import already exists on line 1; the diff adds a new import on line 2, not this one."
+    },
+    "src/executor/a0.ts:174:L174: 🔴 bug: `octets[0] === 0` allows 0.0.0.0 through, which is not loopback. Change to `octets[0] !== 127` to match intent.": {
+      "verdict": "invalid",
+      "reason": "The finding refers to line 174 in a diff with max L174; line does not contain octets[0]===0—hallucinated."
+    },
+    "src/vision/openrouter.ts:133:L133: 🔴 bug: Error message prefix is hardcoded and may mismatch actual failure reason. Use dynamic prefix based on `errors` content.": {
+      "verdict": "invalid",
+      "reason": "The hardcoded prefix is always accurate for the 'all candidates failed' fallback path; no dynamic prefix is needed."
+    },
+    "src/driver/target.ts:92:L92: 🔴 bug: `child.exitCode !== null` is false when the child dies by signal (Node sets `signalCode`, leaves `exitCode` null), so a signal-killed child passes the squatter check and the run binds evidence to a server it didn't start — exactly what this guard was added to prevent. Check `child.exitCode !== null || child.signalCode !== null`, or record which of `ready`/`childExited` won the race and treat a `childExited` win as terminal regardless.": {
+      "verdict": "valid",
+      "reason": "Node child_process exit event sets exitCode only on normal exit; signal-killed processes leave exitCode null, bypassing the squatter guard."
+    },
+    "src/executor/a0.ts:88:L88: 🔵 nit: the `/ENOENT|not found|no such file/i` stderr sniff can tag a completed run as `spawnError` — exactly the misclassification the comment forbids. Drop the sniff and treat missing `res.spawnError` as `false` for injected execs.": {
+      "verdict": "valid",
+      "reason": "The regex sniff on line 95 can misclassify completed runs as spawn failures, contradicting the code's own comment."
+    },
+    "src/report/manifest.ts:268:L268: 🟡 risk: sanitizing with `replace(/[^\\w.-]/g, '-')` is not injective — distinct runIds (`a/b` and `a-b`) collapse to the same filename and silently overwrite each other's archive; append a short hash of the raw runId to keep names unique.": {
+      "verdict": "valid",
+      "reason": "The sanitizer collapses 'a/b' and 'a-b' into the same filename, risking silent overwrite when runIds differ."
+    },
+    "src/detect.ts:60:L60: 🟡 risk: `settled` is referenced by the `execFile` callback before its `let` declaration; a synchronous callback (or a future refactor) throws a TDZ ReferenceError. Hoist `let settled = false` above the `execFile` call.": {
+      "verdict": "valid",
+      "reason": "`settled` is assigned in the `execFile` callback before its `let` declaration; a synchronous callback path would throw a TDZ ReferenceError."
+    },
+    "src/detect.ts:88:L88: 🟡 risk: escalation timer is only cleared on `'close'`, so when a spawn error (ENOENT) fires `error` without `close` the timer still runs and can `resolve()` a second time after the callback already resolved. Clear `escalate` in the execFile callback too, or guard with `settled` before clearing.": {
+      "verdict": "valid",
+      "reason": "If execFile callback fires without 'close' (e.g. spawn ENOENT), escalate timer stays active and can resolve twice."
+    },
+    "src/report/run.ts:83:L83: ❓ q: comment claims the explore video is \"also in `artifacts.videos`\", but `buildRunReport` only maps `tests[].videoPath` — confirm the caller appends `explore.videoPath` to `artifacts.videos`, otherwise the claim is false and the video is unreachable via the documented field.": {
+      "verdict": "valid",
+      "reason": "buildRunReport only pushes test videoPath into artifacts.videos; explore.videoPath is never appended, making the comment claim false."
+    },
+    "src/config.ts:455:L455: 🔵 nit: `app.task` keeps untrimmed value while `sanitizeExpectation` trims its markers — a padded task string is stored verbatim. Assign `app.task.trim()`.": {
+      "verdict": "valid",
+      "reason": "Line 456 checks `app.task.trim()` but assigns the original `app.task`; padded strings are stored verbatim and bypass the guard."
+    },
+    "src/executor/a0.ts:143:L143: 🔵 nit: `done()` forces `summary` to \"delegation returned — self-reported\" for every `inconclusive`, so the timeout path (L240) reports a return that never happened. Allow the caller to pass a `summary` override in `extra`.": {
+      "verdict": "invalid",
+      "reason": "Timeout path (L240+) is outside the shown diff; `summary` override claim cannot be confirmed from visible context."
+    },
+    "src/detect.ts:141:L141: 🔵 nit: the byte cap is checked after pushing, so up to `chunkSize-1` extra bytes past 65_536 are buffered/decoded. Slice the final chunk to `65_536 - received` before pushing.": {
+      "verdict": "invalid",
+      "reason": "The finding references a 'byte cap' and 'chunkSize' that do not exist in the shown code; it hallucinates logic."
+    },
+    "src/report/manifest.ts:282:L282: 🔴 bug: `keep` is compared against `names.length` read *after* the new file is written, so when `keep` equals the pre-existing count the oldest archive is pruned immediately; retention should bound the total including the new entry, or the count should be computed before the write. Read `readdir` first, then write, then prune against `names.length - keep + 1`.": {
+      "verdict": "valid",
+      "reason": "New file is written before listing, so when keep equals the pre-existing count, the oldest archive is immediately pruned."
+    },
+    "src/fsutil.ts:12:L12: 🔵 nit: `writeAtomicText` leaks the `.tmp` file when `rename` throws (EACCES/EXDEV), leaving orphaned temps in the evidence dir. Wrap `writeFile`/`rename` in try/catch with `unlink(tmp).catch(() => {})`.": {
+      "verdict": "valid",
+      "reason": "rename can throw (e.g., EXDEV), leaking the tmp file; lack of cleanup is a genuine risk."
+    },
+    "src/probe/queue.ts:597:L597: 🟡 risk: `probe.content.slice(0, PROBE_CONTENT_CAP)` truncates by UTF-16 code units, so multi-byte content exceeds the byte cap and can split a surrogate pair. Encode with `TextEncoder`/`Buffer.byteLength` and slice on a code-point boundary.": {
+      "verdict": "invalid",
+      "reason": "The `persist` field is not serialized to JSON here; the comment mentions `capped for serialization`, not a byte-cap enforcement."
+    },
+    "src/vision/decisions.ts:199:L199: 🔵 nit: single line exceeds the repo print width and bypasses the multi-line style used by the surrounding branches; wrap it like the `validation` branch.": {
+      "verdict": "invalid",
+      "reason": "Line 199 is a concise early-return pattern; wrapping it like the multi-line `validation` branch is a style preference, not a defect."
+    },
+    "src/config.ts:492:L492: 🔵 nit: a whitespace-only `a0.url` (e.g. `'  '`) passes the `!== ''` check and becomes the base URL. Use `a0.url.trim() !== ''` and store the trimmed value.": {
+      "verdict": "invalid",
+      "reason": "The finding references line 492, but the provided code shows review.profiles assignment at that line, not a0.url handling—misplaced claim."
+    },
+    "src/executor/a0.ts:195:L195: 🔴 bug: empty-string `a0.url` is excluded by `configured` (so `resolveHost()` runs) yet `??` keeps `host = ''` and sets `hostSource = 'config'`, so a resolvable host is discarded and the lane reports `unavailable`. Select host/source off `configured` instead of `!== undefined`.": {
+      "verdict": "valid",
+      "reason": "When a0.url is empty-string, configured is false, resolveHost runs, but host becomes '' and hostSource becomes 'config', discarding resolved host."
+    },
+    "src/pipeline/verify.ts:178:L178: 🔵 nit: `flowEvidenceRan`'s doc comment claims an errored explore pass also fails closed, but the check only inspects `explore.skipped`; either extend `FlowReport.explore` with an error/outcome field and check it, or drop the 'errored' claim from the comment.": {
+      "verdict": "valid",
+      "reason": "The doc comment says 'errored' but the check only inspects `skipped`; the code doesn't handle an error outcome field."
+    },
+    "src/config.ts:199:L199: 🟡 risk: `ConfigInput` keeps `a0` as a non-partial `{ url; maxTasks; timeoutMs }`, so TS callers must supply `maxTasks`/`timeoutMs` even though `resolveConfig` treats both as optional. Add a dedicated `a0?: Partial<{...}>` (or a `A0Config` interface) to `ConfigInput`.": {
+      "verdict": "valid",
+      "reason": "ConfigInput.a0 is non-partial `{ url; maxTasks; timeoutMs }`, but resolveConfig treats maxTasks/timeoutMs as optional via defaults, forcing callers to supply undefineds."
+    },
+    "src/executor/a0.ts:218:L218: 🟡 risk: `maxTasks` is read only for the `note` string — the lane always calls `runA0Task` once, so `a0.maxTasks: 0` still spends a delegation and the logged \"max N\" is false. Gate on `maxTasks > 0` (or loop up to `maxTasks`) before delegating.": {
+      "verdict": "invalid",
+      "reason": "Finding addresses code from a different section (runA0Lane), not the shown isLoopback function at L218."
+    },
+    "src/pipeline/verify.ts:419:L419-421: 🟡 risk: a valid `detailStatus` overrides the exit code unconditionally, so a runner that writes `status: 'passed'` and then exits non-zero (post-processing failure, crash after write) yields a passing lane. Gate the override on `code === 0` for `'passed'`, e.g. `detailStatus === 'passed' && code !== 0 ? 'failed' : (detailStatus ?? ...)`.": {
+      "verdict": "valid",
+      "reason": "The detail status unconditionally overrides exit code; a runner writing 'passed' then exiting non-zero yields a false pass."
+    },
+    "src/pipeline/verify.ts:252:L252: 🟡 risk: `laneDetailBudget` sets `exceeded` from `overLimit(detail.visionCostUsd, budget.limitUsd)` but never assigns `spentUsd` from `detail.visionCostUsd`, so the manifest reports `spentUsd: 0` alongside `exceeded: true` for runners that only emit scalar totals. Set `spentUsd: detail.visionCostUsd` when `detail.calls === undefined`.": {
+      "verdict": "valid",
+      "reason": "budget.spentUsd stays 0 in laneDetailBudget when calls is undefined, contradicting exceeded set from visionCostUsd."
+    },
+    "src/config.ts:466:L466: 🔵 nit: `app.maxSteps`/`app.timeoutMs` are read from `rawApp` while sibling fields read from the merged `app`; a future default would be silently ignored. Read `optPosInt(app.maxSteps)`/`optPosInt(app.timeoutMs)` for consistency.": {
+      "verdict": "invalid",
+      "reason": "Other fields read from merged app for computed defaults; maxSteps/timeoutMs are optional and correctly raw-read to preserve unset semantics."
+    },
+    "src/pipeline/verify.ts:160:L160: 🟡 risk: `totals.visionCalls ?? usage.calls` lets an explicit `0` in `totals.visionCalls` overwrite a non-empty per-test call count, so usage under-reports when a runner emits totals without call counts. Fall back when the total is falsy: `totals.visionCalls || usage.calls`.": {
+      "verdict": "invalid",
+      "reason": "The diff removes the old code this finding targets; the new code already uses the recommended `||` fallback instead."
+    }
+  },
+  "costUsd": 0
+}
