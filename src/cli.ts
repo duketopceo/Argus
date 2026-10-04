@@ -113,6 +113,7 @@ import { CliError, errorJson, renderError, toCliError, type ErrorCode } from './
 import { colorEnabled, createStyler, type Styler } from './ui/style.js'
 import { renderSummary, verifySummary } from './ui/summary.js'
 import { PROOF_LEVELS, proofMeter, SEVERITY_GLYPH, SEVERITY_LABEL, shortSha } from './report/viewmodel.js'
+import { DEFAULT_BRANCH as DEFAULT_PR_BRANCH, initPr, validateBranch, validateRepo } from './onboarding/pr.js'
 import { renderScaffold, scaffoldChecklist } from './onboarding/scaffold.js'
 import { INLINE_SENTINEL, inlineDedupKey, normalizeFindingMessage } from './review/inline.js'
 
@@ -235,7 +236,7 @@ const HELP_GROUPS: { title: string; commands: [signature: string[], description:
   {
     title: 'Setup',
     commands: [
-      [['init [--force]'], 'Scaffold config, a smoke test and the PR workflow.'],
+      [['init [--force | --pr]'], 'Scaffold config, a smoke test and the PR workflow.'],
       [['--help'], 'Show this help.'],
     ],
   },
@@ -3120,7 +3121,50 @@ Then reports which optional features your environment already supports
 
 Options:
   --force   Overwrite files that already exist
-  -h, --help`
+  --pr      Open an onboarding pull request instead of writing files here
+            (uses your git and gh; never reads or sends your OpenRouter key)
+  --repo <owner/name>   With --pr: confirm the target (must match origin)
+  --branch <name>       With --pr: branch to use (default argus/onboarding)
+  -h, --help
+
+--pr refuses to overwrite existing files and, if the branch or an open PR
+already exists, reports it instead of creating another.`
+
+/** `argus-reviewer init --pr` — open an onboarding PR through local git + gh. */
+async function cmdInitPr(
+  values: { force?: boolean | undefined; repo?: string | undefined; branch?: string | undefined },
+  ctx: Ctx,
+  deps: CliDeps,
+): Promise<number> {
+  const branch = values.branch ?? DEFAULT_PR_BRANCH
+  const invalid =
+    (values.force ? '--force cannot be combined with --pr (a PR never overwrites files)' : undefined) ??
+    (values.repo !== undefined ? validateRepo(values.repo) : undefined) ??
+    validateBranch(branch)
+  if (invalid !== undefined) {
+    usageError(ctx, 'init', invalid, 'argus-reviewer init --help')
+    return 2
+  }
+  try {
+    const result = await initPr({
+      cwd: ctx.cwd,
+      exec: deps.exec ?? defaultExec,
+      repo: values.repo,
+      branch,
+      budgetUsd: resolveConfig({}).budgetUsd ?? 1,
+    })
+    ctx.out(
+      result.kind === 'existing'
+        ? `onboarding PR already open for ${result.repo} (${result.branch}): ${result.url}`
+        : `opened onboarding PR for ${result.repo} (${result.branch}): ${result.url}`,
+    )
+    ctx.out('Add OPENROUTER_API_KEY as a repository secret before merging; this command never reads it.')
+    return 0
+  } catch (e) {
+    reportError(ctx, e, 'init --pr', 'COMMAND_FAILED')
+    return 1
+  }
+}
 
 /** `argus-reviewer init` — scaffold config, a smoke test, and the workflow. */
 async function cmdInit(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> {
@@ -3128,12 +3172,20 @@ async function cmdInit(args: string[], ctx: Ctx, deps: CliDeps): Promise<number>
     args,
     options: {
       force: { type: 'boolean', default: false },
+      pr: { type: 'boolean', default: false },
+      repo: { type: 'string' },
+      branch: { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
     },
   })
   if (values.help) {
     ctx.out(INIT_USAGE)
     return 0
+  }
+  if (values.pr) return cmdInitPr(values, ctx, deps)
+  if (values.repo !== undefined || values.branch !== undefined) {
+    usageError(ctx, 'init', '--repo and --branch only apply with --pr', 'argus-reviewer init --pr')
+    return 2
   }
 
   // Detect first so the generated config can auto-enable what is present

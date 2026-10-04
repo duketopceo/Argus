@@ -27,6 +27,8 @@ npx argus-reviewer init          # config, a smoke test, and the PR workflow
 
 `init` checks your environment and tells you what is missing. Add `OPENROUTER_API_KEY` to your shell and to the repository secrets, and every pull request gets a review.
 
+To onboard through a pull request instead of writing files into your checkout, run `npx argus-reviewer init --pr` (optional `--repo owner/name`, `--branch argus/onboarding`). It uses your own `git` and `gh`, opens a PR with the secrets checklist, what is sent to the provider, the default budget and how to stop, refuses to overwrite existing files, and reports the existing PR if one is already open. It never reads your OpenRouter key.
+
 Record a browser flow once, then replay it on every run:
 
 ```bash
