@@ -1,6 +1,8 @@
 export interface ReplayGuard {
   /** Returns true if this delivery id was already seen inside the window; records it otherwise. */
   seen(id: string): boolean
+  /** Un-records a delivery id so a failed event can be redelivered inside the window. */
+  forget(id: string): void
   size(): number
 }
 
@@ -35,6 +37,9 @@ export function createReplayGuard(opts: { ttlMs?: number; maxEntries?: number; n
         map.delete(oldest)
       }
       return false
+    },
+    forget(id) {
+      map.delete(id)
     },
     size: () => map.size,
   }

@@ -73,7 +73,8 @@ export async function handleWebhook(request: Request, env: Env, deps: WebhookDep
 
   if (!(await verifySignature(env.WEBHOOK_SECRET, body, request.headers.get('x-hub-signature-256')))) return DENY()
 
-  if ((deps.replay ?? defaultReplay).seen(delivery)) return DENY()
+  const replay = deps.replay ?? defaultReplay
+  if (replay.seen(delivery)) return DENY()
 
   let payload: unknown
   try {
@@ -86,6 +87,9 @@ export async function handleWebhook(request: Request, env: Env, deps: WebhookDep
     try {
       await deps.onEvent({ event: request.headers.get('x-github-event') ?? '', delivery, payload })
     } catch {
+      // The event was not processed — release the delivery id so GitHub's
+      // redelivery of the same X-GitHub-Delivery is not denied as a replay.
+      replay.forget(delivery)
       return new Response(null, { status: 500 }) // detail deliberately dropped
     }
   }

@@ -86,6 +86,18 @@ describe('handleWebhook', () => {
     expect((await handleWebhook(await req('{}', { delivery: 'x', sig: 'sha256=' + '0'.repeat(64) }), env, { replay })).status).toBe(401)
     expect((await handleWebhook(await req('{}', { delivery: 'x' }), env, { replay })).status).toBe(202)
   })
+  it('does not burn a delivery id when the event handler fails — redelivery is accepted', async () => {
+    const replay = createReplayGuard()
+    let calls = 0
+    const onEvent = async () => {
+      calls++
+      if (calls === 1) throw new Error('transient')
+    }
+    expect((await handleWebhook(await req('{}', { delivery: 'd-5' }), env, { replay, onEvent })).status).toBe(500)
+    // GitHub redelivers the same X-GitHub-Delivery; it must not 401 as a replay.
+    expect((await handleWebhook(await req('{}', { delivery: 'd-5' }), env, { replay, onEvent })).status).toBe(202)
+    expect(calls).toBe(2)
+  })
   it('replay guard expires entries and bounds memory', () => {
     let t = 0
     const g = createReplayGuard({ ttlMs: 1000, maxEntries: 2, now: () => t })
