@@ -406,7 +406,7 @@ canvas and surface of the same theme.
 | `ink` | `#0E1116` | Primary text | 17.3 / 18.9 |
 | `ink-2` | `#3A414C` | Secondary text | 9.4 / 10.3 |
 | `ink-3` | `#5D6571` | Metadata, timestamps (minimum text tone) | 5.4 / 5.9 |
-| `accent` | `#2343F5` | Mark, focus ring, selection edge, primary button, links | 6.0 / 6.6 (white on accent 6.6) |
+| `accent` | `#2343F5` | Mark, focus ring, selection edge, primary button | 6.0 / 6.6 (white on accent 6.6) |
 | `accent-tint` | `#E6EAFE` | Selected row fill | n/a |
 | `passed` / `passed-tint` | `#0F7A55` / `#E3F3EC` | Passed status | 4.9 / 5.3; on tint 4.65 |
 | `failed` / `failed-tint` | `#C42B2F` / `#FBE7E6` | Failed status, bug severity | 5.2 / 5.6; on tint 4.73 |
@@ -594,14 +594,14 @@ Target first screen (markdown, renders in both GitHub themes):
 <!-- argus-reviewer -->
 ### Argus: ⊘ needs changes
 
-**2 bugs reproduced** in `src/discount.ts` · head `a1b2c3d` · $0.004210 · 38.1s
+**2 bugs reproduced** in `src/discount.ts` · head `a1b2c3d` · $0.003100 · 38.1s
 
-| | Lane | Result | Proof | Spend |
-|:-:|---|---|---|--:|
-| ⊘ | review | 3 findings, 2 reproduced | ▰▰▰▰ | $0.003100 |
-| ● | flow | 4 of 4 journeys, 1 healed | ▰▰▰▱ | $0.000000 |
-| ◐ | a0 | agent report is self-reported | ▰▱▱▱ | unmetered |
-| – | app | not selected | | |
+| Status | Lane | Result | Proof | Spend |
+|---|---|---|---|--:|
+| ⊘ failed | review | 3 findings, 2 reproduced | ▰▰▰▰ | $0.003100 |
+| ● passed | flow | 4 of 4 journeys, 1 healed | ▰▰▰▱ | $0.000000 |
+| ◐ inconclusive | a0 | agent report is self-reported | ▰▱▱▱ | unmetered |
+| – skipped | app | not selected | | |
 
 ◆ 2 bugs · ◈ 1 risk · ○ 0 nits · 1 suggestion ready to commit
 

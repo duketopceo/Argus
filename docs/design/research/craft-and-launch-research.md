@@ -225,7 +225,7 @@ Export a high-bitrate master, then encode a deliverable yourself so X's transcod
 2. **Capture** (deterministic, re-runnable):
    - Web UI: a Playwright script against a seeded local build at 2x DPR, recording video (or
      high-FPS screenshots per state), plus an `events.json` of every click/type target rect and timestamp.
-   - Live desktop (wisp only): `gpu-screen-recorder` region capture at 60 fps, cursor hidden.
+   - Live desktop (wisp only): `gpu-screen-recorder` region capture at 60 fps, real cursor visible for wisp’s cursor acting; do not enable cursor hiding.
    - Terminal: a VHS `.tape` per scene in the product's theme, as PNG-sequence or MP4.
 3. **Compose** in Remotion with shared components (Part C): `KineticType`, `UIZoom` (camera from
    `events.json`), `SynthCursor`, `TerminalScene`, `MarkSting` (three.js), `EndCard`. Brand tokens come from
@@ -240,7 +240,10 @@ Export a high-bitrate master, then encode a deliverable yourself so X's transcod
 
 Why this one: it is verified on this exact machine and needs no macOS. Every frame is code, so an
 agent can author and revise it. Re-renders are free when the UI changes. It uses the products' own CSS tokens, and
-the same components produce changelog clips weekly. Cost: $0 under Remotion's individual license.
+the same components produce changelog clips weekly. For the shared launch-kit including Pace (4+ people),
+budget the [Remotion Company license for Creators](https://www.remotion.dev/docs/pricing) at $25 per user per month
+for local, manually produced launch and changelog videos. The $0 license applies only to eligible individuals
+and companies of three or fewer people, excluding Pace; automated video services require separate Automators pricing.
 
 ### B.5 Per-product video concepts (30 to 45 s, 60 fps, silent-first)
 
@@ -248,8 +251,9 @@ the same components produce changelog clips weekly. Cost: $0 under Remotion's in
 - **Look**: graphite `#0C0E12` canvas, cobalt `#2343F5` used only on the mark and the one primary
   moment. Schibsted Grotesk headlines, Martian Mono for every number. The eye-state glyphs are the
   motion vocabulary (scan, blink-to-state).
-- **Hook (0 to 2.5 s)**: a black frame, then the Argus eye opens (blink-to-state, 260 ms). Headline
-  in kinetic type: **"Every PR gets a witness."**
+- **Hook (0 to 2.5 s)**: the Argus eye mark is visible on the graphite canvas in the first autoplay
+  frame, then blinks closed and opens (blink-to-state, 260 ms). Headline in kinetic type:
+  **"Every PR gets a witness."**
 - **Beats**
   1. 2.5 to 7 s. Terminal (VHS): `npx argus-reviewer init`, with the "What runs and what it costs" block
      landing. Type: "Your keys. Your models. Your runner."
@@ -336,7 +340,8 @@ launch-kit/
   AGENTS.md                 # rules: tokens only from brands/, no emoji, no stock, QC gate
   LICENSES.md               # every music/SFX/font file + license + source URL
   src/
-    Root.tsx                # registers every <product>/<video>/<aspect> composition
+    index.ts                # entry point: calls registerRoot with Root from ./Root
+    Root.tsx                # declares every <product>/<video>/<aspect> composition
     core/                   # shared, brand-agnostic components
       tokens.ts             # Brand type (zod): colors, fonts, motion, radii, glyphs
       timing.ts             # fps=60, beat grid helpers, bpm->frames, springs (no-overshoot, snappy)
