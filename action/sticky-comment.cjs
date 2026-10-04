@@ -680,6 +680,29 @@ function diagnosticsFold(manifest, report, codeReview) {
   const binding = manifest?.lanes?.review?.headBinding ?? (codeReview && !codeReview.skipped ? codeReview.headBinding : undefined)
   if (binding) items.push(`Head binding: ${cell(binding.status)}, ${cell(binding.detail)}`)
   if (codeReview && !codeReview.skipped) {
+    const sc = codeReview.scope
+    if (sc && sc.excludedFiles > 0) {
+      const sample = Array.isArray(sc.excludedSample) ? sc.excludedSample.slice(0, 5).map((p) => code(p)).join(', ') : ''
+      items.push(
+        `Review scope: ${sc.reviewedFiles} of ${sc.totalFiles} changed files reviewed; ` +
+          `${sc.excludedFiles} excluded by \`review.exclude\`${sample ? ` (${sample})` : ''}`,
+      )
+    }
+    const val = codeReview.validation
+    if (val && val.dropped > 0) {
+      const LABEL = {
+        file_not_in_diff: 'file not in the diff',
+        file_excluded: 'file excluded from review',
+        file_deleted: 'file deleted at head',
+        line_beyond_file: 'line past end of file',
+        line_outside_diff: 'line outside changed hunks',
+      }
+      const parts = Object.entries(val.byReason ?? {}).map(([k, n]) => `${n} ${LABEL[k] ?? cell(k)}`)
+      items.push(`Findings dropped by validation: ${val.dropped} (${parts.join(', ')})`)
+    }
+    if (typeof codeReview.testFileCapped === 'number' && codeReview.testFileCapped > 0) {
+      items.push(`Test-file findings capped at nit: ${codeReview.testFileCapped}`)
+    }
     const t = codeReview.triage
     if (t) {
       if (t.unadjudicated === true) {

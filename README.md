@@ -120,6 +120,8 @@ export default defineConfig({
 })
 ```
 
+Code review skips generated, fixture and vendored paths by default (`dist/**`, `fixtures/**`, `tests/goldens/**`, lockfiles, `*.generated.*`, `assets/brand/export/**`). Set `review: { exclude: [...] }` to replace that list (`[]` excludes nothing). The sticky comment's Diagnostics fold says how many files were left out.
+
 Full shape: [`src/config.ts`](src/config.ts). Setup walkthrough: [`docs/quickstart.md`](docs/quickstart.md).
 
 ## Contributing

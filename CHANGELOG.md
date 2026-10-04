@@ -3,6 +3,46 @@
 All notable changes to argus-reviewer are documented here. The project is
 pre-1.0; breaking changes may ship without a major bump until `1.0.0`.
 
+## [0.4.0] - 2026-10-03
+
+A redesign and a quieter reviewer. Argus now looks and reads the same
+everywhere, and review comments carry fewer false alarms.
+
+### Changed
+- **One visual language everywhere.** The PR comment, inline review
+  comments, commit status, CLI output, terminal UI, desk app and the
+  offline `report.html` share one emoji-free design: the same words, the
+  same severity labels, the same layout. Evidence reports open offline
+  with no network requests.
+- **Readable errors.** CLI failures are classified with a stable code, a
+  plain summary and a fix line saying what to run next. With `--json`, the
+  error is printed as one JSON object on stdout (it used to go to stderr),
+  so a pipe captures it.
+- **Quieter reviewer.** Files that are generated or fixtures are skipped by
+  default (`review.exclude` changes the list), findings that point outside
+  the diff are dropped, and findings
+  in test files are capped so they cannot crowd out real issues.
+- **Spend confirmations.** Paid eval runs show the estimated cost and ask
+  before spending anything, in the CLI and in the terminal UI.
+- Inline review comments use a new format. Comments posted by older
+  versions are still recognised, so upgrading does not repost them.
+
+### Added
+- Brand assets: logo, mark and social images, with a reproducible
+  `npm run brand` build.
+- A new README with a hero image and demo recordings.
+- A launch film, "The witness", under `launch/` in the repository. It is
+  not part of the npm package.
+- `docs/github-app.md` + a commented opt-in block in the `init` scaffold:
+  create and install your own GitHub App so Argus can submit APPROVE /
+  REQUEST_CHANGES — token minted per run via
+  `actions/create-github-app-token`, no webhook, no hosted service. The
+  scaffolded action pin now tracks the latest release.
+
+### Notes
+- The desk app and the terminal UI remain contributor tools in the
+  repository. They are not shipped in the npm package.
+
 ## [0.3.1] — 2026-10-01
 
 ### Added
