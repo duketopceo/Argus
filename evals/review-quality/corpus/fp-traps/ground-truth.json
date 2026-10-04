@@ -1,0 +1,6 @@
+{
+  "title": "FP traps — .find() guarded by early return, interval cleared in dispose, deliberate Math.floor",
+  "kind": "trees",
+  "planted": [],
+  "expectVerdictIn": ["pass", "approve"]
+}

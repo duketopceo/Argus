@@ -1,0 +1,9 @@
+{
+  "title": "Real PR #107 — residual hardening (nonce binding, validator parity, --no-review, visionTokens)",
+  "kind": "revisions",
+  "revisions": { "baseRev": "c0f2b3c59be1800f96ff48bd962ffdfb48dfbb42", "headRev": "119cacdce427046d1300da7b1eb386bcc4ed52a5" },
+  "strip": ["dist", "package-lock.json"],
+  "planted": [],
+  "precisionOnly": true,
+  "note": "Merged real diff — no ground truth; judge scores findings for precision. dist/ and lockfile excluded."
+}

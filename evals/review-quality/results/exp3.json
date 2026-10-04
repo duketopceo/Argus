@@ -1,0 +1,824 @@
+{
+  "label": "exp3",
+  "at": "2026-10-01T21:29:52.142Z",
+  "metrics": {
+    "reports_produced": 1,
+    "planted_recall": 0.8571,
+    "corpus_cost_usd": 0.0165,
+    "finding_count": 53,
+    "verdict_correct_count": 5,
+    "verdict_total": 6,
+    "secrets_correct_count": 4,
+    "secrets_total": 5,
+    "suppressed_count": 5,
+    "tokens": 137670,
+    "items_reviewed": 8
+  },
+  "items": [
+    {
+      "name": "clean-refactor",
+      "kind": "trees",
+      "precisionOnly": false,
+      "verdict": "approve",
+      "expectedVerdictIn": [
+        "pass",
+        "approve"
+      ],
+      "verdictCorrect": true,
+      "findings": [],
+      "secretsRecords": [],
+      "planted": [],
+      "secretsExpect": [],
+      "costUsd": 0.000429321,
+      "tokens": 3650,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "evals/work/rq-clean-refactor-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "demo-pr",
+      "kind": "source",
+      "precisionOnly": false,
+      "verdict": "needs_changes",
+      "expectedVerdictIn": [
+        "needs_changes"
+      ],
+      "verdictCorrect": true,
+      "findings": [
+        {
+          "file": "src/discount.ts",
+          "line": 5,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "The discount percentage is applied twice, leading to an incorrect calculation. Expected price * (1 - pct / 100), but got price * (1 - pct / 100) * (1 - pct / 100).",
+          "suggestion": null,
+          "p": 0.52
+        }
+      ],
+      "secretsRecords": [
+        {
+          "file": ".env.example",
+          "line": 2,
+          "patternClass": "stripe-live",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.07
+        },
+        {
+          "file": "docs/setup.md",
+          "line": 8,
+          "patternClass": "aws-access-key",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.08
+        }
+      ],
+      "planted": [
+        {
+          "file": "src/discount.ts",
+          "line": 6,
+          "severity": "bug",
+          "category": "correctness",
+          "note": "discount applied a second time",
+          "found": true
+        }
+      ],
+      "secretsExpect": [
+        {
+          "file": "docs/setup.md",
+          "line": 8,
+          "expect": "quiet",
+          "note": "AWS docs example key — should be suppressed or never flagged",
+          "suppressed": true,
+          "flagged": false,
+          "adjudicated": true,
+          "correct": true
+        },
+        {
+          "file": ".env.example",
+          "line": 2,
+          "expect": "quiet",
+          "note": "key content says fake/DEMO — suppression is correct adjudication",
+          "suppressed": true,
+          "flagged": false,
+          "adjudicated": true,
+          "correct": true
+        }
+      ],
+      "costUsd": 0.000425154,
+      "tokens": 4702,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "evals/work/rq-demo-pr-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "fp-traps",
+      "kind": "trees",
+      "precisionOnly": false,
+      "verdict": "approve",
+      "expectedVerdictIn": [
+        "pass",
+        "approve"
+      ],
+      "verdictCorrect": true,
+      "findings": [
+        {
+          "file": "src/cache.ts",
+          "line": 6,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L6: 🔵 nit: `startSweeper` accepts an optional `intervalMs` but doesn't validate it. Ensure it's a positive number.",
+          "suggestion": null,
+          "p": 0.43
+        },
+        {
+          "file": "src/users.ts",
+          "line": 14,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L14: 🔵 nit: `userEmail` function re-finds the user when it could be passed as an argument or reused from a caller's context for efficiency.",
+          "suggestion": null,
+          "p": 0.26
+        },
+        {
+          "file": "src/users.ts",
+          "line": 19,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L19: 🔵 nit: `daysSince` calculation could be more explicit by naming the constant `MS_PER_DAY` for clarity.",
+          "suggestion": null,
+          "p": 0.2
+        }
+      ],
+      "secretsRecords": [],
+      "planted": [],
+      "secretsExpect": [],
+      "costUsd": 0.0005659889999999999,
+      "tokens": 5016,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "evals/work/rq-fp-traps-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "planted-security",
+      "kind": "trees",
+      "precisionOnly": false,
+      "verdict": "needs_changes",
+      "expectedVerdictIn": [
+        "needs_changes"
+      ],
+      "verdictCorrect": true,
+      "findings": [
+        {
+          "file": "src/api.ts",
+          "line": 21,
+          "severity": "risk",
+          "category": "security",
+          "message": "SQL injection vulnerability: `id` from `req.query` is directly used in SQL query. Sanitize or use parameterized queries.",
+          "suggestion": null,
+          "p": 0.93
+        },
+        {
+          "file": "src/api.ts",
+          "line": 26,
+          "severity": "risk",
+          "category": "security",
+          "message": "Insecure admin check: Uses plaintext `x-admin` header. Implement a more secure method for authentication and authorization.",
+          "suggestion": null,
+          "p": 0.85
+        }
+      ],
+      "secretsRecords": [],
+      "planted": [
+        {
+          "file": "src/api.ts",
+          "line": 25,
+          "severity": "bug",
+          "category": "security",
+          "note": "string-interpolated SQL — injection",
+          "found": true
+        },
+        {
+          "file": "src/api.ts",
+          "line": 30,
+          "severity": "risk",
+          "category": "security",
+          "note": "x-admin header trusted — authz bypass",
+          "found": true
+        }
+      ],
+      "secretsExpect": [],
+      "costUsd": 0.000430476,
+      "tokens": 3709,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "evals/work/rq-planted-security-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "planted-trio",
+      "kind": "trees",
+      "precisionOnly": false,
+      "verdict": "needs_changes",
+      "expectedVerdictIn": [
+        "needs_changes"
+      ],
+      "verdictCorrect": true,
+      "findings": [
+        {
+          "file": "src/cart.ts",
+          "line": 15,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "L15: `cartTotal` incorrectly sums item prices. It should use `lineTotal` to account for quantity and price per item.",
+          "suggestion": null,
+          "p": 0.6
+        },
+        {
+          "file": "src/cart.ts",
+          "line": 20,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "L20: `applyCoupon` does not validate `pct`. The validation for `pct` was removed.",
+          "suggestion": null,
+          "p": 0.88
+        },
+        {
+          "file": "src/cart.ts",
+          "line": 25,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "L25: `persistCart` calls `writeFile` but does not `await` it, meaning the cart might not be persisted before the function returns.",
+          "suggestion": null,
+          "p": 0.75
+        }
+      ],
+      "secretsRecords": [],
+      "planted": [
+        {
+          "file": "src/cart.ts",
+          "line": 17,
+          "severity": "bug",
+          "category": "correctness",
+          "note": "cartTotal drops qty — sum += item.price",
+          "found": true
+        },
+        {
+          "file": "src/cart.ts",
+          "line": 24,
+          "severity": "bug",
+          "category": "correctness",
+          "note": "applyCoupon lost its range/NaN guard — NaN propagates",
+          "found": true
+        },
+        {
+          "file": "src/cart.ts",
+          "line": 29,
+          "severity": "risk",
+          "category": "correctness",
+          "note": "persistCart no longer awaits writeFile — fire-and-forget",
+          "found": true
+        }
+      ],
+      "secretsExpect": [],
+      "costUsd": 0.000494658,
+      "tokens": 4331,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "evals/work/rq-planted-trio-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "pr-107-snapshot",
+      "kind": "revisions",
+      "precisionOnly": true,
+      "verdict": "approve",
+      "expectedVerdictIn": null,
+      "verdictCorrect": null,
+      "findings": [
+        {
+          "file": "action/sticky-comment.cjs",
+          "line": 97,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L97: 🔵 nit: Add comment explaining why `Array.isArray(m.identity)` check is necessary.",
+          "suggestion": null,
+          "p": 0.27
+        },
+        {
+          "file": "action/sticky-comment.cjs",
+          "line": 103,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L103: 🔵 nit: Add comment explaining why `v !== undefined && typeof v !== 'string'` check is necessary.",
+          "suggestion": null,
+          "p": 0.29
+        },
+        {
+          "file": "action/sticky-comment.cjs",
+          "line": 108,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L108: 🔵 nit: Add comment explaining why `lane.lane === id` check is necessary.",
+          "suggestion": null,
+          "p": 0.31
+        },
+        {
+          "file": "action/sticky-comment.cjs",
+          "line": 110,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L110: 🔵 nit: Add comment explaining why `KNOWN_STATUSES.has(lane.status)` check is necessary.",
+          "suggestion": null,
+          "p": 0.33
+        },
+        {
+          "file": "scripts/collect.mjs",
+          "line": 75,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L75: 🔵 nit: Add comment explaining why `Array.isArray(m)` check is necessary.",
+          "suggestion": null,
+          "p": 0.29
+        },
+        {
+          "file": "scripts/collect.mjs",
+          "line": 81,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L81: 🔵 nit: Add comment explaining why `v !== undefined && typeof v !== 'string'` check is necessary.",
+          "suggestion": null,
+          "p": 0.29
+        },
+        {
+          "file": "scripts/collect.mjs",
+          "line": 86,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L86: 🔵 nit: Add comment explaining why `lane.lane === id` check is necessary.",
+          "suggestion": null,
+          "p": 0.3
+        },
+        {
+          "file": "scripts/collect.mjs",
+          "line": 88,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L88: 🔵 nit: Add comment explaining why `KNOWN_STATUSES.has(lane.status)` check is necessary.",
+          "suggestion": null,
+          "p": 0.29
+        },
+        {
+          "file": "src/cli.ts",
+          "line": 90,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L90: 🔵 nit: Clarify that `runNonceFrom` also trims whitespace.",
+          "suggestion": null,
+          "p": 0.29
+        },
+        {
+          "file": "src/pipeline/verify.ts",
+          "line": 154,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L154: 🔵 nit: Add comment explaining that `visionTokens` is a fallback for older `run.json` files.",
+          "suggestion": null,
+          "p": 0.25
+        },
+        {
+          "file": "src/report/manifest.ts",
+          "line": 90,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L90: 🔵 nit: Expand comment to explain why `RUN_ATTEMPT` is excluded from `runNonce`.",
+          "suggestion": null,
+          "p": 0.27
+        },
+        {
+          "file": "src/report/run.ts",
+          "line": 51,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L51: 🔵 nit: The comment `/** Token rollup across per-test calls AND lane-level extraCalls. */` is redundant with the property name `visionTokens`.",
+          "suggestion": null,
+          "p": 0.24
+        },
+        {
+          "file": "src/report/run.ts",
+          "line": 69,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L69: 🔵 nit: The comment `/** Workflow-run nonce (GITHUB_RUN_ID) — freshness binding for post steps. */` is redundant with the property name `runNonce`.",
+          "suggestion": null,
+          "p": 0.27
+        },
+        {
+          "file": "src/report/run.ts",
+          "line": 114,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L114: 🔵 nit: The comment explaining `runNonce` is verbose and can be shortened to focus on its purpose and usage.",
+          "suggestion": null,
+          "p": 0.27
+        },
+        {
+          "file": "src/report/viewmodel.ts",
+          "line": 155,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L155: 🔵 nit: The check `Array.isArray(m.identity)` is a redundant check because `typeof m.identity !== 'object'` will already catch arrays.",
+          "suggestion": null,
+          "p": 0.32
+        },
+        {
+          "file": "src/report/viewmodel.ts",
+          "line": 166,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L166: 🔵 nit: The check `aggregate === null` is redundant with `aggregate === undefined` as `typeof null` is `'object'`.",
+          "suggestion": null,
+          "p": 0.29
+        },
+        {
+          "file": "src/report/viewmodel.ts",
+          "line": 178,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L178: 🔵 nit: The check `m.lanes === null` is redundant with `m.lanes === undefined` as `typeof null` is `'object'`.",
+          "suggestion": null,
+          "p": 0.3
+        },
+        {
+          "file": "src/report/viewmodel.ts",
+          "line": 182,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L182: 🔵 nit: The check `lane === null` is redundant with `lane === undefined` as `typeof null` is `'object'`.",
+          "suggestion": null,
+          "p": 0.29
+        },
+        {
+          "file": "src/report/viewmodel.ts",
+          "line": 184,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L184: 🔵 nit: The check `lane.lane !== id` is redundant because the key in `m.lanes` already ensures this.",
+          "suggestion": null,
+          "p": 0.3
+        },
+        {
+          "file": "src/report/viewmodel.ts",
+          "line": 190,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L190: 🔵 nit: The check `lane.usage === null` is redundant with `lane.usage === undefined` as `typeof null` is `'object'`.",
+          "suggestion": null,
+          "p": 0.29
+        },
+        {
+          "file": "src/report/viewmodel.ts",
+          "line": 195,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L195: 🔵 nit: The check `lane.budget === null` is redundant with `lane.budget === undefined` as `typeof null` is `'object'`.",
+          "suggestion": null,
+          "p": 0.33
+        },
+        {
+          "file": "tests/unit/action-contract.test.ts",
+          "line": 568,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L568: 🔵 nit: Add comment explaining why `runNonce: '1'` is set.",
+          "suggestion": null,
+          "p": 0.31
+        },
+        {
+          "file": "tests/unit/action-contract.test.ts",
+          "line": 911,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L911: 🔵 nit: Add comment explaining the nonce's role in binding manifests to the current run.",
+          "suggestion": null,
+          "p": 0.31
+        },
+        {
+          "file": "tests/unit/action-contract.test.ts",
+          "line": 1175,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L1175: 🔵 nit: Add comment explaining why the nonce is '1' for the skipped manifest.",
+          "suggestion": null,
+          "p": 0.33
+        },
+        {
+          "file": "tests/unit/app-lane.test.ts",
+          "line": 483,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L483: 🔵 nit: Add comment explaining `runNonce: undefined` for this test case.",
+          "suggestion": null,
+          "p": 0.34
+        },
+        {
+          "file": "tests/unit/app-lane.test.ts",
+          "line": 540,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L540: 🔵 nit: Add comment explaining `runNonce: undefined` for this test case.",
+          "suggestion": null,
+          "p": 0.36
+        },
+        {
+          "file": "tests/unit/app-lane.test.ts",
+          "line": 581,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L581: 🔵 nit: Add comment explaining `runNonce: undefined` for this test case.",
+          "suggestion": null,
+          "p": 0.39
+        },
+        {
+          "file": "tests/unit/app-lane.test.ts",
+          "line": 742,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L742: 🔵 nit: Add comment explaining why `--no-review` alone leads to failure.",
+          "suggestion": null,
+          "p": 0.38
+        },
+        {
+          "file": "tests/unit/app-lane.test.ts",
+          "line": 770,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L770: 🔵 nit: Add comment explaining the composition of `--no-review` and `--app`.",
+          "suggestion": null,
+          "p": 0.43
+        },
+        {
+          "file": "tests/unit/app-lane.test.ts",
+          "line": 809,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L809: 🔵 nit: Add comment explaining why `RUN_ATTEMPT` is not part of the nonce.",
+          "suggestion": null,
+          "p": 0.43
+        },
+        {
+          "file": "tests/unit/app-lane.test.ts",
+          "line": 830,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L830: 🔵 nit: Add comment explaining why the nonce is absent for local runs.",
+          "suggestion": null,
+          "p": 0.46
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 323,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "L323: 🔵 nit: Add `runNonce: '42'` to mock `read` result to match the new `ARGUS_RUN_ID` binding in `emitApprovalReview`. This confirms the report belongs to the current workflow run.",
+          "suggestion": null,
+          "p": 0.42
+        },
+        {
+          "file": "tests/unit/pipeline.test.ts",
+          "line": 119,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "L119: 🔵 nit: Add `runNonce: undefined` to `identity` to match the new `ARGUS_RUN_ID` binding. This represents a run without the nonce explicitly set, like in older versions.",
+          "suggestion": null,
+          "p": 0.45
+        },
+        {
+          "file": "tests/unit/pipeline.test.ts",
+          "line": 178,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "L178: 🔵 nit: Add `runNonce: undefined` to `identity` to match the new `ARGUS_RUN_ID` binding. This represents a run without the nonce explicitly set, like in older versions.",
+          "suggestion": null,
+          "p": 0.4
+        }
+      ],
+      "secretsRecords": [
+        {
+          "file": "tests/unit/action-contract.test.ts",
+          "line": 1160,
+          "patternClass": "generic-assignment",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.09
+        }
+      ],
+      "planted": [],
+      "secretsExpect": [],
+      "costUsd": 0.008357028,
+      "tokens": 71641,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "evals/work/rq-pr-107-snapshot-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "pr-109-snapshot",
+      "kind": "revisions",
+      "precisionOnly": true,
+      "verdict": "approve",
+      "expectedVerdictIn": null,
+      "verdictCorrect": null,
+      "findings": [
+        {
+          "file": "src/cli.ts",
+          "line": 909,
+          "severity": "risk",
+          "category": "correctness",
+          "message": "Remote A0 host cannot access loopback/file targets. Add check to prevent delegation.",
+          "suggestion": null,
+          "p": 0.36
+        },
+        {
+          "file": "src/executor/a0.ts",
+          "line": 249,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `file:` protocol check to `isLoopback`.",
+          "suggestion": null,
+          "p": 0.28
+        },
+        {
+          "file": "tests/unit/a0-escalation.test.ts",
+          "line": 140,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `file:///` to loopback test cases.",
+          "suggestion": null,
+          "p": 0.38
+        },
+        {
+          "file": "tests/unit/cli.test.ts",
+          "line": 538,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Comment 'Loopback host matches the loopback fixture target — a remote host would be refused before any delegation.' is unclear. Clarify the purpose of this comment.",
+          "suggestion": null,
+          "p": 0.27
+        },
+        {
+          "file": "tests/unit/cli.test.ts",
+          "line": 538,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Test name 'run with heal:a0 delegates each failed test to Agent Zero' is long. Consider shortening to 'run with heal:a0 delegates failed tests'.",
+          "suggestion": null,
+          "p": 0.16
+        },
+        {
+          "file": "tests/unit/cli.test.ts",
+          "line": 522,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Test name 'delegate refuses an env-resolved remote host with a loopback target (#53)' is long. Consider shortening to 'delegate refuses remote env host with loopback target (#53)'.",
+          "suggestion": null,
+          "p": 0.17
+        },
+        {
+          "file": "tests/unit/cli.test.ts",
+          "line": 614,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Test name 'heal:a0 stops at the delegation cap — a0.maxTasks (#53)' is long. Consider shortening to 'heal:a0 stops at delegation cap (#53)'.",
+          "suggestion": null,
+          "p": 0.17
+        },
+        {
+          "file": "tests/unit/cli.test.ts",
+          "line": 667,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Test name 'heal:a0 refuses when the host is remote but the target is loopback (#53)' is long. Consider shortening to 'heal:a0 refuses remote host with loopback target (#53)'.",
+          "suggestion": null,
+          "p": 0.18
+        }
+      ],
+      "secretsRecords": [],
+      "planted": [],
+      "secretsExpect": [],
+      "costUsd": 0.0052581089999999995,
+      "tokens": 39504,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "evals/work/rq-pr-109-snapshot-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "secrets-mix",
+      "kind": "trees",
+      "precisionOnly": false,
+      "verdict": "approve",
+      "expectedVerdictIn": [
+        "needs_changes"
+      ],
+      "verdictCorrect": false,
+      "findings": [
+        {
+          "file": ".env.example",
+          "line": 3,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L3: 🔵 nit: `STRIPE_SECRET_KEY` example value could be more descriptive. Use a placeholder like `sk_test_...` or `sk_live_...`.",
+          "suggestion": null,
+          "p": 0.2
+        },
+        {
+          "file": "README.md",
+          "line": 6,
+          "severity": "nit",
+          "category": "security",
+          "message": "L6: 🔵 nit: AWS credentials should be managed using a configuration file (e.g., `~/.aws/credentials`) or IAM roles, not directly as environment variables. This improves security and manageability.",
+          "suggestion": null,
+          "p": 0.45
+        }
+      ],
+      "secretsRecords": [
+        {
+          "file": ".env.example",
+          "line": 3,
+          "patternClass": "stripe-live",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.12
+        },
+        {
+          "file": "README.md",
+          "line": 8,
+          "patternClass": "aws-access-key",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.14
+        }
+      ],
+      "planted": [
+        {
+          "file": ".env.example",
+          "line": 3,
+          "severity": "bug",
+          "category": "security",
+          "note": "live-format Stripe key committed to .env.example",
+          "found": false
+        }
+      ],
+      "secretsExpect": [
+        {
+          "file": "README.md",
+          "line": 8,
+          "expect": "quiet",
+          "note": "AWS docs example — suppress or never flag",
+          "suppressed": true,
+          "flagged": false,
+          "adjudicated": true,
+          "correct": true
+        },
+        {
+          "file": ".env.example",
+          "line": 3,
+          "expect": "flagged",
+          "note": "live-shaped sk_live_ key",
+          "suppressed": true,
+          "flagged": false,
+          "adjudicated": true,
+          "correct": false
+        },
+        {
+          "file": "src/config.ts",
+          "line": 13,
+          "expect": "quiet",
+          "note": "labeled test id — suppress or never flag",
+          "suppressed": false,
+          "flagged": false,
+          "adjudicated": false,
+          "correct": true
+        }
+      ],
+      "costUsd": 0.000555282,
+      "tokens": 5117,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "evals/work/rq-secrets-mix-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    }
+  ]
+}

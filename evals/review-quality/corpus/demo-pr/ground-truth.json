@@ -1,0 +1,13 @@
+{
+  "title": "Seeded double-discount bug + credential adjudication",
+  "kind": "source",
+  "source": "fixtures/demo-pr",
+  "planted": [
+    { "file": "src/discount.ts", "line": 6, "severity": "bug", "category": "correctness", "note": "discount applied a second time" }
+  ],
+  "secretsExpect": [
+    { "file": "docs/setup.md", "line": 8, "expect": "quiet", "note": "AWS docs example key — should be suppressed or never flagged" },
+    { "file": ".env.example", "line": 2, "expect": "quiet", "note": "key content says fake/DEMO — suppression is correct adjudication" }
+  ],
+  "expectVerdictIn": ["needs_changes"]
+}

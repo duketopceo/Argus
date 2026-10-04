@@ -1,0 +1,112 @@
+{
+  "label": "smoke-demo",
+  "at": "2026-10-01T20:49:12.099Z",
+  "metrics": {
+    "reports_produced": 1,
+    "planted_recall": 1,
+    "corpus_cost_usd": 0.0004,
+    "finding_count": 3,
+    "verdict_correct_count": 1,
+    "verdict_total": 1,
+    "secrets_correct_count": 1,
+    "secrets_total": 2,
+    "suppressed_count": 2,
+    "tokens": 4340,
+    "items_reviewed": 1
+  },
+  "items": [
+    {
+      "name": "demo-pr",
+      "kind": "source",
+      "precisionOnly": false,
+      "verdict": "needs_changes",
+      "expectedVerdictIn": [
+        "needs_changes"
+      ],
+      "verdictCorrect": true,
+      "findings": [
+        {
+          "file": "src/discount.ts",
+          "line": 5,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "L5: 🔴 bug: The discount percentage is applied twice, resulting in an incorrect final price. Remove the second application of the discount.",
+          "suggestion": "  return price * (1 - pct / 100)\n"
+        },
+        {
+          "file": ".env.example",
+          "line": 2,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L2: 🔵 nit: Provide a real-looking example value for `STRIPE_SECRET_KEY` to aid local setup.",
+          "suggestion": null
+        },
+        {
+          "file": "docs/setup.md",
+          "line": 6,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L6: 🔵 nit: Provide a real-looking example value for `AWS_ACCESS_KEY_ID` to aid local setup.",
+          "suggestion": null
+        }
+      ],
+      "secretsRecords": [
+        {
+          "file": ".env.example",
+          "line": 2,
+          "patternClass": "stripe-live",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.07
+        },
+        {
+          "file": "docs/setup.md",
+          "line": 8,
+          "patternClass": "aws-access-key",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.08
+        }
+      ],
+      "planted": [
+        {
+          "file": "src/discount.ts",
+          "line": 6,
+          "severity": "bug",
+          "category": "correctness",
+          "note": "discount applied a second time",
+          "found": true
+        }
+      ],
+      "secretsExpect": [
+        {
+          "file": "docs/setup.md",
+          "line": 8,
+          "expect": "quiet",
+          "note": "AWS docs example key — should be suppressed or never flagged",
+          "suppressed": true,
+          "flagged": false,
+          "adjudicated": true,
+          "correct": true
+        },
+        {
+          "file": ".env.example",
+          "line": 2,
+          "expect": "flagged",
+          "note": "live-format Stripe key — should surface as bug/risk",
+          "suppressed": true,
+          "flagged": false,
+          "adjudicated": true,
+          "correct": false
+        }
+      ],
+      "costUsd": 0.000352248,
+      "tokens": 4340,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "evals/work/rq-demo-pr-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    }
+  ]
+}

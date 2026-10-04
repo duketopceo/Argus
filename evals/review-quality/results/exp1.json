@@ -1,0 +1,1013 @@
+{
+  "label": "exp1",
+  "at": "2026-10-01T21:21:44.465Z",
+  "metrics": {
+    "reports_produced": 1,
+    "planted_recall": 0.8571,
+    "corpus_cost_usd": 0.0124,
+    "finding_count": 74,
+    "verdict_correct_count": 5,
+    "verdict_total": 6,
+    "secrets_correct_count": 4,
+    "secrets_total": 5,
+    "suppressed_count": 5,
+    "tokens": 104780,
+    "items_reviewed": 8
+  },
+  "items": [
+    {
+      "name": "clean-refactor",
+      "kind": "trees",
+      "precisionOnly": false,
+      "verdict": "approve",
+      "expectedVerdictIn": [
+        "pass",
+        "approve"
+      ],
+      "verdictCorrect": true,
+      "findings": [
+        {
+          "file": "src/format.ts",
+          "line": 2,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L2: 🔵 nit: Constant `CURRENCY_SYMBOLS` could be exported if needed elsewhere.",
+          "suggestion": "export const CURRENCY_SYMBOLS: Record<string, string> = { EUR: '€', GBP: '£', USD: '$' }",
+          "p": 0.13
+        }
+      ],
+      "secretsRecords": [],
+      "planted": [],
+      "secretsExpect": [],
+      "costUsd": 0.000247284,
+      "tokens": 3163,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "evals/work/rq-clean-refactor-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "demo-pr",
+      "kind": "source",
+      "precisionOnly": false,
+      "verdict": "needs_changes",
+      "expectedVerdictIn": [
+        "needs_changes"
+      ],
+      "verdictCorrect": true,
+      "findings": [
+        {
+          "file": "src/discount.ts",
+          "line": 5,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "L5: 🔴 bug: The percentage discount is applied twice. Fix by removing the second discount application.",
+          "suggestion": "return price * (1 - pct / 100)",
+          "p": 0.49
+        },
+        {
+          "file": ".env.example",
+          "line": 2,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L2: 🔵 nit: Use a placeholder key that is clearly not a live key, and include a comment about it.",
+          "suggestion": null,
+          "p": 0.34
+        },
+        {
+          "file": "docs/setup.md",
+          "line": 6,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L6: 🔵 nit: The example AWS key `AKIAIOSFODNN7EXAMPLE` is a valid public example key and should not be used for instructions on how to set up credentials.",
+          "suggestion": null,
+          "p": 0.36
+        }
+      ],
+      "secretsRecords": [
+        {
+          "file": ".env.example",
+          "line": 2,
+          "patternClass": "stripe-live",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.08
+        },
+        {
+          "file": "docs/setup.md",
+          "line": 8,
+          "patternClass": "aws-access-key",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.09
+        }
+      ],
+      "planted": [
+        {
+          "file": "src/discount.ts",
+          "line": 6,
+          "severity": "bug",
+          "category": "correctness",
+          "note": "discount applied a second time",
+          "found": true
+        }
+      ],
+      "secretsExpect": [
+        {
+          "file": "docs/setup.md",
+          "line": 8,
+          "expect": "quiet",
+          "note": "AWS docs example key — should be suppressed or never flagged",
+          "suppressed": true,
+          "flagged": false,
+          "adjudicated": true,
+          "correct": true
+        },
+        {
+          "file": ".env.example",
+          "line": 2,
+          "expect": "quiet",
+          "note": "key content says fake/DEMO — suppression is correct adjudication",
+          "suppressed": true,
+          "flagged": false,
+          "adjudicated": true,
+          "correct": true
+        }
+      ],
+      "costUsd": 0.000346416,
+      "tokens": 4336,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "evals/work/rq-demo-pr-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "fp-traps",
+      "kind": "trees",
+      "precisionOnly": false,
+      "verdict": "approve",
+      "expectedVerdictIn": [
+        "pass",
+        "approve"
+      ],
+      "verdictCorrect": true,
+      "findings": [
+        {
+          "file": "src/cache.ts",
+          "line": 1,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L5: 🔵 nit: `sweeper` is a NodeJS.Timeout but type is `NodeJS.Timeout | null`. Consider `NodeJS.Timeout | undefined` or initialize to `undefined`.",
+          "suggestion": null,
+          "p": 0.22
+        }
+      ],
+      "secretsRecords": [],
+      "planted": [],
+      "secretsExpect": [],
+      "costUsd": 0.000282876,
+      "tokens": 3079,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "evals/work/rq-fp-traps-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "planted-security",
+      "kind": "trees",
+      "precisionOnly": false,
+      "verdict": "needs_changes",
+      "expectedVerdictIn": [
+        "needs_changes"
+      ],
+      "verdictCorrect": true,
+      "findings": [
+        {
+          "file": "src/api.ts",
+          "line": 21,
+          "severity": "risk",
+          "category": "security",
+          "message": "L21: 🟡 risk: SQL injection vulnerability. Sanitize or use parameterized queries for `id`.",
+          "suggestion": null,
+          "p": 0.92
+        },
+        {
+          "file": "src/api.ts",
+          "line": 25,
+          "severity": "risk",
+          "category": "security",
+          "message": "L25: 🟡 risk: Insecure admin check. Header `x-admin` can be easily spoofed. Use authenticated user roles.",
+          "suggestion": null,
+          "p": 0.92
+        }
+      ],
+      "secretsRecords": [],
+      "planted": [
+        {
+          "file": "src/api.ts",
+          "line": 25,
+          "severity": "bug",
+          "category": "security",
+          "note": "string-interpolated SQL — injection",
+          "found": true
+        },
+        {
+          "file": "src/api.ts",
+          "line": 30,
+          "severity": "risk",
+          "category": "security",
+          "note": "x-admin header trusted — authz bypass",
+          "found": true
+        }
+      ],
+      "secretsExpect": [],
+      "costUsd": 0.000273459,
+      "tokens": 2832,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "evals/work/rq-planted-security-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "planted-trio",
+      "kind": "trees",
+      "precisionOnly": false,
+      "verdict": "needs_changes",
+      "expectedVerdictIn": [
+        "needs_changes"
+      ],
+      "verdictCorrect": true,
+      "findings": [
+        {
+          "file": "src/cart.ts",
+          "line": 17,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "L17: 🔴 bug: `cartTotal` does not use `lineTotal`. Use `lineTotal` for correct calculation.",
+          "suggestion": null,
+          "p": 0.7
+        },
+        {
+          "file": "src/cart.ts",
+          "line": 25,
+          "severity": "bug",
+          "category": "correctness",
+          "message": "L25: 🔴 bug: `applyCoupon` validation is removed. Re-add validation for `pct`.",
+          "suggestion": null,
+          "p": 0.85
+        },
+        {
+          "file": "src/cart.ts",
+          "line": 30,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L30: 🔵 nit: `persistCart` does not `await` `writeFile`. `await` `writeFile` to ensure cart is persisted before function returns.",
+          "suggestion": null,
+          "p": 0.73
+        }
+      ],
+      "secretsRecords": [],
+      "planted": [
+        {
+          "file": "src/cart.ts",
+          "line": 17,
+          "severity": "bug",
+          "category": "correctness",
+          "note": "cartTotal drops qty — sum += item.price",
+          "found": true
+        },
+        {
+          "file": "src/cart.ts",
+          "line": 24,
+          "severity": "bug",
+          "category": "correctness",
+          "note": "applyCoupon lost its range/NaN guard — NaN propagates",
+          "found": true
+        },
+        {
+          "file": "src/cart.ts",
+          "line": 29,
+          "severity": "risk",
+          "category": "correctness",
+          "note": "persistCart no longer awaits writeFile — fire-and-forget",
+          "found": true
+        }
+      ],
+      "secretsExpect": [],
+      "costUsd": 0.00027759,
+      "tokens": 3184,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "evals/work/rq-planted-trio-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "pr-107-snapshot",
+      "kind": "revisions",
+      "precisionOnly": true,
+      "verdict": "needs_changes",
+      "expectedVerdictIn": null,
+      "verdictCorrect": null,
+      "findings": [
+        {
+          "file": "action/emit-review.mjs",
+          "line": 229,
+          "severity": "risk",
+          "category": "security",
+          "message": "Safely access `codeReview?.runNonce` to prevent errors when `runNonce` is missing.",
+          "suggestion": null,
+          "p": 0.34
+        },
+        {
+          "file": "action/sticky-comment.cjs",
+          "line": 100,
+          "severity": "risk",
+          "category": "security",
+          "message": "Validate all fields (`repo`, `pr`, `intendedHeadSha`, `checkoutSha`, `baseSha`, `runNonce`) of `m.identity` for completeness.",
+          "suggestion": null,
+          "p": 0.35
+        },
+        {
+          "file": "action/sticky-comment.cjs",
+          "line": 108,
+          "severity": "risk",
+          "category": "security",
+          "message": "Validate the type of `m.identity` fields (`repo`, `pr`, `intendedHeadSha`, `checkoutSha`, `baseSha`, `runNonce`) to ensure they are strings when defined.",
+          "suggestion": null,
+          "p": 0.38
+        },
+        {
+          "file": "action/sticky-comment.cjs",
+          "line": 832,
+          "severity": "risk",
+          "category": "security",
+          "message": "Safely access `codeReview?.runNonce` to prevent errors when `runNonce` is missing.",
+          "suggestion": null,
+          "p": 0.42
+        },
+        {
+          "file": "action/sticky-comment.cjs",
+          "line": 1026,
+          "severity": "risk",
+          "category": "security",
+          "message": "Verify `parsed.identity?.runNonce` matches `expectedNonce` before assignment to prevent potential replay attacks.",
+          "suggestion": null,
+          "p": 0.37
+        },
+        {
+          "file": "scripts/collect.mjs",
+          "line": 77,
+          "severity": "risk",
+          "category": "security",
+          "message": "Validate all fields (`repo`, `pr`, `intendedHeadSha`, `checkoutSha`, `baseSha`, `runNonce`) of `m.identity` for completeness.",
+          "suggestion": null,
+          "p": 0.44
+        },
+        {
+          "file": "scripts/collect.mjs",
+          "line": 85,
+          "severity": "risk",
+          "category": "security",
+          "message": "Validate the type of `m.identity` fields (`repo`, `pr`, `intendedHeadSha`, `checkoutSha`, `baseSha`, `runNonce`) to ensure they are strings when defined.",
+          "suggestion": null,
+          "p": 0.43
+        },
+        {
+          "file": "scripts/collect.mjs",
+          "line": 91,
+          "severity": "risk",
+          "category": "security",
+          "message": "Ensure type consistency or explicit type coercion when comparing `lane.lane` to `id` to prevent unexpected behavior.",
+          "suggestion": null,
+          "p": 0.33
+        },
+        {
+          "file": ".github/workflows/ci.yml",
+          "line": 44,
+          "severity": "nit",
+          "category": "other",
+          "message": "Add a comment to explain the importance of the dashboard smoke test.",
+          "suggestion": null,
+          "p": 0.26
+        },
+        {
+          "file": "src/report/run.ts",
+          "line": 49,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Remove redundant JSDoc comment for `visionTokens` as it's self-explanatory.",
+          "suggestion": null,
+          "p": 0.19
+        },
+        {
+          "file": "src/report/run.ts",
+          "line": 112,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Remove redundant JSDoc comment for `runNonce` as it's self-explanatory.",
+          "suggestion": null,
+          "p": 0.18
+        },
+        {
+          "file": "src/report/viewmodel.ts",
+          "line": 155,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Explicitly check for `null` in addition to `undefined` for `m.identity` and `aggregate`.",
+          "suggestion": null,
+          "p": 0.23
+        },
+        {
+          "file": "src/report/viewmodel.ts",
+          "line": 178,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Explicitly check for `null` in addition to `undefined` for `lane.usage` and `lane.budget`.",
+          "suggestion": null,
+          "p": 0.23
+        },
+        {
+          "file": "tests/unit/action-contract.test.ts",
+          "line": 568,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Add a comment explaining why `runNonce: '1'` is hardcoded and its importance for the test.",
+          "suggestion": null,
+          "p": 0.24
+        },
+        {
+          "file": "tests/unit/action-contract.test.ts",
+          "line": 842,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Clarify the comment 'the plant vector the nonce closes' to better explain the mechanism or intention.",
+          "suggestion": null,
+          "p": 0.25
+        },
+        {
+          "file": "tests/unit/action-contract.test.ts",
+          "line": 873,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Clarify the comment 'it cannot launder a green flow verdict' by explaining why a foreign nonce invalidates the verdict.",
+          "suggestion": null,
+          "p": 0.22
+        },
+        {
+          "file": "tests/unit/action-contract.test.ts",
+          "line": 924,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Ensure consistent and clear explanation of why a foreign nonce invalidates the 'green flow verdict'.",
+          "suggestion": null,
+          "p": 0.23
+        },
+        {
+          "file": "tests/unit/action-contract.test.ts",
+          "line": 1093,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Explain the concept of 'the plant vector' or provide a link to its definition.",
+          "suggestion": null,
+          "p": 0.26
+        },
+        {
+          "file": "tests/unit/action-contract.test.ts",
+          "line": 1155,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Ensure consistent explanation of 'the plant vector' across tests.",
+          "suggestion": null,
+          "p": 0.25
+        },
+        {
+          "file": "tests/unit/action-contract.test.ts",
+          "line": 1355,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Add a note on why validator parity is important beyond just agreement (e.g., preventing subtle drifts).",
+          "suggestion": null,
+          "p": 0.23
+        },
+        {
+          "file": "tests/unit/app-lane.test.ts",
+          "line": 483,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Add a comment explaining the meaning of `runNonce: undefined` in this test context.",
+          "suggestion": null,
+          "p": 0.22
+        },
+        {
+          "file": "tests/unit/app-lane.test.ts",
+          "line": 540,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Add a comment explaining the meaning of `runNonce: undefined` in this test context.",
+          "suggestion": null,
+          "p": 0.23
+        },
+        {
+          "file": "tests/unit/app-lane.test.ts",
+          "line": 583,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Clarify the meaning of `runNonce: undefined` if it's not simply absent.",
+          "suggestion": null,
+          "p": 0.24
+        },
+        {
+          "file": "tests/unit/app-lane.test.ts",
+          "line": 749,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Add a brief explanation for why re-adding a review would be problematic (e.g., security risk, unexpected behavior).",
+          "suggestion": null,
+          "p": 0.25
+        },
+        {
+          "file": "tests/unit/app-lane.test.ts",
+          "line": 769,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Explicitly state what the 'reachable target' is in this context (e.g., CI environment, specific configuration).",
+          "suggestion": null,
+          "p": 0.24
+        },
+        {
+          "file": "tests/unit/app-lane.test.ts",
+          "line": 806,
+          "severity": "nit",
+          "category": "convention",
+          "message": "Add a brief note on why `RUN_ATTEMPT` is not part of the nonce (e.g., 'to ensure evidence from retries isn't invalidated').",
+          "suggestion": null,
+          "p": 0.24
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 322,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: '42'` to the mock return value of `read` to test report binding.",
+          "suggestion": null,
+          "p": 0.24
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 352,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: '42'` to the mock return value of `read` to test report binding.",
+          "suggestion": null,
+          "p": 0.23
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 370,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: '42'` to the mock return value of `read` to test report binding.",
+          "suggestion": null,
+          "p": 0.25
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 388,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: '42'` to the mock return value of `read` to test report binding.",
+          "suggestion": null,
+          "p": 0.24
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 406,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: '42'` to the mock return value of `read` to test report binding.",
+          "suggestion": null,
+          "p": 0.22
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 419,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: '42'` to the mock return value of `read` to test report binding.",
+          "suggestion": null,
+          "p": 0.24
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 437,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: '42'` to the mock return value of `read` to test report binding.",
+          "suggestion": null,
+          "p": 0.24
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 456,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: '42'` to the mock return value of `read` to test report binding.",
+          "suggestion": null,
+          "p": 0.24
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 475,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: '42'` to the mock return value of `read` to test report binding.",
+          "suggestion": null,
+          "p": 0.23
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 495,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: '42'` to the mock return value of `read` to test report binding.",
+          "suggestion": null,
+          "p": 0.24
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 521,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: '42'` to the mock return value of `read` to test report binding.",
+          "suggestion": null,
+          "p": 0.22
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 547,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: '42'` to the mock return value of `read` to test report binding.",
+          "suggestion": null,
+          "p": 0.23
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 571,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: '42'` to the mock return value of `read` to test report binding.",
+          "suggestion": null,
+          "p": 0.24
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 597,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: '42'` to the mock return value of `read` to test report binding.",
+          "suggestion": null,
+          "p": 0.25
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 615,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: '42'` to the mock return value of `read` when verdict is `needs_changes` to test report binding.",
+          "suggestion": null,
+          "p": 0.25
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 627,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: '42'` to the mock return value of `read` to test report binding.",
+          "suggestion": null,
+          "p": 0.24
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 666,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: '42'` to the mock return value of `read` to test report binding.",
+          "suggestion": null,
+          "p": 0.25
+        },
+        {
+          "file": "tests/unit/approval-review.test.ts",
+          "line": 677,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: '42'` to the mock return value of `read` to test report binding.",
+          "suggestion": null,
+          "p": 0.27
+        },
+        {
+          "file": "tests/unit/pipeline.test.ts",
+          "line": 22,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: undefined` to the `identity` object in test setup.",
+          "suggestion": null,
+          "p": 0.26
+        },
+        {
+          "file": "tests/unit/pipeline.test.ts",
+          "line": 155,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: undefined` to the `identity` object in test setup.",
+          "suggestion": null,
+          "p": 0.25
+        },
+        {
+          "file": "tests/unit/pipeline.test.ts",
+          "line": 179,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: undefined` to the `identity` object in test setup.",
+          "suggestion": null,
+          "p": 0.27
+        },
+        {
+          "file": "tests/unit/pipeline.test.ts",
+          "line": 193,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: undefined` to the `identity` object in test setup.",
+          "suggestion": null,
+          "p": 0.26
+        },
+        {
+          "file": "tests/unit/pipeline.test.ts",
+          "line": 210,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: undefined` to the `identity` object in test setup.",
+          "suggestion": null,
+          "p": 0.27
+        },
+        {
+          "file": "tests/unit/pipeline.test.ts",
+          "line": 235,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: undefined` to the `identity` object in test setup.",
+          "suggestion": null,
+          "p": 0.28
+        },
+        {
+          "file": "tests/unit/pipeline.test.ts",
+          "line": 573,
+          "severity": "nit",
+          "category": "correctness",
+          "message": "Add `runNonce: undefined` to the `identity` object in test setup.",
+          "suggestion": null
+        }
+      ],
+      "secretsRecords": [
+        {
+          "file": "tests/unit/action-contract.test.ts",
+          "line": 1160,
+          "patternClass": "generic-assignment",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.08
+        }
+      ],
+      "planted": [],
+      "secretsExpect": [],
+      "costUsd": 0.008173805999999999,
+      "tokens": 59363,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "evals/work/rq-pr-107-snapshot-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "pr-109-snapshot",
+      "kind": "revisions",
+      "precisionOnly": true,
+      "verdict": "approve",
+      "expectedVerdictIn": null,
+      "verdictCorrect": null,
+      "findings": [
+        {
+          "file": "README.md",
+          "line": 41,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L41: 🔵 nit: `inconclusive`/`unavailable` is redundant with `inconclusive`, as it reports `inconclusive`, never `passed`, while live verification is unproven. Remove `unavailable`.",
+          "suggestion": null,
+          "p": 0.29
+        },
+        {
+          "file": "SECURITY.md",
+          "line": 124,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L124: 🔵 nit: `inconclusive` — never `passed`. Remove `inconclusive`.",
+          "suggestion": null,
+          "p": 0.28
+        },
+        {
+          "file": "docs/quickstart.md",
+          "line": 236,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L236: 🔵 nit: `inconclusive` even on agent-reported success — live round-trip verification is open. Remove `inconclusive`.",
+          "suggestion": null,
+          "p": 0.33
+        },
+        {
+          "file": "src/cli.ts",
+          "line": 920,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L920: 🔵 nit: a hard `inconclusive` ceiling — a completed delegation is evidence. Remove `inconclusive`.",
+          "suggestion": null,
+          "p": 0.28
+        },
+        {
+          "file": "src/config.ts",
+          "line": 211,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L211: 🔵 nit: `inconclusive` — the agent's answer is self-reported evidence, never a `passed` verdict. Remove `inconclusive`.",
+          "suggestion": null,
+          "p": 0.27
+        },
+        {
+          "file": "tests/e2e/dashboard-smoke.mjs",
+          "line": 51,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L51: 🔵 nit: delegation returned — self-reported. Remove `self-reported`.",
+          "suggestion": null,
+          "p": 0.22
+        },
+        {
+          "file": "tests/fixtures/manifest.ts",
+          "line": 120,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L120: 🔵 nit: delegation returned — self-reported. Remove `self-reported`.",
+          "suggestion": null,
+          "p": 0.24
+        },
+        {
+          "file": "tests/unit/a0-escalation.test.ts",
+          "line": 140,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L140: 🔵 nit: delegates through a reachable host and caps at inconclusive (self-reported). Remove `inconclusive`.",
+          "suggestion": null,
+          "p": 0.27
+        },
+        {
+          "file": "tests/unit/comment.test.ts",
+          "line": 227,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L227: 🔵 nit: 'delegation returned — unverified-live (#53)' is too specific and may become outdated. Prefer a more general description.",
+          "suggestion": "delegation returned — self-reported",
+          "p": 0.31
+        }
+      ],
+      "secretsRecords": [],
+      "planted": [],
+      "secretsExpect": [],
+      "costUsd": 0.0024029999999999998,
+      "tokens": 24500,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "evals/work/rq-pr-109-snapshot-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    },
+    {
+      "name": "secrets-mix",
+      "kind": "trees",
+      "precisionOnly": false,
+      "verdict": "approve",
+      "expectedVerdictIn": [
+        "needs_changes"
+      ],
+      "verdictCorrect": false,
+      "findings": [
+        {
+          "file": ".env.example",
+          "line": 2,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L2: 🔵 nit: Example URL should not be a real service URL. Use a placeholder like `https://hooks.example.com/services/T000/B000/XXXX`.",
+          "suggestion": null,
+          "p": 0.35
+        },
+        {
+          "file": ".env.example",
+          "line": 3,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L3: 🔵 nit: Example secret key should not resemble a real key. Use a placeholder like `sk_live_test_XXXX`.",
+          "suggestion": null,
+          "p": 0.49
+        },
+        {
+          "file": "README.md",
+          "line": 5,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L5: 🔵 nit: Example AWS access key ID should not be a real-looking example. Use a generic placeholder like `AKIAIOSFODNN7EXAMPLE`.",
+          "suggestion": null,
+          "p": 0.34
+        },
+        {
+          "file": "README.md",
+          "line": 6,
+          "severity": "nit",
+          "category": "convention",
+          "message": "L6: 🔵 nit: Example AWS secret access key should not be a real-looking example. Use a generic placeholder like `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`.",
+          "suggestion": null,
+          "p": 0.32
+        }
+      ],
+      "secretsRecords": [
+        {
+          "file": ".env.example",
+          "line": 3,
+          "patternClass": "stripe-live",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.11
+        },
+        {
+          "file": "README.md",
+          "line": 8,
+          "patternClass": "aws-access-key",
+          "adjudicated": true,
+          "suppressed": true,
+          "pLive": 0.11
+        }
+      ],
+      "planted": [
+        {
+          "file": ".env.example",
+          "line": 3,
+          "severity": "bug",
+          "category": "security",
+          "note": "live-format Stripe key committed to .env.example",
+          "found": false
+        }
+      ],
+      "secretsExpect": [
+        {
+          "file": "README.md",
+          "line": 8,
+          "expect": "quiet",
+          "note": "AWS docs example — suppress or never flag",
+          "suppressed": true,
+          "flagged": false,
+          "adjudicated": true,
+          "correct": true
+        },
+        {
+          "file": ".env.example",
+          "line": 3,
+          "expect": "flagged",
+          "note": "live-shaped sk_live_ key",
+          "suppressed": true,
+          "flagged": false,
+          "adjudicated": true,
+          "correct": false
+        },
+        {
+          "file": "src/config.ts",
+          "line": 13,
+          "expect": "quiet",
+          "note": "labeled test id — suppress or never flag",
+          "suppressed": false,
+          "flagged": false,
+          "adjudicated": false,
+          "correct": true
+        }
+      ],
+      "costUsd": 0.000402537,
+      "tokens": 4323,
+      "model": "google/gemini-2.5-flash-lite",
+      "exitCode": 0,
+      "reportPath": "evals/work/rq-secrets-mix-report/code-review.json",
+      "parseError": null,
+      "stderrTail": "trust: trusted — local run — no CI event context\n"
+    }
+  ]
+}
