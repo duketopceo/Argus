@@ -5,6 +5,14 @@
  * `persist-credentials: false`, a pinned action SHA, least-privilege
  * `permissions`, and never `pull_request_target`.
  */
+/**
+ * The one place the user-facing action pin lives. Bump it here (and the golden
+ * fixtures) on release; see RELEASING.md. v0.4.0 and v0.4.1 ship an action.yml
+ * GitHub cannot parse, so never pin to them.
+ */
+export const ACTION_PIN_SHA = 'c2bcd160272c67ec0bd531fa664435a2456c0d47';
+export const ACTION_PIN_TAG = 'v0.4.2';
+const ACTION_PIN = `${ACTION_PIN_SHA} # ${ACTION_PIN_TAG}`;
 export function initConfig(a0Host) {
     // R19 — a detected Agent Zero host earns a labeled suggestion, never an
     // enabled lane: `verify --a0` is explicit opt-in per run, and completed
@@ -87,10 +95,10 @@ jobs:
       #          approval-token: \${{ steps.argus-app.outputs.token }}
       #          approval-evidence: 'npm test'   # command the approval stands on
       #          approval-check: 'test'          # check-run name, green on head SHA
-      - uses: duketopceo/Argus/action@63c9575622afef8bf4a8f2ea2d2909c6e54505d3 # v0.4.1
+      - uses: duketopceo/Argus/action@@@ACTION_PIN@@
         with:
           openrouter-api-key: \${{ secrets.OPENROUTER_API_KEY }}
-`;
+`.replace('@@ACTION_PIN@@', ACTION_PIN);
 export const INIT_MENTION_WORKFLOW = `name: argus-mention
 
 # @argus mention commands on PR comments — '@argus review', '@argus
@@ -123,7 +131,7 @@ jobs:
       # Record commands need the app's dependencies to boot its target.
       # Uncomment if you use '@argus record':
       # - run: npm ci
-      - uses: duketopceo/Argus/action@63c9575622afef8bf4a8f2ea2d2909c6e54505d3 # v0.4.1
+      - uses: duketopceo/Argus/action@@@ACTION_PIN@@
         with:
           openrouter-api-key: \${{ secrets.OPENROUTER_API_KEY }}
       # '@argus record' uploads the generated test + flow cache as an
@@ -136,7 +144,7 @@ jobs:
             tests/argus/
             .argus-reviewer-cache/
           if-no-files-found: ignore
-`;
+`.replace('@@ACTION_PIN@@', ACTION_PIN);
 export const CONFIG_PATH = 'argus-reviewer.config.ts';
 /** The files `init` writes, in write order. */
 export function renderScaffold(opts) {

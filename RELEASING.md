@@ -28,8 +28,8 @@ git checkout main && git pull
 git tag v$(node -p 'require("./package.json").version')
 git push origin v$(node -p 'require("./package.json").version')
 
-# 3. retarget the `init` scaffold: bump the duketopceo/Argus/action@ pin in
-#    src/cli.ts INIT_WORKFLOW to the new tag's commit SHA, rebuild dist/, and
+# 3. retarget the `init` scaffold: bump ACTION_PIN_SHA/ACTION_PIN_TAG in
+#    src/onboarding/scaffold.ts and the golden fixtures to the new tag's commit SHA, rebuild dist/, and
 #    land it as a small follow-up PR. The template pins by SHA, so it only
 #    knows about a release after the tag exists.
 ```

@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { execFileSync } from 'node:child_process'
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
 import { main } from '../../src/cli.js'
 import { resolveConfig } from '../../src/config.js'
-import { renderScaffold, scaffoldChecklist } from '../../src/onboarding/scaffold.js'
+import { ACTION_PIN_SHA, ACTION_PIN_TAG, renderScaffold, scaffoldChecklist } from '../../src/onboarding/scaffold.js'
 
 const GOLDEN = join(import.meta.dirname, '../fixtures/onboarding')
 const UPDATE = process.env.GOLDEN_UPDATE === '1'
@@ -126,5 +127,43 @@ describe('scaffoldChecklist', () => {
     expect(lines).toContain('how to stop')
     expect(lines).toContain('OPENROUTER_API_KEY')
     expect(scaffoldChecklist(5).join('\n')).toContain('$5/run cap')
+  })
+})
+
+describe('action pin', () => {
+  it('is a released tag SHA that skips the unparseable v0.4.0 and v0.4.1', () => {
+    expect(ACTION_PIN_SHA).toMatch(/^[0-9a-f]{40}$/)
+    expect(ACTION_PIN_TAG).toMatch(/^v\d+\.\d+\.\d+$/)
+    expect(['v0.4.0', 'v0.4.1']).not.toContain(ACTION_PIN_TAG)
+    expect(ACTION_PIN_SHA).not.toBe('63c9575622afef8bf4a8f2ea2d2909c6e54505d3')
+  })
+
+  it('appears in every generated workflow from the one constant', () => {
+    const pin = `duketopceo/Argus/action@${ACTION_PIN_SHA} # ${ACTION_PIN_TAG}`
+    const workflows = renderScaffold({ a0Host: undefined, includeConfig: true }).filter((f) =>
+      f.path.startsWith('.github/workflows/'),
+    )
+    expect(workflows.length).toBeGreaterThan(0)
+    for (const w of workflows) expect(w.content).toContain(pin)
+  })
+
+  it("pinned action.yml has no unquoted plain scalar containing ': ' (offline, skipped without the object)", (ctx) => {
+    let yml: string
+    try {
+      yml = execFileSync('git', ['show', `${ACTION_PIN_SHA}:action/action.yml`], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        cwd: import.meta.dirname,
+      })
+    } catch {
+      return ctx.skip()
+    }
+    const bad = yml.split('\n').filter((line) => {
+      const m = /^\s*[A-Za-z0-9_-]+:\s+(.*)$/.exec(line)
+      if (!m) return false
+      const v = (m[1] as string).trim()
+      return !/^["'|>[{&*!#]/.test(v) && v.includes(': ')
+    })
+    expect(bad).toEqual([])
   })
 })
