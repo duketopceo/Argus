@@ -9,6 +9,25 @@ mode: pipeline (non-interactive)
 
 # feat: GitHub App onboarding for Argus
 
+## Status (2026-10-04)
+
+Verified against `gh pr list -R duketopceo/Argus` and `git log origin/main` (main at `53cccef`). The plan itself is on main (#115). v0.4.0 is released (tag and GitHub release 2026-10-04; changelog dated 2026-10-03) and includes the GitHub App install docs and the opt-in approval wiring in the `init` scaffold (#116), which is a separate, smaller path from this plan.
+
+**Done on main:** none of U1 to U9.
+
+**Open PRs (all drafts), stack order:**
+- #121 chunked review and OpenRouter batch mode (base main) -> #124 bake-off defaults, separate batch model, request timeout (base #121 branch) -> #125 `init --pr` (U1 + U2, base #124 branch) -> #126 onboarding docs and App boundary (U3, base #125 branch).
+- #123 reviewer model bake-off results (base main, independent).
+- #122 OCR static-analysis lane plan (docs only, base main, ready for review, not a unit of this plan).
+
+**In progress:** a default per-run budget cap of $1 (approved by the user; not yet a PR, outside this plan's units).
+
+**Next:** Phase 2 (U4 Worker skeleton, signature verification and replay guard; U5 App auth; U6 onboarding PR on install; U7 manifest-flow self-registration and deploy docs). Phase 2 should wait until U1 to U3 have shipped and some demand is measured, per Sequencing. Phase 3 (U8, U9) stays optional.
+
+**Blocked on the user:** the pipeline-mode open questions below (notably the Q5 gate for any hosted key) before Phase 3; no Phase 1 blocker.
+
+**Recommended merge order:** #123, then #121, #124, #125, #126 in that order (retarget each to main after its parent merges), with #122 at any point. Cut a release after #126 so the onboarding path is installable, then measure demand before starting U4.
+
 ## Verdict
 
 **A GitHub App is a good idea, but only as the second step and only as a thin, key-free onboarding and identity layer.** Ship `argus-reviewer init --pr` first (zero hosting, solves most of the onboarding pain). Add the App second for one-click install, a bot identity, Checks API check runs and an automatic onboarding PR. Reject any design where the App's infrastructure runs reviews, holds an OpenRouter key, or checks out customer code: that would turn Argus into the SaaS middleman its README says it is not.
@@ -89,39 +108,39 @@ Each unit is one PR. Units U1 to U3 are Phase 1 (no hosting); U4 to U7 are Phase
 
 ### Phase 1: CLI
 
-- U1. **Extract the scaffold generator**
+- U1. **Extract the scaffold generator** [status: in PR #125]
   - Goal: move `INIT_WORKFLOW`, `INIT_MENTION_WORKFLOW`, config and smoke test templates out of `src/cli.ts` into `src/onboarding/scaffold.ts` as a pure function returning `{path, content}[]` plus a checklist. Behavior of `init` unchanged.
   - Files: `src/onboarding/scaffold.ts` (new), `src/cli.ts`, `dist/` rebuild, `tests/unit/onboarding-scaffold.test.ts`
   - Tests: golden output equals current `init` output; workflow keeps `persist-credentials: false`, pinned action SHA, minimal `permissions`; no `pull_request_target`.
-- U2. **`init --pr`**
+- U2. **`init --pr`** [status: in PR #125]
   - Goal: `argus-reviewer init --pr [--repo owner/name] [--branch argus/onboarding]` creates the branch, commits scaffold files via the Git Data/Contents API (or local `git` + `gh pr create`), opens a PR whose body has the secrets checklist, what-is-sent-to-provider statement, default budget, and how to stop. Refuses to overwrite existing files; idempotent if the branch or PR exists. Never reads or transmits `OPENROUTER_API_KEY`.
   - Files: `src/cli.ts`, `src/onboarding/pr.ts`, `tests/unit/init-pr.test.ts` (injected `exec`/fetch via `CliDeps`)
   - Dependencies: U1.
-- U3. **Docs and README onboarding path**
+- U3. **Docs and README onboarding path** [status: in PR #126]
   - Goal: README "Get started" leads with `npx argus-reviewer init --pr`; add `docs/onboarding.md` describing the three paths (CLI, App, self-hosted App) and the secret checklist. Add a SECURITY.md paragraph stating the App/Worker boundary (R3).
   - Dependencies: U2.
 
 ### Phase 2: App and webhook Worker
 
-- U4. **Worker skeleton, signature verification, replay guard**
+- U4. **Worker skeleton, signature verification, replay guard** [status: todo (next)]
   - Goal: `app/worker/` (own `package.json`, excluded from the published tarball and root lint/tsconfig as `launch/` is in Ocellus) with `POST /webhook`: raw-body HMAC-SHA256 constant-time verify, `X-GitHub-Delivery` dedupe window (best effort), body size cap, 401 on any failure, no body logging.
   - Tests: GitHub's published test vector (secret `It's a Secret to Everybody`, payload `Hello, World!`, signature `sha256=757107ea...3e17`), tampered body, missing header, wrong content type, oversize body.
-- U5. **App auth: JWT and installation token**
+- U5. **App auth: JWT and installation token** [status: todo]
   - Goal: RS256 JWT with WebCrypto (`iat` backdated 60 s, `exp` under 10 min), exchange for an installation token restricted to the single repo and the minimal permission set; token never persisted or logged. Private key lives only in a Worker secret.
   - Tests: JWT claims, key import from PKCS8, token request body restricts `repositories` and `permissions`, redaction of tokens in error paths.
-- U6. **Onboarding PR on install**
+- U6. **Onboarding PR on install** [status: todo]
   - Goal: handle `installation.created` and `installation_repositories.added`; per repo skip archived, forked, and repos with `.github/workflows/argus-reviewer.yml`; create branch, commit scaffold (shared module, U1), open the PR. Uses the Contents/Git Data API only. Measure CPU time and subrequests against free limits.
   - Tests: mocked GitHub API; idempotency (branch exists, PR exists); fork/archived skip; fan-out cap of N repos per delivery with remainder noted in logs (50-subrequest limit).
   - Dependencies: U4, U5.
-- U7. **Manifest-flow self-registration and deploy docs**
+- U7. **Manifest-flow self-registration and deploy docs** [status: todo]
   - Goal: `app/register/` script and `docs/self-host-app.md` so an org registers its own App, deploys the Worker with `wrangler`, and sets secrets (`APP_ID`, `PRIVATE_KEY`, `WEBHOOK_SECRET`). Includes key rotation steps.
 
 ### Phase 3: Identity and checks (optional, own threat review)
 
-- U8. **Token broker endpoint (OIDC)**
+- U8. **Token broker endpoint (OIDC)** [status: todo (optional)]
   - Goal: `POST /token` verifies the GitHub Actions OIDC JWT (signature via GitHub JWKS, `iss`, `aud`, `exp`, `repository`, `event_name` not `pull_request` from fork, installation exists), returns an installation token limited to `checks: write` + `pull_requests: write` for that one repo. Rate limit per repo.
   - Tests: expired, wrong audience, repo not installed, fork-origin claims, replay.
-- U9. **Action: optional check run and App identity**
+- U9. **Action: optional check run and App identity** [status: todo (optional)]
   - Goal: new optional action input (`check-run: true`, `app-token-url`) that requests a broker token and publishes a check run summarizing the manifest verdict; falls back silently to current commit-status path when the token is unavailable (fork PRs, broker down). No change to `src/trust.ts`.
   - Tests: `tests/unit/action-contract.test.ts` extended: input absent means identical behavior; fork events never call the broker; failure is non-fatal.
   - Dependencies: U8.

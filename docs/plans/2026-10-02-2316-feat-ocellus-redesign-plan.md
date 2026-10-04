@@ -11,6 +11,12 @@ deepened: 2026-10-02
 
 # Ocellus Redesign - Plan
 
+## Status (2026-10-04)
+
+Verified against `gh pr list -R duketopceo/Argus` and `git log origin/main` (main at `53cccef`). The program shipped as v0.4.0: #113 (Ocellus redesign across comment, CLI, TUI, desk and report) and #116 (U18 launch film "The witness" and DoD tail) are merged, #112 (this spec and plan) is merged, and the v0.4.0 release is published. Unit status below comes from those PR titles and the changelog, not a unit-by-unit code audit.
+
+**Done:** U1 to U14 and U16 to U18. **Deferred:** U15 (`argus-reviewer desk` packaging), gated on Q2; the changelog states the desk app and terminal UI remain contributor tools, so U15 is not started. **Open PRs:** none for this plan. **In progress:** none. **Blocked on the user:** Q2 (ship desk to consumers or keep contributor-only). Follow-on work lives in `docs/plans/2026-10-04-0002-feat-github-app-onboarding-plan.md` and open PRs #121 to #126.
+
 ## Goal Capsule
 
 - **Objective:** A PR author, reviewer or adopter who meets Argus anywhere (PR comment, terminal, desk app, README, social unfurl, launch video) sees one consistent, honest, emoji-free visual language. They can read a verdict, how strong its proof is and what it cost in seconds, and every failure tells them what happened and what to do next.
@@ -283,26 +289,26 @@ flowchart TB
 
 ## Implementation Units
 
-| U-ID | Title | Key files | Depends on |
-|---|---|---|---|
-| U1 | Tokens, glyph vocabulary, lint gates | `scripts/build-tokens.mjs`, `assets/brand/tokens.*`, `src/report/viewmodel.ts` | none |
-| U2 | Verification harness | `scripts/qa/`, `tests/e2e/visual-capture.mjs` | U1 |
-| U3 | Copy hygiene, branding, README truth | `docs/quickstart.md`, `CHANGELOG.md`, `action/action.yml`, `README.md` | U1 |
-| U4 | Comment grammar and goldens | `action/sticky-comment.cjs`, `src/report/comment.ts`, `fixtures/manifests/` | U1 |
-| U5 | Comment error and degraded UX | `action/sticky-comment.cjs` | U4 |
-| U6 | Inline comments, review body, status | `src/cli.ts`, `action/approval-review.mjs`, `action/sticky-comment.cjs` | U4 |
-| U7 | Mark, wordmark, lockup | `assets/brand/src/mark*.svg`, `scripts/build-brand.mjs` | U1 |
-| U8 | Status, proof, severity, lane glyph SVGs | `assets/brand/src/glyphs/` | U7 |
-| U9 | Chrome icons, empty states, motion | `assets/brand/src/icons/`, `assets/brand/src/empty/`, `assets/brand/motion.css` | U8 |
-| U10 | Fonts, app icon, favicons | `assets/brand/fonts/`, `assets/brand/src/app-icon.svg` | U7 |
-| U11 | CLI styler, summary, help, errors | `src/ui/`, `src/log.ts`, `src/cli.ts`, `src/vision/openrouter.ts` | U1 |
-| U12 | TUI rebuild | `scripts/watch.mjs`, `scripts/tui/` | U11 |
-| U13 | Desk app reskin, IA and states | `electron/*` | U8, U9, U10, U12 |
-| U14 | HTML evidence report | `src/report/html.ts` | U5, U13 |
-| U15 | `argus-reviewer desk` packaging (gated on Q2) | `src/desk/`, `package.json` | U13 |
-| U16 | Fixture-rendered hero and social card | `assets/brand/templates/`, `scripts/render-brand.mjs` | U4, U8, U10 |
-| U17 | VHS demo casts and README rewrite | `assets/demo/*.tape`, `README.md` | U11, U16 |
-| U18 | Launch video "The witness" | `launch/` | U13, U16, U17 |
+| U-ID | Title | Key files | Depends on | Status |
+|---|---|---|---|---|
+| U1 | Tokens, glyph vocabulary, lint gates | `scripts/build-tokens.mjs`, `assets/brand/tokens.*`, `src/report/viewmodel.ts` | none | done (v0.4.0, #113) |
+| U2 | Verification harness | `scripts/qa/`, `tests/e2e/visual-capture.mjs` | U1 | done (v0.4.0, #113) |
+| U3 | Copy hygiene, branding, README truth | `docs/quickstart.md`, `CHANGELOG.md`, `action/action.yml`, `README.md` | U1 | done (v0.4.0, #113) |
+| U4 | Comment grammar and goldens | `action/sticky-comment.cjs`, `src/report/comment.ts`, `fixtures/manifests/` | U1 | done (v0.4.0, #113) |
+| U5 | Comment error and degraded UX | `action/sticky-comment.cjs` | U4 | done (v0.4.0, #113) |
+| U6 | Inline comments, review body, status | `src/cli.ts`, `action/approval-review.mjs`, `action/sticky-comment.cjs` | U4 | done (v0.4.0, #113) |
+| U7 | Mark, wordmark, lockup | `assets/brand/src/mark*.svg`, `scripts/build-brand.mjs` | U1 | done (v0.4.0, #113) |
+| U8 | Status, proof, severity, lane glyph SVGs | `assets/brand/src/glyphs/` | U7 | done (v0.4.0, #113) |
+| U9 | Chrome icons, empty states, motion | `assets/brand/src/icons/`, `assets/brand/src/empty/`, `assets/brand/motion.css` | U8 | done (v0.4.0, #113) |
+| U10 | Fonts, app icon, favicons | `assets/brand/fonts/`, `assets/brand/src/app-icon.svg` | U7 | done (v0.4.0, #113) |
+| U11 | CLI styler, summary, help, errors | `src/ui/`, `src/log.ts`, `src/cli.ts`, `src/vision/openrouter.ts` | U1 | done (v0.4.0, #113) |
+| U12 | TUI rebuild | `scripts/watch.mjs`, `scripts/tui/` | U11 | done (v0.4.0, #113) |
+| U13 | Desk app reskin, IA and states | `electron/*` | U8, U9, U10, U12 | done (v0.4.0, #113) |
+| U14 | HTML evidence report | `src/report/html.ts` | U5, U13 | done (v0.4.0, #113) |
+| U15 | `argus-reviewer desk` packaging (gated on Q2) | `src/desk/`, `package.json` | U13 | deferred: Q2 (contributor-only default) |
+| U16 | Fixture-rendered hero and social card | `assets/brand/templates/`, `scripts/render-brand.mjs` | U4, U8, U10 | done (v0.4.0, #113) |
+| U17 | VHS demo casts and README rewrite | `assets/demo/*.tape`, `README.md` | U11, U16 | done (v0.4.0, #113) |
+| U18 | Launch video "The witness" | `launch/` | U13, U16, U17 | done (v0.4.0, #116) |
 
 ### U1. Tokens, glyph vocabulary, lint gates
 
