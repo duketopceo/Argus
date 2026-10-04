@@ -23,6 +23,7 @@ import { resolveTrust } from './trust.js';
 import { linkFindings } from './evidence/link.js';
 import { DecisionClient } from './vision/decisions.js';
 import { isReviewProfile, packRubric } from './review/packs.js';
+import { planChunks } from './review/chunks.js';
 import { partitionByExclude } from './review/scope.js';
 import { capTestFindings } from './review/testfiles.js';
 import { auditOf, validateFindings } from './review/validate.js';
@@ -1072,8 +1073,6 @@ const CODE_REVIEW_SCHEMA = {
         required: ['summary', 'verdict', 'findings'],
     },
 };
-const CHUNK_TOKEN_TARGET = 6000;
-const CHUNK_FILE_OVERHEAD = 100;
 const MAX_PR_FILE_PAGES = 10;
 async function fetchPrFiles(repo, pr, token, ctx) {
     const files = [];
@@ -1142,32 +1141,7 @@ export async function loadFixture(dir, exec = defaultExec) {
     return { files: filesFromUnifiedDiff(diff.stdout), meta, diff: diff.stdout };
 }
 export function buildPatchChunks(files, contexts = {}) {
-    const section = (c) => {
-        const ctxBlock = contexts[c.filename];
-        const head = ctxBlock === undefined ? `### ${c.filename}` : `### ${c.filename}\n${ctxBlock}`;
-        return `${head}\n\`\`\`diff\n${c.patch}\n\`\`\``;
-    };
-    const chunks = [];
-    let current = [];
-    let currentTokens = 0;
-    for (const f of files) {
-        const fileTokens = Math.ceil((f.patch?.length ?? 0) / 4) +
-            Math.ceil((contexts[f.filename]?.length ?? 0) / 4) +
-            CHUNK_FILE_OVERHEAD;
-        if (current.length > 0 && currentTokens + fileTokens > CHUNK_TOKEN_TARGET) {
-            chunks.push(current.map(section).join('\n\n'));
-            current = [f];
-            currentTokens = fileTokens;
-        }
-        else {
-            current.push(f);
-            currentTokens += fileTokens;
-        }
-    }
-    if (current.length > 0) {
-        chunks.push(current.map(section).join('\n\n'));
-    }
-    return chunks;
+    return planChunks(files, contexts).map((c) => c.text);
 }
 export function buildCodeReviewMessages(repo, pr, patchText, chunkIndex = 0, totalChunks = 1, profiles = []) {
     const rubric = packRubric(profiles);
@@ -1565,7 +1539,8 @@ async function cmdCodeReview(args, ctx, deps) {
     if (attached > 0) {
         debug('code-review', `contexts=${attached}/${files.length}`);
     }
-    const chunks = buildPatchChunks(files, contexts);
+    const plan = planChunks(files, contexts);
+    const chunks = plan.map((c) => c.text);
     debug('code-review', `chunks=${chunks.length} files=${files.length}`);
     try {
         const client = createClient(deps, config, ctx);
@@ -1655,9 +1630,17 @@ async function cmdCodeReview(args, ctx, deps) {
                 stage(`${triageLine(triage)} — ${routed.reason}`);
         }
         stage(`reviewing ${chunks.length} chunk(s) — model ${reviewModel}`);
+        let chunksReviewed = 0;
         for (let i = 0; i < chunks.length; i++) {
             if (ledger.budgetExceeded)
                 break;
+            // Stop BEFORE a chunk the remaining budget cannot be expected to
+            // cover (projected at the mean cost so far) — checking only after
+            // the spend lets every run overshoot its cap by a whole chunk.
+            if (chunksReviewed > 0 && !ledger.canSpend(ledger.visionCostUsd / chunksReviewed)) {
+                ctx.err(`code-review: budget would be exceeded by chunk ${i + 1}; stopping early`);
+                break;
+            }
             debug('code-review', `chunk=${i + 1}/${chunks.length}`);
             const chunk = chunks[i];
             if (chunk === undefined)
@@ -1670,6 +1653,7 @@ async function cmdCodeReview(args, ctx, deps) {
                 provider: config.provider,
             });
             recordSpend(response.cost);
+            chunksReviewed++;
             lastModel = response.model;
             const parsed = parseCodeReview(response.content);
             allFindings.push(...parsed.findings);
@@ -1725,12 +1709,25 @@ async function cmdCodeReview(args, ctx, deps) {
                 verdict = 'approve';
             }
         }
+        // Files with at least one reviewed chunk. A budget stop leaves the
+        // tail of the plan unreviewed; the scope and summary must say so.
+        const reviewedSet = new Set(plan.slice(0, chunksReviewed).flatMap((c) => c.files));
+        const unreviewed = files.length - reviewedSet.size;
         const scope = {
             totalFiles: allFiles.length,
-            reviewedFiles: files.length,
+            reviewedFiles: reviewedSet.size,
             excludedFiles: excluded.length,
             excludedSample: excluded.slice(0, 5).map((f) => f.filename),
+            chunksTotal: chunks.length,
+            chunksReviewed,
+            unreviewedFiles: unreviewed,
         };
+        if (chunks.length > 1) {
+            const coverage = chunksReviewed === chunks.length
+                ? `Reviewed all ${chunks.length} chunks (${reviewedSet.size} of ${files.length} files).`
+                : `Reviewed ${chunksReviewed} of ${chunks.length} chunks (${reviewedSet.size} of ${files.length} files); ${unreviewed} file(s) were not reviewed.`;
+            summary = `${coverage} ${summary}`;
+        }
         if (excluded.length > 0) {
             summary = `Reviewed ${files.length} of ${allFiles.length} changed files (${excluded.length} excluded by review.exclude). ${summary}`;
         }

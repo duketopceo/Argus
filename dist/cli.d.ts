@@ -72,6 +72,12 @@ export interface ReviewScope {
     reviewedFiles: number;
     /** Files kept out by `review.exclude`. */
     excludedFiles: number;
+    /** Model calls the diff was split into (1 for a PR that fits one call). */
+    chunksTotal?: number;
+    /** Chunks that were actually reviewed (fewer than total when the budget stopped the run). */
+    chunksReviewed?: number;
+    /** Reviewed files with no chunk reviewed (budget stop); 0 on a full review. */
+    unreviewedFiles?: number;
     /** Up to 5 excluded paths, for the Diagnostics line. */
     excludedSample: string[];
 }

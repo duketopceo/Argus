@@ -122,6 +122,8 @@ export default defineConfig({
 
 Code review skips generated, fixture and vendored paths by default (`dist/**`, `fixtures/**`, `tests/goldens/**`, lockfiles, `*.generated.*`, `assets/brand/export/**`). Set `review: { exclude: [...] }` to replace that list (`[]` excludes nothing). The sticky comment's Diagnostics fold says how many files were left out.
 
+Large PRs are reviewed in chunks (about 6k tokens of diff each, grouped by directory; a single oversized file is split at hunk boundaries) and the findings are merged. The review summary says how many chunks and files were reviewed. When `codeReviewBudgetUsd` cannot cover the next chunk, the run stops before spending it and the summary lists how many files went unreviewed.
+
 Full shape: [`src/config.ts`](src/config.ts). Setup walkthrough: [`docs/quickstart.md`](docs/quickstart.md).
 
 ## Contributing

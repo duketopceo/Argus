@@ -155,6 +155,21 @@ Spend is still yours:
 the `run.json` ledger records the per-run dollar figure regardless of which
 provider served the call.
 
+### Large PRs
+
+A diff over about 6k tokens is split into chunks, grouped by directory, and
+each chunk is one model call; a single file larger than that is split at hunk
+boundaries. Findings from all chunks are merged (and synthesized when there is
+more than one). The summary says `Reviewed all N chunks (X of Y files)`, and
+`code-review.json` carries the same numbers in `scope.chunksTotal`,
+`scope.chunksReviewed` and `scope.unreviewedFiles`.
+
+Spend is metered per chunk. Before each chunk after the first, the run checks
+the budget (`codeReviewBudgetUsd` or `ARGUS_BUDGET_USD`) against the mean chunk
+cost so far; if the next chunk is not expected to fit, it stops without
+spending and the summary reads `Reviewed 3 of 7 chunks (...); N file(s) were
+not reviewed`.
+
 ### Agent Zero delegation (optional)
 
 If you run an [Agent Zero](https://agent-zero.ai) instance — the launcher, a
