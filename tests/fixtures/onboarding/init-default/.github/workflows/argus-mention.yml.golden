@@ -1,0 +1,45 @@
+name: argus-mention
+
+# @argus mention commands on PR comments — '@argus review', '@argus
+# record "<flow>"', '@argus persist', '@argus help'. issue_comment is
+# strictly more privileged than pull_request (secrets + write token are
+# present), so the checkout below deliberately resolves the BASE ref —
+# never the PR head. Argus reviews the head diff over the API.
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  argus-mention:
+    runs-on: ubuntu-latest
+    if: github.event.issue.pull_request && startsWith(github.event.comment.body, '@argus')
+    permissions:
+      # contents: write — '@argus persist' commits reproduced probes to an
+      # argus/ branch via the git/refs + contents APIs and opens a PR.
+      contents: write
+      issues: write
+      pull-requests: write
+      checks: write
+      statuses: write
+    steps:
+      # No 'ref' — the default checkout resolves the base branch. persist
+      # writes via the API, so checkout credentials stay disabled.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      # Record commands need the app's dependencies to boot its target.
+      # Uncomment if you use '@argus record':
+      # - run: npm ci
+      - uses: duketopceo/Argus/action@cd38ba901152ddc6e7cbed21c01079702b2501f1 # v0.3.1
+        with:
+          openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+      # '@argus record' uploads the generated test + flow cache as an
+      # artifact — committing to a PR branch is intentionally not done.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: contains(github.event.comment.body, 'record')
+        with:
+          name: argus-recorded-flow
+          path: |
+            tests/argus/
+            .argus-reviewer-cache/
+          if-no-files-found: ignore

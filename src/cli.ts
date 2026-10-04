@@ -113,6 +113,7 @@ import { CliError, errorJson, renderError, toCliError, type ErrorCode } from './
 import { colorEnabled, createStyler, type Styler } from './ui/style.js'
 import { renderSummary, verifySummary } from './ui/summary.js'
 import { PROOF_LEVELS, proofMeter, SEVERITY_GLYPH, SEVERITY_LABEL, shortSha } from './report/viewmodel.js'
+import { renderScaffold, scaffoldChecklist } from './onboarding/scaffold.js'
 import { INLINE_SENTINEL, inlineDedupKey, normalizeFindingMessage } from './review/inline.js'
 
 export interface CliDeps {
@@ -3121,143 +3122,6 @@ Options:
   --force   Overwrite files that already exist
   -h, --help`
 
-function initConfig(a0Host: string | undefined): string {
-  // R19 — a detected Agent Zero host earns a labeled suggestion, never an
-  // enabled lane: `verify --a0` is explicit opt-in per run, and completed
-  // delegations cap at inconclusive (self-reported evidence).
-  const a0Block =
-    a0Host !== undefined
-      ? `
-  // Optional: Agent Zero detected at ${a0Host}. Nothing below runs unless
-  // you ask for it — both stays commented until you opt in deliberately.
-  //   a0: { url: ${JSON.stringify(a0Host)} },  // enables \`verify --a0\` (self-reported, unmetered)
-  //   heal: 'a0',                             // escalates a failed heal to the A0 host
-`
-      : ''
-  return `import { defineConfig } from 'argus-reviewer-e2e'
-
-export default defineConfig({
-  // The app under test. command boots it (omit if it is already running);
-  // argus-reviewer polls url until it responds before running tests.
-  target: {
-    command: 'npm run dev',
-    url: 'http://localhost:3000',
-    readyTimeoutMs: 30_000,
-  },
-  // Hard per-run cap on vision-model spend (USD). Steps replayed from the
-  // fingerprint cache cost $0 regardless of this cap.
-  budgetUsd: 1,
-  testsDir: 'tests/argus',
-  // Exploratory lane: after the test loop, a bounded agent pass probes the
-  // app itself — same-origin navigation, clicks, invalid input — while taps
-  // capture console errors, page errors, and failed requests. Findings
-  // render as 'observed' — evidence only, never verdict-changing.
-  // maxSteps caps acts per run; budgetUsd caps explore model spend (falls
-  // back to budgetUsd). Point it at disposable targets only — clicks and
-  // form submits have real side effects.
-  // explore: { enabled: true, maxSteps: 20, budgetUsd: 0.25 },${a0Block}
-})
-`
-}
-
-const INIT_TEST = `test('home renders', async (td) => {
-  const ok = await td.assert('the page rendered without obvious errors')
-  if (!ok) throw new Error('home did not render')
-})
-`
-
-const INIT_WORKFLOW = `name: argus-reviewer
-
-on:
-  pull_request:
-    # 'labeled' lets a maintainer re-trigger with the argus-probe label when
-    # sandbox probes are enabled for fork PRs.
-    types: [opened, synchronize, reopened, labeled]
-
-jobs:
-  argus:
-    runs-on: ubuntu-latest
-    # 'labeled' fires on EVERY label — only argus-probe is the fork-gate
-    # signal worth a full review run.
-    if: github.event.action != 'labeled' || github.event.label.name == 'argus-probe'
-    permissions:
-      contents: read
-      issues: write
-      pull-requests: write
-      checks: write
-      statuses: write
-    steps:
-      # persist-credentials: false keeps the GITHUB_TOKEN out of .git/config —
-      # the probe sandbox masks .git regardless, but don't store it at all.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-          ref: \${{ github.event.pull_request.head.sha || github.sha }}
-      # Optional verdict-as-review: let Argus submit APPROVE / REQUEST_CHANGES
-      # so require_approving_reviews counts it. GITHUB_TOKEN cannot approve, so
-      # create + install your own GitHub App (docs/github-app.md), set the
-      # ARGUS_APP_ID variable and ARGUS_APP_PRIVATE_KEY secret, then uncomment:
-      #      - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
-      #        id: argus-app
-      #        with:
-      #          app-id: \${{ vars.ARGUS_APP_ID }}
-      #          private-key: \${{ secrets.ARGUS_APP_PRIVATE_KEY }}
-      # and pass approval-token plus its evidence inputs to the action below:
-      #          approval-token: \${{ steps.argus-app.outputs.token }}
-      #          approval-evidence: 'npm test'   # command the approval stands on
-      #          approval-check: 'test'          # check-run name, green on head SHA
-      - uses: duketopceo/Argus/action@cd38ba901152ddc6e7cbed21c01079702b2501f1 # v0.3.1
-        with:
-          openrouter-api-key: \${{ secrets.OPENROUTER_API_KEY }}
-`
-
-const INIT_MENTION_WORKFLOW = `name: argus-mention
-
-# @argus mention commands on PR comments — '@argus review', '@argus
-# record "<flow>"', '@argus persist', '@argus help'. issue_comment is
-# strictly more privileged than pull_request (secrets + write token are
-# present), so the checkout below deliberately resolves the BASE ref —
-# never the PR head. Argus reviews the head diff over the API.
-on:
-  issue_comment:
-    types: [created]
-
-jobs:
-  argus-mention:
-    runs-on: ubuntu-latest
-    if: github.event.issue.pull_request && startsWith(github.event.comment.body, '@argus')
-    permissions:
-      # contents: write — '@argus persist' commits reproduced probes to an
-      # argus/ branch via the git/refs + contents APIs and opens a PR.
-      contents: write
-      issues: write
-      pull-requests: write
-      checks: write
-      statuses: write
-    steps:
-      # No 'ref' — the default checkout resolves the base branch. persist
-      # writes via the API, so checkout credentials stay disabled.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      # Record commands need the app's dependencies to boot its target.
-      # Uncomment if you use '@argus record':
-      # - run: npm ci
-      - uses: duketopceo/Argus/action@cd38ba901152ddc6e7cbed21c01079702b2501f1 # v0.3.1
-        with:
-          openrouter-api-key: \${{ secrets.OPENROUTER_API_KEY }}
-      # '@argus record' uploads the generated test + flow cache as an
-      # artifact — committing to a PR branch is intentionally not done.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: contains(github.event.comment.body, 'record')
-        with:
-          name: argus-recorded-flow
-          path: |
-            tests/argus/
-            .argus-reviewer-cache/
-          if-no-files-found: ignore
-`
-
 /** `argus-reviewer init` — scaffold config, a smoke test, and the workflow. */
 async function cmdInit(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> {
   const { values } = parseArgs({
@@ -3284,15 +3148,8 @@ async function cmdInit(args: string[], ctx: Ctx, deps: CliDeps): Promise<number>
     'vision-e2e.config.ts',
     'vision-e2e.config.json',
   ]
-  const files: [string, string][] = [
-    ['tests/argus/smoke.test.ts', INIT_TEST],
-    ['.github/workflows/argus-reviewer.yml', INIT_WORKFLOW],
-    ['.github/workflows/argus-mention.yml', INIT_MENTION_WORKFLOW],
-  ]
   const hasConfig = configNames.some((n) => existsSync(join(ctx.cwd, n)))
-  if (!hasConfig || values.force) {
-    files.unshift(['argus-reviewer.config.ts', initConfig(env.a0.host)])
-  }
+  const files = renderScaffold({ a0Host: env.a0.host, includeConfig: !hasConfig || values.force })
 
   // DESIGN.md 7.8: a three-step checklist (files, environment, next
   // command) around the unchanged "What runs and what it costs" block.
@@ -3302,7 +3159,7 @@ async function cmdInit(args: string[], ctx: Ctx, deps: CliDeps): Promise<number>
   const fixLine = (cmd: string): string => `      ${style.role('accent', cmd)}`
 
   ctx.out(style.bold('1. Write the setup files'))
-  for (const [rel, content] of files) {
+  for (const { path: rel, content } of files) {
     const path = join(ctx.cwd, rel)
     if (existsSync(path) && !values.force) {
       ctx.out(row('skipped', `exists, skipping: ${rel}`))
@@ -3353,12 +3210,7 @@ async function cmdInit(args: string[], ctx: Ctx, deps: CliDeps): Promise<number>
   // R19: name what leaves the machine, the default spend posture, and
   // the stop path before the user runs anything. Kept verbatim (DESIGN 7.8).
   ctx.out('')
-  ctx.out('What runs and what it costs:')
-  ctx.out('  sent to provider  PR diffs, page screenshots/DOM snapshots, and')
-  ctx.out('                    review prompts — via your OpenRouter key (BYOK)')
-  ctx.out(`  default budget    $${dm.budgetUsd ?? 1}/run cap (budgetUsd); cached replay costs $0`)
-  ctx.out('  how to stop       Ctrl+C locally; in CI remove the workflow file')
-  ctx.out('                    or delete the OPENROUTER_API_KEY secret')
+  for (const line of scaffoldChecklist(dm.budgetUsd ?? 1)) ctx.out(line)
 
   ctx.out('')
   ctx.out(style.bold('3. Run the default lane (code review)'))
