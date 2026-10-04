@@ -39,12 +39,12 @@ import { resolveStaticLaneConfig } from '../../src/review/static.js'
 
 describe('static lane config', () => {
   it('defaults to disabled so nothing changes for existing users', () => {
-    const c = resolveStaticLaneConfig({})
+    const c = resolveStaticLaneConfig()
     expect(c.enabled).toBe(false)
   })
 
   it('defaults to a generous timeout — ocr on a large changeset is slow', () => {
-    expect(resolveStaticLaneConfig({}).timeoutMs).toBe(180_000)
+    expect(resolveStaticLaneConfig().timeoutMs).toBe(180_000)
   })
 
   it('accepts an explicit binary path', () => {
@@ -170,7 +170,9 @@ export async function discoverOcr(
   const r = await exec(bin, ['--version'], 10_000)
   if (r.code === 0) return { found: true, reason: '', version: r.stdout.trim() }
   // 127/ENOENT means the binary simply isn't installed — expected, not a bug.
-  if (r.code === 127) return { found: false, reason: 'not-installed' }
+  // defaultExec resolves ENOENT to code 1, so match both the shell-style 127
+  // and an ENOENT message on stderr.
+  if (r.code === 127 || /ENOENT/i.test(r.stderr)) return { found: false, reason: 'not-installed' }
   return { found: false, reason: 'crashed' }
 }
 ```
@@ -206,17 +208,24 @@ import { parseOcrFindings } from '../../src/review/static.js'
 
 describe('ocr output parsing', () => {
   it('maps a well-formed finding onto AdjudicableFinding', () => {
+    // The real ocr CLI emits path/content/start_line — see its cli-reference.
     const out = parseOcrFindings(JSON.stringify({
-      comments: [{ file: 'src/a.ts', line: 12, severity: 'high',
-        category: 'security', message: 'SQL injection via string concat' }],
+      comments: [{ path: 'src/a.ts', start_line: 12,
+        content: 'SQL injection via string concat' }],
     }))
     expect(out.skipped).toBe(false)
     expect(out.findings).toHaveLength(1)
     expect(out.findings[0]).toMatchObject({
-      file: 'src/a.ts', line: 12, severity: 'high',
-      category: 'security', message: 'SQL injection via string concat',
+      file: 'src/a.ts', line: 12,
+      message: 'SQL injection via string concat',
     })
     expect(out.findings[0].source).toBe('static')
+  })
+
+  it('reports the documented skipped status instead of a clean run', () => {
+    const out = parseOcrFindings(JSON.stringify({ status: 'skipped', comments: [] }))
+    expect(out.skipped).toBe(true)
+    expect(out.reason).toBe('ocr-skipped')
   })
 
   it('degrades (not throws) on malformed JSON', () => {
@@ -267,6 +276,10 @@ export function parseOcrFindings(stdout: string): ParsedOcr {
   } catch {
     return { findings: [], skipped: true, reason: 'bad-json' }
   }
+  // The CLI can decline a run entirely — that is a skip, not a clean pass.
+  if ((raw as { status?: unknown })?.status === 'skipped') {
+    return { findings: [], skipped: true, reason: 'ocr-skipped' }
+  }
   const comments = (raw as { comments?: unknown })?.comments
   if (!Array.isArray(comments)) {
     // Third-party schema drifted — degrade, don't guess at field names.
@@ -274,14 +287,18 @@ export function parseOcrFindings(stdout: string): ParsedOcr {
   }
   const findings: StaticFinding[] = []
   for (const c of comments as Record<string, unknown>[]) {
-    const file = typeof c?.file === 'string' ? c.file : ''
+    // ocr emits path/content/start_line (cli-reference), not file/message/line.
+    const file = typeof c?.path === 'string' ? c.path : ''
     if (!file) continue                       // unusable row, drop it
     findings.push({
       file,
-      line: typeof c.line === 'number' ? c.line : undefined,
+      line: typeof c.start_line === 'number' ? c.start_line : undefined,
       severity: typeof c.severity === 'string' ? c.severity : 'q',
-      category: typeof c.category === 'string' ? c.category : 'security',
-      message: typeof c.message === 'string' ? c.message.slice(0, 300) : '',
+      category: 'security',
+      // content can carry raw diff text — including secrets the diff touched —
+      // so it goes through the same masking the secrets lane applies to
+      // finding messages (see maskFindingMessage in src/review/secrets.ts).
+      message: maskSecretLiterals(typeof c.content === 'string' ? c.content.slice(0, 300) : ''),
       source: 'static',
     })
   }
@@ -377,6 +394,8 @@ export interface StaticLaneResult {
 export async function runStaticLane(
   cfg: StaticLaneConfig,
   exec: ExecFn,
+  baseSha: string,
+  headSha: string,
 ): Promise<StaticLaneResult> {
   if (!cfg.enabled) {
     return { findings: [], skipped: true, reason: 'disabled' }
@@ -385,9 +404,17 @@ export async function runStaticLane(
   if (!d.found) {
     return { findings: [], skipped: true, reason: d.reason }
   }
-  const args = ['review', '--format', 'json', '--output', '-']
+  // Range flags are required: without --from/--to the CLI reviews staged,
+  // unstaged and untracked workspace changes, and a clean CI checkout
+  // produces no PR findings. The smoke test uses the same base/head pair.
+  const args = [
+    'review', '--format', 'json', '--output', '-',
+    '--from', baseSha, '--to', headSha,
+  ]
   if (cfg.model) args.push('--model', cfg.model)
-  const r = await exec(cfg.bin, args, cfg.timeoutMs)
+  // Third-party binary reading hostile diff content: scrub the environment
+  // the same way the probe sandbox does — no *_KEY / *_TOKEN / *_SECRET vars.
+  const r = await exec(cfg.bin, args, cfg.timeoutMs, { env: sanitizedExecEnv() })
   if (r.code !== 0) {
     return { findings: [], skipped: true, reason: 'crashed', version: d.version }
   }
@@ -479,8 +506,11 @@ Expected: FAIL — `unionFindings` not exported
 ```ts
 // src/review/static.ts — append
 /** Union key: same file + line + category is the same finding, regardless of lane. */
-function unionKey(f: { file: string; line?: number; category?: string }): string {
-  return `${f.file}:${f.line ?? 0}:${f.category ?? ''}`
+function unionKey(f: { file: string; line?: number; category?: string; message?: string }): string {
+  // Line-less findings must not all collapse onto line 0 — include a
+  // discriminator so distinct no-line findings in one file survive dedup.
+  const anchor = f.line ?? `no-line:${(f.message ?? '').slice(0, 40)}`
+  return `${f.file}:${anchor}:${f.category ?? ''}`
 }
 
 export function unionFindings(input: {
