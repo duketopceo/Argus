@@ -26,3 +26,27 @@ export function resolveStaticLaneConfig(raw: Partial<StaticLaneConfig> = {}): St
   }
   return { ...DEFAULTS, ...raw }
 }
+
+export interface OcrDiscovery {
+  found: boolean
+  /** '' when found; otherwise 'not-installed' or 'crashed'. */
+  reason: string
+  version?: string
+}
+
+const DISCOVERY_TIMEOUT_MS = 10_000
+
+export async function discoverOcr(bin: string, exec: ExecFn): Promise<OcrDiscovery> {
+  let r
+  try {
+    r = await exec(bin, ['--version'], DISCOVERY_TIMEOUT_MS)
+  } catch {
+    // A throwing exec is still just "not usable" — degrade, never propagate.
+    return { found: false, reason: 'crashed' }
+  }
+  if (r.code === 0) return { found: true, reason: '', version: r.stdout.trim() }
+  // 127 is the shell's "command not found": the binary is simply absent, which
+  // is a normal un-provisioned environment rather than an error.
+  if (r.code === 127) return { found: false, reason: 'not-installed' }
+  return { found: false, reason: 'crashed' }
+}
