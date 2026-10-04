@@ -15,12 +15,12 @@ Verified against `gh pr list -R duketopceo/Argus` and `git log origin/main` (mai
 
 **Done on main:** none of U1 to U9.
 
-**Open PRs (all drafts), stack order:**
+**Open PRs (stack order; drafts unless noted):**
 - #121 chunked review and OpenRouter batch mode (base main) -> #124 bake-off defaults, separate batch model, request timeout (base #121 branch) -> #125 `init --pr` (U1 + U2, base #124 branch) -> #126 onboarding docs and App boundary (U3, base #125 branch).
 - #123 reviewer model bake-off results (base main, independent).
 - #122 OCR static-analysis lane plan (docs only, base main, ready for review, not a unit of this plan).
 
-**In progress:** a default per-run budget cap of $1 (approved by the user; not yet a PR, outside this plan's units).
+**In progress:** a default per-run budget cap of $1 (approved by the user; open as draft #127, outside this plan's units).
 
 **Next:** Phase 2 (U4 Worker skeleton, signature verification and replay guard; U5 App auth; U6 onboarding PR on install; U7 manifest-flow self-registration and deploy docs). Phase 2 should wait until U1 to U3 have shipped and some demand is measured, per Sequencing. Phase 3 (U8, U9) stays optional.
 
