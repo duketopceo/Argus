@@ -1,0 +1,143 @@
+{
+  "$comment": "Scrubbed copy of a real dogfooding run (npm run demo on fixtures/demo-pr, 2026-09-23). Provenance and scrub list: fixtures/manifests/README.md.",
+  "body": "review-only",
+  "ok": false,
+  "version": "0.4.0",
+  "runUrl": "https://github.com/acme/shop/actions/runs/123456",
+  "codeReview": {
+    "ok": false,
+    "skipped": false,
+    "summary": "3 finding(s) include bug or risk",
+    "verdict": "needs_changes",
+    "findings": [
+      {
+        "file": "src/discount.ts",
+        "line": 6,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "Discount is applied twice, so 10% yields 81% of price. Return `price * (1 - pct / 100)` and drop the `discounted` intermediate.",
+        "p": 0.66,
+        "evidence": {
+          "status": "inconclusive",
+          "detail": "could not fetch CI check-runs"
+        }
+      },
+      {
+        "file": ".env.example",
+        "line": 2,
+        "severity": "risk",
+        "category": "security",
+        "message": "The `sk_live_` prefix matches real Stripe live-key pattern and will trip secret scanners / invite copy-paste of a live-format value. Use `STRIPE_SECRET_KEY=sk_test_replace_me` or `your_key_here`.",
+        "p": 0.68,
+        "evidence": {
+          "status": "inconclusive",
+          "detail": "could not fetch CI check-runs"
+        }
+      },
+      {
+        "file": "docs/setup.md",
+        "line": 6,
+        "severity": "nit",
+        "category": "convention",
+        "message": "The AWS documentation example access key gets copied verbatim; use `AWS_ACCESS_KEY_ID=<your-access-key-id>` to remove the key-shaped literal.",
+        "p": 0.66,
+        "evidence": {
+          "status": "inconclusive",
+          "detail": "could not fetch CI check-runs"
+        }
+      }
+    ],
+    "probeLaneSkipped": "fixture mode: probes need a real PR checkout",
+    "secretsScan": {
+      "findings": [],
+      "records": [
+        {
+          "file": ".env.example",
+          "line": 2,
+          "patternClass": "stripe-live",
+          "adjudicated": true,
+          "pLive": 0.06,
+          "suppressed": true
+        },
+        {
+          "file": "docs/setup.md",
+          "line": 8,
+          "patternClass": "aws-access-key",
+          "adjudicated": true,
+          "pLive": 0.07,
+          "suppressed": true
+        }
+      ],
+      "overflow": 0
+    },
+    "triage": {
+      "mode": "annotate",
+      "model": "redacted/triage-model",
+      "needsDeepReview": 0.92,
+      "risk": 2.72,
+      "topRiskArea": "billing",
+      "topRiskAreaConfidence": 0.91
+    },
+    "findingAdjudication": {
+      "records": [
+        {
+          "file": "src/discount.ts",
+          "line": 6,
+          "severity": "bug",
+          "adjudicated": true,
+          "p": 0.66
+        },
+        {
+          "file": ".env.example",
+          "line": 2,
+          "severity": "risk",
+          "adjudicated": true,
+          "p": 0.68
+        },
+        {
+          "file": "docs/setup.md",
+          "line": 6,
+          "severity": "nit",
+          "adjudicated": true,
+          "p": 0.66
+        }
+      ],
+      "overflow": 0
+    },
+    "maxComments": 20,
+    "calls": [
+      {
+        "model": "redacted/triage-model",
+        "provider": "redacted",
+        "tokens": 1161,
+        "costUsd": 0.000045108,
+        "kind": "decide"
+      },
+      {
+        "model": "deepseek/deepseek-v4.1-flash",
+        "provider": "DeepInfra",
+        "tokens": 2154,
+        "costUsd": 0.0006245316,
+        "kind": "code"
+      },
+      {
+        "model": "redacted/triage-model",
+        "provider": "redacted",
+        "tokens": 1230,
+        "costUsd": 0.000049224,
+        "kind": "decide"
+      },
+      {
+        "model": "redacted/triage-model",
+        "provider": "redacted",
+        "tokens": 527,
+        "costUsd": 0.000020454,
+        "kind": "decide"
+      }
+    ],
+    "visionCostUsd": 0.0007393176,
+    "tokens": 5072,
+    "model": "deepseek/deepseek-v4.1-flash",
+    "budgetExceeded": false
+  }
+}

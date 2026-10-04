@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none">
+  <title>Argus</title>
+  <!-- Optical master for 16 and 32 px (ICO, ICNS small slots, favicon-32):
+       full-bleed squircle and the bolder mark-16 geometry, no sunk ring. -->
+  <path d="M10.24 0c2.02 0 3.02 0 3.79 0.39a3.6 3.6 0 0 1 1.57 1.57c0.39 0.77 0.39 1.78 0.39 3.79V10.24c0 2.02 0 3.02 -0.39 3.79a3.6 3.6 0 0 1 -1.57 1.57c-0.77 0.39 -1.78 0.39 -3.79 0.39H5.76c-2.02 0 -3.02 0 -3.79 -0.39a3.6 3.6 0 0 1 -1.57 -1.57c-0.39 -0.77 -0.39 -1.78 -0.39 -3.79V5.76c0 -2.02 0 -3.02 0.39 -3.79a3.6 3.6 0 0 1 1.57 -1.57c0.77 -0.39 1.78 -0.39 3.79 -0.39Z" fill="#2343F5"/>
+  <g id="mark" transform="translate(0.56 0.56) scale(0.62)">
+    <path d="M19.9 3.6A0.5 0.5 0 0 1 20.4 4.1L20.4 12A8.4 8.4 0 1 1 12 3.6Z" stroke="#FFFFFF" stroke-width="2.75" stroke-linejoin="round"/>
+    <circle cx="13.414" cy="10.586" r="3.4" fill="#FFFFFF"/>
+  </g>
+</svg>

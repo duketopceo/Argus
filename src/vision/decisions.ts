@@ -1,9 +1,10 @@
 import { debug } from '../debug.js'
+import { classifyHttpStatus, type ErrorCode } from '../ui/errors.js'
 import { makeDecisionsCallCost } from './cost.js'
 import type { CallCost, DecisionsResponse, ProviderValue } from './cost.js'
 
 /**
- * Pinned Jev slug — the alias `~typesafe/jev-latest` drifts silently and
+ * Pinned confidence-model slug — the alias `~typesafe/jev-latest` drifts silently and
  * adjudication thresholds are calibrated to a version. The alias stays
  * usable via `config.decisionModel` for experimentation.
  */
@@ -23,6 +24,9 @@ export class DecisionError extends Error {
     readonly kind: DecisionErrorKind,
     message: string,
     readonly retryable: boolean,
+    /** CLI error class (src/ui/errors.ts) when the failure has one: key, credit, rate, provider. */
+    readonly code?: ErrorCode,
+    readonly retryAfterSeconds?: number,
   ) {
     super(message)
     this.name = 'DecisionError'
@@ -82,7 +86,7 @@ export function describeDecisionError(e: unknown): string {
   return e instanceof DecisionError ? e.kind : (e as Error).message
 }
 
-/** Shared per-call batch cap for the Jev lanes (secrets, findings, triage). */
+/** Shared per-call batch cap for the confidence-model lanes (secrets, findings, triage). */
 export const MAX_CANDIDATES = 50
 
 export interface DecisionClientOptions {
@@ -181,23 +185,29 @@ function validateAnswers(
   return out
 }
 
-function classifyStatus(status: number): DecisionError {
-  if (status === 401 || status === 403) {
-    return new DecisionError('auth', `decide: HTTP ${status} — check OPENROUTER_API_KEY`, false)
-  }
+/**
+ * HTTP status to a typed DecisionError. `kind` and `retryable` drive the
+ * retry loop and stay as they were; the CLI class (`code`) and its message
+ * come from the shared classifier in src/ui/errors.ts.
+ */
+function classifyStatus(status: number, headers?: Headers): DecisionError {
+  const shared = classifyHttpStatus(status, headers)
+  const make = (kind: DecisionErrorKind, fallback: string, retryable: boolean): DecisionError =>
+    new DecisionError(
+      kind,
+      shared !== undefined ? `decide: ${shared.message}` : fallback,
+      retryable,
+      shared?.code,
+      shared?.retryAfterSeconds,
+    )
+  if (status === 401 || status === 403) return make('auth', `decide: HTTP ${status}, check OPENROUTER_API_KEY`, false)
   if (status === 400 || status === 404 || status === 422) {
-    return new DecisionError('validation', `decide: HTTP ${status} — request rejected`, false)
+    return make('validation', `decide: HTTP ${status}, request rejected`, false)
   }
-  if (status === 429) {
-    return new DecisionError('rate_limited', 'decide: HTTP 429 rate limited', true)
-  }
-  if (status === 503) {
-    return new DecisionError('overloaded', 'decide: HTTP 503 provider overloaded', true)
-  }
-  if (status >= 500) {
-    return new DecisionError('server_error', `decide: HTTP ${status}`, true)
-  }
-  return new DecisionError('unexpected', `decide: HTTP ${status}`, false)
+  if (status === 429) return make('rate_limited', 'decide: HTTP 429 rate limited', true)
+  if (status === 503) return make('overloaded', 'decide: HTTP 503 provider overloaded', true)
+  if (status >= 500) return make('server_error', `decide: HTTP ${status}`, true)
+  return make('unexpected', `decide: HTTP ${status}`, false)
 }
 
 function retryDelayMs(res: Response): number {
@@ -268,10 +278,10 @@ export class DecisionClient {
           body: JSON.stringify(body),
         })
         if (!res.ok) {
-          const err = classifyStatus(res.status)
+          const err = classifyStatus(res.status, res.headers)
           if (err.retryable && attempt === 0) {
             const delay = retryDelayMs(res)
-            debug('decisions', `${err.kind} — retrying in ${delay}ms`)
+            debug('decisions', `${err.kind}, retrying in ${delay}ms`)
             await new Promise((r) => setTimeout(r, delay))
             continue
           }
@@ -311,7 +321,7 @@ export class DecisionClient {
             true,
           )
           if (attempt === 0) {
-            debug('decisions', 'timeout — retrying once')
+            debug('decisions', 'timeout, retrying once')
             continue
           }
           break

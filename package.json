@@ -45,15 +45,22 @@
     "watch": "node scripts/watch.mjs",
     "smoke:dashboard": "node tests/e2e/dashboard-smoke.mjs",
     "app": "electron electron",
-    "demo": "node scripts/demo.mjs"
+    "demo": "node scripts/demo.mjs",
+    "demo:record": "node scripts/demo-record.mjs",
+    "tokens": "node scripts/build-tokens.mjs",
+    "brand": "node scripts/build-brand.mjs",
+    "render:brand": "node scripts/render-brand.mjs",
+    "check:contrast": "node scripts/check-contrast.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^26.6.2",
     "electron": "^44.2.0",
     "eslint": "^10.11.0",
     "globals": "^17.12.0",
     "prettier": "^3.0.0",
+    "svgo": "^4.1.0",
     "typescript-eslint": "^8.0.0",
     "vitest": "^5.0.1"
   },

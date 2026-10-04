@@ -1,0 +1,138 @@
+/*
+ * Argus motion (DESIGN.md A14, section 6.5). Three web motions, nothing else:
+ *
+ *   scan             a running lane: the pupil drifts round the iris ring
+ *   blink-to-state   a lane resolves: the lid closes and reopens on the result
+ *   tally tick       a ledger figure changes: the new number rolls in
+ *
+ * The terminal spinner (A14c) lives in spinner.json. Durations and easing
+ * come from tokens.css (--argus-motion-*); scan's 1600 ms loop is the one
+ * value tokens.css does not carry, so it is declared here.
+ *
+ * Contract for surfaces:
+ *   - Add the blink and tally markup only when the value actually changed.
+ *     A poll refresh that re-renders an unchanged row must not re-insert it,
+ *     or the one-shot animations replay (section 6.5: polls never animate).
+ *   - Scan runs only while a lane is running; swap it for the status glyph
+ *     inside .argus-blink when the lane resolves.
+ *   - prefers-reduced-motion: reduce zeroes every motion token, shows the
+ *     static half-lid instead of the moving pupil, and turns blink and tally
+ *     into an instant swap.
+ *
+ * Load after tokens.css so the reduced-motion token overrides win.
+ *
+ * Markup:
+ *
+ *   <svg class="argus-scan" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+ *        stroke-width="1.8" role="img" aria-label="running">
+ *     <circle cx="12" cy="12" r="8"/>
+ *     <circle class="argus-scan__pupil" cx="12" cy="9.25" r="2.75"
+ *             fill="currentColor" stroke="none"/>
+ *     <path class="argus-scan__lid" d="M4 12A8 8 0 0 1 20 12Z" fill="currentColor"/>
+ *   </svg>
+ *
+ *   <span class="argus-blink">
+ *     <svg class="argus-blink__from">…scan…</svg>
+ *     <svg class="argus-blink__to"><use href="glyphs.svg#status-passed"/></svg>
+ *   </span>
+ *
+ *   <span class="argus-tally"><span class="argus-tally__value">$0.004210</span></span>
+ */
+
+:root {
+  --argus-motion-scan: 1600ms;
+}
+
+/* (a) Scan: running lane only. */
+.argus-scan__pupil {
+  transform-box: view-box;
+  transform-origin: 12px 12px;
+  animation: argus-scan var(--argus-motion-scan) var(--argus-motion-ease-in-out) infinite;
+}
+
+.argus-scan__lid {
+  display: none;
+}
+
+@keyframes argus-scan {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* (b) Blink-to-state: the lid closes over the old state, opens on the new. */
+.argus-blink {
+  display: inline-grid;
+}
+
+.argus-blink > * {
+  grid-area: 1 / 1;
+  display: flex; /* no inline line box, so the lid closes on the glyph's centre */
+}
+
+.argus-blink__from {
+  animation: argus-lid-close calc(var(--argus-motion-panel) / 2) var(--argus-motion-ease-in-out)
+    forwards;
+}
+
+.argus-blink__to {
+  animation: argus-lid-open calc(var(--argus-motion-panel) / 2) var(--argus-motion-ease-in-out)
+    calc(var(--argus-motion-panel) / 2) both;
+}
+
+/* The lid stops at a sliver, so the closed eye reads as a line, not a gap. */
+@keyframes argus-lid-close {
+  to {
+    transform: scaleY(0.12);
+    visibility: hidden;
+  }
+}
+
+@keyframes argus-lid-open {
+  from {
+    transform: scaleY(0.12);
+  }
+}
+
+/* (d) Tally tick: the new ledger figure rolls up into place. */
+.argus-tally {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+}
+
+.argus-tally__value {
+  display: inline-block;
+  animation: argus-tally-roll var(--argus-motion-state) var(--argus-motion-ease-out);
+}
+
+@keyframes argus-tally-roll {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --argus-motion-instant: 0ms;
+    --argus-motion-state: 0ms;
+    --argus-motion-panel: 0ms;
+    --argus-motion-scan: 0ms;
+  }
+
+  .argus-scan__pupil,
+  .argus-blink__from,
+  .argus-blink__to,
+  .argus-tally__value {
+    animation: none;
+  }
+
+  .argus-scan__pupil,
+  .argus-blink__from {
+    display: none;
+  }
+
+  .argus-scan__lid {
+    display: inline;
+  }
+}

@@ -17,7 +17,7 @@ export interface TriageRecord {
     topRiskArea?: TriageArea;
     /** Choice-answer confidence when the API provides one. */
     topRiskAreaConfidence?: number;
-    /** Chars of diff evidence Jev saw — route mode won't downgrade on 0. */
+    /** Chars of diff evidence the confidence model saw — route mode won't downgrade on 0. */
     diffExcerptChars?: number;
     /** decide() failed or answers failed validation — degrade-open marker. */
     unadjudicated?: boolean;

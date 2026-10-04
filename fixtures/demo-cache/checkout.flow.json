@@ -1,0 +1,36 @@
+{
+  "asserts": [
+    {
+      "a11yHash": "2118963b",
+      "model": "demo-seed (scripted, no model call)",
+      "question": "the page says the order is confirmed",
+      "reasoning": "seeded for the README demo",
+      "verdict": "pass"
+    }
+  ],
+  "schemaVersion": 1,
+  "steps": [
+    {
+      "a11ySnippet": "Place order",
+      "action": {
+        "action": "click",
+        "x": 125,
+        "y": 197
+      },
+      "bbox": {
+        "height": 37,
+        "snippet": "Place order",
+        "width": 120,
+        "x": 65,
+        "y": 179
+      },
+      "clickPoint": {
+        "x": 125,
+        "y": 197
+      },
+      "instruction": "locate: the \"Place order\" button",
+      "model": "demo-seed (scripted, no model call)",
+      "regionHash": "ffffffffe0000000"
+    }
+  ]
+}

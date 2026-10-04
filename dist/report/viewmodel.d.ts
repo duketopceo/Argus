@@ -12,8 +12,30 @@ import { type BudgetSummary, type CacheSummary, type HeadBinding, type LaneId, t
 export declare const LANE_STATUS_LABEL: Record<LaneStatus, string>;
 /** One glyph per status — terminal/comment-safe, color-independent. */
 export declare const LANE_STATUS_ICON: Record<LaneStatus, string>;
-/** Comment-flavored emoji per status — same ordering contract as the glyph. */
-export declare const LANE_STATUS_EMOJI: Record<LaneStatus, string>;
+/** Status glyph per lane status; no two statuses share one. */
+export declare const STATUS_GLYPH: Record<LaneStatus, string>;
+/** Proof strength, weakest to strongest (A4 ladder). */
+export declare const PROOF_LEVELS: readonly ["suspected", "corroborated", "exercised", "reproduced"];
+export type ProofLevel = (typeof PROOF_LEVELS)[number];
+/**
+ * Four-notch meter: one filled notch per ladder step reached. Any other
+ * value (an evidence status outside the ladder, a missing level) is the
+ * empty meter, so a renderer never throws on unexpected input.
+ */
+export declare function proofMeter(level: string | undefined): string;
+/** Finding severities as the review pipeline emits them (`q` is a question). */
+export declare const SEVERITIES: readonly ["bug", "risk", "nit", "q"];
+export type Severity = (typeof SEVERITIES)[number];
+/** Geometric, shape-only severity glyphs (A5). */
+export declare const SEVERITY_GLYPH: Record<Severity, string>;
+export declare const SEVERITY_LABEL: Record<Severity, string>;
+/** Review verdicts as the synthesis step emits them. */
+export declare const VERDICTS: readonly ["approve", "needs_changes", "pass"];
+export type Verdict = (typeof VERDICTS)[number];
+/** Verdicts reuse status glyphs, so there is no third vocabulary. */
+export declare const VERDICT_STATUS: Record<Verdict, LaneStatus>;
+export declare const VERDICT_LABEL: Record<Verdict, string>;
+export declare function verdictGlyph(verdict: Verdict): string;
 export interface LaneView {
     lane: LaneId;
     selected: boolean;
@@ -59,6 +81,12 @@ export declare function laneView(lane: LaneManifest): LaneView;
 export declare function manifestToRunView(manifest: RunManifest): RunView;
 /** Structural validation — a manifest the view-model can trust enough to render. */
 export declare function isRunManifest(value: unknown): value is RunManifest;
+/**
+ * One lane record the view-model can render. Exported so a surface that
+ * degrades per lane (the HTML report) applies the same check as the whole-
+ * manifest guard.
+ */
+export declare function isLaneManifest(value: unknown, id: LaneId): value is LaneManifest;
 export declare function maskSecrets(s: string): string;
 export declare function formatUsd(n: number | undefined): string;
 export declare function formatDuration(ms: number | undefined): string;

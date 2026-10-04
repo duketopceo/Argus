@@ -7,10 +7,11 @@ Deterministic fixture for `argus-reviewer code-review --fixture` and
 - `head/` — the PR state: a real seeded bug in `src/discount.ts`
   (discount applied twice), a **documentation-shaped** credential
   (`__ARGUS_DEMO_DOC_KEY__` — substituted with the AWS docs example at
-  materialize time; Jev should adjudicate it as not-live and suppress),
+  materialize time; the confidence model should adjudicate it as not-live
+  and suppress it),
   and a **live-format** credential in `.env.example`
-  (`__ARGUS_DEMO_LIVE_KEY__` — a fake-but-real-shaped Stripe key; Jev
-  should hedge or flag it as live).
+  (`__ARGUS_DEMO_LIVE_KEY__`, a fake but real-shaped Stripe key; the
+  confidence model should hedge or flag it as live).
 
 Placeholders exist so no secret-shaped literal sits in this repo —
 `scripts/demo.mjs` substitutes them while materializing a temporary git

@@ -67,7 +67,7 @@ export async function adjudicateFindings(opts) {
         }
     }
     const blocking = new Set(opts.blockSeverities ?? []);
-    // Only Jev may attach p — a model-emitted p on an unadjudicated
+    // Only the confidence model may attach p — a model-emitted p on an unadjudicated
     // finding is spoofed confidence, so strip it.
     const stripP = (f) => {
         const out = { ...f };

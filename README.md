@@ -1,7 +1,8 @@
-# Argus
-
 <p align="center">
-  <img src="docs/assets/social.png" alt="Argus — vision-model E2E testing" width="640" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/export/lockup-dark.svg" />
+    <img src="assets/brand/export/lockup-light.svg" alt="Argus" width="240" />
+  </picture>
 </p>
 
 <p align="center">
@@ -11,125 +12,118 @@
   <a href="https://github.com/duketopceo/Argus/security/policy"><img src="https://img.shields.io/badge/security-policy-orange" alt="security policy" /></a>
 </p>
 
-**The hundred-eyed watcher for your pull requests.** Argus reviews your diff, then goes further: it starts your real app, clicks through it like a user, and executes probes against suspected bugs — then posts a verdict on the PR with the exact dollar cost. Self-hosted, MIT-licensed, bring-your-own OpenRouter key. No SaaS middleman, no telemetry, no per-seat pricing.
+**Argus reviews your pull request, runs your real app in a browser, and posts a verdict with its exact cost.**
 
-## Get started in 60 seconds
+It is a GitHub Action and a CLI. It runs on your infrastructure with your own OpenRouter key: no hosted service, no telemetry, no per-seat pricing. MIT licensed.
 
-```bash
-npm i -D argus-reviewer-e2e      # the npm package; the command it installs is `argus-reviewer`
-npx argus-reviewer init          # writes config + smoke test + GitHub workflow
-```
-
-Add `OPENROUTER_API_KEY` to your environment (and repo secrets for CI). Then:
+## Install in 60 seconds
 
 ```bash
-npx argus-reviewer record "sign in and open the dashboard" --url http://localhost:3000
-npx argus-reviewer run           # replays + asserts — free on cache hit
+npm i -D argus-reviewer-e2e      # the package; the command is argus-reviewer
+npx argus-reviewer init          # config, a smoke test, and the PR workflow
 ```
 
-That's it. `init` drops a ready-to-run GitHub workflow; every PR from then on gets a review comment with findings, flow results, video evidence, and spend.
+<img src="docs/assets/demo/init.gif" width="1100" alt="Terminal: argus-reviewer init writes the config, a smoke test and two workflow files, then checks the environment. The OpenRouter key is reported as not set, Playwright chromium is found, and the default lane is code review." />
 
-## `verify` — four lanes, one manifest
+`init` checks your environment and tells you what is missing. Add `OPENROUTER_API_KEY` to your shell and to the repository secrets, and every pull request gets a review.
 
-`argus-reviewer verify` runs the product lanes and writes one `run-manifest.json` — the shared evidence contract the sticky comment, the `npm run watch` TUI, and the Electron dashboard (`npm run app`) all render:
+Record a browser flow once, then replay it on every run:
 
-| Lane | Selected by | What it does |
-|---|---|---|
-| **review** | default | Diff review → inline findings + verdict |
-| **flow** | `--flow` (action input `run`) | Cache-first replay of recorded journeys |
-| **app** | `--app` + `--task` (action inputs `app`/`app-task`) | Directed task against your live app with an expected-state check (`--expect-text`/`--expect-url`/`--expect-selector`) |
-| **a0** | `--a0` (action input `a0`) | Escalates the task to your Agent Zero host — sandboxed child env, bounded, and deliberately honest: a completed delegation reports `inconclusive`, never `passed`, because the agent's answer is self-reported evidence |
+```bash
+npx argus-reviewer record "add an item and check out" --url http://localhost:3000
+npx argus-reviewer run
+```
 
-Every lane reports an honest status (`passed`/`failed`/`skipped`/`blocked`/`unavailable`/`inconclusive`) with usage, budget, and head binding in the manifest — a lane that couldn't run says so instead of silently no-opping. Completed manifests archive to `<reportDir>/manifests/` (bounded by `reportRetention`, default 20; `0` disables), and the dashboards keep the last valid run even if a write is interrupted.
+A replay that matches the recorded page makes no model call and costs $0. This cast replays a recorded checkout flow with no API key set at all:
+
+<img src="docs/assets/demo/run-cache-hit.gif" width="1100" alt="Terminal: cat shows a test that clicks Place order and asserts the order is confirmed. argus-reviewer run passes it from the cache: passed, 1 of 1 tests, total $0.000000 of a $1.00 budget." />
 
 ## What lands on your PR
 
-A sticky comment that updates on every push:
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-dark.png" />
+  <img src="docs/assets/hero-light.png" alt="The Argus sticky comment from a real review run: verdict needs changes, 3 findings with suspected proof and none reproduced, review lane failed, flow lane skipped, metered spend $0.000739." />
+</picture>
 
-- **Verdict** — `APPROVE` / `NEEDS_CHANGES` with findings linked to concrete source lines
-- **Inline comments on every severity** — one batched PR review, severity-sorted; each finding can carry a committable `suggestion` block you apply in one click
-- **Blocks only on proof** — the review escalates to `REQUEST_CHANGES` only for reproduced or adjudicated blockers; everything else stays advisory. Stale request-changes reviews are dismissed automatically, and `requestChanges: false` keeps it advisory forever
-- **Flow results** — which recorded user-journeys passed, healed, or broke
-- **Reproduced, not suspected** — opt-in sandbox lane runs authored regression probes; a probe that fails on head and passes on base stamps the finding as *proven*
-- **Cost** — every model call metered from OpenRouter's per-call pricing, totaled in dollars
+One sticky comment that updates on every push:
 
-That comment is **not a review**. `require_approving_reviews` reads reviews only, so on a protected branch the verdict alone leaves the gate unsatisfied. Supply `approval-token` — a GitHub App installation token, or a PAT from an account that is not the PR author — and Argus also submits a real review whose event follows the verdict. `github.token` cannot do this; GitHub refuses it outright. A token alone is **not** enough: an `APPROVE` also needs `approval-evidence` naming the test command, and `approval-check` naming a check run that has completed green on the pull request's head commit, produced by the App named in `approval-check-app` (`github-actions` by default). Details, the measured refusals, and the review-discipline rules: [`docs/approval-token.md`](docs/approval-token.md).
+- **Verdict:** approve or needs changes, with each finding linked to a source line.
+- **Inline comments:** one batched review, sorted by severity. A finding can carry a `suggestion` block you apply in one click.
+- **Proof level:** each finding says whether it is suspected or reproduced. Argus requests changes only for reproduced or adjudicated blockers; everything else stays advisory. `requestChanges: false` keeps it advisory always.
+- **Lanes and cost:** what ran, what did not and why, and the dollar cost of the model calls.
 
-<p align="center">
-  <img src="docs/assets/demo.gif" alt="argus-reviewer run — live vision call, PASS, $0.0005 spend" width="900" />
-</p>
+The comment is not a GitHub review, so on its own it does not satisfy a required-approval rule. To have Argus submit a real review, supply `approval-token` (a GitHub App token, or a PAT from an account that is not the PR author). An approve also needs `approval-evidence` and a green `approval-check` on the head commit. Details: [`docs/approval-token.md`](docs/approval-token.md).
 
-## Why it's different
+## Four lanes
 
-| | Argus |
-|---|---|
-| **Selectors** | None. A vision model looks at a screenshot and decides where to click. |
-| **Maintenance** | Fingerprint cache replays at zero model cost; when the UI drifts, self-healing re-grounds and the heal shows up as a reviewable diff. |
-| **Review depth** | Beyond the diff: full-source evidence linkage, CI evidence, executed probes, real browser runs. |
-| **Spend** | You pick the models per lane (`model`, `grounding_model`, `code_model`, `escalation_model`) and set `budgetUsd`. Cache hits cost nothing. |
-| **Data** | Yours. Keys, journals, videos, and reports stay on your infra. |
+`argus-reviewer verify` runs the lanes you select and writes one `run-manifest.json`, which the PR comment renders.
+
+Beside it, verify writes `report.html`: an offline evidence report with the verdict, each lane, findings with suggestions, the flow step timeline, heals and the spend ledger. It is one self-contained file (inline styles, fonts and icons, no network requests), follows your light or dark setting and prints cleanly. It lands at `argus-reviewer-report/report.html` (or your `report-dir`). The action does not upload it; add an upload step for the report directory, and the PR comment footer names the path inside that artifact:
+
+```yaml
+- uses: actions/upload-artifact@v4
+  if: always()
+  with:
+    name: argus-reviewer-report-${{ github.run_id }}-${{ github.run_attempt }}
+    path: argus-reviewer-report/
+```
+
+| Lane | Select with | What it does |
+|---|---|---|
+| review | default | Reviews the diff and posts findings and a verdict |
+| flow | `--flow` (action input `run`) | Replays recorded browser flows, cache first |
+| app | `--app --task "..."` plus `--expect-text`, `--expect-url` or `--expect-selector` | Runs one directed task against your live app and checks the expected state |
+| a0 | `--a0` (action input `a0`) | Hands the task to your own Agent Zero host in a sandboxed child environment. A finished delegation reports inconclusive, never passed, because the agent's answer is self-reported |
+
+A lane that cannot run says so. Here the review lane has no pull request to read, so it reports skipped with the reason, and the flow lane replays from the cache:
+
+<img src="docs/assets/demo/verify.gif" width="1100" alt="Terminal: argus-reviewer verify --flow. The review lane is skipped because there is no pull request in context; the flow lane passes; total $0.000000 of a $1.00 budget." />
+
+## Status legend
+
+Every lane, in the comment and in the terminal, reports one of six statuses:
+
+| Glyph | Status | Meaning |
+|---|---|---|
+| `●` | passed | The lane ran and its checks held |
+| `⊘` | failed | The lane ran and found a problem |
+| `◐` | inconclusive | The lane ran, but its evidence cannot settle the answer |
+| `⊖` | blocked | A policy stopped the lane |
+| `◌` | unavailable | The lane could not run: a missing key, tool or host |
+| `–` | skipped | The lane was not selected, or had nothing to work on |
+
+## Cost
+
+Every OpenRouter call is metered from the provider's per-call price and totaled in the comment. The review in the image above cost **$0.000739**. A flow replay that matches its cache costs $0. `budgetUsd` caps each run (default $1.00), and you choose the model for each job (`model`, `code_model`, `escalation_model`).
+
+The action tags every call with `ARGUS_REVIEWER_TRACE` (repository, PR, commit, run), so spend can be attributed per review. See [`docs/quickstart.md`](docs/quickstart.md) for the `openrouter` config block.
+
+## Security
+
+Argus treats pull request content as hostile. Untrusted checkouts never execute config code, fork PRs are gated behind the `argus-probe` label, secrets are filtered from model input and comment output, and the probe sandbox runs with no network and a read-only filesystem. Threat model: [`SECURITY.md`](SECURITY.md).
 
 ## Configuration
 
-`argus-reviewer.config.ts`:
+`argus-reviewer.config.ts` (or `argus-reviewer.config.json`):
 
 ```ts
 import { defineConfig } from 'argus-reviewer-e2e'
 
 export default defineConfig({
-  model: 'google/gemini-2.5-flash-lite',          // vision grounding + actions
+  model: 'google/gemini-2.5-flash-lite',          // vision: grounding and actions
   code_model: 'deepseek/deepseek-v4.1-flash',     // diff review
-  escalation_model: 'anthropic/claude-sonnet-4',  // risky/complex findings
+  escalation_model: 'anthropic/claude-sonnet-4',  // risky or complex findings
   budgetUsd: 1.0,
   target: { url: 'https://your-app.example.com' },
   testsDir: 'e2e',
-  // How many verify manifests stay under <reportDir>/manifests/ for the
-  // dashboard/TUI run history (default 20; 0 disables archival).
-  reportRetention: 20,
+  reportRetention: 20,                            // archived manifests to keep
 })
 ```
 
-Point `provider.order` at fast OpenRouter backends (`cerebras`, `groq`) for sub-second review calls — speed is a routing choice, not a pricing tier. Full shape: [`src/config.ts`](src/config.ts) (a legacy `vision-e2e.config.*` is still accepted). Setup walkthrough: [`docs/quickstart.md`](docs/quickstart.md).
+Full shape: [`src/config.ts`](src/config.ts). Setup walkthrough: [`docs/quickstart.md`](docs/quickstart.md).
 
-## The execution ladder
+## Contributing
 
-Argus does more as you grant it more access — each rung is opt-in:
-
-1. **API review** — GitHub token only. Reviews the PR diff and posts the verdict.
-2. **Trusted checkout** — findings get verified against the full source tree.
-3. **Browser flows** — Playwright drives your real app through recorded journeys (`verify --flow`).
-4. **App task lane** — `verify --app --task "submit the signup form" --expect-url /welcome` runs a directed task against your live app and checks the expected state.
-5. **Sandbox probes** — suspected findings get authored regression tests, executed in a hardened container (no network, no secrets, read-only FS). Fork PRs stay behind an `argus-probe` label gate.
-6. **Agent Zero delegation** — `argus-reviewer delegate "find the checkout bug"` or the opt-in `verify --a0` lane hands work to your own A0 instance over a sanitized child environment. The lane reports `inconclusive`, not `passed`: the round-trip is verified, but the agent's report of what it saw is self-reported.
-
-## Cost attribution
-
-Every OpenRouter call carries a trace tag. The action auto-sets `ARGUS_REVIEWER_TRACE` (repo, PR, commit, run id) so spend is attributable per review — or set it yourself for custom fields. See [`docs/quickstart.md`](docs/quickstart.md) for the `openrouter` config block.
-
-## Security model
-
-Reviews run against hostile input by design: untrusted checkouts never execute config code, fork PRs are label-gated, secrets are filtered from model context and comment output, and the sandbox probe lane runs network-less with a read-only filesystem. Threat model: [`SECURITY.md`](SECURITY.md).
-
-## File structure
-
-```text
-argus-reviewer/
-├── action/                  # GitHub Actions composite action + sticky PR comment
-├── runner/                  # Self-hosted runner registration docs + script
-├── electron/                # Local observability dashboard (`npm run app`)
-├── src/
-│   ├── api.ts               # Test-facing `test`/`td` API + generated test renderer
-│   ├── cli.ts               # verify · record · run · code-review · delegate · cache · index · init
-│   ├── config.ts            # `argus-reviewer.config.*` loader
-│   ├── cache/               # Per-step fingerprint + flow store
-│   ├── driver/              # Playwright browser + dev-server target
-│   ├── engine/              # Vision record/replay + healing loop
-│   ├── evidence/            # PR/CI context, fork trust gate, finding linkage
-│   ├── executor/            # Agent Zero delegation + hardened probe sandbox
-│   ├── probe/               # Model-authored regression probes
-│   ├── report/              # PR comment, JUnit XML, run.json, run-manifest.json
-│   └── vision/              # OpenRouter client, cost parsing, budget ledger
-└── tests/                   # Unit tests + Playwright fixture page
-```
+The repository also has a terminal view (`npm run watch`) and a desktop dashboard (`npm run app`). They are contributor tools: they run only from a clone of this repository, and the npm package does not ship them. The casts above are recorded by `npm run demo:record` (see `scripts/demo-record.mjs`). Guidelines: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 License: [MIT](LICENSE).

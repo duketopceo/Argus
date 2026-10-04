@@ -1,0 +1,7 @@
+{
+  "$comment": "No OPENROUTER_API_KEY: nothing ran; the status is neutral.",
+  "body": "missing-key",
+  "ok": true,
+  "version": "0.4.0",
+  "runUrl": "https://github.com/acme/shop/actions/runs/123456"
+}
