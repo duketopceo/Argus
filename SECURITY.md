@@ -25,6 +25,22 @@ You should receive an acknowledgement within a few days.
   with a real browser — run it only against targets you are willing to have
   an agent click through.
 
+## GitHub App and Worker boundary (planned)
+
+Argus is bring-your-own-key and runs in your own GitHub Actions. A GitHub App
+and webhook Worker for one-click onboarding are planned and not yet available
+(`docs/onboarding.md`). When they exist, this boundary holds by design:
+
+- The App and its Worker never hold, see, proxy or log a customer
+  `OPENROUTER_API_KEY`, and never set repository secrets.
+- They never check out or execute customer code.
+- They never run reviews. Reviews run in the customer's GitHub Actions with
+  the customer's key.
+- Their job is limited to opening an onboarding pull request and, in an
+  optional later phase, issuing short-lived tokens for a bot identity and
+  check runs. Neither changes fork pull request trust (`src/trust.ts`): fork
+  and `pull_request_target` runs never receive write credentials.
+
 ## GitHub Action boundary
 
 - The action's default path installs the CLI package from the pinned action ref
