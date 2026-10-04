@@ -115,7 +115,7 @@ Every lane, in the comment and in the terminal, reports one of six statuses:
 
 ## Cost
 
-Every OpenRouter call is metered from the provider's per-call price and totaled in the comment. The review in the image above cost **$0.000739**. A flow replay that matches its cache costs $0. `budgetUsd` caps each run (default $1.00), and you choose the model for each job (`model`, `code_model`, `escalation_model`).
+Every OpenRouter call is metered from the provider's per-call price and totaled in the comment. The review in the image above cost **$0.000739**. A flow replay that matches its cache costs $0. `budgetUsd` caps each run (default $1.00; raise it, or set `0` to run uncapped, which logs a warning), and you choose the model for each job (`model`, `code_model`, `escalation_model`).
 
 The action tags every call with `ARGUS_REVIEWER_TRACE` (repository, PR, commit, run), so spend can be attributed per review. See [`docs/quickstart.md`](docs/quickstart.md) for the `openrouter` config block.
 
@@ -134,7 +134,7 @@ export default defineConfig({
   model: 'google/gemini-2.5-flash-lite',          // vision: grounding and actions
   code_model: 'deepseek/deepseek-v4-flash',     // diff review
   escalation_model: 'anthropic/claude-sonnet-4',  // risky or complex findings
-  budgetUsd: 1.0,
+  budgetUsd: 1.0,                                 // per-run cap in USD; default 1, 0 = unlimited
   target: { url: 'https://your-app.example.com' },
   testsDir: 'e2e',
   reportRetention: 20,                            // archived manifests to keep

@@ -79,8 +79,8 @@ export function validateBrowser(raw) {
 export function validateBudget(raw, name = 'budget-usd') {
   if (raw === undefined || raw === '') return undefined
   const value = Number(raw)
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(`${name} must be a positive number`)
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`${name} must be a non-negative number (0 = unlimited)`)
   }
   return value
 }

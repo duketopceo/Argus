@@ -24,7 +24,7 @@ inputs:
     description: Working directory for the consumer's project
     required: false
   budget-usd:
-    description: Optional per-run budget cap override in USD
+    description: Per-run spend cap in USD. Default 1 (built in). Set 0 to run uncapped (logs a warning).
     required: false
   index:
     description: Run `argus-reviewer index` before the test run to enable diff-aware cache invalidation
