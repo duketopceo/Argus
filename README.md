@@ -16,7 +16,24 @@
 
 It is a GitHub Action and a CLI. It runs on your infrastructure with your own OpenRouter key: no hosted service, no telemetry, no per-seat pricing. MIT licensed.
 
-## Install in 60 seconds
+## Get started
+
+From a checkout of your GitHub repository, with `git` and the GitHub CLI (`gh auth login`) set up:
+
+```bash
+npx argus-reviewer init --pr
+```
+
+This opens a pull request that adds the Argus workflows, a config and a smoke test. Nothing runs until you merge it. Then:
+
+1. Add `OPENROUTER_API_KEY` as a repository secret (the PR links to the exact page, or run `gh secret set OPENROUTER_API_KEY --repo owner/name`).
+2. Review and merge the PR. Every pull request after that gets a review.
+
+`init --pr` uses your own `git` and `gh`, so your credentials do the pushing. Optional flags: `--repo owner/name` (must match the checkout's `origin`) and `--branch <name>` (default `argus/onboarding`). It never overwrites existing files, reports the existing PR instead of opening a second one, and never reads your OpenRouter key. Details, defaults, what is sent to the model provider, and troubleshooting: [`docs/onboarding.md`](docs/onboarding.md).
+
+### Manual setup
+
+To write the files into your working tree instead of opening a PR:
 
 ```bash
 npm i -D argus-reviewer-e2e      # the package; the command is argus-reviewer
@@ -25,9 +42,9 @@ npx argus-reviewer init          # config, a smoke test, and the PR workflow
 
 <img src="docs/assets/demo/init.gif" width="1100" alt="Terminal: argus-reviewer init writes the config, a smoke test and two workflow files, then checks the environment. The OpenRouter key is reported as not set, Playwright chromium is found, and the default lane is code review." />
 
-`init` checks your environment and tells you what is missing. Add `OPENROUTER_API_KEY` to your shell and to the repository secrets, and every pull request gets a review.
+`init` checks your environment and tells you what is missing. Add `OPENROUTER_API_KEY` to your shell and to the repository secrets, commit the files, and every pull request gets a review.
 
-To onboard through a pull request instead of writing files into your checkout, run `npx argus-reviewer init --pr` (optional `--repo owner/name`, `--branch argus/onboarding`). It uses your own `git` and `gh`, opens a PR with the secrets checklist, what is sent to the provider, the default budget and how to stop, refuses to overwrite existing files, and reports the existing PR if one is already open. It never reads your OpenRouter key.
+A GitHub App that opens the onboarding PR for you on install is planned and not available yet; see [`docs/onboarding.md`](docs/onboarding.md).
 
 Record a browser flow once, then replay it on every run:
 
