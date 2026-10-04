@@ -2813,7 +2813,7 @@ jobs:
       #          approval-token: \${{ steps.argus-app.outputs.token }}
       #          approval-evidence: 'npm test'   # command the approval stands on
       #          approval-check: 'test'          # check-run name, green on head SHA
-      - uses: duketopceo/Argus/action@c91fbd537266428483baacc0c0247b1abbe90ff3 # v0.4.0
+      - uses: duketopceo/Argus/action@63c9575622afef8bf4a8f2ea2d2909c6e54505d3 # v0.4.1
         with:
           openrouter-api-key: \${{ secrets.OPENROUTER_API_KEY }}
 `;
@@ -2849,7 +2849,7 @@ jobs:
       # Record commands need the app's dependencies to boot its target.
       # Uncomment if you use '@argus record':
       # - run: npm ci
-      - uses: duketopceo/Argus/action@c91fbd537266428483baacc0c0247b1abbe90ff3 # v0.4.0
+      - uses: duketopceo/Argus/action@63c9575622afef8bf4a8f2ea2d2909c6e54505d3 # v0.4.1
         with:
           openrouter-api-key: \${{ secrets.OPENROUTER_API_KEY }}
       # '@argus record' uploads the generated test + flow cache as an
