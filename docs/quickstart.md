@@ -364,6 +364,15 @@ export default defineConfig({
     // secrets-lane finding confirmed live. Set false for a permanently advisory (COMMENT-only)
     // posture — e.g. while evaluating the tool.
     requestChanges: true,
+    // Changed paths kept out of the review input (glob list). Default
+    // shown; a configured list REPLACES it, [] excludes nothing. Excluded
+    // counts are reported in the sticky Diagnostics fold. Not read from
+    // untrusted (fork) checkouts, so a PR cannot widen it.
+    exclude: [
+      'dist/**', 'fixtures/**', 'tests/goldens/**',
+      '**/package-lock.json', '**/yarn.lock', '**/pnpm-lock.yaml', '**/go.sum', // and other lockfiles
+      '**/*.generated.*', 'assets/brand/export/**',
+    ],
   },
   // Confidence model for all decision lanes (triage, finding
   // adjudication, secrets). '' disables every confidence-model call,
