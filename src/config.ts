@@ -289,7 +289,49 @@ export interface Config {
      * fallback. Default 480000.
      */
     batchTimeoutMs: number
+    /**
+     * Model for `mode: 'batch'`, a `:batch` slug (the base slug is what is
+     * sent). Separate from `code_model` because not every realtime model has
+     * a batch endpoint. Unset: `<review model>:batch` when that slug is known
+     * to exist, else DEFAULT_BATCH_MODEL.
+     */
+    batchModel: string | undefined
+    /**
+     * Per-request timeout for realtime review calls, ms (1..900000,
+     * default 120000). Reasoning models need more than the default.
+     */
+    requestTimeoutMs: number
   }
+}
+
+export const DEFAULT_REQUEST_TIMEOUT_MS = 120_000
+export const MAX_REQUEST_TIMEOUT_MS = 900_000
+export const DEFAULT_BATCH_MODEL = 'deepseek/deepseek-v4.1-flash:batch'
+
+/**
+ * Base slugs measured to have an OpenRouter `:batch` endpoint (reviewer
+ * bake-off, 2026-10-03). The realtime default deepseek-v4-flash has none.
+ */
+const KNOWN_BATCH_BASES = new Set([
+  'google/gemini-2.5-flash-lite',
+  'deepseek/deepseek-v4.1-flash',
+  'z-ai/glm-5.3',
+  'z-ai/glm-5.3-flash',
+  'openai/gpt-oss-120b',
+])
+
+/** Batch slug for a review: explicit `batchModel`, else `<model>:batch` if known to exist, else the default. */
+export function resolveBatchModel(reviewModel: string, batchModel: string | undefined): string {
+  if (batchModel !== undefined && batchModel !== '') return batchModel
+  const base = reviewModel.replace(/:batch$/, '')
+  return KNOWN_BATCH_BASES.has(base) ? `${base}:batch` : DEFAULT_BATCH_MODEL
+}
+
+/** Validates a per-request timeout; returns an error message or undefined when valid. */
+export function checkRequestTimeoutMs(v: unknown): string | undefined {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= MAX_REQUEST_TIMEOUT_MS
+    ? undefined
+    : `requestTimeoutMs must be an integer from 1 to ${MAX_REQUEST_TIMEOUT_MS} (ms), got ${String(v)}`
 }
 
 export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review' | 'explore' | 'app'>> & {
@@ -331,7 +373,7 @@ const defaults: Config = {
   model: 'google/gemini-2.5-flash-lite',
   escalation_model: 'moonshotai/kimi-k2.5',
   grounding_model: undefined,
-  code_model: 'deepseek/deepseek-v4.1-flash',
+  code_model: 'deepseek/deepseek-v4-flash',
   decisionModel: JEV_DEFAULT_MODEL,
   codeReviewBudgetUsd: undefined,
   provider: {
@@ -371,6 +413,8 @@ const defaults: Config = {
     exclude: [...DEFAULT_REVIEW_EXCLUDE],
     mode: 'realtime',
     batchTimeoutMs: 480_000,
+    batchModel: undefined,
+    requestTimeoutMs: DEFAULT_REQUEST_TIMEOUT_MS,
   },
 }
 
@@ -520,6 +564,13 @@ export function resolveConfig(input: ConfigInput = {}): Config {
       : [...DEFAULT_REVIEW_EXCLUDE]
   review.mode = review.mode === 'batch' ? 'batch' : 'realtime'
   review.batchTimeoutMs = posInt(review.batchTimeoutMs, defaults.review.batchTimeoutMs)
+  if (typeof review.batchModel !== 'string' || review.batchModel.trim() === '') {
+    review.batchModel = undefined
+  }
+  if (rawReview.requestTimeoutMs !== undefined) {
+    const bad = checkRequestTimeoutMs(rawReview.requestTimeoutMs)
+    if (bad !== undefined) throw new Error(`review.${bad}`)
+  }
   const resolved: Config = { ...defaults, ...input, provider, sandbox, explore, app, review }
   resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP)
   // Retention is a non-negative integer (0 = keep none) — a mis-typed or

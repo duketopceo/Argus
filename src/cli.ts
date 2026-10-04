@@ -15,9 +15,11 @@ import {
   TdSession,
 } from './api.js'
 import {
+  checkRequestTimeoutMs,
   Config,
   DEFAULT_RECORD_STEP_CAP,
   loadConfig,
+  resolveBatchModel,
   resolveBlockSeverities,
   resolveConfig,
   resolveMaxComments,
@@ -301,6 +303,11 @@ Options:
   --mode <mode>      realtime (default) | batch. batch submits the chunks through
                      OpenRouter's async Batch API and falls back to realtime on
                      failure or timeout. Overrides ARGUS_REVIEW_MODE and review.mode.
+  --batch-model <slug>  Model for batch mode (a :batch slug; default
+                     deepseek/deepseek-v4.1-flash:batch). Overrides
+                     ARGUS_BATCH_MODEL and review.batchModel.
+  Env: ARGUS_REQUEST_TIMEOUT_MS sets the per-request timeout (default 120000,
+                     max 900000; also review.requestTimeoutMs).
   -h, --help         Show this help`
 
 const CACHE_USAGE = `Usage: argus-reviewer cache <list|prune> [options]
@@ -450,6 +457,7 @@ function createClient(deps: CliDeps, config: Config, ctx: Ctx): VisionClient {
       const headersOpt = Object.keys(headers).length > 0 ? headers : undefined
       inner = new OpenRouterClient({
         apiKey,
+        timeoutMs: config.review.requestTimeoutMs,
         ...(traceOpt ? { trace: traceOpt } : {}),
         ...(headersOpt ? { headers: headersOpt } : {}),
         onCall: (call) => {
@@ -1790,6 +1798,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       'report-dir': { type: 'string' },
       fixture: { type: 'string' },
       mode: { type: 'string' },
+      'batch-model': { type: 'string' },
     },
   })
   if (values.help) {
@@ -1858,6 +1867,18 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       return 2
     }
     ctx.err(`warning: ignoring invalid ARGUS_REVIEW_MODE="${modeRaw}"`)
+  }
+  const batchModelRaw = (values['batch-model'] ?? ctx.env.ARGUS_BATCH_MODEL ?? '').trim()
+  if (batchModelRaw !== '') config.review.batchModel = batchModelRaw
+  const timeoutRaw = ctx.env.ARGUS_REQUEST_TIMEOUT_MS?.trim()
+  if (timeoutRaw !== undefined && timeoutRaw !== '') {
+    const ms = /^\d+$/.test(timeoutRaw) ? Number(timeoutRaw) : Number.NaN
+    const bad = checkRequestTimeoutMs(ms)
+    if (bad !== undefined) {
+      usageError(ctx, 'code-review', `ARGUS_REQUEST_TIMEOUT_MS: ${bad.replace('requestTimeoutMs', 'value')}, got "${timeoutRaw}"`, 'ARGUS_REQUEST_TIMEOUT_MS=300000 argus-reviewer code-review')
+      return 2
+    }
+    config.review.requestTimeoutMs = ms
   }
   const model = config.code_model ?? config.model
   const runNonce = runNonceFrom(ctx.env)
@@ -2064,8 +2085,10 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       } else {
         stage(`submitting ${chunks.length} chunk(s) as a batch, poll deadline ${Math.round(config.review.batchTimeoutMs / 1000)}s`)
         try {
+          const batchModel = resolveBatchModel(reviewModel, config.review.batchModel)
+          stage(`batch model ${batchModel}`)
           const items = await client.completeBatch({
-            model: reviewModel,
+            model: batchModel,
             requests: chunks.map((chunk, i) => ({
               customId: `chunk-${i}`,
               messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles),

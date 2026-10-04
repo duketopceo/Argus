@@ -111,7 +111,7 @@ import { defineConfig } from 'argus-reviewer-e2e'
 
 export default defineConfig({
   model: 'google/gemini-2.5-flash-lite',          // vision: grounding and actions
-  code_model: 'deepseek/deepseek-v4.1-flash',     // diff review
+  code_model: 'deepseek/deepseek-v4-flash',     // diff review
   escalation_model: 'anthropic/claude-sonnet-4',  // risky or complex findings
   budgetUsd: 1.0,
   target: { url: 'https://your-app.example.com' },
@@ -125,6 +125,8 @@ Code review skips generated, fixture and vendored paths by default (`dist/**`, `
 Large PRs are reviewed in chunks (about 6k tokens of diff each, grouped by directory; a single oversized file is split at hunk boundaries) and the findings are merged. The review summary says how many chunks and files were reviewed. When `codeReviewBudgetUsd` cannot cover the next chunk, the run stops before spending it and the summary lists how many files went unreviewed.
 
 Batch mode: `review: { mode: 'batch' }` (or `--mode batch`, or `ARGUS_REVIEW_MODE=batch`; default `realtime`) sends all chunks through OpenRouter's async Batch API instead of one call each. It is slower (minutes; a probe took about six) and is polled until `review.batchTimeoutMs` (default 480000, kept inside the 15-minute job timeout). On failure, timeout, or a single errored request, Argus falls back to realtime for the affected chunks. Cost is metered from the batch usage, and `code-review.json` records `batch.used` / `batch.fellBack`.
+
+Models and timeouts: realtime review uses `code_model` (default `deepseek/deepseek-v4-flash`: cheap but noisier, so the validate step and severity gating stay on). Batch uses `review.batchModel` (`--batch-model`, `ARGUS_BATCH_MODEL`; default `deepseek/deepseek-v4.1-flash:batch`, or `<code_model>:batch` when that model is known to have a batch endpoint). Batch is the recommended mode for large PRs. `review.requestTimeoutMs` (`ARGUS_REQUEST_TIMEOUT_MS`; default 120000, max 900000) is the per-request timeout; raise it for reasoning models such as `deepseek/deepseek-v4.1-flash`. To keep the previous review model, set `code_model: 'deepseek/deepseek-v4.1-flash'` with `review: { requestTimeoutMs: 600000 }`.
 
 Full shape: [`src/config.ts`](src/config.ts). Setup walkthrough: [`docs/quickstart.md`](docs/quickstart.md).
 

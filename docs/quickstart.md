@@ -18,7 +18,7 @@ import { defineConfig } from 'argus-reviewer-e2e'
 export default defineConfig({
   model: 'google/gemini-2.5-flash-lite',
   escalation_model: 'anthropic/claude-sonnet-4',
-  code_model: 'deepseek/deepseek-v4.1-flash',
+  code_model: 'deepseek/deepseek-v4-flash',
   budgetUsd: 1.0,
   target: {
     // command: 'npm run dev' if the target needs a local server started
@@ -126,6 +126,11 @@ export default defineConfig({
 serves the model; `provider.only` would hard-restrict instead. Provider slugs
 are validated against a known list and warn on typos.
 
+Reasoning models (`deepseek/deepseek-v4.1-flash`, `z-ai/glm-5.3`) can take
+longer than the default 120 s per request in realtime. Raise it with
+`review: { requestTimeoutMs: 600_000 }` or `ARGUS_REQUEST_TIMEOUT_MS=600000`
+(integer ms, 1 to 900000; anything else is an error).
+
 The caller environment can also pin the code-review model without touching
 the checkout: `ARGUS_CODE_MODEL="owner/model"` wins over `code_model` in
 config — including on `pull_request` events, where the PR's config never
@@ -181,7 +186,13 @@ API (`POST /api/v1/batches`, then `GET /api/v1/batches/:id` until
 `completed`, `failed`, `expired` or `cancelled`) and maps each result back by
 `custom_id`. Override per run with `argus-reviewer code-review --mode batch` or
 `ARGUS_REVIEW_MODE=batch` (the operator lever for fork PRs, whose config never
-loads). The model is sent as its base slug; a `:batch` suffix is stripped.
+loads). The batch model is `review.batchModel` (`--batch-model`,
+`ARGUS_BATCH_MODEL`), default `deepseek/deepseek-v4.1-flash:batch`: the
+realtime default `deepseek/deepseek-v4-flash` has no batch endpoint, so batch
+uses its own slug (or `<code_model>:batch` when that model is known to have
+one). The model is sent as its base slug; a `:batch` suffix is stripped.
+Batch is the recommended mode for large PRs: in the bake-off 62% of its
+findings were judged valid against 27% for the cheaper realtime default.
 
 Batches finish in minutes (a real probe took about six). Polling stops at
 `batchTimeoutMs` (default 8 minutes) so the run stays inside the workflow's
