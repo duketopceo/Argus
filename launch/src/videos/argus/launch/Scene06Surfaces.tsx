@@ -7,7 +7,6 @@ import {
   staticFile,
   useCurrentFrame,
 } from 'remotion';
-import {TerminalPlate} from '../../../core/TerminalScene';
 import {KineticType} from '../../../core/KineticType';
 import {color, font, motion, radius} from '../../../brands/argus/tokens';
 import {StatusGlyph} from '../../../brands/argus/EyeMark';
@@ -75,7 +74,7 @@ const VerifyPlate: React.FC = () => (
     <OffthreadVideo
       src={staticFile('captures/verify.mp4')}
       startFrom={430}
-      style={{width: '100%', height: '100%', objectFit: 'cover'}}
+      style={{width: '100%', height: '100%', objectFit: 'contain'}}
       muted
     />
   </PlateShell>
@@ -83,7 +82,7 @@ const VerifyPlate: React.FC = () => (
 
 const CommentPlate: React.FC = () => (
   <PlateShell label="PR comment · acme/shop #42">
-    <div style={{padding: '34px 40px', fontFamily: font.mono}}>
+    <div style={{padding: '78px 40px 34px', fontFamily: font.mono}}>
       <div
         style={{
           display: 'flex',

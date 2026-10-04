@@ -70,7 +70,7 @@ const LANES: Lane[] = [
   },
 ];
 
-const CARD_W = 1420;
+const CARD_W = 1560;
 const CARD_H = 640;
 const ROW_H = 76;
 
@@ -121,7 +121,7 @@ const LaneRow: React.FC<{lane: Lane}> = ({lane}) => {
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: '300px 150px 1fr 280px 170px',
+        gridTemplateColumns: '280px 160px minmax(0,1fr) 280px 180px',
         alignItems: 'center',
         height: ROW_H,
         borderTop: `1px solid ${color.hairline}`,
@@ -257,7 +257,7 @@ const CommentCard: React.FC = () => {
         style={{
           marginTop: 30,
           display: 'grid',
-          gridTemplateColumns: '300px 150px 1fr 280px 170px',
+          gridTemplateColumns: '280px 160px minmax(0,1fr) 280px 180px',
           height: 56,
           alignItems: 'end',
           paddingBottom: 12,
@@ -317,10 +317,10 @@ export const Scene03Lanes: React.FC = () => {
         keys={[
           {at: 0, x: 960, y: 500, scale: 1.12},
           {at: 34, x: 960, y: 500, scale: 1.12},
-          {at: 62, x: 800, y: y0, scale: 1.3},
-          {at: 140, x: 800, y: y0 + ROW_H, scale: 1.3},
-          {at: 208, x: 800, y: y0 + ROW_H * 2, scale: 1.3},
-          {at: 282, x: 800, y: y0 + ROW_H * 3, scale: 1.36},
+          {at: 62, x: 960, y: y0, scale: 1.2},
+          {at: 140, x: 960, y: y0 + ROW_H, scale: 1.2},
+          {at: 208, x: 960, y: y0 + ROW_H * 2, scale: 1.2},
+          {at: 282, x: 960, y: y0 + ROW_H * 3, scale: 1.2},
           {at: 356, x: 960, y: 450, scale: 1.02},
           {at: 480, x: 960, y: 450, scale: 1.05},
         ]}

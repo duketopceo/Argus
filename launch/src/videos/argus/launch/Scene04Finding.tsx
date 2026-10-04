@@ -177,7 +177,7 @@ const Stage: React.FC = () => {
         <div
           style={{
             marginTop: 20,
-            display: 'inline-block',
+            display: 'block',
             padding: '10px 18px',
             borderRadius: radius.sm,
             border: `1px solid ${provGlow > 0.2 ? color.accent : color.controlBorder}`,
@@ -189,18 +189,17 @@ const Stage: React.FC = () => {
           provenance
           <span
             style={{
-              display: 'inline-block',
+              display: 'block',
               overflow: 'hidden',
-              verticalAlign: 'bottom',
-              maxWidth: interpolate(provOpen, [0, 1], [0, 1400]),
+              maxHeight: interpolate(provOpen, [0, 1], [0, 80]),
               opacity: provOpen,
-              whiteSpace: 'nowrap',
             }}
           >
-            {' — '}
             <span style={{color: color.ink}}>deepseek/deepseek-v4.1-flash</span>
             {' · p 0.94 · '}
-            <span style={{color: color.ink3}}>tests/argus-probes/discount-bound.test.ts</span>
+            <span style={{color: color.ink3}}>
+              tests/argus-probes/discount-bound.test.ts
+            </span>
           </span>
         </div>
       </div>
