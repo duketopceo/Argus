@@ -160,7 +160,7 @@ async function a0EnvFileHost(home) {
  * the default local port (http://localhost:5080).
  */
 export async function resolveA0Host(env, opts = {}) {
-    const home = opts.home ?? homedir();
+    const home = opts.home ?? (env.HOME || homedir());
     const probe = opts.probe ?? defaultProbe;
     const fromEnv = env.AGENT_ZERO_HOST;
     if (fromEnv !== undefined && fromEnv !== '')
@@ -192,7 +192,7 @@ async function playwrightBrowsers(home) {
 }
 export async function detectEnvironment(env, opts = {}) {
     const exec = opts.exec ?? defaultExec;
-    const home = opts.home ?? homedir();
+    const home = opts.home ?? (env.HOME || homedir());
     const [a0Version, gh, browsers, a0Host] = await Promise.all([
         // Even the presence probe gets the allowlisted env — an `a0` binary is
         // third-party code and never sees provider/git secrets.

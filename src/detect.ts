@@ -237,7 +237,7 @@ export async function resolveA0Host(
   env: NodeJS.ProcessEnv,
   opts: DetectOptions = {},
 ): Promise<{ host: string | undefined; source: A0Info['hostSource'] }> {
-  const home = opts.home ?? homedir()
+  const home = opts.home ?? (env.HOME || homedir())
   const probe = opts.probe ?? defaultProbe
 
   const fromEnv = env.AGENT_ZERO_HOST
@@ -273,7 +273,7 @@ export async function detectEnvironment(
   opts: DetectOptions = {},
 ): Promise<EnvironmentReport> {
   const exec = opts.exec ?? defaultExec
-  const home = opts.home ?? homedir()
+  const home = opts.home ?? (env.HOME || homedir())
 
   const [a0Version, gh, browsers, a0Host] = await Promise.all([
     // Even the presence probe gets the allowlisted env — an `a0` binary is

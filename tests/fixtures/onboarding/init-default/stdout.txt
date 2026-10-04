@@ -10,8 +10,7 @@
   <glyph> playwright      <host-dependent>
   ◌ github          gh not authenticated (enables PR workflows)
       gh auth login
-  ● agent zero      CLI not on PATH → https://agent0.bartlettdash.com
-                    opt-in only; see config comments
+  – agent zero      not found (optional; enables `verify --a0` delegation)
     models        vision google/gemini-2.5-flash-lite (docs/models.md)
                   code deepseek/deepseek-v4-flash
                   escalation moonshotai/kimi-k2.5
@@ -28,4 +27,3 @@ What runs and what it costs:
     Then: point target.url at your app for the flow and app lanes,
     record a real flow with argus-reviewer record "...", and add
     OPENROUTER_API_KEY to the repo secrets to enable the PR workflow.
-    verify --a0 and heal: a0 are opt-in; suggestions are in the config.
