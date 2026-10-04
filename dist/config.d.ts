@@ -271,8 +271,39 @@ export interface Config {
          * paths); `[]` excludes nothing.
          */
         exclude: string[];
+        /**
+         * `realtime` (default) calls the chat API per chunk. `batch` submits all
+         * chunks through OpenRouter's async Batch API (cheaper, slower: minutes),
+         * falling back to realtime on failure or timeout.
+         */
+        mode: 'realtime' | 'batch';
+        /**
+         * Poll deadline for a batch, ms. Must sit inside the CI job timeout
+         * (the shipped workflow's is 15 minutes) with room left for a realtime
+         * fallback. Default 480000.
+         */
+        batchTimeoutMs: number;
+        /**
+         * Model for `mode: 'batch'`, a `:batch` slug (the base slug is what is
+         * sent). Separate from `code_model` because not every realtime model has
+         * a batch endpoint. Unset: `<review model>:batch` when that slug is known
+         * to exist, else DEFAULT_BATCH_MODEL.
+         */
+        batchModel: string | undefined;
+        /**
+         * Per-request timeout for realtime review calls, ms (1..900000,
+         * default 120000). Reasoning models need more than the default.
+         */
+        requestTimeoutMs: number;
     };
 }
+export declare const DEFAULT_REQUEST_TIMEOUT_MS = 120000;
+export declare const MAX_REQUEST_TIMEOUT_MS = 900000;
+export declare const DEFAULT_BATCH_MODEL = "deepseek/deepseek-v4.1-flash:batch";
+/** Batch slug for a review: explicit `batchModel`, else `<model>:batch` if known to exist, else the default. */
+export declare function resolveBatchModel(reviewModel: string, batchModel: string | undefined): string;
+/** Validates a per-request timeout; returns an error message or undefined when valid. */
+export declare function checkRequestTimeoutMs(v: unknown): string | undefined;
 export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review' | 'explore' | 'app'>> & {
     provider?: Partial<ProviderRules>;
     sandbox?: Partial<Sandbox>;
