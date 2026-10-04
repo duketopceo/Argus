@@ -79,7 +79,9 @@ const TEMPORARY: Record<string, Allowance> = {
   // U6 cleaned the review comment, persist reply and code-review report text in src/cli.ts.
   // What remains is terminal stage lines, mention replies, run-report skip text, the
   // generated workflow text and the verbatim init cost block (DESIGN 7.8).
-  'src/cli.ts': { emdash: 27, unit: null, why: NO_OWNER },
+  'src/cli.ts': { emdash: 22, unit: null, why: NO_OWNER },
+  // Moved verbatim from src/cli.ts (init must stay byte-identical).
+  'src/onboarding/scaffold.ts': { emdash: 5, unit: null, why: NO_OWNER },
   'src/api.ts': { emdash: 1, unit: null, why: NO_OWNER },
   'src/driver/target.ts': { emdash: 1, unit: null, why: NO_OWNER },
   'src/engine/explore.ts': { emdash: 2, unit: null, why: NO_OWNER },

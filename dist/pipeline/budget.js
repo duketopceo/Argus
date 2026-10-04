@@ -46,3 +46,37 @@ export function budgetCanSpend(budget, nextCostUsd) {
         (budget.limitUsd === undefined ||
             budget.spentUsd + nextCostUsd <= budget.limitUsd + USD_EPSILON));
 }
+/**
+ * Conservative per-request cost ceiling (USD) used ONLY where a paid call
+ * cannot be stopped mid-flight (batch submission). Argus has no live price
+ * table, so this prices tokens at a deliberately high blended rate (well above
+ * the default review models) and reserves a fixed output allowance. Real
+ * spend is metered from provider usage; this only decides whether to submit.
+ */
+const EST_INPUT_USD_PER_TOKEN = 3 / 1_000_000;
+const EST_OUTPUT_USD_PER_TOKEN = 12 / 1_000_000;
+const EST_OUTPUT_TOKENS = 4_000;
+const EST_CHARS_PER_TOKEN = 3;
+export function estimateRequestCostUsd(req) {
+    const chars = JSON.stringify(req.messages ?? '').length + JSON.stringify(req.schema ?? '').length;
+    const inputTokens = Math.ceil(chars / EST_CHARS_PER_TOKEN);
+    return inputTokens * EST_INPUT_USD_PER_TOKEN + EST_OUTPUT_TOKENS * EST_OUTPUT_USD_PER_TOKEN;
+}
+/**
+ * How many leading requests of a batch fit in the remaining budget. A batch
+ * cannot be cancelled once submitted, so the guard sizes it up front.
+ * `limitUsd` undefined = unlimited.
+ */
+export function affordableBatchPrefix(requests, limitUsd, spentUsd) {
+    if (limitUsd === undefined)
+        return requests.length;
+    let projected = spentUsd;
+    let n = 0;
+    for (const r of requests) {
+        projected += estimateRequestCostUsd(r);
+        if (projected > limitUsd + USD_EPSILON)
+            break;
+        n++;
+    }
+    return n;
+}

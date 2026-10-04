@@ -752,7 +752,7 @@ describe('argus-reviewer CLI', () => {
     expect(workflow).toContain('ref: ${{ github.event.pull_request.head.sha || github.sha }}')
     expect(workflow).toMatch(/actions\/checkout@[0-9a-f]{40} # v7/)
     expect(workflow).toMatch(
-      /duketopceo\/Argus\/action@[0-9a-f]{40} # v0\.4\.1/,
+      /duketopceo\/Argus\/action@[0-9a-f]{40} # v0\.4\.2/,
     )
     // Second run without --force skips rather than overwriting
     const out2 = capture()
@@ -1112,8 +1112,9 @@ export default { model: 'hostile/model' }
     expect(config.provider.only).toBeUndefined()
     expect(config.openrouter).toBeUndefined()
     expect(config.severity).toEqual(['bug'])
-    expect(config.codeReviewBudgetUsd).toBeUndefined()
-    expect(config.budgetUsd).toBeUndefined()
+    // A PR can neither lower its own cap nor disable it (codeReviewBudgetUsd: 0).
+    expect(config.codeReviewBudgetUsd).toBe(1)
+    expect(config.budgetUsd).toBe(1)
     expect(config.target).toBeUndefined()
     expect(config.pageSetup).toBeUndefined()
     expect(config.testsDir).toBeUndefined()

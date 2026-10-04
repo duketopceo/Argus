@@ -74,6 +74,16 @@ export interface DroppedFinding {
     message: string;
     reason: 'outside-diff' | 'revert-nit';
 }
+export interface ReviewBatch {
+    /** True when the Batch API produced the chunk reviews. */
+    used: boolean;
+    /** Chunks submitted. */
+    chunks: number;
+    /** Batch chunks re-run realtime because their request errored. */
+    retriedRealtime?: number;
+    /** Why the whole batch fell back to realtime. */
+    fellBack?: string;
+}
 export interface ReviewScope {
     /** Changed files in the PR with a patch. */
     totalFiles: number;
@@ -81,6 +91,12 @@ export interface ReviewScope {
     reviewedFiles: number;
     /** Files kept out by `review.exclude`. */
     excludedFiles: number;
+    /** Model calls the diff was split into (1 for a PR that fits one call). */
+    chunksTotal?: number;
+    /** Chunks that were actually reviewed (fewer than total when the budget stopped the run). */
+    chunksReviewed?: number;
+    /** Reviewed files with no chunk reviewed (budget stop); 0 on a full review. */
+    unreviewedFiles?: number;
     /** Up to 5 excluded paths, for the Diagnostics line. */
     excludedSample: string[];
 }
@@ -124,6 +140,8 @@ interface CodeReviewReport {
     modelVerdict?: 'pass' | 'needs_changes' | 'approve';
     /** How much of the PR the review covered, and what was left out. */
     scope?: ReviewScope;
+    /** Present when `review.mode` is batch: whether the batch served the review. */
+    batch?: ReviewBatch;
     /** Findings dropped by deterministic validation, with reasons. */
     validation?: ValidationAudit;
     /** Test-file findings capped at nit (bug/risk with no non-test citation). */

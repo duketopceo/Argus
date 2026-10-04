@@ -16,7 +16,24 @@
 
 It is a GitHub Action and a CLI. It runs on your infrastructure with your own OpenRouter key: no hosted service, no telemetry, no per-seat pricing. MIT licensed.
 
-## Install in 60 seconds
+## Get started
+
+From a checkout of your GitHub repository, with `git` and the GitHub CLI (`gh auth login`) set up:
+
+```bash
+npx argus-reviewer init --pr
+```
+
+This opens a pull request that adds the Argus workflows, a config and a smoke test. Nothing runs until you merge it. Then:
+
+1. Add `OPENROUTER_API_KEY` as a repository secret (the PR links to the exact page, or run `gh secret set OPENROUTER_API_KEY --repo owner/name`).
+2. Review and merge the PR. Every pull request after that gets a review.
+
+`init --pr` uses your own `git` and `gh`, so your credentials do the pushing. Optional flags: `--repo owner/name` (must match the checkout's `origin`) and `--branch <name>` (default `argus/onboarding`). It never overwrites existing files, reports the existing PR instead of opening a second one, and never reads your OpenRouter key. Details, defaults, what is sent to the model provider, and troubleshooting: [`docs/onboarding.md`](docs/onboarding.md).
+
+### Manual setup
+
+To write the files into your working tree instead of opening a PR:
 
 ```bash
 npm i -D argus-reviewer-e2e      # the package; the command is argus-reviewer
@@ -25,7 +42,11 @@ npx argus-reviewer init          # config, a smoke test, and the PR workflow
 
 <img src="docs/assets/demo/init.gif" width="1100" alt="Terminal: argus-reviewer init writes the config, a smoke test and two workflow files, then checks the environment. The OpenRouter key is reported as not set, Playwright chromium is found, and the default lane is code review." />
 
-`init` checks your environment and tells you what is missing. Add `OPENROUTER_API_KEY` to your shell and to the repository secrets, and every pull request gets a review.
+`init` checks your environment and tells you what is missing. Add `OPENROUTER_API_KEY` to your shell and to the repository secrets, commit the files, and every pull request gets a review.
+
+A GitHub App that opens the onboarding PR for you on install is planned and not available yet; see [`docs/onboarding.md`](docs/onboarding.md).
+
+To have an App open that PR when you install it on a repository, register and host your own: [`docs/self-host-app.md`](docs/self-host-app.md).
 
 Record a browser flow once, then replay it on every run:
 
@@ -94,7 +115,7 @@ Every lane, in the comment and in the terminal, reports one of six statuses:
 
 ## Cost
 
-Every OpenRouter call is metered from the provider's per-call price and totaled in the comment. The review in the image above cost **$0.000739**. A flow replay that matches its cache costs $0. `budgetUsd` caps each run (default $1.00), and you choose the model for each job (`model`, `code_model`, `escalation_model`).
+Every OpenRouter call is metered from the provider's per-call price and totaled in the comment. The review in the image above cost **$0.000739**. A flow replay that matches its cache costs $0. `budgetUsd` caps each run (default $1.00; raise it, or set `0` to run uncapped, which logs a warning), and you choose the model for each job (`model`, `code_model`, `escalation_model`).
 
 The action tags every call with `ARGUS_REVIEWER_TRACE` (repository, PR, commit, run), so spend can be attributed per review. See [`docs/quickstart.md`](docs/quickstart.md) for the `openrouter` config block.
 
@@ -111,9 +132,9 @@ import { defineConfig } from 'argus-reviewer-e2e'
 
 export default defineConfig({
   model: 'google/gemini-2.5-flash-lite',          // vision: grounding and actions
-  code_model: 'deepseek/deepseek-v4.1-flash',     // diff review
+  code_model: 'deepseek/deepseek-v4-flash',     // diff review
   escalation_model: 'anthropic/claude-sonnet-4',  // risky or complex findings
-  budgetUsd: 1.0,
+  budgetUsd: 1.0,                                 // per-run cap in USD; default 1, 0 = unlimited
   target: { url: 'https://your-app.example.com' },
   testsDir: 'e2e',
   reportRetention: 20,                            // archived manifests to keep
@@ -121,6 +142,12 @@ export default defineConfig({
 ```
 
 Code review skips generated, fixture and vendored paths by default (`dist/**`, `fixtures/**`, `tests/goldens/**`, lockfiles, `*.generated.*`, `assets/brand/export/**`). Set `review: { exclude: [...] }` to replace that list (`[]` excludes nothing). The sticky comment's Diagnostics fold says how many files were left out.
+
+Large PRs are reviewed in chunks (about 6k tokens of diff each, grouped by directory; a single oversized file is split at hunk boundaries) and the findings are merged. The review summary says how many chunks and files were reviewed. When `codeReviewBudgetUsd` cannot cover the next chunk, the run stops before spending it and the summary lists how many files went unreviewed.
+
+Batch mode: `review: { mode: 'batch' }` (or `--mode batch`, or `ARGUS_REVIEW_MODE=batch`; default `realtime`) sends all chunks through OpenRouter's async Batch API instead of one call each. It is slower (minutes; a probe took about six) and is polled until `review.batchTimeoutMs` (default 480000, kept inside the 15-minute job timeout). On failure, timeout, or a single errored request, Argus falls back to realtime for the affected chunks. Cost is metered from the batch usage, and `code-review.json` records `batch.used` / `batch.fellBack`.
+
+Models and timeouts: realtime review uses `code_model` (default `deepseek/deepseek-v4-flash`: cheap but noisier, so the validate step and severity gating stay on). Batch uses `review.batchModel` (`--batch-model`, `ARGUS_BATCH_MODEL`; default `deepseek/deepseek-v4.1-flash:batch`, or `<code_model>:batch` when that model is known to have a batch endpoint). Batch is the recommended mode for large PRs. `review.requestTimeoutMs` (`ARGUS_REQUEST_TIMEOUT_MS`; default 120000, max 900000) is the per-request timeout; raise it for reasoning models such as `deepseek/deepseek-v4.1-flash`. To keep the previous review model, set `code_model: 'deepseek/deepseek-v4.1-flash'` with `review: { requestTimeoutMs: 600000 }`.
 
 Full shape: [`src/config.ts`](src/config.ts). Setup walkthrough: [`docs/quickstart.md`](docs/quickstart.md).
 

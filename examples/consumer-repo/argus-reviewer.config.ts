@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 export default defineConfig({
   model: 'google/gemini-2.5-flash-lite',
-  code_model: 'deepseek/deepseek-v4.1-flash',
+  code_model: 'deepseek/deepseek-v4-flash',
   budgetUsd: 1.0,
   target: {
     url: `file://${fileURLToPath(new URL('./fixtures/index.html', import.meta.url))}`,

@@ -15,13 +15,19 @@ import {
   TdSession,
 } from './api.js'
 import {
+  checkRequestTimeoutMs,
   Config,
+  applyBudgetSetting,
+  DEFAULT_BUDGET_USD,
   DEFAULT_RECORD_STEP_CAP,
   loadConfig,
+  parseBudgetSetting,
+  resolveBatchModel,
   resolveBlockSeverities,
   resolveConfig,
   resolveMaxComments,
   sanitizeExpectation,
+  UNCAPPED_WARNING,
   unknownProviderSlugs,
 } from './config.js'
 import { debug, setLiveDir } from './debug.js'
@@ -46,6 +52,7 @@ import { resolveTrust } from './trust.js'
 import { linkFindings, type Evidence } from './evidence/link.js'
 import { DecisionClient } from './vision/decisions.js'
 import { isReviewProfile, packRubric } from './review/packs.js'
+import { planChunks } from './review/chunks.js'
 import { partitionByExclude } from './review/scope.js'
 import { capTestFindings } from './review/testfiles.js'
 import { auditOf, validateFindings, type ValidationAudit } from './review/validate.js'
@@ -90,7 +97,7 @@ import {
 } from './report/manifest.js'
 import { writeAtomicJson } from './fsutil.js'
 import { CallCost } from './vision/cost.js'
-import { JsonSchema, Message, OpenRouterClient } from './vision/openrouter.js'
+import { BatchItemResult, JsonSchema, Message, OpenRouterClient } from './vision/openrouter.js'
 import { Ledger } from './vision/ledger.js'
 import { selectionFromFlags } from './pipeline/contracts.js'
 import {
@@ -99,7 +106,7 @@ import {
   parseMention,
   postIssueComment,
 } from './mention.js'
-import type { BudgetOptions } from './pipeline/budget.js'
+import { affordableBatchPrefix, type BudgetOptions } from './pipeline/budget.js'
 import { runVerify, writeEvidenceReport } from './pipeline/verify.js'
 import {
   APP_LANE_DEFAULT_TIMEOUT_MS,
@@ -110,6 +117,8 @@ import { CliError, errorJson, renderError, toCliError, type ErrorCode } from './
 import { colorEnabled, createStyler, type Styler } from './ui/style.js'
 import { renderSummary, verifySummary } from './ui/summary.js'
 import { PROOF_LEVELS, proofMeter, SEVERITY_GLYPH, SEVERITY_LABEL, shortSha } from './report/viewmodel.js'
+import { DEFAULT_BRANCH as DEFAULT_PR_BRANCH, initPr, validateBranch, validateRepo } from './onboarding/pr.js'
+import { renderScaffold, scaffoldChecklist } from './onboarding/scaffold.js'
 import { INLINE_SENTINEL, inlineDedupKey, normalizeFindingMessage } from './review/inline.js'
 
 export interface CliDeps {
@@ -231,7 +240,7 @@ const HELP_GROUPS: { title: string; commands: [signature: string[], description:
   {
     title: 'Setup',
     commands: [
-      [['init [--force]'], 'Scaffold config, a smoke test and the PR workflow.'],
+      [['init [--force | --pr]'], 'Scaffold config, a smoke test and the PR workflow.'],
       [['--help'], 'Show this help.'],
     ],
   },
@@ -297,6 +306,14 @@ Options:
   --report-dir <dir> Report output dir (default: config reportDir or ./argus-reviewer-report)
   --fixture <dir>    Review a local fixture repo (ref argus-fixture-base vs HEAD)
                      instead of a live PR, with no GitHub API calls. Used by npm run demo.
+  --mode <mode>      realtime (default) | batch. batch submits the chunks through
+                     OpenRouter's async Batch API and falls back to realtime on
+                     failure or timeout. Overrides ARGUS_REVIEW_MODE and review.mode.
+  --batch-model <slug>  Model for batch mode (a :batch slug; default
+                     deepseek/deepseek-v4.1-flash:batch). Overrides
+                     ARGUS_BATCH_MODEL and review.batchModel.
+  Env: ARGUS_REQUEST_TIMEOUT_MS sets the per-request timeout (default 120000,
+                     max 900000; also review.requestTimeoutMs).
   -h, --help         Show this help`
 
 const CACHE_USAGE = `Usage: argus-reviewer cache <list|prune> [options]
@@ -430,34 +447,37 @@ function createClient(deps: CliDeps, config: Config, ctx: Ctx): VisionClient {
   // Lazy: a cache-hit replay makes zero vision calls and needs no key. The
   // error fires clearly on the first actual model call.
   let inner: OpenRouterClient | undefined
-  return {
-    complete: async (opts) => {
-      if (inner === undefined) {
-        const apiKey = ctx.env.OPENROUTER_API_KEY
-        if (apiKey === undefined || apiKey === '') {
-          throw new CliError(
-            'OPENROUTER_KEY_MISSING',
-            'OPENROUTER_API_KEY is not set; model calls bill through this key (BYOK)',
-          )
-        }
-        const envTrace = parseOpenRouterTrace(ctx.env)
-        const trace = { ...(envTrace ?? {}), ...(config.openrouter?.trace ?? {}) }
-        const headers = { ...(config.openrouter?.headers ?? {}) }
-        const traceOpt = Object.keys(trace).length > 0 ? trace : undefined
-        const headersOpt = Object.keys(headers).length > 0 ? headers : undefined
-        inner = new OpenRouterClient({
-          apiKey,
-          ...(traceOpt ? { trace: traceOpt } : {}),
-          ...(headersOpt ? { headers: headersOpt } : {}),
-          onCall: (call) => {
-            ctx.out(
-              `openrouter ${call.kind} ${call.model} ${call.tokens}tok $${call.costUsd.toFixed(6)}`,
-            )
-          },
-        })
+  const getInner = (): OpenRouterClient => {
+    if (inner === undefined) {
+      const apiKey = ctx.env.OPENROUTER_API_KEY
+      if (apiKey === undefined || apiKey === '') {
+        throw new CliError(
+          'OPENROUTER_KEY_MISSING',
+          'OPENROUTER_API_KEY is not set; model calls bill through this key (BYOK)',
+        )
       }
-      return inner.complete(opts)
-    },
+      const envTrace = parseOpenRouterTrace(ctx.env)
+      const trace = { ...(envTrace ?? {}), ...(config.openrouter?.trace ?? {}) }
+      const headers = { ...(config.openrouter?.headers ?? {}) }
+      const traceOpt = Object.keys(trace).length > 0 ? trace : undefined
+      const headersOpt = Object.keys(headers).length > 0 ? headers : undefined
+      inner = new OpenRouterClient({
+        apiKey,
+        timeoutMs: config.review.requestTimeoutMs,
+        ...(traceOpt ? { trace: traceOpt } : {}),
+        ...(headersOpt ? { headers: headersOpt } : {}),
+        onCall: (call) => {
+          ctx.out(
+            `openrouter ${call.kind} ${call.model} ${call.tokens}tok $${call.costUsd.toFixed(6)}`,
+          )
+        },
+      })
+    }
+    return inner
+  }
+  return {
+    complete: async (opts) => getInner().complete(opts),
+    completeBatch: async (opts) => getInner().completeBatch(opts),
   }
 }
 
@@ -709,11 +729,13 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
     config.cacheDir = resolve(ctx.cwd, values['cache-dir'])
   }
   const envBudget = ctx.env.ARGUS_BUDGET_USD
-  if (envBudget !== undefined && envBudget !== '') {
-    const parsed = Number(envBudget)
-    if (Number.isFinite(parsed) && parsed > 0) config.budgetUsd = parsed
-    else ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`)
+  const envSetting = parseBudgetSetting(envBudget)
+  if (envSetting.kind === 'invalid') {
+    ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`)
   }
+  const applied = applyBudgetSetting(envSetting)
+  if (applied !== 'keep') config.budgetUsd = applied
+  if (config.budgetUsd === undefined) ctx.err(UNCAPPED_WARNING)
 
   const liveDir = resolve(ctx.cwd, config.cacheDir ?? '.argus-reviewer-cache')
   // liveLog's mkdir is non-recursive by design — create a custom nested
@@ -1307,6 +1329,17 @@ export interface DroppedFinding {
   reason: 'outside-diff' | 'revert-nit'
 }
 
+export interface ReviewBatch {
+  /** True when the Batch API produced the chunk reviews. */
+  used: boolean
+  /** Chunks submitted. */
+  chunks: number
+  /** Batch chunks re-run realtime because their request errored. */
+  retriedRealtime?: number
+  /** Why the whole batch fell back to realtime. */
+  fellBack?: string
+}
+
 export interface ReviewScope {
   /** Changed files in the PR with a patch. */
   totalFiles: number
@@ -1314,6 +1347,12 @@ export interface ReviewScope {
   reviewedFiles: number
   /** Files kept out by `review.exclude`. */
   excludedFiles: number
+  /** Model calls the diff was split into (1 for a PR that fits one call). */
+  chunksTotal?: number
+  /** Chunks that were actually reviewed (fewer than total when the budget stopped the run). */
+  chunksReviewed?: number
+  /** Reviewed files with no chunk reviewed (budget stop); 0 on a full review. */
+  unreviewedFiles?: number
   /** Up to 5 excluded paths, for the Diagnostics line. */
   excludedSample: string[]
 }
@@ -1356,6 +1395,8 @@ interface CodeReviewReport {
   modelVerdict?: 'pass' | 'needs_changes' | 'approve'
   /** How much of the PR the review covered, and what was left out. */
   scope?: ReviewScope
+  /** Present when `review.mode` is batch: whether the batch served the review. */
+  batch?: ReviewBatch
   /** Findings dropped by deterministic validation, with reasons. */
   validation?: ValidationAudit
   /** Test-file findings capped at nit (bug/risk with no non-test citation). */
@@ -1377,8 +1418,6 @@ interface CodeReviewReport {
   persistPayload?: string
 }
 
-const CHUNK_TOKEN_TARGET = 6000
-const CHUNK_FILE_OVERHEAD = 100
 const MAX_PR_FILE_PAGES = 10
 
 async function fetchPrFiles(
@@ -1463,32 +1502,7 @@ export async function loadFixture(
 }
 
 export function buildPatchChunks(files: PrFile[], contexts: Record<string, string> = {}): string[] {
-  const section = (c: PrFile): string => {
-    const ctxBlock = contexts[c.filename]
-    const head = ctxBlock === undefined ? `### ${c.filename}` : `### ${c.filename}\n${ctxBlock}`
-    return `${head}\n\`\`\`diff\n${c.patch}\n\`\`\``
-  }
-  const chunks: string[] = []
-  let current: PrFile[] = []
-  let currentTokens = 0
-  for (const f of files) {
-    const fileTokens =
-      Math.ceil((f.patch?.length ?? 0) / 4) +
-      Math.ceil((contexts[f.filename]?.length ?? 0) / 4) +
-      CHUNK_FILE_OVERHEAD
-    if (current.length > 0 && currentTokens + fileTokens > CHUNK_TOKEN_TARGET) {
-      chunks.push(current.map(section).join('\n\n'))
-      current = [f]
-      currentTokens = fileTokens
-    } else {
-      current.push(f)
-      currentTokens += fileTokens
-    }
-  }
-  if (current.length > 0) {
-    chunks.push(current.map(section).join('\n\n'))
-  }
-  return chunks
+  return planChunks(files, contexts).map((c) => c.text)
 }
 
 export function buildCodeReviewMessages(
@@ -1953,6 +1967,8 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       help: { type: 'boolean', short: 'h', default: false },
       'report-dir': { type: 'string' },
       fixture: { type: 'string' },
+      mode: { type: 'string' },
+      'batch-model': { type: 'string' },
     },
   })
   if (values.help) {
@@ -2010,11 +2026,35 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       .map((s) => s.trim())
       .filter(isReviewProfile)
   }
+  // Review mode: --mode beats the operator env, which beats config (same
+  // operator-env pattern as ARGUS_CODE_MODEL — the only lever in the
+  // untrusted lane, where PR-controlled config never executes).
+  const modeRaw = (values.mode ?? ctx.env.ARGUS_REVIEW_MODE ?? '').trim()
+  if (modeRaw === 'realtime' || modeRaw === 'batch') config.review.mode = modeRaw
+  else if (modeRaw !== '') {
+    if (values.mode !== undefined) {
+      usageError(ctx, 'code-review', `--mode must be realtime or batch, got "${modeRaw}"`, 'argus-reviewer code-review --mode batch')
+      return 2
+    }
+    ctx.err(`warning: ignoring invalid ARGUS_REVIEW_MODE="${modeRaw}"`)
+  }
+  const batchModelRaw = (values['batch-model'] ?? ctx.env.ARGUS_BATCH_MODEL ?? '').trim()
+  if (batchModelRaw !== '') config.review.batchModel = batchModelRaw
+  const timeoutRaw = ctx.env.ARGUS_REQUEST_TIMEOUT_MS?.trim()
+  if (timeoutRaw !== undefined && timeoutRaw !== '') {
+    const ms = /^\d+$/.test(timeoutRaw) ? Number(timeoutRaw) : Number.NaN
+    const bad = checkRequestTimeoutMs(ms)
+    if (bad !== undefined) {
+      usageError(ctx, 'code-review', `ARGUS_REQUEST_TIMEOUT_MS: ${bad.replace('requestTimeoutMs', 'value')}, got "${timeoutRaw}"`, 'ARGUS_REQUEST_TIMEOUT_MS=300000 argus-reviewer code-review')
+      return 2
+    }
+    config.review.requestTimeoutMs = ms
+  }
   const model = config.code_model ?? config.model
   const runNonce = runNonceFrom(ctx.env)
   debug(
     'code-review',
-    `repo=${repo ?? 'none'} pr=${pr ?? 'none'} model=${model} budget=${config.codeReviewBudgetUsd ?? 'unlimited'}`,
+    `repo=${repo ?? 'none'} pr=${pr ?? 'none'} model=${model} budget=${config.codeReviewBudgetUsd ?? 'UNCAPPED'}`,
   )
 
   const skip = async (reason: string): Promise<number> => {
@@ -2063,12 +2103,14 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
   const prNum = pr as string
   const ghToken = token as string
   const envBudget = ctx.env.ARGUS_BUDGET_USD
-  if (envBudget !== undefined && envBudget !== '') {
-    const parsed = Number(envBudget)
-    if (Number.isFinite(parsed) && parsed > 0) config.codeReviewBudgetUsd = parsed
-    else ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`)
+  const envSetting = parseBudgetSetting(envBudget)
+  if (envSetting.kind === 'invalid') {
+    ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`)
   }
+  const appliedBudget = applyBudgetSetting(envSetting)
+  if (appliedBudget !== 'keep') config.codeReviewBudgetUsd = appliedBudget
   const budget = config.codeReviewBudgetUsd
+  if (budget === undefined) ctx.err(UNCAPPED_WARNING)
   const [allFiles, index] = await Promise.all([
     fixture !== undefined
       ? Promise.resolve(fixture.files)
@@ -2100,7 +2142,8 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     debug('code-review', `contexts=${attached}/${files.length}`)
   }
 
-  const chunks = buildPatchChunks(files, contexts)
+  const plan = planChunks(files, contexts)
+  const chunks = plan.map((c) => c.text)
   debug('code-review', `chunks=${chunks.length} files=${files.length}`)
 
   try {
@@ -2228,19 +2271,98 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       }
     }
 
+    // Batch mode: all chunks go out as one async batch up front. A whole-
+    // batch failure (or timeout) leaves `batched` empty so every chunk runs
+    // realtime below; a single errored request falls back for that chunk
+    // only. Synthesis stays realtime — it needs the merged chunk findings.
+    const batched = new Map<number, BatchItemResult['result']>()
+    let batchRecord: ReviewBatch | undefined
+    if (config.review.mode === 'batch') {
+      if (client.completeBatch === undefined || chunks.length === 0) {
+        batchRecord = { used: false, chunks: chunks.length, fellBack: 'client has no batch support' }
+      } else {
+        const allRequests = chunks.map((chunk, i) => ({
+          customId: `chunk-${i}`,
+          messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles),
+          schema: CODE_REVIEW_SCHEMA,
+          provider: config.provider,
+        }))
+        // A submitted batch cannot be stopped, so size it against the
+        // remaining budget first (conservative token-based estimate). Chunks
+        // past the prefix run realtime below, where the per-chunk budget
+        // gate applies.
+        const fit = affordableBatchPrefix(allRequests, budget, ledger.visionCostUsd)
+        const requests = allRequests.slice(0, fit)
+        if (fit < allRequests.length) {
+          ctx.err(
+            fit === 0
+              ? `code-review: batch skipped: projected cost of ${allRequests.length} chunk(s) exceeds the $${budget} budget; using realtime with budget checks`
+              : `code-review: batch limited to ${fit} of ${allRequests.length} chunk(s): projected cost exceeds the $${budget} budget; the rest run realtime with budget checks`,
+          )
+        }
+        if (fit === 0) {
+          batchRecord = { used: false, chunks: chunks.length, fellBack: 'projected batch cost exceeds budget' }
+        } else try {
+          stage(`submitting ${requests.length} chunk(s) as a batch, poll deadline ${Math.round(config.review.batchTimeoutMs / 1000)}s`)
+          const batchModel = resolveBatchModel(reviewModel, config.review.batchModel)
+          stage(`batch model ${batchModel}`)
+          const items = await client.completeBatch({
+            model: batchModel,
+            requests,
+            kind: 'code',
+            deadlineMs: config.review.batchTimeoutMs,
+          })
+          items.forEach((item, i) => {
+            if (item.result !== undefined) batched.set(i, item.result)
+          })
+          batchRecord = {
+            used: true,
+            chunks: chunks.length,
+            retriedRealtime: chunks.length - batched.size,
+          }
+          if (batched.size < chunks.length) {
+            ctx.err(`code-review: ${chunks.length - batched.size} batch request(s) failed; running those chunks realtime`)
+          }
+        } catch (e) {
+          const reason = (e as Error).message
+          debug('code-review', `batch failed: ${reason}`)
+          ctx.err(`code-review: batch failed (${reason}); falling back to realtime`)
+          batchRecord = { used: false, chunks: chunks.length, fellBack: reason }
+        }
+      }
+    }
+
+    const reviewedChunks = new Set<number>()
+    let chunkSpend = 0
     for (let i = 0; i < chunks.length; i++) {
-      if (ledger.budgetExceeded) break
+      const fromBatch = batched.get(i)
+      // Batch results are already paid for: always take them. Only
+      // realtime chunks are gated by the budget.
+      if (fromBatch === undefined) {
+        if (ledger.budgetExceeded) continue
+        // Stop BEFORE a chunk the remaining budget cannot be expected to
+        // cover (projected at the mean cost so far) — checking only after
+        // the spend lets every run overshoot its cap by a whole chunk.
+        if (reviewedChunks.size > 0 && !ledger.canSpend(chunkSpend / reviewedChunks.size)) {
+          ctx.err(`code-review: budget would be exceeded by chunk ${i + 1}; stopping early`)
+          continue
+        }
+      }
       debug('code-review', `chunk=${i + 1}/${chunks.length}`)
       const chunk = chunks[i]
       if (chunk === undefined) continue
-      const response = await client.complete({
-        model: reviewModel,
-        messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles),
-        schema: CODE_REVIEW_SCHEMA,
-        kind: 'code',
-        provider: config.provider,
-      })
+      const response =
+        fromBatch ??
+        (await client.complete({
+          model: reviewModel,
+          messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles),
+          schema: CODE_REVIEW_SCHEMA,
+          kind: 'code',
+          provider: config.provider,
+        }))
       recordSpend(response.cost)
+      chunkSpend += response.cost.costUsd
+      reviewedChunks.add(i)
       lastModel = response.model
       const parsed = parseCodeReview(response.content)
       const anchored = filterToDiffLines(parsed.findings, diffRanges, blockSeverities)
@@ -2257,17 +2379,21 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       }
       allFindings.push(...vetted.kept)
       stage(`chunk ${i + 1}/${chunks.length} — ${parsed.findings.length} finding(s)`)
-      if (ledger.budgetExceeded) {
+      if (ledger.budgetExceeded && fromBatch === undefined) {
         ctx.err(`code-review: budget exceeded after chunk ${i + 1}; stopping early`)
-        break
       }
     }
+    const chunksReviewed = reviewedChunks.size
 
     let modelVerdict: 'pass' | 'needs_changes' | 'approve' | undefined
     let modelSummary: string | undefined
     let finalFindings = allFindings
 
-    if (chunks.length > 1 && !ledger.budgetExceeded) {
+    // Synthesis is paid too: project it at the mean chunk cost.
+    const synthAllowed =
+      !ledger.budgetExceeded &&
+      (reviewedChunks.size === 0 || ledger.canSpend(chunkSpend / reviewedChunks.size))
+    if (chunks.length > 1 && synthAllowed) {
       try {
         debug('code-review', 'synthesis')
         stage('synthesizing chunk findings')
@@ -2338,11 +2464,25 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     }
     if (modelVerdict === verdict && modelSummary !== undefined) summary = modelSummary
 
+    // Files with at least one reviewed chunk. A budget stop leaves the
+    // tail of the plan unreviewed; the scope and summary must say so.
+    const reviewedSet = new Set(plan.flatMap((c, i) => (reviewedChunks.has(i) ? c.files : [])))
+    const unreviewed = files.length - reviewedSet.size
     const scope: ReviewScope = {
       totalFiles: allFiles.length,
-      reviewedFiles: files.length,
+      reviewedFiles: reviewedSet.size,
       excludedFiles: excluded.length,
       excludedSample: excluded.slice(0, 5).map((f) => f.filename),
+      chunksTotal: chunks.length,
+      chunksReviewed,
+      unreviewedFiles: unreviewed,
+    }
+    if (chunks.length > 1) {
+      const coverage =
+        chunksReviewed === chunks.length
+          ? `Reviewed all ${chunks.length} chunks (${reviewedSet.size} of ${files.length} files).`
+          : `Reviewed ${chunksReviewed} of ${chunks.length} chunks (${reviewedSet.size} of ${files.length} files); ${unreviewed} file(s) were not reviewed.`
+      summary = `${coverage} ${summary}`
     }
     if (excluded.length > 0) {
       summary = `Reviewed ${files.length} of ${allFiles.length} changed files (${excluded.length} excluded by review.exclude). ${summary}`
@@ -2621,6 +2761,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       ...(droppedFindings.length > 0 ? { droppedFindings } : {}),
       ...(modelVerdict !== undefined && modelVerdict !== verdict ? { modelVerdict } : {}),
       scope,
+      ...(batchRecord !== undefined ? { batch: batchRecord } : {}),
       ...(validation !== undefined ? { validation } : {}),
       ...(testFileCapped > 0 ? { testFileCapped } : {}),
       maxComments,
@@ -2742,18 +2883,21 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
   const trace = parseOpenRouterTrace(ctx.env)
   const git = await gitInfo(ctx.cwd)
   const envBudget = envOr(ctx.env.ARGUS_BUDGET_USD)
-  let actionBudget: number | undefined
-  if (envBudget !== undefined) {
-    const parsed = Number(envBudget)
-    if (Number.isFinite(parsed) && parsed > 0) actionBudget = parsed
-    else ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`)
+  const envSetting = parseBudgetSetting(envBudget)
+  if (envSetting.kind === 'invalid') {
+    ctx.err(`warning: ignoring invalid ARGUS_BUDGET_USD="${envBudget}"`)
   }
+  // 'keep' → fall back to config; otherwise the env value (undefined = unlimited)
+  const appliedBudget = applyBudgetSetting(envSetting)
+  const hasEnvBudget = appliedBudget !== 'keep'
+  const envCap = appliedBudget === 'keep' ? undefined : appliedBudget
   const budgets: Partial<Record<LaneId, BudgetOptions>> = {}
-  const reviewBudget = actionBudget ?? config.codeReviewBudgetUsd
-  const flowBudget = actionBudget ?? config.budgetUsd
+  const reviewBudget = hasEnvBudget ? envCap : config.codeReviewBudgetUsd
+  const flowBudget = hasEnvBudget ? envCap : config.budgetUsd
   if (reviewBudget !== undefined) budgets.review = { limitUsd: reviewBudget }
   if (flowBudget !== undefined) budgets.flow = { limitUsd: flowBudget }
-  const appBudget = config.app.budgetUsd ?? actionBudget ?? config.budgetUsd
+  const appBudget = config.app.budgetUsd ?? (hasEnvBudget ? envCap : config.budgetUsd)
+  if (selection.app && appBudget === undefined) ctx.err(UNCAPPED_WARNING)
   budgets.app = {
     ...(appBudget !== undefined ? { limitUsd: appBudget } : {}),
     maxDurationMs: config.app.timeoutMs ?? APP_LANE_DEFAULT_TIMEOUT_MS,
@@ -3236,144 +3380,50 @@ Then reports which optional features your environment already supports
 
 Options:
   --force   Overwrite files that already exist
-  -h, --help`
+  --pr      Open an onboarding pull request instead of writing files here
+            (uses your git and gh; never reads or sends your OpenRouter key)
+  --repo <owner/name>   With --pr: confirm the target (must match origin)
+  --branch <name>       With --pr: branch to use (default argus/onboarding)
+  -h, --help
 
-function initConfig(a0Host: string | undefined): string {
-  // R19 — a detected Agent Zero host earns a labeled suggestion, never an
-  // enabled lane: `verify --a0` is explicit opt-in per run, and completed
-  // delegations cap at inconclusive (self-reported evidence).
-  const a0Block =
-    a0Host !== undefined
-      ? `
-  // Optional: Agent Zero detected at ${a0Host}. Nothing below runs unless
-  // you ask for it — both stays commented until you opt in deliberately.
-  //   a0: { url: ${JSON.stringify(a0Host)} },  // enables \`verify --a0\` (self-reported, unmetered)
-  //   heal: 'a0',                             // escalates a failed heal to the A0 host
-`
-      : ''
-  return `import { defineConfig } from 'argus-reviewer-e2e'
+--pr refuses to overwrite existing files and, if the branch or an open PR
+already exists, reports it instead of creating another.`
 
-export default defineConfig({
-  // The app under test. command boots it (omit if it is already running);
-  // argus-reviewer polls url until it responds before running tests.
-  target: {
-    command: 'npm run dev',
-    url: 'http://localhost:3000',
-    readyTimeoutMs: 30_000,
-  },
-  // Hard per-run cap on vision-model spend (USD). Steps replayed from the
-  // fingerprint cache cost $0 regardless of this cap.
-  budgetUsd: 1,
-  testsDir: 'tests/argus',
-  // Exploratory lane: after the test loop, a bounded agent pass probes the
-  // app itself — same-origin navigation, clicks, invalid input — while taps
-  // capture console errors, page errors, and failed requests. Findings
-  // render as 'observed' — evidence only, never verdict-changing.
-  // maxSteps caps acts per run; budgetUsd caps explore model spend (falls
-  // back to budgetUsd). Point it at disposable targets only — clicks and
-  // form submits have real side effects.
-  // explore: { enabled: true, maxSteps: 20, budgetUsd: 0.25 },${a0Block}
-})
-`
+/** `argus-reviewer init --pr` — open an onboarding PR through local git + gh. */
+async function cmdInitPr(
+  values: { force?: boolean | undefined; repo?: string | undefined; branch?: string | undefined },
+  ctx: Ctx,
+  deps: CliDeps,
+): Promise<number> {
+  const branch = values.branch ?? DEFAULT_PR_BRANCH
+  const invalid =
+    (values.force ? '--force cannot be combined with --pr (a PR never overwrites files)' : undefined) ??
+    (values.repo !== undefined ? validateRepo(values.repo) : undefined) ??
+    validateBranch(branch)
+  if (invalid !== undefined) {
+    usageError(ctx, 'init', invalid, 'argus-reviewer init --help')
+    return 2
+  }
+  try {
+    const result = await initPr({
+      cwd: ctx.cwd,
+      exec: deps.exec ?? defaultExec,
+      repo: values.repo,
+      branch,
+      budgetUsd: DEFAULT_BUDGET_USD,
+    })
+    ctx.out(
+      result.kind === 'existing'
+        ? `onboarding PR already open for ${result.repo} (${result.branch}): ${result.url}`
+        : `opened onboarding PR for ${result.repo} (${result.branch}): ${result.url}`,
+    )
+    ctx.out('Add OPENROUTER_API_KEY as a repository secret before merging; this command never reads it.')
+    return 0
+  } catch (e) {
+    reportError(ctx, e, 'init --pr', 'COMMAND_FAILED')
+    return 1
+  }
 }
-
-const INIT_TEST = `test('home renders', async (td) => {
-  const ok = await td.assert('the page rendered without obvious errors')
-  if (!ok) throw new Error('home did not render')
-})
-`
-
-const INIT_WORKFLOW = `name: argus-reviewer
-
-on:
-  pull_request:
-    # 'labeled' lets a maintainer re-trigger with the argus-probe label when
-    # sandbox probes are enabled for fork PRs.
-    types: [opened, synchronize, reopened, labeled]
-
-jobs:
-  argus:
-    runs-on: ubuntu-latest
-    # 'labeled' fires on EVERY label — only argus-probe is the fork-gate
-    # signal worth a full review run.
-    if: github.event.action != 'labeled' || github.event.label.name == 'argus-probe'
-    permissions:
-      contents: read
-      issues: write
-      pull-requests: write
-      checks: write
-      statuses: write
-    steps:
-      # persist-credentials: false keeps the GITHUB_TOKEN out of .git/config —
-      # the probe sandbox masks .git regardless, but don't store it at all.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-          ref: \${{ github.event.pull_request.head.sha || github.sha }}
-      # Optional verdict-as-review: let Argus submit APPROVE / REQUEST_CHANGES
-      # so require_approving_reviews counts it. GITHUB_TOKEN cannot approve, so
-      # create + install your own GitHub App (docs/github-app.md), set the
-      # ARGUS_APP_ID variable and ARGUS_APP_PRIVATE_KEY secret, then uncomment:
-      #      - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
-      #        id: argus-app
-      #        with:
-      #          app-id: \${{ vars.ARGUS_APP_ID }}
-      #          private-key: \${{ secrets.ARGUS_APP_PRIVATE_KEY }}
-      # and pass approval-token plus its evidence inputs to the action below:
-      #          approval-token: \${{ steps.argus-app.outputs.token }}
-      #          approval-evidence: 'npm test'   # command the approval stands on
-      #          approval-check: 'test'          # check-run name, green on head SHA
-      - uses: duketopceo/Argus/action@63c9575622afef8bf4a8f2ea2d2909c6e54505d3 # v0.4.1
-        with:
-          openrouter-api-key: \${{ secrets.OPENROUTER_API_KEY }}
-`
-
-const INIT_MENTION_WORKFLOW = `name: argus-mention
-
-# @argus mention commands on PR comments — '@argus review', '@argus
-# record "<flow>"', '@argus persist', '@argus help'. issue_comment is
-# strictly more privileged than pull_request (secrets + write token are
-# present), so the checkout below deliberately resolves the BASE ref —
-# never the PR head. Argus reviews the head diff over the API.
-on:
-  issue_comment:
-    types: [created]
-
-jobs:
-  argus-mention:
-    runs-on: ubuntu-latest
-    if: github.event.issue.pull_request && startsWith(github.event.comment.body, '@argus')
-    permissions:
-      # contents: write — '@argus persist' commits reproduced probes to an
-      # argus/ branch via the git/refs + contents APIs and opens a PR.
-      contents: write
-      issues: write
-      pull-requests: write
-      checks: write
-      statuses: write
-    steps:
-      # No 'ref' — the default checkout resolves the base branch. persist
-      # writes via the API, so checkout credentials stay disabled.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      # Record commands need the app's dependencies to boot its target.
-      # Uncomment if you use '@argus record':
-      # - run: npm ci
-      - uses: duketopceo/Argus/action@63c9575622afef8bf4a8f2ea2d2909c6e54505d3 # v0.4.1
-        with:
-          openrouter-api-key: \${{ secrets.OPENROUTER_API_KEY }}
-      # '@argus record' uploads the generated test + flow cache as an
-      # artifact — committing to a PR branch is intentionally not done.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: contains(github.event.comment.body, 'record')
-        with:
-          name: argus-recorded-flow
-          path: |
-            tests/argus/
-            .argus-reviewer-cache/
-          if-no-files-found: ignore
-`
 
 /** `argus-reviewer init` — scaffold config, a smoke test, and the workflow. */
 async function cmdInit(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> {
@@ -3381,12 +3431,20 @@ async function cmdInit(args: string[], ctx: Ctx, deps: CliDeps): Promise<number>
     args,
     options: {
       force: { type: 'boolean', default: false },
+      pr: { type: 'boolean', default: false },
+      repo: { type: 'string' },
+      branch: { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
     },
   })
   if (values.help) {
     ctx.out(INIT_USAGE)
     return 0
+  }
+  if (values.pr) return cmdInitPr(values, ctx, deps)
+  if (values.repo !== undefined || values.branch !== undefined) {
+    usageError(ctx, 'init', '--repo and --branch only apply with --pr', 'argus-reviewer init --pr')
+    return 2
   }
 
   // Detect first so the generated config can auto-enable what is present
@@ -3401,15 +3459,8 @@ async function cmdInit(args: string[], ctx: Ctx, deps: CliDeps): Promise<number>
     'vision-e2e.config.ts',
     'vision-e2e.config.json',
   ]
-  const files: [string, string][] = [
-    ['tests/argus/smoke.test.ts', INIT_TEST],
-    ['.github/workflows/argus-reviewer.yml', INIT_WORKFLOW],
-    ['.github/workflows/argus-mention.yml', INIT_MENTION_WORKFLOW],
-  ]
   const hasConfig = configNames.some((n) => existsSync(join(ctx.cwd, n)))
-  if (!hasConfig || values.force) {
-    files.unshift(['argus-reviewer.config.ts', initConfig(env.a0.host)])
-  }
+  const files = renderScaffold({ a0Host: env.a0.host, includeConfig: !hasConfig || values.force })
 
   // DESIGN.md 7.8: a three-step checklist (files, environment, next
   // command) around the unchanged "What runs and what it costs" block.
@@ -3419,7 +3470,7 @@ async function cmdInit(args: string[], ctx: Ctx, deps: CliDeps): Promise<number>
   const fixLine = (cmd: string): string => `      ${style.role('accent', cmd)}`
 
   ctx.out(style.bold('1. Write the setup files'))
-  for (const [rel, content] of files) {
+  for (const { path: rel, content } of files) {
     const path = join(ctx.cwd, rel)
     if (existsSync(path) && !values.force) {
       ctx.out(row('skipped', `exists, skipping: ${rel}`))
@@ -3470,12 +3521,7 @@ async function cmdInit(args: string[], ctx: Ctx, deps: CliDeps): Promise<number>
   // R19: name what leaves the machine, the default spend posture, and
   // the stop path before the user runs anything. Kept verbatim (DESIGN 7.8).
   ctx.out('')
-  ctx.out('What runs and what it costs:')
-  ctx.out('  sent to provider  PR diffs, page screenshots/DOM snapshots, and')
-  ctx.out('                    review prompts — via your OpenRouter key (BYOK)')
-  ctx.out(`  default budget    $${dm.budgetUsd ?? 1}/run cap (budgetUsd); cached replay costs $0`)
-  ctx.out('  how to stop       Ctrl+C locally; in CI remove the workflow file')
-  ctx.out('                    or delete the OPENROUTER_API_KEY secret')
+  for (const line of scaffoldChecklist(DEFAULT_BUDGET_USD)) ctx.out(line)
 
   ctx.out('')
   ctx.out(style.bold('3. Run the default lane (code review)'))

@@ -18,8 +18,8 @@ import { defineConfig } from 'argus-reviewer-e2e'
 export default defineConfig({
   model: 'google/gemini-2.5-flash-lite',
   escalation_model: 'anthropic/claude-sonnet-4',
-  code_model: 'deepseek/deepseek-v4.1-flash',
-  budgetUsd: 1.0,
+  code_model: 'deepseek/deepseek-v4-flash',
+  budgetUsd: 1.0,   // per-run cap in USD (built-in default 1; 0 = unlimited, logs a warning)
   target: {
     // command: 'npm run dev' if the target needs a local server started
     url: 'https://your-app.example.com',
@@ -126,6 +126,11 @@ export default defineConfig({
 serves the model; `provider.only` would hard-restrict instead. Provider slugs
 are validated against a known list and warn on typos.
 
+Reasoning models (`deepseek/deepseek-v4.1-flash`, `z-ai/glm-5.3`) can take
+longer than the default 120 s per request in realtime. Raise it with
+`review: { requestTimeoutMs: 600_000 }` or `ARGUS_REQUEST_TIMEOUT_MS=600000`
+(integer ms, 1 to 900000; anything else is an error).
+
 The caller environment can also pin the code-review model without touching
 the checkout: `ARGUS_CODE_MODEL="owner/model"` wins over `code_model` in
 config — including on `pull_request` events, where the PR's config never
@@ -154,6 +159,59 @@ model doesn't.
 Spend is still yours:
 the `run.json` ledger records the per-run dollar figure regardless of which
 provider served the call.
+
+### Large PRs
+
+A diff over about 6k tokens is split into chunks, grouped by directory, and
+each chunk is one model call; a single file larger than that is split at hunk
+boundaries. Findings from all chunks are merged (and synthesized when there is
+more than one). The summary says `Reviewed all N chunks (X of Y files)`, and
+`code-review.json` carries the same numbers in `scope.chunksTotal`,
+`scope.chunksReviewed` and `scope.unreviewedFiles`.
+
+Spend is metered per chunk and capped at $1 per run by default
+(`budgetUsd`; `codeReviewBudgetUsd` overrides it for this lane, and
+`ARGUS_BUDGET_USD` / the action input `budget-usd` override both; `0` means
+unlimited and logs an `UNCAPPED` warning). Before each chunk after the first,
+the run checks the budget against the mean chunk
+cost so far; if the next chunk is not expected to fit, it stops without
+spending and the summary reads `Reviewed 3 of 7 chunks (...); N file(s) were
+not reviewed`.
+
+### Batch mode
+
+```ts
+review: { mode: 'batch', batchTimeoutMs: 480_000 }   // default mode: 'realtime'
+```
+
+`mode: 'batch'` submits every chunk in one request to OpenRouter's async Batch
+API (`POST /api/v1/batches`, then `GET /api/v1/batches/:id` until
+`completed`, `failed`, `expired` or `cancelled`) and maps each result back by
+`custom_id`. Override per run with `argus-reviewer code-review --mode batch` or
+`ARGUS_REVIEW_MODE=batch` (the operator lever for fork PRs, whose config never
+loads). The batch model is `review.batchModel` (`--batch-model`,
+`ARGUS_BATCH_MODEL`), default `deepseek/deepseek-v4.1-flash:batch`: the
+realtime default `deepseek/deepseek-v4-flash` has no batch endpoint, so batch
+uses its own slug (or `<code_model>:batch` when that model is known to have
+one). The model is sent as its base slug; a `:batch` suffix is stripped.
+Batch is the recommended mode for large PRs: in the bake-off 62% of its
+findings were judged valid against 27% for the cheaper realtime default.
+
+Batches finish in minutes (a real probe took about six). Polling stops at
+`batchTimeoutMs` (default 8 minutes) so the run stays inside the workflow's
+15-minute job timeout with room for the fallback: if the batch fails, expires,
+times out, or an individual request errors, those chunks run realtime. Cost is
+read from each batch response's usage and recorded in the same ledger as
+realtime calls. The final synthesis call (multi-chunk PRs) always runs realtime.
+`code-review.json` carries `batch: { used, chunks, retriedRealtime?, fellBack? }`.
+
+Budget: a batch is submitted whole and cannot be stopped mid-way, so Argus
+sizes it first. It estimates each chunk's worst-case cost from its token count
+at a deliberately high price (about $3 per million input tokens plus a 4000
+token output allowance) and submits only the chunks that fit in the remaining
+budget. The rest run realtime under the per-chunk gate; if none fit, the batch
+is skipped with a `batch skipped: projected cost` line. Actual spend is still
+metered from provider usage when results arrive.
 
 ### Agent Zero delegation (optional)
 

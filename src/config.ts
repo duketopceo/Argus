@@ -125,11 +125,17 @@ export interface Config {
    */
   decisionModel: string | undefined
   /**
-   * Hard budget for the `argus-reviewer code-review` lane. When set, the
-   * review stops early if the cumulative OpenRouter cost exceeds this cap.
+   * Hard budget for the `argus-reviewer code-review` lane. Unset follows
+   * `budgetUsd` (default $1/run); `0` runs the review lane uncapped. After
+   * resolveConfig `undefined` means explicitly unlimited.
    */
   codeReviewBudgetUsd: number | undefined
   provider: ProviderRules
+  /**
+   * Per-run spend cap in USD. Default `DEFAULT_BUDGET_USD` ($1). `0` is the
+   * explicit unlimited switch (every command logs a warning). After
+   * resolveConfig `undefined` means explicitly unlimited — never "unset".
+   */
   budgetUsd: number | undefined
   target: Target | undefined
   cacheDir: string | undefined
@@ -277,7 +283,61 @@ export interface Config {
      * paths); `[]` excludes nothing.
      */
     exclude: string[]
+    /**
+     * `realtime` (default) calls the chat API per chunk. `batch` submits all
+     * chunks through OpenRouter's async Batch API (cheaper, slower: minutes),
+     * falling back to realtime on failure or timeout.
+     */
+    mode: 'realtime' | 'batch'
+    /**
+     * Poll deadline for a batch, ms. Must sit inside the CI job timeout
+     * (the shipped workflow's is 15 minutes) with room left for a realtime
+     * fallback. Default 480000.
+     */
+    batchTimeoutMs: number
+    /**
+     * Model for `mode: 'batch'`, a `:batch` slug (the base slug is what is
+     * sent). Separate from `code_model` because not every realtime model has
+     * a batch endpoint. Unset: `<review model>:batch` when that slug is known
+     * to exist, else DEFAULT_BATCH_MODEL.
+     */
+    batchModel: string | undefined
+    /**
+     * Per-request timeout for realtime review calls, ms (1..900000,
+     * default 120000). Reasoning models need more than the default.
+     */
+    requestTimeoutMs: number
   }
+}
+
+export const DEFAULT_REQUEST_TIMEOUT_MS = 120_000
+export const MAX_REQUEST_TIMEOUT_MS = 900_000
+export const DEFAULT_BATCH_MODEL = 'deepseek/deepseek-v4.1-flash:batch'
+
+/**
+ * Base slugs measured to have an OpenRouter `:batch` endpoint (reviewer
+ * bake-off, 2026-10-03). The realtime default deepseek-v4-flash has none.
+ */
+const KNOWN_BATCH_BASES = new Set([
+  'google/gemini-2.5-flash-lite',
+  'deepseek/deepseek-v4.1-flash',
+  'z-ai/glm-5.3',
+  'z-ai/glm-5.3-flash',
+  'openai/gpt-oss-120b',
+])
+
+/** Batch slug for a review: explicit `batchModel`, else `<model>:batch` if known to exist, else the default. */
+export function resolveBatchModel(reviewModel: string, batchModel: string | undefined): string {
+  if (batchModel !== undefined && batchModel !== '') return batchModel
+  const base = reviewModel.replace(/:batch$/, '')
+  return KNOWN_BATCH_BASES.has(base) ? `${base}:batch` : DEFAULT_BATCH_MODEL
+}
+
+/** Validates a per-request timeout; returns an error message or undefined when valid. */
+export function checkRequestTimeoutMs(v: unknown): string | undefined {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= MAX_REQUEST_TIMEOUT_MS
+    ? undefined
+    : `requestTimeoutMs must be an integer from 1 to ${MAX_REQUEST_TIMEOUT_MS} (ms), got ${String(v)}`
 }
 
 export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review' | 'explore' | 'app'>> & {
@@ -289,6 +349,37 @@ export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review'
 }
 
 export const DEFAULT_RECORD_STEP_CAP = 40
+
+/** Built-in per-run spend cap (USD) when nothing else is configured. */
+export const DEFAULT_BUDGET_USD = 1
+
+/** Logged by every paid command when the cap was explicitly disabled. */
+export const UNCAPPED_WARNING =
+  'warning: spend cap disabled (budgetUsd/ARGUS_BUDGET_USD = 0): this run is UNCAPPED; model spend is unbounded'
+
+export type BudgetSetting =
+  | { kind: 'unset' }
+  | { kind: 'invalid' }
+  | { kind: 'unlimited' }
+  | { kind: 'cap'; usd: number }
+
+/** Parse ARGUS_BUDGET_USD / the `budget-usd` action input: `0` = unlimited. */
+export function parseBudgetSetting(raw: string | undefined): BudgetSetting {
+  if (raw === undefined || raw.trim() === '') return { kind: 'unset' }
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 0) return { kind: 'invalid' }
+  return n === 0 ? { kind: 'unlimited' } : { kind: 'cap', usd: n }
+}
+
+/**
+ * Apply an env/action budget setting. Returns the new cap (`undefined` =
+ * unlimited) or `'keep'` when the setting is unset/invalid.
+ */
+export function applyBudgetSetting(s: BudgetSetting): number | undefined | 'keep' {
+  if (s.kind === 'cap') return s.usd
+  if (s.kind === 'unlimited') return undefined
+  return 'keep'
+}
 
 export const DEFAULT_EXPLORE: Explore = {
   enabled: false,
@@ -319,13 +410,13 @@ const defaults: Config = {
   model: 'google/gemini-2.5-flash-lite',
   escalation_model: 'moonshotai/kimi-k2.5',
   grounding_model: undefined,
-  code_model: 'deepseek/deepseek-v4.1-flash',
+  code_model: 'deepseek/deepseek-v4-flash',
   decisionModel: JEV_DEFAULT_MODEL,
   codeReviewBudgetUsd: undefined,
   provider: {
     ignore: ['siliconflow', 'novitaai', 'atlascloud', 'streamlake', 'chutes'],
   },
-  budgetUsd: undefined,
+  budgetUsd: DEFAULT_BUDGET_USD,
   target: undefined,
   cacheDir: undefined,
   testsDir: undefined,
@@ -357,6 +448,10 @@ const defaults: Config = {
     requestChanges: true,
     profiles: [],
     exclude: [...DEFAULT_REVIEW_EXCLUDE],
+    mode: 'realtime',
+    batchTimeoutMs: 480_000,
+    batchModel: undefined,
+    requestTimeoutMs: DEFAULT_REQUEST_TIMEOUT_MS,
   },
 }
 
@@ -504,7 +599,34 @@ export function resolveConfig(input: ConfigInput = {}): Config {
     rawReview.exclude.every((g) => typeof g === 'string' && g !== '')
       ? [...rawReview.exclude]
       : [...DEFAULT_REVIEW_EXCLUDE]
+  review.mode = review.mode === 'batch' ? 'batch' : 'realtime'
+  review.batchTimeoutMs = posInt(review.batchTimeoutMs, defaults.review.batchTimeoutMs)
+  if (typeof review.batchModel !== 'string' || review.batchModel.trim() === '') {
+    review.batchModel = undefined
+  }
+  if (rawReview.requestTimeoutMs !== undefined) {
+    const bad = checkRequestTimeoutMs(rawReview.requestTimeoutMs)
+    if (bad !== undefined) throw new Error(`review.${bad}`)
+  }
   const resolved: Config = { ...defaults, ...input, provider, sandbox, explore, app, review }
+  // 0 = explicit unlimited; anything not a finite non-negative number
+  // (mis-typed, negative, null) degrades to the default cap, never to unlimited.
+  const rawBudget = input.budgetUsd
+  resolved.budgetUsd =
+    rawBudget === undefined
+      ? DEFAULT_BUDGET_USD
+      : typeof rawBudget === 'number' && Number.isFinite(rawBudget) && rawBudget >= 0
+        ? rawBudget === 0
+          ? undefined
+          : rawBudget
+        : DEFAULT_BUDGET_USD
+  const rawReviewBudget = input.codeReviewBudgetUsd
+  resolved.codeReviewBudgetUsd =
+    typeof rawReviewBudget === 'number' && Number.isFinite(rawReviewBudget) && rawReviewBudget > 0
+      ? rawReviewBudget
+      : rawReviewBudget === 0
+        ? undefined
+        : resolved.budgetUsd
   resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP)
   // Retention is a non-negative integer (0 = keep none) — a mis-typed or
   // negative bound degrades to unset, never to "keep everything".

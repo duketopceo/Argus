@@ -132,7 +132,7 @@ Each unit is one PR. Units U1 to U3 are Phase 1 (no hosting); U4 to U7 are Phase
   - Tests: mocked GitHub API; idempotency (branch exists, PR exists); fork/archived skip; fan-out cap of N repos per delivery with remainder noted in logs (50-subrequest limit).
   - Dependencies: U4, U5.
 - U7. **Manifest-flow self-registration and deploy docs** [status: todo]
-  - Goal: `app/register/` script and `docs/self-host-app.md` so an org registers its own App, deploys the Worker with `wrangler`, and sets secrets (`APP_ID`, `PRIVATE_KEY`, `WEBHOOK_SECRET`). Includes key rotation steps.
+  - Goal: `app/register/` script and `docs/self-host-app.md` (and `app/register/manifest.mjs`) so an org registers its own App, deploys the Worker with `wrangler`, and sets secrets (`APP_ID`, `PRIVATE_KEY`, `WEBHOOK_SECRET`). Includes key rotation steps.
 
 ### Phase 3: Identity and checks (optional, own threat review)
 

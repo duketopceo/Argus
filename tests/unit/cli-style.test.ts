@@ -174,7 +174,7 @@ describe('run and verify plain output changes only where intended (characterizat
     expect(out.lines.slice(1)).toEqual([
       expect.stringMatching(/^⊘ failed {3}(head [0-9a-f]{7} {3})?\d+ms$/),
       '  ⊘ flow     0/0 tests passed                                    $0.000000',
-      '  total $0.000000 · report argus-reviewer-report/run.json',
+      '  total $0.000000 of $1.00 budget · report argus-reviewer-report/run.json',
     ])
   })
 })
