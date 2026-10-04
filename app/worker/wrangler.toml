@@ -1,0 +1,16 @@
+name = "argus-app-worker"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+# No public URL and no routes until U7 documents deployment.
+workers_dev = false
+preview_urls = false
+
+[observability]
+enabled = false
+
+# Secrets (set with `wrangler secret put <NAME>`, never in this file):
+#   WEBHOOK_SECRET  GitHub App webhook secret
+#   APP_ID          GitHub App numeric ID
+#   PRIVATE_KEY     App private key (PKCS#8 or GitHub's PKCS#1 PEM)
+# There is deliberately no OPENROUTER_* binding: the Worker never holds a model key.
