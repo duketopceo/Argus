@@ -11,7 +11,7 @@
  * fixtures) on release; see RELEASING.md. v0.4.0 and v0.4.1 ship an action.yml
  * GitHub cannot parse, so never pin to them.
  */
-export const ACTION_PIN_SHA = 'c2bcd160272c67ec0bd531fa664435a2456c0d47'
+export const ACTION_PIN_SHA = '63e8e75adbfc7180972e57c59d1a71c1ea20bfa8'
 export const ACTION_PIN_TAG = 'v0.4.2'
 const ACTION_PIN = `${ACTION_PIN_SHA} # ${ACTION_PIN_TAG}`
 

@@ -3,6 +3,40 @@
 All notable changes to argus-reviewer are documented here. The project is
 pre-1.0; breaking changes may ship without a major bump until `1.0.0`.
 
+## [0.4.2] — 2026-10-04
+
+Onboarding and reviewer throughput. `init --pr` opens a ready-to-merge
+onboarding PR on your repo, large diffs review in chunks, and a default
+spend cap makes runaway cost opt-in rather than default.
+
+### Added
+- **`argus-reviewer init --pr`** — scaffolds the workflow on a branch and
+  opens an onboarding PR with the secrets checklist, what-is-sent statement,
+  and how to stop (#125, App plan U1–U3). `docs/onboarding.md` covers the
+  CLI / App / self-hosted-App paths (#126).
+- **Chunked review and OpenRouter batch mode** — large diffs review in
+  chunks; the batch lane uses a separate model and a configurable request
+  timeout (#121, #124).
+- **GitHub App webhook worker** (`app/worker/`) — signature verification,
+  replay guard, single-repo installation token, and an onboarding PR opened
+  on installation events; self-host deploy guide and manifest registration
+  (#131, #134, #135).
+- **Default budget cap** — $1 per-run spend cap; explicit `0` means
+  unlimited (#127).
+- Reviewer bake-off eval harness and report under `evals/reviewer-bakeoff/`
+  (#123).
+
+### Fixed
+- `action.yml` parse failure since v0.4.0 — descriptions containing `': '`
+  are now quoted (#133).
+- Test temp files are isolated in a per-run TMPDIR removed at teardown;
+  cleanup binds to the creating test, and the leak check spawns vitest's
+  JS entry so it also works on Windows (#136).
+
+### Docs
+- The OCR static-lane plan recorded its dry run: the kill criterion tripped
+  (the tool hung on a one-file scan) — **do not integrate** (#137).
+
 ## [0.4.1] — 2026-10-04
 
 ### Fixed
