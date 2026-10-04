@@ -2611,7 +2611,7 @@ jobs:
       # Record commands need the app's dependencies to boot its target.
       # Uncomment if you use '@argus record':
       # - run: npm ci
-      - uses: duketopceo/Argus/action@75492b8a6b10338d1f141ac9f8544135edc34409 # v0.2.0
+      - uses: duketopceo/Argus/action@cd38ba901152ddc6e7cbed21c01079702b2501f1 # v0.3.1
         with:
           openrouter-api-key: \${{ secrets.OPENROUTER_API_KEY }}
       # '@argus record' uploads the generated test + flow cache as an

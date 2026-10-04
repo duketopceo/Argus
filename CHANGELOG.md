@@ -3,6 +3,34 @@
 All notable changes to argus-reviewer are documented here. The project is
 pre-1.0; breaking changes may ship without a major bump until `1.0.0`.
 
+## [0.3.1] — 2026-10-01
+
+### Added
+- `ARGUS_CODE_MODEL` env override for the review model (#96).
+
+## [0.3.0] — 2026-09-30
+
+### Added
+- **CodeRabbit-style review surface** (#92): inline suggestions with
+  `suggestion` blocks and a gated `REQUEST_CHANGES` verdict.
+- **Formal GitHub review lane** (#91): Argus can submit an APPROVE /
+  REQUEST_CHANGES review so its verdict satisfies
+  `require_approving_reviews` (see `docs/approval-token.md`).
+- **Head-bound four-lane verification** (#88): review, flow, app, and a0
+  lanes all bind their verdict to the PR head SHA.
+- `code-review --fixture <dir>` offline review against a local fixture.
+
+### Fixed
+- Budget float drift tripping the USD cap (#89).
+- `cacheDir` default — `record` persisted nothing and wrote empty test
+  files (#85).
+- CI: `ARGUS_TRUSTED` scoped to non-PR events — the env override beats fork
+  detection, so it must not be set on `pull_request` (#83).
+
+### Docs
+- README rewritten for clean install + onboarding (#86); AGENTS.md added
+  (#90).
+
 ## [0.2.0] — 2026-09-21
 
 ### Added
