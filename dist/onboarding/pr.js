@@ -14,10 +14,9 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { CliError } from '../ui/errors.js';
-import { renderScaffold, scaffoldChecklist } from './scaffold.js';
-export const DEFAULT_BRANCH = 'argus/onboarding';
-const REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
-const BRANCH_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
+import { renderPrBody, validateBranch } from './pr-content.js';
+import { renderScaffold } from './scaffold.js';
+export { DEFAULT_BRANCH, renderPrBody, validateBranch, validateRepo } from './pr-content.js';
 const CONFIG_NAMES = [
     'argus-reviewer.config.ts',
     'argus-reviewer.config.json',
@@ -26,57 +25,10 @@ const CONFIG_NAMES = [
 ];
 const SHORT_MS = 30_000;
 const NET_MS = 120_000;
-/** A validation message, or undefined when the repo slug is safe to use in argv and URLs. */
-export function validateRepo(repo) {
-    if (!REPO_RE.test(repo) || repo.split('/').some((p) => p === '.' || p === '..')) {
-        return `--repo must look like owner/name (letters, digits, . _ -), got ${JSON.stringify(repo)}`;
-    }
-    return undefined;
-}
-export function validateBranch(branch) {
-    if (!BRANCH_RE.test(branch) ||
-        branch.includes('..') ||
-        branch.endsWith('/') ||
-        branch.endsWith('.lock')) {
-        return `--branch is not a safe branch name: ${JSON.stringify(branch)}`;
-    }
-    return undefined;
-}
 /** owner/name from a GitHub remote URL (ssh, https, with or without .git). */
 export function parseGithubRemote(url) {
     const m = url.trim().match(/github\.com[:/]([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?\/?$/);
     return m?.[1];
-}
-export function renderPrBody(input) {
-    const { repo, budgetUsd, paths } = input;
-    return `## Add Argus reviewer
-
-This PR adds a review-only [Argus](https://github.com/duketopceo/Argus) setup. Nothing runs until it is merged.
-
-### Files added
-
-${paths.map((p) => `- \`${p}\``).join('\n')}
-
-### Before merging: add the secret
-
-- [ ] Add \`OPENROUTER_API_KEY\` as a repository secret: https://github.com/${repo}/settings/secrets/actions/new?name=OPENROUTER_API_KEY
-  - Or from your own terminal: \`gh secret set OPENROUTER_API_KEY --repo ${repo}\`
-- [ ] Review the workflow files above. They use \`pull_request\` (never \`pull_request_target\`), \`persist-credentials: false\`, a pinned action SHA and least-privilege \`permissions\`.
-
-Argus never sees your key. It is your OpenRouter key (BYOK) and it stays in your repository secrets. The command that opened this PR did not read it.
-
-### What runs and what it costs
-
-\`\`\`
-${scaffoldChecklist(budgetUsd).join('\n')}
-\`\`\`
-
-### How to stop or uninstall
-
-- Remove \`.github/workflows/argus-reviewer.yml\` and \`.github/workflows/argus-mention.yml\`, or
-- delete the \`OPENROUTER_API_KEY\` repository secret (reviews stop, nothing else changes).
-- Optionally delete \`argus-reviewer.config.ts\` and \`tests/argus/\`.
-`;
 }
 function fail(message, fix) {
     return new CliError('COMMAND_FAILED', message, fix !== undefined ? { fix } : {});
