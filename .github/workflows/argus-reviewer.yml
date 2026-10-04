@@ -73,9 +73,6 @@ jobs:
           index: 'false'
           run: 'false'
           working-directory: .
-          # The deepseek default stalled on OpenRouter (120s timeout, CI +
-          # local) — pin a working cheap model until the default is revisited.
-          code-model: google/gemini-2.5-flash-lite
 
       - name: Upload Argus review report artifact
         if: always()

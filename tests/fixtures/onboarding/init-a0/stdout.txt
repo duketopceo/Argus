@@ -1,0 +1,31 @@
+1. Write the setup files
+  ● wrote argus-reviewer.config.ts
+  ● wrote tests/argus/smoke.test.ts
+  ● wrote .github/workflows/argus-reviewer.yml
+  ● wrote .github/workflows/argus-mention.yml
+
+2. Check the argus-reviewer environment
+  ⊘ openrouter key  not set (BYOK, required for model calls)
+      export OPENROUTER_API_KEY=sk-or-...
+  <glyph> playwright      <host-dependent>
+  ◌ github          gh not authenticated (enables PR workflows)
+      gh auth login
+  ● agent zero      a0 2.12 → https://a0.example.com
+                    opt-in only; see config comments
+    models        vision google/gemini-2.5-flash-lite (docs/models.md)
+                  code deepseek/deepseek-v4-flash
+                  escalation moonshotai/kimi-k2.5
+
+What runs and what it costs:
+  sent to provider  PR diffs, page screenshots/DOM snapshots, and
+                    review prompts — via your OpenRouter key (BYOK)
+  default budget    $1/run cap (budgetUsd); cached replay costs $0
+  how to stop       Ctrl+C locally; in CI remove the workflow file
+                    or delete the OPENROUTER_API_KEY secret
+
+3. Run the default lane (code review)
+      argus-reviewer verify
+    Then: point target.url at your app for the flow and app lanes,
+    record a real flow with argus-reviewer record "...", and add
+    OPENROUTER_API_KEY to the repo secrets to enable the PR workflow.
+    verify --a0 and heal: a0 are opt-in; suggestions are in the config.

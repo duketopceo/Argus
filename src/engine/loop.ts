@@ -3,7 +3,7 @@ import { Actions } from './actions.js'
 import { Config, DEFAULT_RECORD_STEP_CAP, ProviderRules } from '../config.js'
 import { CallCost, CallKind } from '../vision/cost.js'
 import { Ledger } from '../vision/ledger.js'
-import { JsonSchema, Message } from '../vision/openrouter.js'
+import { BatchItemResult, BatchRequest, JsonSchema, Message } from '../vision/openrouter.js'
 import {
   ActionPayload,
   Bbox,
@@ -35,6 +35,13 @@ export interface VisionClient {
     provider?: ProviderRules
     kind?: CallKind
   }): Promise<{ id: string; content: string; cost: CallCost; model: string }>
+  /** Optional async Batch API path (code review `review.mode: batch`). */
+  completeBatch?(opts: {
+    model: string
+    requests: BatchRequest[]
+    kind?: CallKind
+    deadlineMs: number
+  }): Promise<BatchItemResult[]>
 }
 
 export interface UiDriverApi {

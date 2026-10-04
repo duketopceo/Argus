@@ -12,11 +12,23 @@ silently.
 
 | Lane | Config field | Default slug | Verified alternates | Tier |
 | --- | --- | --- | --- | --- |
-| Code review | `code_model` | `deepseek/deepseek-v4.1-flash` | `google/gemini-2.5-flash`, `meta-llama/llama-3.3-70b-instruct` | cheap |
+| Code review (realtime) | `code_model` | `deepseek/deepseek-v4-flash` | `deepseek/deepseek-v4.1-flash` (set `review.requestTimeoutMs`), `google/gemini-2.5-flash`, `meta-llama/llama-3.3-70b-instruct` | cheap |
+| Code review (batch) | `review.batchModel` | `deepseek/deepseek-v4.1-flash:batch` | `z-ai/glm-5.3:batch` | cheap |
 | Vision ground/replay | `model` | `google/gemini-2.5-flash-lite` | `google/gemini-2.5-flash` | cheap–mid |
 | Escalation (heal) | `escalation_model` | `moonshotai/kimi-k2.5` | `anthropic/claude-sonnet-4` | mid–premium |
 | Adjudication (confidence model) | `decisionModel` | `typesafe/jev-1.13-20260917` | none: pinned, because aliases like `~typesafe/jev-latest` drift | fixed |
 | Grounding retry | `grounding_model` | — unset | `google/gemini-2.5-flash-lite` | cheap |
+
+Why these defaults: the 2026-10-03 reviewer bake-off (PR #123) scored
+`deepseek/deepseek-v4-flash` at recall 1.00 / precision 0.93 on the demo PR
+for about $0.0001 per review, and `deepseek/deepseek-v4.1-flash` in batch at
+62% judge-valid findings on a real-PR subset. The realtime default is cheap
+but noisier (about 27% of its findings on real code were judged valid), so
+the validate step and severity gating stay on; use batch for large PRs.
+`deepseek/deepseek-v4-flash` has no `:batch` endpoint, which is why batch has
+its own model. Reasoning models (`deepseek/deepseek-v4.1-flash`,
+`z-ai/glm-5.3`, `z-ai/glm-5.3-flash`) exceed the 120 s realtime timeout;
+raise `review.requestTimeoutMs` before using them realtime.
 
 Tiers are qualitative: **cheap** ≈ cents per hundred reviews, **mid** ≈ cents
 per review, **premium** ≈ dimes+ per review. The per-run dollar figure is

@@ -18,6 +18,24 @@ export interface JsonSchema {
     schema: Record<string, unknown>;
     strict?: boolean;
 }
+/** One request inside an async batch; `customId` maps the result back. */
+export interface BatchRequest {
+    customId: string;
+    messages: Message[];
+    schema?: JsonSchema;
+    provider?: ProviderRules;
+}
+/** Exactly one of `result` / `error` is set. */
+export interface BatchItemResult {
+    customId: string;
+    result?: {
+        id: string;
+        content: string;
+        cost: CallCost;
+        model: string;
+    };
+    error?: string;
+}
 export interface OpenRouterClientOptions {
     apiKey: string;
     fetch?: typeof fetch;
@@ -48,7 +66,7 @@ export declare class OpenRouterClient {
     private _fetch;
     private _timeoutMs;
     private _trace;
-    private _headers;
+    private _extraHeaders;
     private _onCall;
     constructor(opts: OpenRouterClientOptions);
     private _request;
@@ -65,9 +83,27 @@ export declare class OpenRouterClient {
         cost: CallCost;
         model: string;
     }>;
+    /**
+     * Async Batch API: submit every request in one POST, poll until a terminal
+     * status, and map the inline results back by `custom_id`. Throws when the
+     * batch fails/expires/cancels or the poll deadline passes — callers fall
+     * back to realtime. A per-request error is returned, not thrown.
+     * `endpoint` and `model` are serialized before `requests`.
+     */
+    completeBatch(opts: {
+        /** Base slug; a trailing `:batch` variant suffix is stripped. */
+        model: string;
+        requests: BatchRequest[];
+        kind?: CallKind;
+        pollIntervalMs?: number;
+        /** Total time to wait for a terminal status before throwing. */
+        deadlineMs: number;
+    }): Promise<BatchItemResult[]>;
     reconcile(id: string): Promise<{
         costUsd: number;
     }>;
+    private _buildBody;
+    private _requestHeaders;
     private _tryComplete;
     private _toApiMessages;
     private _extractContent;

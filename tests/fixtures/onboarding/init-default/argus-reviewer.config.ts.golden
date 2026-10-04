@@ -1,0 +1,28 @@
+import { defineConfig } from 'argus-reviewer-e2e'
+
+export default defineConfig({
+  // The app under test. command boots it (omit if it is already running);
+  // argus-reviewer polls url until it responds before running tests.
+  target: {
+    command: 'npm run dev',
+    url: 'http://localhost:3000',
+    readyTimeoutMs: 30_000,
+  },
+  // Hard per-run cap on vision-model spend (USD). Steps replayed from the
+  // fingerprint cache cost $0 regardless of this cap.
+  budgetUsd: 1,
+  testsDir: 'tests/argus',
+  // Exploratory lane: after the test loop, a bounded agent pass probes the
+  // app itself — same-origin navigation, clicks, invalid input — while taps
+  // capture console errors, page errors, and failed requests. Findings
+  // render as 'observed' — evidence only, never verdict-changing.
+  // maxSteps caps acts per run; budgetUsd caps explore model spend (falls
+  // back to budgetUsd). Point it at disposable targets only — clicks and
+  // form submits have real side effects.
+  // explore: { enabled: true, maxSteps: 20, budgetUsd: 0.25 },
+  // Optional: Agent Zero detected at https://agent0.bartlettdash.com. Nothing below runs unless
+  // you ask for it — both stays commented until you opt in deliberately.
+  //   a0: { url: "https://agent0.bartlettdash.com" },  // enables `verify --a0` (self-reported, unmetered)
+  //   heal: 'a0',                             // escalates a failed heal to the A0 host
+
+})

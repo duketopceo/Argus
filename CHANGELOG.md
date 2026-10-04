@@ -12,6 +12,33 @@ pre-1.0; breaking changes may ship without a major bump until `1.0.0`.
   filters — not the pre-release pin the 0.4.0 tarball shipped with.
 - Internal rename `TestDriverApi` → `UiDriverApi` (no behavior change).
 
+## [Unreleased]
+
+### Changed
+- **Default review models changed** (from the reviewer model bake-off, #123).
+  Realtime `code_model` is now `deepseek/deepseek-v4-flash` (was
+  `deepseek/deepseek-v4.1-flash`): about $0.0001 per demo review, recall 1.00
+  and precision 0.93 there, but noisier on real code (about 27% of findings
+  judged valid), so the validate step and severity gating stay on. Batch mode
+  now uses `deepseek/deepseek-v4.1-flash:batch` (62% judged valid). If you rely
+  on the default model, pin the old one with `code_model:
+  'deepseek/deepseek-v4.1-flash'` (or `ARGUS_CODE_MODEL`) and set
+  `review.requestTimeoutMs: 600000`, since it exceeds the 120 s default
+  timeout in realtime. Batch is recommended for large PRs.
+
+### Added
+- `review.requestTimeoutMs` / `ARGUS_REQUEST_TIMEOUT_MS`: per-request OpenRouter
+  timeout (integer ms, 1 to 900000, default 120000). Invalid values are a
+  usage error.
+- `review.batchModel` / `--batch-model` / `ARGUS_BATCH_MODEL`: separate model
+  for batch mode. Unset, it derives `<code_model>:batch` for models known to
+  have a batch endpoint, else `deepseek/deepseek-v4.1-flash:batch`.
+- Chunked review for large PRs: files are grouped by directory, oversized
+  files split at hunk boundaries, the run stops before a chunk the budget
+  cannot cover, and the summary says how many chunks and files were reviewed.
+- `review.mode: 'batch'` (also `--mode batch`, `ARGUS_REVIEW_MODE`): review
+  through OpenRouter's async Batch API with automatic realtime fallback.
+
 ## [0.4.0] - 2026-10-03
 
 A redesign and a quieter reviewer. Argus now looks and reads the same
