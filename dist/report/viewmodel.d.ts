@@ -10,8 +10,6 @@ import { type BudgetSummary, type CacheSummary, type HeadBinding, type LaneId, t
  */
 /** One display label per status — surfaces may color it, never rename it. */
 export declare const LANE_STATUS_LABEL: Record<LaneStatus, string>;
-/** One glyph per status — terminal/comment-safe, color-independent. */
-export declare const LANE_STATUS_ICON: Record<LaneStatus, string>;
 /** Status glyph per lane status; no two statuses share one. */
 export declare const STATUS_GLYPH: Record<LaneStatus, string>;
 /** Proof strength, weakest to strongest (A4 ladder). */

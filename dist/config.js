@@ -279,7 +279,7 @@ export async function loadConfig(cwd, opts) {
             // legit consumer debugging "why is my config ignored") is invisible.
             try {
                 if ((await fs.stat(path.join(cwd, `${name}.ts`))).isFile()) {
-                    opts.note?.(`config: ${name}.ts ignored — untrusted checkouts load JSON config only`);
+                    opts.note?.(`config: ${name}.ts ignored – untrusted checkouts load JSON config only`);
                 }
             }
             catch {
@@ -299,7 +299,7 @@ export async function loadConfig(cwd, opts) {
                     const raw = await fs.readFile(file, 'utf8');
                     const parsed = JSON.parse(raw);
                     if (untrusted) {
-                        opts.note?.(`config: ${name}.json loaded untrusted — honoring ${[...UNTRUSTED_CONFIG_KEYS].join(', ')} only`);
+                        opts.note?.(`config: ${name}.json loaded untrusted – honoring ${[...UNTRUSTED_CONFIG_KEYS].join(', ')} only`);
                         return finish(filterUntrustedConfig(parsed));
                     }
                     return finish(parsed);

@@ -31,22 +31,11 @@ export const LANE_STATUS_LABEL: Record<LaneStatus, string> = {
   inconclusive: 'inconclusive',
 }
 
-/** One glyph per status — terminal/comment-safe, color-independent. */
-export const LANE_STATUS_ICON: Record<LaneStatus, string> = {
-  passed: '✓',
-  failed: '✗',
-  skipped: '—',
-  blocked: '⛔',
-  unavailable: '⚠',
-  inconclusive: '~',
-}
-
 /*
  * Ocellus vocabulary (DESIGN.md section 6.7, A4, A5). Text surfaces use these
  * glyphs: each is a single-cell, text-presentation code point, never emoji.
  * A status is always shown as glyph plus its LANE_STATUS_LABEL word.
  * `action/sticky-comment.cjs` keeps its own copy, guarded by parity tests.
- * LANE_STATUS_ICON above stays until its TUI and dashboard consumers move (U13).
  */
 
 /** Status glyph per lane status; no two statuses share one. */
@@ -171,7 +160,7 @@ export function laneView(lane: LaneManifest): LaneView {
     selected: lane.selected,
     status: lane.status,
     statusLabel: LANE_STATUS_LABEL[lane.status],
-    statusIcon: LANE_STATUS_ICON[lane.status],
+    statusIcon: STATUS_GLYPH[lane.status],
     summary: lane.summary,
     reason: lane.reason,
     reportPath: lane.reportPath,
@@ -195,7 +184,7 @@ export function manifestToRunView(manifest: RunManifest): RunView {
     finishedAt: manifest.finishedAt,
     status: manifest.aggregate.status,
     statusLabel: LANE_STATUS_LABEL[manifest.aggregate.status],
-    statusIcon: LANE_STATUS_ICON[manifest.aggregate.status],
+    statusIcon: STATUS_GLYPH[manifest.aggregate.status],
     ok: manifest.aggregate.ok,
     costUsd: manifest.aggregate.costUsd,
     calls: manifest.aggregate.calls,
@@ -307,7 +296,7 @@ export function formatUsd(n: number | undefined): string {
 }
 
 export function formatDuration(ms: number | undefined): string {
-  if (ms === undefined || !Number.isFinite(ms)) return '—'
+  if (ms === undefined || !Number.isFinite(ms)) return '–'
   if (ms < 1000) return `${Math.round(ms)}ms`
   return `${(ms / 1000).toFixed(1)}s`
 }

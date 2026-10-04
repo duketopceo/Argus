@@ -75,14 +75,6 @@ const NO_OWNER =
   'no later unit rewrites this file; R5 bans em-dashes in changed strings, so the exact count blocks new ones'
 
 const TEMPORARY: Record<string, Allowance> = {
-  // Rewritten by a later unit of the Ocellus plan (docs/plans/2026-10-02-2316-*).
-  'src/report/viewmodel.ts': { emoji: 2, emdash: 2, unit: 'U13 (legacy LANE_STATUS_ICON consumers)' },
-  // U3 touches these files, but its plan text scopes it to comments; strings need U3 widened.
-  'src/config.ts': { emdash: 2, unit: 'U3 (if widened to strings)' },
-  'src/evidence/ci.ts': { emdash: 5, unit: 'U3 (if widened to strings)' },
-  'src/review/adjudicate.ts': { emdash: 1, unit: 'U3 (if widened to strings)' },
-  'src/review/packs.ts': { emdash: 4, unit: 'U3 (if widened to strings)' },
-  'src/review/triage.ts': { emdash: 8, unit: 'U3 (if widened to strings)' },
   // No unit owns these; the count is a ratchet, not a removal plan.
   // U6 cleaned the review comment, persist reply and code-review report text in src/cli.ts.
   // What remains is terminal stage lines, mention replies, run-report skip text, the

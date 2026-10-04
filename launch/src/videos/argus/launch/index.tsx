@@ -96,16 +96,3 @@ export const ArgusReadmeLoop: React.FC = () => {
  * Prototype assembly for the taste gate — hook + lanes only.
  * Superseded by ArgusLaunch for the full film.
  */
-export const ArgusLaunchProto: React.FC = () => {
-  return (
-    <div style={{position: 'absolute', inset: 0, background: color.canvas}}>
-      <Fonts />
-      <Sequence durationInFrames={150} name="S1 hook">
-        <Scene01Hook />
-      </Sequence>
-      <Sequence from={150} durationInFrames={480} name="S3 lanes">
-        <Scene03Lanes />
-      </Sequence>
-    </div>
-  );
-};

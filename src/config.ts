@@ -581,7 +581,7 @@ export async function loadConfig(cwd: string, opts: LoadConfigOpts): Promise<Con
       // legit consumer debugging "why is my config ignored") is invisible.
       try {
         if ((await fs.stat(path.join(cwd, `${name}.ts`))).isFile()) {
-          opts.note?.(`config: ${name}.ts ignored — untrusted checkouts load JSON config only`)
+          opts.note?.(`config: ${name}.ts ignored – untrusted checkouts load JSON config only`)
         }
       } catch {
         // no .ts candidate — nothing to note
@@ -601,7 +601,7 @@ export async function loadConfig(cwd: string, opts: LoadConfigOpts): Promise<Con
           const parsed = JSON.parse(raw) as ConfigInput
           if (untrusted) {
             opts.note?.(
-              `config: ${name}.json loaded untrusted — honoring ${[...UNTRUSTED_CONFIG_KEYS].join(', ')} only`,
+              `config: ${name}.json loaded untrusted – honoring ${[...UNTRUSTED_CONFIG_KEYS].join(', ')} only`,
             )
             return finish(filterUntrustedConfig(parsed))
           }

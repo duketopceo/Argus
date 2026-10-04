@@ -5,11 +5,11 @@ import {
   formatUsd,
   isRunManifest,
   laneView,
-  LANE_STATUS_ICON,
   LANE_STATUS_LABEL,
   manifestToRunView,
   maskSecrets,
   shortSha,
+  STATUS_GLYPH,
 } from '../../src/report/viewmodel.js'
 import { emptyLane, LANE_STATUSES } from '../../src/report/manifest.js'
 import { fixtureLane, fixtureManifest } from '../fixtures/manifest.js'
@@ -64,10 +64,10 @@ describe('manifestToRunView', () => {
 })
 
 describe('status contract', () => {
-  it('every lane status has a label and an icon — no unmapped status', () => {
+  it('every lane status has a label and a glyph — no unmapped status', () => {
     for (const status of LANE_STATUSES) {
       expect(LANE_STATUS_LABEL[status]).toBe(status)
-      expect(LANE_STATUS_ICON[status]).toBeTruthy()
+      expect(STATUS_GLYPH[status]).toBeTruthy()
     }
     expect(Object.keys(LANE_STATUS_LABEL).sort()).toEqual([...LANE_STATUSES].sort())
   })
@@ -135,7 +135,7 @@ describe('formatters', () => {
     expect(formatUsd(undefined)).toBe('$0.000000')
     expect(formatDuration(42_000)).toBe('42.0s')
     expect(formatDuration(120)).toBe('120ms')
-    expect(formatDuration(undefined)).toBe('—')
+    expect(formatDuration(undefined)).toBe('–')
     expect(shortSha('abc1234deadbeef')).toBe('abc1234')
     expect(shortSha(undefined)).toBeUndefined()
     expect(shortSha('')).toBeUndefined()
