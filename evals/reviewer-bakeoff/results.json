@@ -1,0 +1,3014 @@
+{
+ "realtime": [
+  {
+   "model": "google/gemini-2.5-flash-lite",
+   "fixture": "demo",
+   "rep": 0,
+   "mode": "realtime",
+   "latencyS": 2.248,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.000386058,
+   "codeCostUsd": 0.000271062,
+   "codeCalls": 1,
+   "tokens": 4485,
+   "summary": "3 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 5,
+     "severity": "bug",
+     "message": "L5: \ud83d\udd34 bug: discount percentage is applied twice. Apply `pct` once. The comment mentions a seeded demo bug but the code has the bug."
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "nit",
+     "message": "L2: \ud83d\udd35 nit: `STRIPE_SECRET_KEY` should be `sk_test_...` for non-production environments. Use a placeholder that clearly indicates it's for testing."
+    },
+    {
+     "file": "docs/setup.md",
+     "line": 6,
+     "severity": "nit",
+     "message": "L6: \ud83d\udd35 nit: Use environment variables for AWS credentials instead of hardcoded values in shell export."
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 0.6666666666666666,
+    "findings": 3,
+    "docKeyFalsePositives": 1
+   }
+  },
+  {
+   "model": "google/gemini-2.5-flash-lite",
+   "fixture": "demo",
+   "rep": 1,
+   "mode": "realtime",
+   "latencyS": 2.851,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.000350106,
+   "codeCostUsd": 0.000235026,
+   "codeCalls": 1,
+   "tokens": 4396,
+   "summary": "3 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 4,
+     "severity": "bug",
+     "message": "L4: \ud83d\udd34 bug: The discount percentage is applied twice, incorrectly reducing the price. Remove the second application of the discount."
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "nit",
+     "message": "L2: \ud83d\udd35 nit: Use a more descriptive example key for `STRIPE_SECRET_KEY` to avoid confusion with live keys, e.g. `sk_test_...` or `pk_test_...`."
+    },
+    {
+     "file": "docs/setup.md",
+     "line": 6,
+     "severity": "nit",
+     "message": "L6: \ud83d\udd35 nit: Include instructions on how to configure `AWS_SECRET_ACCESS_KEY`, not just mention it."
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 0.6666666666666666,
+    "findings": 3,
+    "docKeyFalsePositives": 1
+   }
+  },
+  {
+   "model": "google/gemini-2.5-flash-lite",
+   "fixture": "ocellus",
+   "rep": 0,
+   "mode": "realtime",
+   "latencyS": 37.006,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.0079806816,
+   "codeCostUsd": 0.007658877599999999,
+   "codeCalls": 8,
+   "tokens": 70902,
+   "summary": "Address critical correctness issues in `pipeline/verify.ts` and `executor/a0.ts`. Several minor issues related to naming, redundancy, and comments are also present.",
+   "findings": [
+    {
+     "file": "src/executor/a0.ts",
+     "line": 42,
+     "severity": "risk",
+     "message": "L42: \ud83d\udfe1 risk: `spawnError` should be explicitly checked for true, not just an empty string. If `spawnError` is explicitly set to true, it indicates a spawn fail"
+    },
+    {
+     "file": "src/pipeline/verify.ts",
+     "line": 164,
+     "severity": "bug",
+     "message": "L164: \ud83d\udd34 bug: runner threw error, but report is still read. If runner errored before writing, its report may be stale. Remove report read if `runnerError` is pr"
+    },
+    {
+     "file": "src/pipeline/verify.ts",
+     "line": 221,
+     "severity": "bug",
+     "message": "L221: \ud83d\udd34 bug: runner threw error, but detail is still read. If runner errored before writing, its detail file may be stale. Remove detail read if `runnerError` "
+    },
+    {
+     "file": "src/pipeline/verify.ts",
+     "line": 178,
+     "severity": "risk",
+     "message": "L178: \ud83d\udfe1 risk: `report.ok === true` with `code === 0` but no tests run implies no evidence. Fail lane if `flowEvidenceRan` is false."
+    }
+   ],
+   "score": {
+    "postFilter": 4,
+    "bug": 2,
+    "risk": 2,
+    "nit": 0,
+    "q": 0,
+    "bugRisk": 4,
+    "invalidDropped": 0,
+    "preFilter": 4
+   }
+  },
+  {
+   "model": "deepseek/deepseek-v4.1-flash",
+   "fixture": "demo",
+   "rep": 1,
+   "mode": "realtime",
+   "latencyS": 49.71,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.005054982198,
+   "codeCostUsd": 0.004937130198,
+   "codeCalls": 1,
+   "tokens": 5706,
+   "summary": "3 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 6,
+     "severity": "bug",
+     "message": "L6: \ud83d\udd34 bug: `pct` is applied twice, so a 10% discount returns 81% of `price` instead of 90%. Return `discounted` directly without the second `(1 - pct / 100)` f"
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "risk",
+     "message": "L2: \ud83d\udfe1 risk: placeholder `STRIPE_SECRET_KEY` uses the live-key prefix `sk_live_`, which trains copy-paste of live secrets and trips secret scanners. Use a neutr"
+    },
+    {
+     "file": "docs/setup.md",
+     "line": 5,
+     "severity": "nit",
+     "message": "L5: \ud83d\udd35 nit: `AKIAIOSFODNN7EXAMPLE` is AWS's canonical example key; add a one-line note that it is a non-functional sample so readers don't paste it as a real va"
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 0.6666666666666666,
+    "findings": 3,
+    "docKeyFalsePositives": 1
+   }
+  },
+  {
+   "model": "deepseek/deepseek-v4-flash",
+   "fixture": "demo",
+   "rep": 0,
+   "mode": "realtime",
+   "latencyS": 18.292,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.00010600799999999999,
+   "codeCostUsd": 0,
+   "codeCalls": 1,
+   "tokens": 4066,
+   "summary": "2 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "risk",
+     "message": "L2: \ud83d\udfe1 risk: `STRIPE_SECRET_KEY` value `sk_live_...` looks like a real secret key, even if demo/fake, it sets a dangerous precedent. Replace with a clearly fake"
+    },
+    {
+     "file": "src/discount.ts",
+     "line": 7,
+     "severity": "bug",
+     "message": "L7: \ud83d\udd34 bug: `applyDiscount` applies `pct` twice, producing `price * (1 - pct/100)^2` instead of `price * (1 - pct/100)`. Remove the duplicate return line and re"
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 1,
+    "findings": 2,
+    "docKeyFalsePositives": 0
+   }
+  },
+  {
+   "model": "deepseek/deepseek-v4-flash",
+   "fixture": "demo",
+   "rep": 1,
+   "mode": "realtime",
+   "latencyS": 21.889,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.00010563,
+   "codeCostUsd": 0,
+   "codeCalls": 1,
+   "tokens": 4041,
+   "summary": "2 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "bug",
+     "message": "L2: \ud83d\udd34 bug: Live test key `STRIPE_SECRET_KEY=sk_live_\u2026` is present in the example file (comment says \u201cnever commit the real file\u201d, but the key appears real). Re"
+    },
+    {
+     "file": "src/discount.ts",
+     "line": 4,
+     "severity": "bug",
+     "message": "L4: \ud83d\udd34 bug: `applyDiscount` applies the percentage twice because the result is multiplied by `(1 - pct/100)` again. Remove the second multiplication so the expr"
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 1,
+    "findings": 2,
+    "docKeyFalsePositives": 0
+   }
+  },
+  {
+   "model": "deepseek/deepseek-v4-flash",
+   "fixture": "ocellus",
+   "rep": 0,
+   "mode": "realtime",
+   "latencyS": 329.455,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.000546546,
+   "codeCostUsd": 0,
+   "codeCalls": 8,
+   "tokens": 61126,
+   "summary": "The PR introduces several correctness bugs and risks across the codebase, particularly in async lifecycle management (`src/detect.ts`, `src/driver/target.ts`), missing runtime security enforcement (`s",
+   "findings": [
+    {
+     "file": "src/detect.ts",
+     "line": 95,
+     "severity": "bug",
+     "message": "`settled = true` in branch before `escalate` timer created\u2014hoist `let settled = false` above `execFile` call."
+    },
+    {
+     "file": "src/detect.ts",
+     "line": 131,
+     "severity": "risk",
+     "message": "`clearTimeout(escalate)` on any 'close' is fragile; also mark `settled = true` in escalate fallback at L101."
+    },
+    {
+     "file": "src/driver/target.ts",
+     "line": 91,
+     "severity": "bug",
+     "message": "Fixed 250ms pause before checking `child.exitCode` is a race; use `child.on('exit', ...)` tied to ready promise."
+    },
+    {
+     "file": "src/driver/target.ts",
+     "line": 136,
+     "severity": "risk",
+     "message": "`process.kill(-this.child.pid, 'SIGKILL')` without group-leader check; ensure `detached: false` or use `this.child.spawned?._group`."
+    },
+    {
+     "file": "src/engine/prompts.ts",
+     "line": 68,
+     "severity": "risk",
+     "message": "Prompt allows `navigate` to arbitrary URLs; add runtime same-origin enforcement in action executor."
+    },
+    {
+     "file": "src/engine/prompts.ts",
+     "line": 84,
+     "severity": "risk",
+     "message": "`ExploreAction` schema omits `fail` but prompt includes it; align schema with prompt to prevent hallucination."
+    },
+    {
+     "file": "src/engine/prompts.ts",
+     "line": 152,
+     "severity": "bug",
+     "message": "`buildExploreMessages` passes base64 without `data:image/jpeg;base64,` prefix; will cause image rejection by OpenAI API."
+    },
+    {
+     "file": "src/pipeline/verify.ts",
+     "line": 181,
+     "severity": "bug",
+     "message": "`flowEvidenceRan` accesses `report.explore?.enabled` without full object guard; simplify to early return then check."
+    },
+    {
+     "file": "src/pipeline/verify.ts",
+     "line": 202,
+     "severity": "bug",
+     "message": "`report` may be a truthy non-object (e.g., string from malformed JSON) causing crash; add `typeof report === 'object'` check."
+    },
+    {
+     "file": "src/report/comment.ts",
+     "line": 91,
+     "severity": "bug",
+     "message": "`bestFindingProof` returns `'suspected'` when no findings exist; return `'none'` when findings list is empty."
+    },
+    {
+     "file": "src/report/manifest.ts",
+     "line": 281,
+     "severity": "bug",
+     "message": "`writeAtomicJson` will fail if directory does not exist; call `mkdir(dir, {recursive: true})` before writing."
+    },
+    {
+     "file": "src/report/comment.ts",
+     "line": 86,
+     "severity": "risk",
+     "message": "Explicit cast with `indexOf` may access `PROOF_LEVELS[-1]` returning `undefined`; use explicit mapping instead."
+    }
+   ],
+   "score": {
+    "postFilter": 12,
+    "bug": 7,
+    "risk": 5,
+    "nit": 0,
+    "q": 0,
+    "bugRisk": 12,
+    "invalidDropped": 0,
+    "preFilter": 12
+   }
+  },
+  {
+   "model": "z-ai/glm-5.3",
+   "fixture": "demo",
+   "rep": 0,
+   "mode": "realtime",
+   "latencyS": 88.196,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.00780862725,
+   "codeCostUsd": 0.00770455125,
+   "codeCalls": 1,
+   "tokens": 6581,
+   "summary": "2 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 6,
+     "severity": "bug",
+     "message": "L6: \ud83d\udd34 bug: discount factor applied twice \u2014 10% off returns 81% of price, not 90%. Return `discounted` directly."
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "risk",
+     "message": "L2: \ud83d\udfe1 risk: `sk_live_` prefix mimics a real live secret key \u2014 secret scanners flag it and it normalizes live keys in examples. Use a `sk_test_` placeholder."
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 1,
+    "findings": 2,
+    "docKeyFalsePositives": 0
+   }
+  },
+  {
+   "model": "z-ai/glm-5.3",
+   "fixture": "demo",
+   "rep": 1,
+   "mode": "realtime",
+   "latencyS": 75.48,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.01066810725,
+   "codeCostUsd": 0.01055080125,
+   "codeCalls": 1,
+   "tokens": 8232,
+   "summary": "3 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 6,
+     "severity": "bug",
+     "message": "L6: \ud83d\udd34 bug: discount percentage is applied twice \u2014 `applyDiscount(100, 10)` returns 81, not 90. Return `discounted` without the second `(1 - pct / 100)` multipl"
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "risk",
+     "message": "L2: \ud83d\udfe1 risk: committed example embeds a `sk_live_`-prefixed key-shaped value, normalizing live-key patterns and tripping secret scanners. Use a non-live placeho"
+    },
+    {
+     "file": "docs/setup.md",
+     "line": 7,
+     "severity": "nit",
+     "message": "L7: \ud83d\udd35 nit: setup splits credentials between shell env vars and `.env`. Add `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` placeholders to `.env.example` so all se"
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 0.6666666666666666,
+    "findings": 3,
+    "docKeyFalsePositives": 1
+   }
+  },
+  {
+   "model": "z-ai/glm-5.3-flash",
+   "fixture": "demo",
+   "rep": 0,
+   "mode": "realtime",
+   "latencyS": 23.03,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.0005149635129,
+   "codeCostUsd": 0.0004098795129,
+   "codeCalls": 1,
+   "tokens": 4316,
+   "summary": "2 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 8,
+     "severity": "bug",
+     "message": "L8: \ud83d\udd34 bug: `pct` is applied twice, so a 10% discount returns 81% of `price` instead of 90%. Remove the second application and return `discounted` directly."
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "risk",
+     "message": "L2: \ud83d\udfe1 risk: placeholder uses `sk_live_` prefix, which trips secret-scanning and may block the push or page users. Use a `sk_test_`-prefixed placeholder like `s"
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 1,
+    "findings": 2,
+    "docKeyFalsePositives": 0
+   }
+  },
+  {
+   "model": "z-ai/glm-5.3-flash",
+   "fixture": "demo",
+   "rep": 1,
+   "mode": "realtime",
+   "latencyS": 32.768,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.0007443228432,
+   "codeCostUsd": 0.0006265548432,
+   "codeCalls": 1,
+   "tokens": 4973,
+   "summary": "3 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 7,
+     "severity": "bug",
+     "message": "L7: \ud83d\udd34 bug: discount is applied twice (`discounted * (1 - pct / 100)`), so 10% off returns 81% of price. Return `discounted` directly."
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "risk",
+     "message": "L2: \ud83d\udfe1 risk: `sk_live_REDACTED` uses live-key format and will fail secret scanning / mislead users into thinking live keys belong here. Replace"
+    },
+    {
+     "file": "docs/setup.md",
+     "line": 8,
+     "severity": "nit",
+     "message": "L8: \ud83d\udd35 nit: inline `AKIAIOSFODNN7EXAMPLE` still triggers AWS secret scanners even though it's the documented example. Link to the AWS docs page instead of embed"
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 0.6666666666666666,
+    "findings": 3,
+    "docKeyFalsePositives": 1
+   }
+  },
+  {
+   "model": "qwen/qwen3-coder",
+   "fixture": "demo",
+   "rep": 0,
+   "mode": "realtime",
+   "latencyS": 4.057,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.0007821456,
+   "codeCostUsd": 0.0006676956,
+   "codeCalls": 1,
+   "tokens": 4252,
+   "summary": "3 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 5,
+     "severity": "bug",
+     "message": "L5: \ud83d\udd34 bug: Discount is applied twice, leading to incorrect final price. Remove the second discount application."
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "risk",
+     "message": "L2: \ud83d\udfe1 risk: Example Stripe key may mislead users into committing real keys. Replace with a clearly fake placeholder value."
+    },
+    {
+     "file": "docs/setup.md",
+     "line": 6,
+     "severity": "risk",
+     "message": "L6: \ud83d\udfe1 risk: AWS example credentials may be committed by accident. Remove example values and link to AWS documentation instead."
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 0.6666666666666666,
+    "findings": 3,
+    "docKeyFalsePositives": 1
+   }
+  },
+  {
+   "model": "qwen/qwen3-coder",
+   "fixture": "demo",
+   "rep": 1,
+   "mode": "realtime",
+   "latencyS": 3.511,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.0007693776,
+   "codeCostUsd": 0.0006552216,
+   "codeCalls": 1,
+   "tokens": 4238,
+   "summary": "3 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 5,
+     "severity": "bug",
+     "message": "L5: \ud83d\udd34 bug: Discount is applied twice, leading to incorrect final price. Remove the second discount application."
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "risk",
+     "message": "L2: \ud83d\udfe1 risk: Example Stripe key suggests live mode. Use test key prefix `sk_test_` instead."
+    },
+    {
+     "file": "docs/setup.md",
+     "line": 6,
+     "severity": "risk",
+     "message": "L6: \ud83d\udfe1 risk: AWS example uses documented dummy credentials. Remove or clarify these are placeholders."
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 0.6666666666666666,
+    "findings": 3,
+    "docKeyFalsePositives": 1
+   }
+  },
+  {
+   "model": "qwen/qwen3-coder",
+   "fixture": "ocellus",
+   "rep": 0,
+   "mode": "realtime",
+   "latencyS": 32.872,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.016973458799999997,
+   "codeCostUsd": 0.0163555128,
+   "codeCalls": 8,
+   "tokens": 60181,
+   "summary": "This PR introduces critical correctness issues including undefined variable access, race conditions, invalid data handling, and unsafe string slicing. Security risks involve orphaned processes and unf",
+   "findings": [
+    {
+     "file": "src/config.ts",
+     "line": 440,
+     "severity": "bug",
+     "message": "L440: \ud83d\udd34 bug: `review.requestChanges` coercion treats non-false values as true. Use explicit boolean check."
+    },
+    {
+     "file": "src/driver/browser.ts",
+     "line": 117,
+     "severity": "bug",
+     "message": "L117: \ud83d\udd34 bug: `driver` is not defined in scope when `options.captureErrors` is true. Rename `new BrowserDriver(...)` to `driver` before the conditional."
+    },
+    {
+     "file": "src/driver/target.ts",
+     "line": 88,
+     "severity": "bug",
+     "message": "L88: \ud83d\udd34 bug: race condition between `ready` and `childExited` may cause false-positive readiness. Ensure `child.exitCode` is checked before declaring readiness."
+    },
+    {
+     "file": "src/engine/prompts.ts",
+     "line": 210,
+     "severity": "bug",
+     "message": "L210: \ud83d\udd34 bug: `describeAction` does not handle `fail` action type from `ExploreAction`. Add case for `fail` to prevent undefined behavior."
+    },
+    {
+     "file": "src/executor/a0.ts",
+     "line": 130,
+     "severity": "bug",
+     "message": "L130: \ud83d\udd34 bug: `parseInt` can receive `undefined` from regex match groups. Add nullish checks before parsing."
+    },
+    {
+     "file": "src/pipeline/budget.ts",
+     "line": 65,
+     "severity": "bug",
+     "message": "L65: \ud83d\udd34 bug: Budget check uses `budget.spentUsd` instead of updated total. Add `nextCostUsd` to spent amount."
+    },
+    {
+     "file": "src/pipeline/verify.ts",
+     "line": 224,
+     "severity": "bug",
+     "message": "L224: \ud83d\udd34 bug: `detail?.visionCalls` used when `detail?.calls` undefined. Use `detail?.visionCalls ?? 0` to prevent NaN."
+    },
+    {
+     "file": "src/pipeline/verify.ts",
+     "line": 226,
+     "severity": "bug",
+     "message": "L226: \ud83d\udd34 bug: `detail?.visionCostUsd` used when `detail?.calls` undefined. Use `detail?.visionCostUsd ?? 0` to prevent NaN."
+    },
+    {
+     "file": "src/pipeline/verify.ts",
+     "line": 414,
+     "severity": "bug",
+     "message": "L414: \ud83d\udd34 bug: `detail?.status` not validated against known statuses. Add status validation to prevent invalid lane states."
+    },
+    {
+     "file": "src/probe/queue.ts",
+     "line": 595,
+     "severity": "bug",
+     "message": "L595: \ud83d\udd34 bug: `probe.content.slice(0, PROBE_CONTENT_CAP)` may truncate UTF-8 characters. Use `Buffer.byteLength()` to ensure safe slicing."
+    },
+    {
+     "file": "src/report/comment.ts",
+     "line": 265,
+     "severity": "bug",
+     "message": "L265: \ud83d\udd34 bug: `PROOF_LEVELS.indexOf` can return -1, leading to `PROOF_LEVELS[-1]`. Guard against negative indices."
+    },
+    {
+     "file": "src/report/comment.ts",
+     "line": 390,
+     "severity": "bug",
+     "message": "L390: \ud83d\udd34 bug: `VERDICT_STATUS[verdict]` and `VERDICT_LABEL[verdict]` assume `verdict` is always a valid key. Add runtime check."
+    },
+    {
+     "file": "src/report/run.ts",
+     "line": 115,
+     "severity": "bug",
+     "message": "L115: \ud83d\udd34 bug: `ok` logic allows empty test suites to pass when `exploreEvidence` is true. Ensure explicit test execution is required for a pass."
+    },
+    {
+     "file": "src/vision/openrouter.ts",
+     "line": 133,
+     "severity": "bug",
+     "message": "L133: \ud83d\udd34 bug: Error message loses original error details when no provider error is found. Include original errors in message or preserve as cause."
+    },
+    {
+     "file": "src/detect.ts",
+     "line": 115,
+     "severity": "risk",
+     "message": "L115: \ud83d\udfe1 risk: Child process timeout escalation may leave orphaned processes. Add process group management."
+    },
+    {
+     "file": "src/driver/browser.ts",
+     "line": 150,
+     "severity": "risk",
+     "message": "L150: \ud83d\udfe1 risk: capturing all console errors without filtering may expose sensitive data. Consider adding allowlist or redaction for known sensitive patterns."
+    },
+    {
+     "file": "src/executor/a0.ts",
+     "line": 260,
+     "severity": "risk",
+     "message": "L260: \ud83d\udfe1 risk: Resolved host is discarded when `a0.url` is configured. Use resolved host for reachability checks."
+    },
+    {
+     "file": "src/pipeline/verify.ts",
+     "line": 354,
+     "severity": "risk",
+     "message": "L354: \ud83d\udfe1 risk: `noEvidence` check allows flow to fail when no tests ran. Ensure report includes test count validation."
+    },
+    {
+     "file": "src/report/comment.ts",
+     "line": 277,
+     "severity": "risk",
+     "message": "L277: \ud83d\udfe1 risk: `laneProof` returns `'suspected'` for `inconclusive` status but `'exercised'` for other lanes without checking evidence. Clarify intent or align "
+    },
+    {
+     "file": "src/report/manifest.ts",
+     "line": 280,
+     "severity": "risk",
+     "message": "L280: \ud83d\udfe1 risk: `unlink` may fail silently during pruning. Handle specific error cases or log failures."
+    },
+    {
+     "file": "src/vision/openrouter.ts",
+     "line": 205,
+     "severity": "risk",
+     "message": "L205: \ud83d\udfe1 risk: HTTP errors may be retried indefinitely without backoff. Add retry limits and exponential backoff for 429/5xx."
+    }
+   ],
+   "score": {
+    "postFilter": 21,
+    "bug": 14,
+    "risk": 7,
+    "nit": 0,
+    "q": 0,
+    "bugRisk": 21,
+    "invalidDropped": 0,
+    "preFilter": 21
+   }
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "fixture": "demo",
+   "rep": 0,
+   "mode": "realtime",
+   "latencyS": 5.592,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.00016468439999999998,
+   "codeCostUsd": 6.09444e-05,
+   "codeCalls": 1,
+   "tokens": 3919,
+   "summary": "2 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "bug",
+     "message": "L2: \ud83d\udd34 bug: `.env.example` contains a real Stripe secret key. Replace with placeholder like `sk_test_...` or remove value."
+    },
+    {
+     "file": "src/discount.ts",
+     "line": 5,
+     "severity": "bug",
+     "message": "L5: \ud83d\udd34 bug: Discount calculation applies the percentage twice, yielding 81% for 10\u202f% discount. Return `discounted` instead of `discounted * (... )`."
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 1,
+    "findings": 2,
+    "docKeyFalsePositives": 0
+   }
+  },
+  {
+   "model": "deepseek/deepseek-v4.1-flash",
+   "fixture": "demo",
+   "rep": 0,
+   "mode": "realtime",
+   "latencyS": 19.17,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.00045616469999999997,
+   "codeCostUsd": 0.0003507867,
+   "codeCalls": 1,
+   "tokens": 5329,
+   "summary": "2 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 6,
+     "severity": "bug",
+     "message": "L6: \ud83d\udd34 bug: `discounted` is multiplied by `(1 - pct / 100)` a second time, so 10% off returns 81% of price instead of 90%. Return `discounted` directly."
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "risk",
+     "message": "L2: \ud83d\udfe1 risk: example value carries a live-key prefix (`sk_live_`), which trips secret scanners and invites copy-pasting real live keys. Use a test/placeholder k"
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 1,
+    "findings": 2,
+    "docKeyFalsePositives": 0
+   }
+  },
+  {
+   "model": "qwen/qwen3.7-flash",
+   "fixture": "demo",
+   "rep": 0,
+   "error": "\u2298 code-review failed   OpenRouter completion failed for all candidate models: OpenRouter request   failed: 404",
+   "latencyS": 0.611,
+   "totalCostUsd": 0
+  },
+  {
+   "model": "qwen/qwen3.7-flash",
+   "fixture": "demo",
+   "rep": 1,
+   "error": "\u2298 code-review failed   OpenRouter completion failed for all candidate models: OpenRouter request   failed: 404",
+   "latencyS": 0.646,
+   "totalCostUsd": 0
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "fixture": "demo",
+   "rep": 1,
+   "mode": "realtime",
+   "latencyS": 25.68,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.00027074172,
+   "codeCostUsd": 0.00016733772,
+   "codeCalls": 1,
+   "tokens": 4487,
+   "summary": "2 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "risk",
+     "message": "L2: \ud83d\udfe1 risk: real-looking secret key committed. Replace with placeholder like `STRIPE_SECRET_KEY=sk_test_...`."
+    },
+    {
+     "file": "src/discount.ts",
+     "line": 5,
+     "severity": "bug",
+     "message": "L5: \ud83d\udd34 bug: discount applied twice, returning 81% instead of 90% for a 10% discount. Return the single\u2011discount value."
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 1,
+    "findings": 2,
+    "docKeyFalsePositives": 0
+   }
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "fixture": "ocellus",
+   "rep": 0,
+   "mode": "realtime",
+   "latencyS": 63.251,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.0017923488,
+   "codeCostUsd": 0.0015419448,
+   "codeCalls": 8,
+   "tokens": 47693,
+   "summary": "The PR introduces several serious bugs and security concerns, notably mutable default config\u00a0objects, missing validation in verification, and unsafe filename handling. There are also multiple low\u2011conf",
+   "findings": [
+    {
+     "file": "src/config.ts",
+     "line": 57,
+     "severity": "bug",
+     "message": "Mutable default `Explore` objects are shared; mutate\u2011after\u2011spread leads to cross\u2011run corruptions. Clone\u00a0or\u00a0use immutable literals."
+    },
+    {
+     "file": "src/config.ts",
+     "line": 71,
+     "severity": "risk",
+     "message": "`budgetUsd` may be set to\u00a0Infinity\u00a0or\u00a0NaN\u00a0or\u00a0non\u2011numeric\u00a0values\u00a0that bypass\u00a0budget\u00a0checks\u00a0\u2026\u00a0"
+    }
+   ],
+   "score": {
+    "postFilter": 2,
+    "bug": 1,
+    "risk": 1,
+    "nit": 0,
+    "q": 0,
+    "bugRisk": 2,
+    "invalidDropped": 0,
+    "preFilter": 2
+   }
+  },
+  {
+   "model": "google/gemini-2.5-flash-lite",
+   "fixture": "demo",
+   "rep": 2,
+   "mode": "realtime",
+   "latencyS": 2.783,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.00037296,
+   "codeCostUsd": 0.000259182,
+   "codeCalls": 1,
+   "tokens": 4426,
+   "summary": "3 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 5,
+     "severity": "bug",
+     "message": "L5: \ud83d\udd34 bug: Discount percentage applied twice. Fix to apply discount once."
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "nit",
+     "message": "L2: \ud83d\udd35 nit: Example Stripe secret key should not be a live key. Use a test key."
+    },
+    {
+     "file": "docs/setup.md",
+     "line": 6,
+     "severity": "nit",
+     "message": "L6: \ud83d\udd35 nit: Example AWS access key ID should be a placeholder. Use a generic placeholder."
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 0.6666666666666666,
+    "findings": 3,
+    "docKeyFalsePositives": 1
+   }
+  },
+  {
+   "model": "google/gemini-2.5-flash-lite",
+   "fixture": "demo",
+   "rep": 3,
+   "mode": "realtime",
+   "latencyS": 2.15,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.000261942,
+   "codeCostUsd": 0.00016929,
+   "codeCalls": 1,
+   "tokens": 3660,
+   "summary": "1 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 5,
+     "severity": "bug",
+     "message": "L5: \ud83d\udd34 bug: discount is applied twice. Fix by returning `discounted` without the second multiplication."
+    }
+   ],
+   "score": {
+    "recall": 0.5,
+    "t1": true,
+    "t2": false,
+    "precision": 1,
+    "findings": 1,
+    "docKeyFalsePositives": 0
+   }
+  },
+  {
+   "model": "google/gemini-2.5-flash-lite",
+   "fixture": "demo",
+   "rep": 4,
+   "mode": "realtime",
+   "latencyS": 1.946,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.00034472999999999996,
+   "codeCostUsd": 0.000229482,
+   "codeCalls": 1,
+   "tokens": 4386,
+   "summary": "3 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 5,
+     "severity": "bug",
+     "message": "L5: \ud83d\udd34 bug: The discount percentage is applied twice. Fix: remove the second `discounted * (1 - pct / 100)`."
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "nit",
+     "message": "L2: \ud83d\udd35 nit: Use a placeholder like `pk_test_...` for test keys or a generic placeholder if this is not intended to be a test key."
+    },
+    {
+     "file": "docs/setup.md",
+     "line": 6,
+     "severity": "nit",
+     "message": "L6: \ud83d\udd35 nit: Suggest using `AWS_ACCESS_KEY` and `AWS_SECRET_KEY` for consistency with AWS SDK documentation."
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 0.6666666666666666,
+    "findings": 3,
+    "docKeyFalsePositives": 1
+   }
+  },
+  {
+   "model": "google/gemini-2.5-flash-lite",
+   "fixture": "ocellus",
+   "rep": 1,
+   "mode": "realtime",
+   "latencyS": 33.894,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.009232032,
+   "codeCostUsd": 0.008935344,
+   "codeCalls": 8,
+   "tokens": 67060,
+   "summary": "The review found three bugs related to potential undefined states in `verify.ts` and one risk concerning unbounded probe output. Numerous minor convention and readability suggestions were also noted a",
+   "findings": [
+    {
+     "file": "src/pipeline/verify.ts",
+     "line": 180,
+     "severity": "bug",
+     "message": "`report` can be undefined after runner error. Access properties only when `report` is defined."
+    },
+    {
+     "file": "src/pipeline/verify.ts",
+     "line": 209,
+     "severity": "bug",
+     "message": "`code` is used to determine status but might be reset later. The `code` variable should be captured before any potential reassignments."
+    },
+    {
+     "file": "src/pipeline/verify.ts",
+     "line": 249,
+     "severity": "bug",
+     "message": "`detail` can be undefined after runner error, but its properties are accessed without a check."
+    },
+    {
+     "file": "src/probe/queue.ts",
+     "line": 76,
+     "severity": "risk",
+     "message": "`ProbeRecord.output` is described as capped, but `PROBE_CONTENT_CAP` is only used for `content`. Ensure `output` is also capped if necessary to prevent excessiv"
+    }
+   ],
+   "score": {
+    "postFilter": 4,
+    "bug": 3,
+    "risk": 1,
+    "nit": 0,
+    "q": 0,
+    "bugRisk": 4,
+    "invalidDropped": 1,
+    "preFilter": 5
+   },
+   "validation": {
+    "dropped": 1,
+    "byReason": {
+     "line_outside_diff": 1
+    }
+   }
+  },
+  {
+   "model": "deepseek/deepseek-v4.1-flash",
+   "fixture": "demo",
+   "rep": 2,
+   "mode": "realtime",
+   "latencyS": 10.529,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.0003648093,
+   "codeCostUsd": 0.0002604393,
+   "codeCalls": 1,
+   "tokens": 4798,
+   "summary": "2 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 6,
+     "severity": "bug",
+     "message": "L6: \ud83d\udd34 bug: `pct` is applied twice, so `applyDiscount(100, 10)` returns 81 instead of 90. Return `discounted` directly."
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "nit",
+     "message": "L2: \ud83d\udd35 nit: placeholder uses a `sk_live_` prefix, inviting a real live key to be pasted here. Use `sk_test_...` or `sk_live_REDACTED_ME`."
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 1,
+    "findings": 2,
+    "docKeyFalsePositives": 0
+   }
+  },
+  {
+   "model": "deepseek/deepseek-v4.1-flash",
+   "fixture": "demo",
+   "rep": 3,
+   "mode": "realtime",
+   "latencyS": 31.634,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.0005755905,
+   "codeCostUsd": 0.0004700025,
+   "codeCalls": 1,
+   "tokens": 6003,
+   "summary": "2 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 6,
+     "severity": "bug",
+     "message": "L6: \ud83d\udd34 bug: discount is applied twice (`price * (1 - pct/100) * (1 - pct/100)`), so 10% returns 0.81*price instead of 0.9*price. Return `discounted` directly."
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "risk",
+     "message": "L2: \ud83d\udfe1 risk: `sk_live_`-prefixed placeholder in a committed file trips secret scanners and normalizes live keys; use `STRIPE_SECRET_KEY=sk_test_your_key_here` o"
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 1,
+    "findings": 2,
+    "docKeyFalsePositives": 0
+   }
+  },
+  {
+   "model": "deepseek/deepseek-v4.1-flash",
+   "fixture": "demo",
+   "rep": 4,
+   "mode": "realtime",
+   "latencyS": 25.588,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.0004211037,
+   "codeCostUsd": 0.0003017817,
+   "codeCalls": 1,
+   "tokens": 5404,
+   "summary": "3 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 6,
+     "severity": "bug",
+     "message": "L6: \ud83d\udd34 bug: `discounted` is multiplied by `(1 - pct / 100)` a second time, so `applyDiscount(100, 10)` returns 81 instead of 90. Return `discounted` unchanged ("
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "risk",
+     "message": "L2: \ud83d\udfe1 risk: placeholder uses the live-key prefix `sk_live_`, which trips secret scanners and invites copy-pasting a real live key into examples. Use a clearly "
+    },
+    {
+     "file": "docs/setup.md",
+     "line": 5,
+     "severity": "nit",
+     "message": "L5: \ud83d\udd35 nit: inline `AKIAIOSFODNN7EXAMPLE` is fine as AWS's canonical doc placeholder, but add a one-line note that it is a dummy value so scanners and readers d"
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 0.6666666666666666,
+    "findings": 3,
+    "docKeyFalsePositives": 1
+   }
+  },
+  {
+   "model": "deepseek/deepseek-v4.1-flash",
+   "fixture": "ocellus",
+   "rep": 0,
+   "error": "\u2298 code-review failed   OpenRouter completion failed for all candidate models: The operation was   aborted due to timeout",
+   "latencyS": 120.392,
+   "totalCostUsd": 0
+  },
+  {
+   "model": "deepseek/deepseek-v4-flash",
+   "fixture": "demo",
+   "rep": 2,
+   "mode": "realtime",
+   "latencyS": 11.37,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.000104664,
+   "codeCostUsd": 0,
+   "codeCalls": 1,
+   "tokens": 3993,
+   "summary": "2 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 7,
+     "severity": "bug",
+     "message": "L7: \ud83d\udd34 bug: discount applied twice because `discounted * (1 - pct / 100)` reapplies the same factor. Remove the second multiplication and return `discounted` di"
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "bug",
+     "message": "L2: \ud83d\udd34 bug: hardcoded live `sk_live_...` key leaked into example file. Replace with a test key, e.g. `sk_test_...`, or a placeholder like `sk_live_<your-key-her"
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 1,
+    "findings": 2,
+    "docKeyFalsePositives": 0
+   }
+  },
+  {
+   "model": "deepseek/deepseek-v4-flash",
+   "fixture": "demo",
+   "rep": 3,
+   "mode": "realtime",
+   "latencyS": 15.287,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.000115794,
+   "codeCostUsd": 0,
+   "codeCalls": 1,
+   "tokens": 4347,
+   "summary": "3 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "bug",
+     "message": "L2: \ud83d\udd34 bug: Example contains a real-looking Stripe secret key `sk_live_51...`. Replace with a placeholder like `sk_test_...` or `your_stripe_secret_key`."
+    },
+    {
+     "file": "src/discount.ts",
+     "line": 6,
+     "severity": "bug",
+     "message": "L6: \ud83d\udd34 bug: Discount percentage applied twice, producing wrong final price. Remove the second multiplication: return `discounted` directly."
+    },
+    {
+     "file": "docs/setup.md",
+     "line": 6,
+     "severity": "bug",
+     "message": "L6: \ud83d\udfe1 risk: Docs encourage setting `AWS_ACCESS_KEY_ID` in shell without warning against committing the `.env` file. Add explicit 'Never commit .env' note."
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 0.6666666666666666,
+    "findings": 3,
+    "docKeyFalsePositives": 1
+   }
+  },
+  {
+   "model": "deepseek/deepseek-v4-flash",
+   "fixture": "demo",
+   "rep": 4,
+   "mode": "realtime",
+   "latencyS": 12.844,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.000104076,
+   "codeCostUsd": 0,
+   "codeCalls": 1,
+   "tokens": 3960,
+   "summary": "2 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 7,
+     "severity": "bug",
+     "message": "L7: \ud83d\udd34 bug: discount percentage applied twice, reducing price by (1-pct/100)^2. Remove the duplicate multiplication `* (1 - pct / 100)` from the return statemen"
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "risk",
+     "message": "L2: \ud83d\udfe1 risk: live Stripe secret key exposed in `.env.example`. Replace with a placeholder like `sk_live_REDACTED` or a test key."
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 1,
+    "findings": 2,
+    "docKeyFalsePositives": 0
+   }
+  },
+  {
+   "model": "deepseek/deepseek-v4-flash",
+   "fixture": "ocellus",
+   "rep": 1,
+   "mode": "realtime",
+   "latencyS": 254.663,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.000612402,
+   "codeCostUsd": 0,
+   "codeCalls": 8,
+   "tokens": 64915,
+   "summary": "Several correctness bugs (hoisting, stale file reads, undefined-\u2192string coercions), security/reliability risks (credential leakage, path traversal, type boundary mismatches), and minor conventions. Th",
+   "findings": [
+    {
+     "file": "src/detect.ts",
+     "line": 118,
+     "severity": "bug",
+     "message": "L118: `child` is referenced before `let settled = false` declaration in the same scope. Move `let settled = false` before `const child = execFile(...)`."
+    },
+    {
+     "file": "src/detect.ts",
+     "line": 109,
+     "severity": "bug",
+     "message": "L109: `settled = true` inside the execFile callback is hoisted\u202f\u2013\u202f`settled` is declared after `execFile` returns. Move `let settled = false` to before `execFile`"
+    },
+    {
+     "file": "src/detect.ts",
+     "line": 67,
+     "severity": "bug",
+     "message": "L67: `env` can be `undefined` and passed as `{ ...baseEnv, ...undefined }` \u2013 fine, but if `opts.baseEnv` is supplied and `env` is `undefined`, `env` becomes `un"
+    },
+    {
+     "file": "src/detect.ts",
+     "line": 97,
+     "severity": "risk",
+     "message": "L97: `A0_CHILD_ENV_KEYS` includes `A0_USERNAME` and `A0_PASSWORD`. These credential-like values leak into every child process. Remove them unless the CLI truly "
+    },
+    {
+     "file": "src/detect.ts",
+     "line": 96,
+     "severity": "risk",
+     "message": "L96: `AGENT_ZERO_HOST` in allowlist may carry embedded credentials (`http://user:pass@host`). Add a check or strip credentials when building child env."
+    },
+    {
+     "file": "src/driver/target.ts",
+     "line": 34,
+     "severity": "bug",
+     "message": "L34: `bounded` assigned from a default when `timeoutMs` is absent; error message prints `bounded` which may be ambiguous. Use `bounded` directly in error string"
+    },
+    {
+     "file": "src/pipeline/verify.ts",
+     "line": 446,
+     "severity": "bug",
+     "message": "L446: `detail` is read before the runner write may have completed, so a stale file from a prior run can be picked up. Move the `readJson` call after the try/cat"
+    },
+    {
+     "file": "src/pipeline/verify.ts",
+     "line": 458,
+     "severity": "bug",
+     "message": "L458: `detail` is used to set `reportPath` even when the runner threw (line 453 sets `detail` to `undefined` on error). Add `runnerError === undefined` guard be"
+    },
+    {
+     "file": "src/report/comment.ts",
+     "line": 122,
+     "severity": "bug",
+     "message": "L122: `cell(s ?? '')` coerces `undefined` to `'undefined'`. Replace `s ?? ''` with `s === undefined ? '' : String(s)`."
+    },
+    {
+     "file": "src/report/comment.ts",
+     "line": 130,
+     "severity": "bug",
+     "message": "L130: `code(s)` receives `undefined` from `shortSha`; `cell()` converts it to `'undefined'` then backtick-fences it. Use `s == null ? '' : cell(s)`."
+    },
+    {
+     "file": "src/report/comment.ts",
+     "line": 207,
+     "severity": "bug",
+     "message": "L207: `formattedCost` variable is used but never defined; `costUsd` may be `undefined`. Add guard: `costUsd === undefined ? 'N/A' : formatUsd(costUsd)`."
+    },
+    {
+     "file": "src/review/secrets.ts",
+     "line": 155,
+     "severity": "bug",
+     "message": "L155: overflow findings message hardcodes `L0` but the overflow is a count-only report with no specific line. Drop line number or use `L-`."
+    },
+    {
+     "file": "src/vision/decisions.ts",
+     "line": 194,
+     "severity": "bug",
+     "message": "L194: `classifyStatus` consumes `headers` but replaces original fallback messages like `\"decide: HTTP 503 provider overloaded\"` with `classifyHttpStatus` output"
+    },
+    {
+     "file": "src/report/comment.ts",
+     "line": 36,
+     "severity": "risk",
+     "message": "L36: `reportHtml` in `CommentMeta` is a user-controlled path. No validation that it doesn't contain path traversal. Validate with `path.basename` or a glob allo"
+    },
+    {
+     "file": "src/report/manifest.ts",
+     "line": 282,
+     "severity": "risk",
+     "message": "L282: `safeName` uses `replace(/[^\\w.-]/g, '-')` which still allows `..` after transformation (e.g., `foo/../bar` \u2192 `foo..-bar`). Add check for `..` or use a st"
+    },
+    {
+     "file": "src/report/comment.ts",
+     "line": 33,
+     "severity": "risk",
+     "message": "L33: `maskSecrets` is called twice per row cell (once in `cell`, once in callers that need raw text). Cache the masked string after first call or document that "
+    },
+    {
+     "file": "src/executor/a0.ts",
+     "line": 227,
+     "severity": "risk",
+     "message": "L227: `cliVersion` passes `buildA0ChildEnv(input.env)` to exec, but `deps.cli` may be a relative path resolved in the child's cwd. Document that `cli` must be a"
+    },
+    {
+     "file": "src/review/secrets.ts",
+     "line": 43,
+     "severity": "risk",
+     "message": "L43: new `p` field on findings re-exports `pLive` which was extracted from a confidence-model response. Ensure `p` is omitted entirely for suppressed candidates"
+    }
+   ],
+   "score": {
+    "postFilter": 18,
+    "bug": 11,
+    "risk": 7,
+    "nit": 0,
+    "q": 0,
+    "bugRisk": 18,
+    "invalidDropped": 0,
+    "preFilter": 18
+   }
+  },
+  {
+   "model": "z-ai/glm-5.3",
+   "fixture": "demo",
+   "rep": 2,
+   "error": "\u2298 code-review failed   OpenRouter completion failed for all candidate models: The operation was   aborted due to timeout",
+   "latencyS": 120.418,
+   "totalCostUsd": 0
+  },
+  {
+   "model": "z-ai/glm-5.3",
+   "fixture": "demo",
+   "rep": 3,
+   "mode": "realtime",
+   "latencyS": 54.031,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.019484942399999997,
+   "codeCostUsd": 0.0193796064,
+   "codeCalls": 1,
+   "tokens": 10814,
+   "summary": "2 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 6,
+     "severity": "bug",
+     "message": "L6: \ud83d\udd34 bug: discount applied twice \u2014 applyDiscount(100, 10) returns 81, not 90. Return price * (1 - pct / 100) once and delete the seeded-bug comment at L4-5."
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "risk",
+     "message": "L2: \ud83d\udfe1 risk: live-format secret sk_live_... committed in a tracked file \u2014 if real it is leaked (rotate now), and even as a fake it normalizes live keys and trip"
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 1,
+    "findings": 2,
+    "docKeyFalsePositives": 0
+   }
+  },
+  {
+   "model": "z-ai/glm-5.3",
+   "fixture": "demo",
+   "rep": 4,
+   "mode": "realtime",
+   "latencyS": 39.133,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.01356335856,
+   "codeCostUsd": 0.01344592656,
+   "codeCalls": 1,
+   "tokens": 9115,
+   "summary": "3 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 6,
+     "severity": "bug",
+     "message": "L6: \ud83d\udd34 bug: discount applied twice, so `applyDiscount(100, 10)` returns 81 instead of 90. Return `discounted` unchanged and drop the bug-documenting comment."
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "risk",
+     "message": "L2: \ud83d\udfe1 risk: example value uses live-key format `sk_live_...`, which trips secret scanners and normalizes live keys in local config. Use a test-mode placeholder"
+    },
+    {
+     "file": "docs/setup.md",
+     "line": 7,
+     "severity": "nit",
+     "message": "L7-8: \ud83d\udd35 nit: docs tell readers to set `AWS_ACCESS_KEY_ID` 'e.g.' to the AWS docs placeholder `AKIAIOSFODNN7EXAMPLE`, which cannot authenticate. Instruct reader"
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 0.6666666666666666,
+    "findings": 3,
+    "docKeyFalsePositives": 1
+   }
+  },
+  {
+   "model": "z-ai/glm-5.3",
+   "fixture": "ocellus",
+   "rep": 0,
+   "error": "\u2298 code-review failed   OpenRouter completion failed for all candidate models: The operation was   aborted due to timeout",
+   "latencyS": 120.421,
+   "totalCostUsd": 0
+  },
+  {
+   "model": "z-ai/glm-5.3-flash",
+   "fixture": "demo",
+   "rep": 2,
+   "mode": "realtime",
+   "latencyS": 24.442,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.0005529080454,
+   "codeCostUsd": 0.0004359380454,
+   "codeCalls": 1,
+   "tokens": 4655,
+   "summary": "3 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 8,
+     "severity": "bug",
+     "message": "L8: \ud83d\udd34 bug: `pct` is applied twice, so a 10% discount returns 81% of `price` instead of 90%. Return `price * (1 - pct / 100)`."
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "risk",
+     "message": "L2: \ud83d\udfe1 risk: example value uses `sk_live_` prefix, which trains users to paste live-mode keys and trips secret scanners. Use `sk_test_your_key_here` or an empty"
+    },
+    {
+     "file": "docs/setup.md",
+     "line": 5,
+     "severity": "nit",
+     "message": "L5: \ud83d\udd35 nit: `AKIAIOSFODNN7EXAMPLE` is the canonical AWS docs example; fine as-is, but labeling it explicitly as a non-real placeholder avoids scanner noise."
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 0.6666666666666666,
+    "findings": 3,
+    "docKeyFalsePositives": 1
+   }
+  },
+  {
+   "model": "z-ai/glm-5.3-flash",
+   "fixture": "demo",
+   "rep": 3,
+   "mode": "realtime",
+   "latencyS": 12.194,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.0004006114242,
+   "codeCostUsd": 0.0002952334242,
+   "codeCalls": 1,
+   "tokens": 4143,
+   "summary": "2 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 5,
+     "severity": "bug",
+     "message": "L5: \ud83d\udd34 bug: `discounted` is discounted a second time, so `applyDiscount(100, 10)` returns 81 instead of 90. Return `discounted` directly."
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "risk",
+     "message": "L2: \ud83d\udfe1 risk: `sk_live_` prefix will trigger secret scanners and CI secret-blocking even though the key is fake. Use an obviously-fake test prefix like `sk_test_"
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 1,
+    "findings": 2,
+    "docKeyFalsePositives": 0
+   }
+  },
+  {
+   "model": "z-ai/glm-5.3-flash",
+   "fixture": "demo",
+   "rep": 4,
+   "mode": "realtime",
+   "latencyS": 22.469,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.000641696379,
+   "codeCostUsd": 0.000524474379,
+   "codeCalls": 1,
+   "tokens": 4799,
+   "summary": "3 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 7,
+     "severity": "bug",
+     "message": "L7: \ud83d\udd34 bug: discount is applied twice \u2014 `discounted * (1 - pct / 100)` compounds the percentage (10% yields 81% of price). Return `discounted` directly."
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "nit",
+     "message": "L2: \ud83d\udd35 nit: example key uses `sk_live_` prefix even though fake; use `sk_test_` or `<your-stripe-secret-key>` so no real key can be pasted into the same slot un"
+    },
+    {
+     "file": "docs/setup.md",
+     "line": 5,
+     "severity": "nit",
+     "message": "L5: \ud83d\udd35 nit: example embeds a credential-shaped literal `AKIAIOSFODNN7EXAMPLE`; use a placeholder like `<your-access-key-id>` to keep docs key-format-agnostic an"
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 0.6666666666666666,
+    "findings": 3,
+    "docKeyFalsePositives": 1
+   }
+  },
+  {
+   "model": "z-ai/glm-5.3-flash",
+   "fixture": "ocellus",
+   "rep": 0,
+   "error": "\u2298 code-review failed   OpenRouter completion failed for all candidate models: The operation was   aborted due to timeout",
+   "latencyS": 120.413,
+   "totalCostUsd": 0
+  },
+  {
+   "model": "qwen/qwen3-coder",
+   "fixture": "demo",
+   "rep": 2,
+   "mode": "realtime",
+   "latencyS": 2.591,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.0007748496,
+   "codeCostUsd": 0.0006605676,
+   "codeCalls": 1,
+   "tokens": 4244,
+   "summary": "3 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 5,
+     "severity": "bug",
+     "message": "L5: \ud83d\udd34 bug: Discount is applied twice, leading to incorrect final price. Remove the second discount application."
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "risk",
+     "message": "L2: \ud83d\udfe1 risk: Example Stripe key suggests live mode usage. Use test keys in examples."
+    },
+    {
+     "file": "docs/setup.md",
+     "line": 6,
+     "severity": "risk",
+     "message": "L6: \ud83d\udfe1 risk: AWS example credentials may be mistaken for real ones. Use placeholder values like `YOUR_ACCESS_KEY` instead."
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 0.6666666666666666,
+    "findings": 3,
+    "docKeyFalsePositives": 1
+   }
+  },
+  {
+   "model": "qwen/qwen3-coder",
+   "fixture": "demo",
+   "rep": 3,
+   "mode": "realtime",
+   "latencyS": 2.73,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.0007496076,
+   "codeCostUsd": 0.0006356196,
+   "codeCalls": 1,
+   "tokens": 4223,
+   "summary": "3 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 5,
+     "severity": "bug",
+     "message": "L5: \ud83d\udd34 bug: Discount is applied twice, leading to incorrect final price. Remove the second discount application."
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "risk",
+     "message": "L2: \ud83d\udfe1 risk: Example contains a live Stripe key prefix. Replace with a clearly fake key prefix."
+    },
+    {
+     "file": "docs/setup.md",
+     "line": 6,
+     "severity": "risk",
+     "message": "L6: \ud83d\udfe1 risk: AWS example uses real-looking credentials. Use obviously fake placeholders."
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 0.6666666666666666,
+    "findings": 3,
+    "docKeyFalsePositives": 1
+   }
+  },
+  {
+   "model": "qwen/qwen3-coder",
+   "fixture": "demo",
+   "rep": 4,
+   "mode": "realtime",
+   "latencyS": 3.267,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.0007745976,
+   "codeCostUsd": 0.0006605676,
+   "codeCalls": 1,
+   "tokens": 4238,
+   "summary": "3 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 5,
+     "severity": "bug",
+     "message": "L5: \ud83d\udd34 bug: Discount is applied twice, leading to incorrect final price. Remove the second discount application."
+    },
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "risk",
+     "message": "L2: \ud83d\udfe1 risk: Example contains a live Stripe key prefix. Replace with a clearly fake key prefix."
+    },
+    {
+     "file": "docs/setup.md",
+     "line": 6,
+     "severity": "risk",
+     "message": "L6: \ud83d\udfe1 risk: AWS example uses valid-looking credentials. Use clearly fake example credentials."
+    }
+   ],
+   "score": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 0.6666666666666666,
+    "findings": 3,
+    "docKeyFalsePositives": 1
+   }
+  },
+  {
+   "model": "qwen/qwen3-coder",
+   "fixture": "ocellus",
+   "rep": 1,
+   "mode": "realtime",
+   "latencyS": 32.127,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.0170469246,
+   "codeCostUsd": 0.0164264166,
+   "codeCalls": 8,
+   "tokens": 60230,
+   "summary": "This PR introduces several correctness bugs and security risks that must be addressed before merging. Key issues include unsafe destructuring, incorrect budget logic, flawed error handling, and potent",
+   "findings": [
+    {
+     "file": "src/config.ts",
+     "line": 441,
+     "severity": "bug",
+     "message": "L441: \ud83d\udd34 bug: `resolved.a0` destructuring assumes object existence. Add null check before destructuring."
+    },
+    {
+     "file": "src/driver/browser.ts",
+     "line": 117,
+     "severity": "bug",
+     "message": "L117: \ud83d\udd34 bug: `driver` is not defined in scope. Rename `new BrowserDriver(...)` to `driver`."
+    },
+    {
+     "file": "src/driver/target.ts",
+     "line": 20,
+     "severity": "bug",
+     "message": "L20: \ud83d\udd34 bug: `timeoutMs` can be NaN if not finite. Use `bounded` instead of `timeoutMs` in error message."
+    },
+    {
+     "file": "src/engine/prompts.ts",
+     "line": 170,
+     "severity": "bug",
+     "message": "L170: \ud83d\udd34 bug: Casting to `ExploreAction` without checking `action.action`. Add type guard before accessing `url`."
+    },
+    {
+     "file": "src/executor/a0.ts",
+     "line": 174,
+     "severity": "bug",
+     "message": "L174: \ud83d\udd34 bug: `octets[0] === 0` allows 0.0.0.0 through, which is not loopback. Change to `octets[0] !== 127` to match intent."
+    },
+    {
+     "file": "src/executor/a0.ts",
+     "line": 325,
+     "severity": "bug",
+     "message": "L325: \ud83d\udd34 bug: `res.output !== ''` discards meaningful empty-string outputs from agent. Check `res.output != null` instead."
+    },
+    {
+     "file": "src/pipeline/budget.ts",
+     "line": 66,
+     "severity": "bug",
+     "message": "L66: \ud83d\udd34 bug: `budget.spentUsd > budget.limitUsd + USD_EPSILON` should be `budget.spentUsd + nextCostUsd > budget.limitUsd + USD_EPSILON`. Fix budget check logic"
+    },
+    {
+     "file": "src/pipeline/verify.ts",
+     "line": 224,
+     "severity": "bug",
+     "message": "L224: \ud83d\udd34 bug: `laneDetailUsage` falls back to `base.model` when `detail?.model` is nullish, but `base` is derived from `emptyUsage(provider)` which may not matc"
+    },
+    {
+     "file": "src/report/comment.ts",
+     "line": 254,
+     "severity": "bug",
+     "message": "L254: \ud83d\udd34 bug: `PROOF_LEVELS` is cast to `readonly string[]` but may contain non-string values. Ensure all elements are strings or filter non-strings."
+    },
+    {
+     "file": "src/report/comment.ts",
+     "line": 255,
+     "severity": "bug",
+     "message": "L255: \ud83d\udd34 bug: `indexOf` on `PROOF_LEVELS` may return -1, leading to `PROOF_LEVELS[-1]`. Handle -1 case to avoid `undefined`."
+    },
+    {
+     "file": "src/report/comment.ts",
+     "line": 420,
+     "severity": "bug",
+     "message": "L420: \ud83d\udd34 bug: `Object.hasOwn(sev, f.severity)` allows prototype pollution if `f.severity` is crafted. Use `f.severity in sev` or validate against known keys."
+    },
+    {
+     "file": "src/report/run.ts",
+     "line": 105,
+     "severity": "bug",
+     "message": "L105: \ud83d\udd34 bug: `ok` logic allows empty test suites to pass when they should fail closed. Ensure runs with zero tests are marked as failed unless `exploreEvidence"
+    },
+    {
+     "file": "src/vision/openrouter.ts",
+     "line": 133,
+     "severity": "bug",
+     "message": "L133: \ud83d\udd34 bug: Error message prefix is hardcoded and may mismatch actual failure reason. Use dynamic prefix based on `errors` content."
+    },
+    {
+     "file": "src/vision/openrouter.ts",
+     "line": 205,
+     "severity": "bug",
+     "message": "L205: \ud83d\udd34 bug: `classifyHttpStatus` result may be ignored silently. Ensure non-null result is used or handle null case explicitly."
+    },
+    {
+     "file": "src/detect.ts",
+     "line": 280,
+     "severity": "risk",
+     "message": "L280: \ud83d\udfe1 risk: `fetch` redirect policy changed from 'manual' to 'follow'. Ensure redirect targets are trusted."
+    },
+    {
+     "file": "src/driver/browser.ts",
+     "line": 130,
+     "severity": "risk",
+     "message": "L130: \ud83d\udfe1 risk: Captured console errors may contain sensitive data. Truncate or sanitize `text` more aggressively."
+    },
+    {
+     "file": "src/executor/a0.ts",
+     "line": 270,
+     "severity": "risk",
+     "message": "L270: \ud83d\udfe1 risk: `buildA0ChildEnv` called twice with same input. Pass precomputed env to `cliVersion` to avoid redundant work."
+    },
+    {
+     "file": "src/pipeline/verify.ts",
+     "line": 296,
+     "severity": "risk",
+     "message": "L296: \ud83d\udfe1 risk: Stale `code-review.json` may be read if runner fails after writing it. Add file timestamp validation or atomic write+rename."
+    },
+    {
+     "file": "src/pipeline/verify.ts",
+     "line": 354,
+     "severity": "risk",
+     "message": "L354: \ud83d\udfe1 risk: Stale `run.json` may be read if runner fails after writing it. Add file timestamp validation or atomic write+rename."
+    },
+    {
+     "file": "src/pipeline/verify.ts",
+     "line": 414,
+     "severity": "risk",
+     "message": "L414: \ud83d\udfe1 risk: Stale `<lane>-lane.json` may be read if runner fails after writing it. Add file timestamp validation or atomic write+rename."
+    },
+    {
+     "file": "src/report/comment.ts",
+     "line": 403,
+     "severity": "risk",
+     "message": "L403: \ud83d\udfe1 risk: `m[2] !== ''` assumes `m` is non-null. Add null check for `m` before accessing `m[2]`."
+    }
+   ],
+   "score": {
+    "postFilter": 21,
+    "bug": 14,
+    "risk": 7,
+    "nit": 0,
+    "q": 0,
+    "bugRisk": 21,
+    "invalidDropped": 0,
+    "preFilter": 21
+   }
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "fixture": "demo",
+   "rep": 2,
+   "mode": "realtime",
+   "latencyS": 7.536,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.0001534779,
+   "codeCostUsd": 6.51519e-05,
+   "codeCalls": 1,
+   "tokens": 3559,
+   "summary": "2 finding(s) include bug or risk 1 finding(s) dropped: anchored outside the reviewed diff.",
+   "findings": [
+    {
+     "file": "docs/setup.md",
+     "line": 6,
+     "severity": "risk",
+     "message": "L6\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u2026\u00a0\u00a0..."
+    }
+   ],
+   "score": {
+    "recall": 0,
+    "t1": false,
+    "t2": false,
+    "precision": 0,
+    "findings": 1,
+    "docKeyFalsePositives": 1
+   },
+   "validation": {
+    "dropped": 1,
+    "byReason": {
+     "line_beyond_file": 1
+    }
+   }
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "fixture": "demo",
+   "rep": 3,
+   "mode": "realtime",
+   "latencyS": 4.069,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.00013623,
+   "codeCostUsd": 4.95e-05,
+   "codeCalls": 1,
+   "tokens": 3428,
+   "summary": "1 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": ".env.example",
+     "line": 2,
+     "severity": "bug",
+     "message": "L2: \ud83d\udd34 bug: Real\u00a0..."
+    }
+   ],
+   "score": {
+    "recall": 0.5,
+    "t1": false,
+    "t2": true,
+    "precision": 1,
+    "findings": 1,
+    "docKeyFalsePositives": 0
+   }
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "fixture": "demo",
+   "rep": 4,
+   "mode": "realtime",
+   "latencyS": 4.354,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.000139545,
+   "codeCostUsd": 4.7817e-05,
+   "codeCalls": 1,
+   "tokens": 3537,
+   "summary": "1 finding(s) include bug or risk",
+   "findings": [
+    {
+     "file": "src/discount.ts",
+     "line": 4,
+     "severity": "bug",
+     "message": "The\u00a0\u00a0\u2026"
+    }
+   ],
+   "score": {
+    "recall": 0.5,
+    "t1": true,
+    "t2": false,
+    "precision": 1,
+    "findings": 1,
+    "docKeyFalsePositives": 0
+   }
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "fixture": "ocellus",
+   "rep": 1,
+   "mode": "realtime",
+   "latencyS": 251.866,
+   "verdict": "needs_changes",
+   "skipped": false,
+   "totalCostUsd": 0.0047166396,
+   "codeCostUsd": 0.0041954616,
+   "codeCalls": 8,
+   "tokens": 71526,
+   "summary": "The changes introduce error\u2011capture in the browser driver, robust ready\u2011polling for targets, an explore\u2011action schema, and a GitHub write helper. Most updates are sound, but several high\u2011confidence bu",
+   "findings": [
+    {
+     "file": "src/config.ts",
+     "line": 57,
+     "severity": "bug",
+     "message": "L57: `Explore.maxSteps` can remain undefined after merging defaults, causing later code to assume a number. Ensure it always has a numeric default."
+    },
+    {
+     "file": "src/driver/target.ts",
+     "line": 33,
+     "severity": "risk",
+     "message": "L33: Uses `AbortSignal.timeout`, which may be unavailable in older Node versions. Provide a polyfill or fallback to a manual AbortController with setTimeout."
+    },
+    {
+     "file": "src/executor/a0.ts",
+     "line": 27,
+     "severity": "risk",
+     "message": "L27: Directly passing `process.env` to `buildA0ChildEnv` may expose unwanted environment variables. Filter to an allow\u2011list before forwarding."
+    },
+    {
+     "file": "src/pipeline/verify.ts",
+     "line": 23,
+     "severity": "risk",
+     "message": "L23: Requiring `package.json` without error handling can crash the process if the file is missing or malformed. Wrap in try/catch or provide a fallback version."
+    },
+    {
+     "file": "src/vision/openrouter.ts",
+     "line": 3,
+     "severity": "bug",
+     "message": "L3: `AbortSignal.timeout` may not exist in all runtimes. Add a fallback for environments lacking this method."
+    },
+    {
+     "file": "src/report/comment.ts",
+     "line": 1,
+     "severity": "risk",
+     "message": "L1: Imports many additional modules, increasing load time. Consolidate imports or lazy\u2011load where possible."
+    }
+   ],
+   "score": {
+    "postFilter": 6,
+    "bug": 2,
+    "risk": 4,
+    "nit": 0,
+    "q": 0,
+    "bugRisk": 6,
+    "invalidDropped": 0,
+    "preFilter": 6
+   }
+  }
+ ],
+ "batch": [
+  {
+   "model": "qwen/qwen3-coder",
+   "mode": "batch",
+   "error": "{\"error\":{\"message\":\"Model 'qwen/qwen3-coder' does not have a :batch endpoint.\",\"code\":400}}"
+  },
+  {
+   "model": "deepseek/deepseek-v4-flash",
+   "mode": "batch",
+   "error": "{\"error\":{\"message\":\"Model 'deepseek/deepseek-v4-flash' does not have a :batch endpoint.\",\"code\":400}}"
+  },
+  {
+   "model": "google/gemini-2.5-flash-lite",
+   "mode": "batch",
+   "batchId": "batch-1791081716-Dl1BYbnpcLhdmCWXa5f3",
+   "status": "completed",
+   "latencyS": 501.937,
+   "parseErrors": 1,
+   "costUsd": 0.00347355,
+   "usage": {
+    "prompt_tokens": 43739,
+    "completion_tokens": 6433,
+    "total_tokens": 50172,
+    "cost": 0.00347355,
+    "is_byok": false
+   },
+   "requestCounts": {
+    "total": 8,
+    "completed": 8,
+    "failed": 0
+   },
+   "demo": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 0.6666666666666666,
+    "findings": 3,
+    "docKeyFalsePositives": 1,
+    "preFilter": 3,
+    "dropped": 0
+   },
+   "ocellus": {
+    "postFilter": 32,
+    "bug": 8,
+    "risk": 0,
+    "nit": 24,
+    "q": 0,
+    "bugRisk": 8,
+    "invalidDropped": 14,
+    "preFilter": 46
+   },
+   "findings": {
+    "demo": [
+     {
+      "file": "src/discount.ts",
+      "line": 5,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L5: \ud83d\udd34 bug: The discount percentage is applied twice. Remove the second `* (1 - pct / 100)`."
+     },
+     {
+      "file": ".env.example",
+      "line": 2,
+      "severity": "risk",
+      "category": "security",
+      "message": "L2: \ud83d\udfe1 risk: `STRIPE_SECRET_KEY` should not be a live key in an example file. Use a test key instead."
+     },
+     {
+      "file": "docs/setup.md",
+      "line": 5,
+      "severity": "risk",
+      "category": "security",
+      "message": "L5: \ud83d\udfe1 risk: AWS credentials should not be set directly in the shell for production. Use instance profiles or IAM roles."
+     }
+    ],
+    "ocellus": [
+     {
+      "file": "src/config.ts",
+      "line": 80,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L80: \ud83d\udd35 nit: `ReviewProfile[]` type should be imported from `./review/packs.js` for clarity."
+     },
+     {
+      "file": "src/config.ts",
+      "line": 267,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L267: \ud83d\udd35 nit: Documentation for `Explore.enabled` should specify default `false`."
+     },
+     {
+      "file": "src/config.ts",
+      "line": 285,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L285: \ud83d\udd35 nit: Documentation for `AppLane.task` should specify default `undefined`."
+     },
+     {
+      "file": "src/config.ts",
+      "line": 447,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L447: \ud83d\udd35 nit: Default value for `reportRetention` should be explicitly `undefined` instead of relying on implicit behavior."
+     },
+     {
+      "file": "src/detect.ts",
+      "line": 21,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L21: \ud83d\udd35 nit: Add documentation for `ExecResult.timedOut` and `ExecResult.signal`."
+     },
+     {
+      "file": "src/detect.ts",
+      "line": 26,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L26: \ud83d\udd35 nit: Add documentation for `ExecResult.spawnError`."
+     },
+     {
+      "file": "src/detect.ts",
+      "line": 35,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L35: \ud83d\udd35 nit: Add documentation for `opts.baseEnv` in `ExecFn`."
+     },
+     {
+      "file": "src/detect.ts",
+      "line": 57,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L57: \ud83d\udd35 nit: Clarify the purpose of `maxBuffer` in `execFile` options."
+     },
+     {
+      "file": "src/detect.ts",
+      "line": 110,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L110: \ud83d\udd35 nit: Add documentation for `A0_CHILD_ENV_KEYS`."
+     },
+     {
+      "file": "src/detect.ts",
+      "line": 134,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L134: \ud83d\udd35 nit: Add documentation for `buildA0ChildEnv`."
+     },
+     {
+      "file": "src/detect.ts",
+      "line": 164,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L164: \ud83d\udd35 nit: Add documentation for `redirect: 'follow'` in `fetch` options."
+     },
+     {
+      "file": "src/detect.ts",
+      "line": 173,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L173: \ud83d\udd35 nit: Add documentation for the `getReader()` call and `chunks` logic."
+     },
+     {
+      "file": "src/driver/browser.ts",
+      "line": 136,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L136: \ud83d\udd34 bug: `page.url()` can be null or invalid before navigation. Add guard for `new URL(page.url()).origin`."
+     },
+     {
+      "file": "src/driver/browser.ts",
+      "line": 136,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L136: \ud83d\udd34 bug: `page.url()` can return 'null' origin, which is not a valid URL. Treat 'null' origin explicitly."
+     },
+     {
+      "file": "src/driver/target.ts",
+      "line": 31,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L31: \ud83d\udd34 bug: `timeoutMs` can be non-finite or zero, leading to incorrect deadline calculation. Ensure `bounded` is always a positive finite number."
+     },
+     {
+      "file": "src/evidence/ci.ts",
+      "line": 99,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L99: \ud83d\udd34 bug: `ghWrite` does not handle non-JSON responses gracefully. If `res.json()` fails, it returns `undefined` which might cause issues later. Add more robust error handling for JSON parsing."
+     },
+     {
+      "file": "src/evidence/ci.ts",
+      "line": 114,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L114: \ud83d\udd34 bug: `ghWrite` incorrectly handles `AbortError`. It logs the error message as 'timeout' but should distinguish between a general AbortError and a specific timeout."
+     },
+     {
+      "file": "src/evidence/ci.ts",
+      "line": 139,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L139: \ud83d\udd34 bug: `fetchPrMeta` incorrectly assigns `baseSha` when `mergeBase` is undefined. It should default to `baseSha` only if `mergeBase` is truly unavailable and not just an empty string or null."
+     },
+     {
+      "file": "src/pipeline/verify.ts",
+      "line": 409,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L409: \ud83d\udd34 bug: `argusVersion` could throw if `package.json` is missing. Return 'unknown' in catch block."
+     },
+     {
+      "file": "src/pipeline/verify.ts",
+      "line": 428,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L428: \ud83d\udd34 bug: `manifest.lanes.review.reportPath` and `manifest.lanes.flow.reportPath` can be undefined, leading to potential errors when accessing `code-review.json` or `run.json`. Add checks for `undefined` before calling `readJson`."
+     },
+     {
+      "file": "src/probe/queue.ts",
+      "line": 73,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L73: \ud83d\udd35 nit: `ProbeRecord` has fields `path` and `content` that are only populated when `outcome` is 'reproduced'. Consider making these optional or clearly documenting when they are populated."
+     },
+     {
+      "file": "src/report/manifest.ts",
+      "line": 1,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L1: \ud83d\udd35 nit: Import 'readdir', 'unlink' from 'node:fs/promises'. Import 'join' from 'node:path'."
+     },
+     {
+      "file": "src/report/manifest.ts",
+      "line": 3,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L3: \ud83d\udd35 nit: Import 'writeAtomicJson' from '../fsutil.js'."
+     },
+     {
+      "file": "src/report/manifest.ts",
+      "line": 60,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L60: \ud83d\udd35 nit: Interface 'CacheSummary' should be defined before use."
+     },
+     {
+      "file": "src/report/manifest.ts",
+      "line": 73,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L73: \ud83d\udd35 nit: Interface 'RunIdentity' should be defined before use."
+     },
+     {
+      "file": "src/report/run.ts",
+      "line": 1,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L1: \ud83d\udd35 nit: Import 'writeAtomicJson' from '../fsutil.js'."
+     },
+     {
+      "file": "src/report/run.ts",
+      "line": 3,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L3: \ud83d\udd35 nit: Import 'HealEvent', 'TdAssertRecord', 'TdStepRecord' from '../api.js'."
+     },
+     {
+      "file": "src/review/secrets.ts",
+      "line": 9,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L9: \ud83d\udd35 nit: Import 'debug' from '../debug.js'."
+     },
+     {
+      "file": "src/vision/decisions.ts",
+      "line": 1,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L1: \ud83d\udd35 nit: Import 'debug' from '../debug.js'."
+     },
+     {
+      "file": "src/vision/openrouter.ts",
+      "line": 31,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L31: \ud83d\udd35 nit: Constant `REQUEST_TIMEOUT_MS` is defined but not exported. Export if intended for external use, otherwise consider moving it inside the class or to a more local scope if only used by the constructor."
+     },
+     {
+      "file": "src/vision/openrouter.ts",
+      "line": 76,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L76: \ud83d\udd35 nit: The `_request` method is private and only used internally. This is fine, but consider if it could be made more general if other methods might need similar request logic with timeout."
+     },
+     {
+      "file": "src/vision/openrouter.ts",
+      "line": 130,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L130: \ud83d\udd35 nit: The error message for failing completion attempts could be more specific, e.g., including the models that failed. The new `pickProviderError` logic is good, but the fallback `Error` message might be improved."
+     }
+    ]
+   }
+  },
+  {
+   "model": "openai/gpt-oss-120b",
+   "mode": "batch",
+   "batchId": "batch-1791081717-C0MpBIiVDdnrLc6YksJX",
+   "status": "completed",
+   "latencyS": 540.819,
+   "parseErrors": 0,
+   "costUsd": 0.003624972,
+   "usage": {
+    "prompt_tokens": 39225,
+    "completion_tokens": 18117,
+    "total_tokens": 57342,
+    "cost": 0.003624972,
+    "is_byok": false
+   },
+   "requestCounts": {
+    "total": 8,
+    "completed": 8,
+    "failed": 0
+   },
+   "demo": {
+    "recall": 0.5,
+    "t1": true,
+    "t2": false,
+    "precision": 1,
+    "findings": 1,
+    "docKeyFalsePositives": 0,
+    "preFilter": 1,
+    "dropped": 0
+   },
+   "ocellus": {
+    "postFilter": 15,
+    "bug": 8,
+    "risk": 5,
+    "nit": 2,
+    "q": 0,
+    "bugRisk": 13,
+    "invalidDropped": 3,
+    "preFilter": 18
+   },
+   "findings": {
+    "demo": [
+     {
+      "file": "src/discount.ts",
+      "line": 5,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L5: \ud83d\udd34 bug: `applyDiscount` applies the discount a second time, returning 81% of the original price for a 10% discount. Return `discounted` directly.",
+      "suggestion": "return discounted",
+      "startLine": 5
+     }
+    ],
+    "ocellus": [
+     {
+      "file": "src/vision/openrouter.ts",
+      "line": 73,
+      "severity": "risk",
+      "category": "compatibility",
+      "message": "L73: \ud83d\udfe1 risk: `AbortSignal.timeout` may be unavailable in older Node.js or browser runtimes. Provide a fallback using `AbortController` with a manual setTimeout or polyfill."
+     },
+     {
+      "file": "src/detect.ts",
+      "line": 33,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L33: \ud83d\udd34 bug: Spreading `env` when it may be undefined throws a TypeError. Replace with `env: { ...baseEnv, ...(env ?? {}) }`."
+     },
+     {
+      "file": "src/detect.ts",
+      "line": 115,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L115: \ud83d\udd34 bug: `Buffer.concat(chunks)` receives Uint8Array elements, causing a TypeError. Convert each chunk to a Buffer first, e.g. `Buffer.concat(chunks.map(c => Buffer.from(c)))`."
+     },
+     {
+      "file": "src/report/comment.ts",
+      "line": 311,
+      "severity": "risk",
+      "category": "performance",
+      "message": "L311: \ud83d\udfe1 risk: `formatUsd(p.costUsd)` is called without checking for `undefined`. If `p.costUsd` is undefined, `formatUsd` may produce `$NaN` or throw. Guard the value before formatting, e.g., `p.costUsd !== undefined ? formatUsd(p.costUsd) : ''`."
+     },
+     {
+      "file": "src/report/comment.ts",
+      "line": 215,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L215: \ud83d\udd35 nit: `hasSuggestion` regex requires a preceding newline before the backticks, so a suggestion block at the very start of a file is ignored. Adjust the pattern to allow start\u2011of\u2011string, e.g., `/^(?:\\r?\\n)?(`{4,})suggestion\\r?\\n([\\s\\S]*?)\\r?\\n\\1/`."
+     },
+     {
+      "file": "src/driver/target.ts",
+      "line": 23,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "L23: \ud83d\udfe1 risk: `timeoutMs` <= 0 is silently replaced with the default 30\u202f000\u202fms, which may hide caller intent. Preserve zero/negative values or explicitly reject them."
+     },
+     {
+      "file": "src/driver/target.ts",
+      "line": 27,
+      "severity": "risk",
+      "category": "compatibility",
+      "message": "L27: \ud83d\udfe1 risk: `AbortSignal.timeout` is not available in Node versions prior to v15, causing a runtime TypeError. Use a polyfill or implement timeout via `AbortController` and `setTimeout`."
+     },
+     {
+      "file": "src/driver/browser.ts",
+      "line": 115,
+      "severity": "nit",
+      "category": "performance",
+      "message": "L115: \ud83d\udd35 nit: Capture listeners added in `_attachCaptureTaps` are never removed, potentially leaking event handlers if a driver is reused. Detach listeners in a driver teardown method."
+     },
+     {
+      "file": "src/report/manifest.ts",
+      "line": 276,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L276: \ud83d\udd34 bug: `archiveManifest` writes to a non\u2011existent directory, causing an unhandled exception. Ensure the target directory exists (e.g., `await mkdir(dir, { recursive: true })` before calling `writeAtomicJson`."
+     },
+     {
+      "file": "src/review/secrets.ts",
+      "line": 150,
+      "severity": "risk",
+      "category": "convention",
+      "message": "L150: \ud83d\udfe1 risk: `maskFindingMessage` omits the required emoji and severity prefix, breaking the expected finding message format. Restore the prefix (`${adjudicated ? '\ud83d\udd34 bug' : '\ud83d\udfe1 risk'}`) in the returned string."
+     },
+     {
+      "file": "src/executor/a0.ts",
+      "line": 124,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L124: \ud83d\udd34 bug: IPv6 unspecified address `[::]` is treated as loopback. It is not a loopback address, so the check should not return true. Remove `[::]` from the loopback condition."
+     },
+     {
+      "file": "src/executor/a0.ts",
+      "line": 122,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L122: \ud83d\udd34 bug: IPv6 loopback check compares `host` to `'[::1]'` and `'[::]'`. `URL.hostname` strips brackets, so the comparison never matches. Compare to `'::1'` (and drop `'[::]'`)."
+     },
+     {
+      "file": "src/executor/a0.ts",
+      "line": 130,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L130: \ud83d\udd34 bug: IPv4\u2011mapped IPv6 regex includes brackets (`/^\\[::ffff:...\\]$/`). `URL.hostname` does not contain brackets, so IPv4\u2011mapped loopback addresses are not detected. Remove the surrounding `\\[` and `\\]` from the pattern."
+     },
+     {
+      "file": "src/pipeline/verify.ts",
+      "line": 215,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L215: \ud83d\udd34 bug: `laneStart` for the flow lane omits the `startedAt` argument, causing inaccurate start timestamps. Include `startedAt` when invoking `laneStart`."
+     },
+     {
+      "file": "src/pipeline/verify.ts",
+      "line": 237,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L237: \ud83d\udd34 bug: `laneStart` for app/a0 lanes is called without `startedAt`, losing lane start time data. Add the missing `startedAt` argument."
+     }
+    ]
+   }
+  },
+  {
+   "model": "z-ai/glm-5.3",
+   "mode": "batch",
+   "batchId": "batch-1791081716-Y1TaGYnsEgM6qDl94W6n",
+   "status": "completed",
+   "latencyS": 668.382,
+   "parseErrors": 0,
+   "costUsd": 0.08334185,
+   "usage": {
+    "prompt_tokens": 39013,
+    "completion_tokens": 32893,
+    "total_tokens": 71906,
+    "cost": 0.08334185,
+    "is_byok": false
+   },
+   "requestCounts": {
+    "total": 8,
+    "completed": 8,
+    "failed": 0
+   },
+   "demo": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 0.6666666666666666,
+    "findings": 3,
+    "docKeyFalsePositives": 1,
+    "preFilter": 3,
+    "dropped": 0
+   },
+   "ocellus": {
+    "postFilter": 20,
+    "bug": 1,
+    "risk": 5,
+    "nit": 11,
+    "q": 3,
+    "bugRisk": 6,
+    "invalidDropped": 0,
+    "preFilter": 20
+   },
+   "findings": {
+    "demo": [
+     {
+      "file": "src/discount.ts",
+      "line": 6,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L6: \ud83d\udd34 bug: percentage applied twice \u2014 a 10% discount returns 0.81\u00d7 the price instead of 0.90\u00d7. Remove the second `(1 - pct / 100)` factor.",
+      "suggestion": "  return price * (1 - pct / 100)",
+      "startLine": 3
+     },
+     {
+      "file": ".env.example",
+      "line": 2,
+      "severity": "risk",
+      "category": "security",
+      "message": "L2: \ud83d\udfe1 risk: example value uses the live-mode format `sk_live_`, normalizing prod-shaped secrets in a committed file and tripping secret scanners. Use a `sk_test_` placeholder.",
+      "suggestion": "STRIPE_SECRET_KEY=sk_test_REDACTED_me"
+     },
+     {
+      "file": "docs/setup.md",
+      "line": 8,
+      "severity": "nit",
+      "category": "usability",
+      "message": "L8: \ud83d\udd35 nit: AWS credentials go in the shell while `STRIPE_SECRET_KEY` lives in `.env`, splitting config across two sources. Add `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` placeholders to `.env.example`."
+     }
+    ],
+    "ocellus": [
+     {
+      "file": "src/vision/openrouter.ts",
+      "line": 34,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "L34: \ud83d\udfe1 risk: default 120s cap aborts slow-but-healthy completions (large-context/reasoning models regularly exceed 2min non-streaming), turning success into spurious failure. Raise the default or allow `complete` to override per call, e.g. accept `timeoutMs` in the completion opts."
+     },
+     {
+      "file": "src/vision/openrouter.ts",
+      "line": 138,
+      "severity": "risk",
+      "category": "usability",
+      "message": "L138: \ud83d\udfe1 risk: classified CliError message drops the aggregate `errors` detail, so a mixed multi-model failure surfaces as a single provider message with no per-candidate context. Include the joined messages in the CliError message or set `cause` to an aggregate Error."
+     },
+     {
+      "file": "src/vision/openrouter.ts",
+      "line": 82,
+      "severity": "nit",
+      "category": "correctness",
+      "message": "L82: \ud83d\udd35 nit: `_request` spread clobbers any `init.signal`, so a caller-supplied AbortSignal is silently ignored. Compose signals (`AbortSignal.any([init.signal, AbortSignal.timeout(this._timeoutMs)])`) or document that `init.signal` is unsupported."
+     },
+     {
+      "file": "src/vision/openrouter.ts",
+      "line": 136,
+      "severity": "q",
+      "category": "correctness",
+      "message": "L136: \u2753 q: does `pickProviderError` classify the `TimeoutError` DOMException from `AbortSignal.timeout`? If not, a pure-timeout failure falls through to the generic aggregate and can't be retried by class."
+     },
+     {
+      "file": "src/report/comment.ts",
+      "line": 299,
+      "severity": "risk",
+      "category": "convention",
+      "message": "L299: \ud83d\udfe1 risk: `P_FALLBACK_GATE = 0.7` is a magic constant duplicated across the action and `src/cli.ts` with only a comment to keep them in sync; any one drifting silently changes which findings count as high-confidence. Move it to a shared module and import it in all three sites."
+     },
+     {
+      "file": "src/report/comment.ts",
+      "line": 350,
+      "severity": "nit",
+      "category": "usability",
+      "message": "L350: \ud83d\udd35 nit: `files` can contain `undefined` when a reproduced finding has no `file`, so `files.size === 1` renders the lead as `N findings reproduced in \\`\\``. Filter out undefined files (`.filter((file) => file !== undefined)`) before the size check."
+     },
+     {
+      "file": "src/driver/target.ts",
+      "line": 92,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L92: \ud83d\udd34 bug: `child.exitCode !== null` is false when the child dies by signal (Node sets `signalCode`, leaves `exitCode` null), so a signal-killed child passes the squatter check and the run binds evidence to a server it didn't start \u2014 exactly what this guard was added to prevent. Check `child.exitCode !== null || child.signalCode !== null`, or record which of `ready`/`childExited` won the race and treat a `childExited` win as terminal regardless."
+     },
+     {
+      "file": "src/driver/target.ts",
+      "line": 91,
+      "severity": "nit",
+      "category": "performance",
+      "message": "L91: \ud83d\udd35 nit: unconditional 250ms sleep runs even when `childExited` won the race (child already dead) \u2014 wasted delay before an inevitable throw. Track the race winner and only defer when `ready` won."
+     },
+     {
+      "file": "src/driver/browser.ts",
+      "line": 148,
+      "severity": "risk",
+      "category": "usability",
+      "message": "L148: \ud83d\udd34 bug: `requestfailed` also fires for aborted requests \u2014 navigation-cancelled fetches and teardown-time aborts report `net::ERR_ABORTED`, so every route change and `context.close()` pollutes captures with non-failures. Skip when `req.failure()?.errorText` is `net::ERR_ABORTED` (and `net::ERR_TIMED_OUT` on page close).",
+      "suggestion": "      const failure = req.failure()?.errorText ?? 'failed'\n      if (failure === 'net::ERR_ABORTED') return\n      this._addCapture('request-failed', failure, url)",
+      "startLine": 148
+     },
+     {
+      "file": "src/engine/prompts.ts",
+      "line": 82,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L82: \ud83d\udd35 nit: `exploreActionSchema` enum omits `done` from `strict` schema property constraints while `ExploreAction.action` union includes `done` \u2014 wait, `done` is present; but `fail` in the `ExploreAction` union has no prompt line and no schema entry, so a model can never emit it and the type is dead weight in the vocabulary union. Drop `fail` from `ExploreAction` or document who sets it."
+     },
+     {
+      "file": "src/report/manifest.ts",
+      "line": 285,
+      "severity": "q",
+      "category": "correctness",
+      "message": "L285: \u2753 q: `archiveManifest` writes into `<reportDir>/manifests` without creating it \u2014 verify `writeAtomicJson` mkdirs, otherwise the first-ever archive throws ENOENT and the rejection propagates to the caller. Add `await mkdir(dir, { recursive: true })` before the write if `writeAtomicJson` does not.",
+      "startLine": 283,
+      "suggestion": "const dir = join(reportDir, MANIFEST_HISTORY_DIR)\nawait mkdir(dir, { recursive: true })\n// runId becomes a filename \u2014 never trust it as a path component.\nconst safeName = manifest.runId.replace(/[^\\w.-]/g, '-')"
+     },
+     {
+      "file": "src/report/manifest.ts",
+      "line": 288,
+      "severity": "nit",
+      "category": "security",
+      "message": "L288: \ud83d\udd35 nit: sanitizer `[\\w.-]` keeps `.` but not path separators, so `..` collapses into a literal `...json` filename \u2014 safe today; document that or also strip leading dots for defense in depth (`safeName.replace(/^\\.+/, '')`).",
+      "startLine": 288,
+      "suggestion": "const safeName = manifest.runId.replace(/[^\\w.-]/g, '-').replace(/^[.-]+/, '')"
+     },
+     {
+      "file": "src/report/run.ts",
+      "line": 119,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L119-133: \ud83d\udd35 nit: `buildRunReport` grew three trailing positional optionals including a boolean \u2014 call sites become unreadable (`buildRunReport(tests, t, d, [], true, nonce)`). Take an options object `{ extraCalls, exploreEvidence, runNonce }`.",
+      "startLine": 119
+     },
+     {
+      "file": "src/report/run.ts",
+      "line": 138,
+      "severity": "nit",
+      "category": "performance",
+      "message": "L138: \ud83d\udd35 nit: `[...tests.flatMap((t) => t.calls), ...extraCalls]` is materialized twice and walked twice. Build the combined array once and fold `tokens` into the existing loop.",
+      "startLine": 133,
+      "suggestion": "const allCalls = [...tests.flatMap((t) => t.calls), ...extraCalls]\nlet visionTokens = 0\nfor (const c of allCalls) {\n  callsByModel[c.model] = (callsByModel[c.model] ?? 0) + 1\n  costByModel[c.model] = (costByModel[c.model] ?? 0) + c.costUsd\n  visionTokens += c.tokens\n}"
+     },
+     {
+      "file": "src/report/manifest.ts",
+      "line": 292,
+      "severity": "nit",
+      "category": "other",
+      "message": "L292: \ud83d\udd35 nit: prune filters only by `.json` extension, so any stray `.json` file dropped into `manifests/` is counted toward retention and can evict real archives. Match the archive shape (`/\\.json$/` plus the sanitized-name prefix) or use a dedicated subdirectory per run.",
+      "startLine": 292
+     },
+     {
+      "file": "src/executor/a0.ts",
+      "line": 241,
+      "severity": "risk",
+      "category": "usability",
+      "message": "L241: \ud83d\udfe1 risk: `done` stamps every `inconclusive` result with summary `delegation returned \u2014 self-reported`, so the timeout path (L315) reports a delegation that never returned. Pass `summary` via `extra` on the timeout call and keep the fixed label only for completed delegations."
+     },
+     {
+      "file": "src/executor/a0.ts",
+      "line": 262,
+      "severity": "nit",
+      "category": "performance",
+      "message": "L262: \ud83d\udd35 nit: when `version === undefined` but `a0.url` is configured, the lane still runs the 5s host probe and a doomed spawn instead of failing fast. Short-circuit to `unavailable` when `version === undefined`, mirroring the both-missing branch."
+     },
+     {
+      "file": "src/executor/a0.ts",
+      "line": 190,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L190: \ud83d\udd35 nit: `new URL(url)` is constructed twice in `isLoopback`. Parse once into a const and reuse for the `file:` check and hostname extraction."
+     },
+     {
+      "file": "src/executor/a0.ts",
+      "line": 83,
+      "severity": "nit",
+      "category": "usability",
+      "message": "L83: \ud83d\udd35 nit: bare `undefined` positional arg for cwd in the `exec` call obscures the signature. Use an options object or named `cwd` parameter on `ExecFn` if the seam allows."
+     },
+     {
+      "file": "src/executor/a0.ts",
+      "line": 94,
+      "severity": "q",
+      "category": "correctness",
+      "message": "L94: \u2753 q: stderr regex `/ENOENT|not found|no such file/i` reclassifies any completed run whose stderr happens to contain those phrases (e.g. a0 logging a missing dependency) as `spawnError`, flipping the lane from `inconclusive` to `unavailable`. Is the sniff worth keeping now that `res.spawnError` is authoritative for `defaultExec`?"
+     }
+    ]
+   }
+  },
+  {
+   "model": "deepseek/deepseek-v4.1-flash",
+   "mode": "batch",
+   "batchId": "batch-1791081717-bZ0eNqmuFhX3JBs5rzRB",
+   "status": "completed",
+   "latencyS": 2006.798,
+   "parseErrors": 3,
+   "costUsd": 0.01631112,
+   "usage": {
+    "prompt_tokens": 40689,
+    "completion_tokens": 34982,
+    "total_tokens": 75671,
+    "cost": 0.01631112,
+    "is_byok": false
+   },
+   "requestCounts": {
+    "total": 8,
+    "completed": 8,
+    "failed": 0
+   },
+   "demo": {
+    "recall": 1,
+    "t1": true,
+    "t2": true,
+    "precision": 1,
+    "findings": 2,
+    "docKeyFalsePositives": 0,
+    "preFilter": 2,
+    "dropped": 0
+   },
+   "ocellus": {
+    "postFilter": 21,
+    "bug": 2,
+    "risk": 9,
+    "nit": 9,
+    "q": 1,
+    "bugRisk": 11,
+    "invalidDropped": 0,
+    "preFilter": 21
+   },
+   "findings": {
+    "demo": [
+     {
+      "file": "src/discount.ts",
+      "line": 6,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L6: \ud83d\udd34 bug: `applyDiscount` multiplies by `(1 - pct / 100)` a second time, compounding the discount (10% off returns 81% of price). Return `discounted` unchanged.",
+      "suggestion": "  return price * (1 - pct / 100)",
+      "startLine": 3
+     },
+     {
+      "file": ".env.example",
+      "line": 2,
+      "severity": "risk",
+      "category": "security",
+      "message": "L2: \ud83d\udfe1 risk: `.env.example` commits a `sk_live_`-prefixed Stripe key, training contributors to commit live secrets and tripping secret scanners. Use a `sk_test_` placeholder.",
+      "suggestion": "STRIPE_SECRET_KEY=sk_test_REDACTED_me",
+      "startLine": 2
+     }
+    ],
+    "ocellus": [
+     {
+      "file": "src/config.ts",
+      "line": 199,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "L199: \ud83d\udfe1 risk: `ConfigInput` keeps `a0` as a non-partial `{ url; maxTasks; timeoutMs }`, so TS callers must supply `maxTasks`/`timeoutMs` even though `resolveConfig` treats both as optional. Add a dedicated `a0?: Partial<{...}>` (or a `A0Config` interface) to `ConfigInput`."
+     },
+     {
+      "file": "src/detect.ts",
+      "line": 60,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "L60: \ud83d\udfe1 risk: `settled` is referenced by the `execFile` callback before its `let` declaration; a synchronous callback (or a future refactor) throws a TDZ ReferenceError. Hoist `let settled = false` above the `execFile` call."
+     },
+     {
+      "file": "src/detect.ts",
+      "line": 88,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "L88: \ud83d\udfe1 risk: escalation timer is only cleared on `'close'`, so when a spawn error (ENOENT) fires `error` without `close` the timer still runs and can `resolve()` a second time after the callback already resolved. Clear `escalate` in the execFile callback too, or guard with `settled` before clearing."
+     },
+     {
+      "file": "src/config.ts",
+      "line": 466,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L466: \ud83d\udd35 nit: `app.maxSteps`/`app.timeoutMs` are read from `rawApp` while sibling fields read from the merged `app`; a future default would be silently ignored. Read `optPosInt(app.maxSteps)`/`optPosInt(app.timeoutMs)` for consistency."
+     },
+     {
+      "file": "src/config.ts",
+      "line": 455,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L455: \ud83d\udd35 nit: `app.task` keeps untrimmed value while `sanitizeExpectation` trims its markers \u2014 a padded task string is stored verbatim. Assign `app.task.trim()`."
+     },
+     {
+      "file": "src/detect.ts",
+      "line": 141,
+      "severity": "nit",
+      "category": "performance",
+      "message": "L141: \ud83d\udd35 nit: the byte cap is checked after pushing, so up to `chunkSize-1` extra bytes past 65_536 are buffered/decoded. Slice the final chunk to `65_536 - received` before pushing."
+     },
+     {
+      "file": "src/config.ts",
+      "line": 492,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L492: \ud83d\udd35 nit: a whitespace-only `a0.url` (e.g. `'  '`) passes the `!== ''` check and becomes the base URL. Use `a0.url.trim() !== ''` and store the trimmed value."
+     },
+     {
+      "file": "src/report/manifest.ts",
+      "line": 282,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L282: \ud83d\udd34 bug: `keep` is compared against `names.length` read *after* the new file is written, so when `keep` equals the pre-existing count the oldest archive is pruned immediately; retention should bound the total including the new entry, or the count should be computed before the write. Read `readdir` first, then write, then prune against `names.length - keep + 1`.",
+      "suggestion": "  await writeAtomicJson(join(dir, `${safeName}.json`), manifest)\n  let names: string[]\n  try {\n    names = (await readdir(dir)).filter((n) => n.endsWith('.json')).sort()\n  } catch {\n    return\n  }\n  const excess = names.length - keep",
+      "startLine": 271
+     },
+     {
+      "file": "src/report/manifest.ts",
+      "line": 268,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "L268: \ud83d\udfe1 risk: sanitizing with `replace(/[^\\w.-]/g, '-')` is not injective \u2014 distinct runIds (`a/b` and `a-b`) collapse to the same filename and silently overwrite each other's archive; append a short hash of the raw runId to keep names unique.",
+      "suggestion": "  const safeName = `${manifest.runId.replace(/[^\\w.-]/g, '-')}-${createHash('sha1').update(manifest.runId).digest('hex').slice(0, 8)}`"
+     },
+     {
+      "file": "src/vision/decisions.ts",
+      "line": 199,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L199: \ud83d\udd35 nit: single line exceeds the repo print width and bypasses the multi-line style used by the surrounding branches; wrap it like the `validation` branch.",
+      "suggestion": "  if (status === 401 || status === 403) {\n    return make('auth', `decide: HTTP ${status}, check OPENROUTER_API_KEY`, false)\n  }",
+      "startLine": 199
+     },
+     {
+      "file": "src/report/run.ts",
+      "line": 83,
+      "severity": "q",
+      "category": "correctness",
+      "message": "L83: \u2753 q: comment claims the explore video is \"also in `artifacts.videos`\", but `buildRunReport` only maps `tests[].videoPath` \u2014 confirm the caller appends `explore.videoPath` to `artifacts.videos`, otherwise the claim is false and the video is unreachable via the documented field."
+     },
+     {
+      "file": "src/executor/a0.ts",
+      "line": 195,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L195: \ud83d\udd34 bug: empty-string `a0.url` is excluded by `configured` (so `resolveHost()` runs) yet `??` keeps `host = ''` and sets `hostSource = 'config'`, so a resolvable host is discarded and the lane reports `unavailable`. Select host/source off `configured` instead of `!== undefined`."
+     },
+     {
+      "file": "src/executor/a0.ts",
+      "line": 218,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "L218: \ud83d\udfe1 risk: `maxTasks` is read only for the `note` string \u2014 the lane always calls `runA0Task` once, so `a0.maxTasks: 0` still spends a delegation and the logged \"max N\" is false. Gate on `maxTasks > 0` (or loop up to `maxTasks`) before delegating."
+     },
+     {
+      "file": "src/executor/a0.ts",
+      "line": 143,
+      "severity": "nit",
+      "category": "usability",
+      "message": "L143: \ud83d\udd35 nit: `done()` forces `summary` to \"delegation returned \u2014 self-reported\" for every `inconclusive`, so the timeout path (L240) reports a return that never happened. Allow the caller to pass a `summary` override in `extra`."
+     },
+     {
+      "file": "src/executor/a0.ts",
+      "line": 88,
+      "severity": "nit",
+      "category": "correctness",
+      "message": "L88: \ud83d\udd35 nit: the `/ENOENT|not found|no such file/i` stderr sniff can tag a completed run as `spawnError` \u2014 exactly the misclassification the comment forbids. Drop the sniff and treat missing `res.spawnError` as `false` for injected execs."
+     },
+     {
+      "file": "src/fsutil.ts",
+      "line": 12,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L12: \ud83d\udd35 nit: `writeAtomicText` leaks the `.tmp` file when `rename` throws (EACCES/EXDEV), leaving orphaned temps in the evidence dir. Wrap `writeFile`/`rename` in try/catch with `unlink(tmp).catch(() => {})`."
+     },
+     {
+      "file": "src/pipeline/verify.ts",
+      "line": 252,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "L252: \ud83d\udfe1 risk: `laneDetailBudget` sets `exceeded` from `overLimit(detail.visionCostUsd, budget.limitUsd)` but never assigns `spentUsd` from `detail.visionCostUsd`, so the manifest reports `spentUsd: 0` alongside `exceeded: true` for runners that only emit scalar totals. Set `spentUsd: detail.visionCostUsd` when `detail.calls === undefined`."
+     },
+     {
+      "file": "src/pipeline/verify.ts",
+      "line": 419,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "L419-421: \ud83d\udfe1 risk: a valid `detailStatus` overrides the exit code unconditionally, so a runner that writes `status: 'passed'` and then exits non-zero (post-processing failure, crash after write) yields a passing lane. Gate the override on `code === 0` for `'passed'`, e.g. `detailStatus === 'passed' && code !== 0 ? 'failed' : (detailStatus ?? ...)`."
+     },
+     {
+      "file": "src/probe/queue.ts",
+      "line": 597,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "L597: \ud83d\udfe1 risk: `probe.content.slice(0, PROBE_CONTENT_CAP)` truncates by UTF-16 code units, so multi-byte content exceeds the byte cap and can split a surrogate pair. Encode with `TextEncoder`/`Buffer.byteLength` and slice on a code-point boundary."
+     },
+     {
+      "file": "src/pipeline/verify.ts",
+      "line": 160,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "L160: \ud83d\udfe1 risk: `totals.visionCalls ?? usage.calls` lets an explicit `0` in `totals.visionCalls` overwrite a non-empty per-test call count, so usage under-reports when a runner emits totals without call counts. Fall back when the total is falsy: `totals.visionCalls || usage.calls`."
+     },
+     {
+      "file": "src/pipeline/verify.ts",
+      "line": 178,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L178: \ud83d\udd35 nit: `flowEvidenceRan`'s doc comment claims an errored explore pass also fails closed, but the check only inspects `explore.skipped`; either extend `FlowReport.explore` with an error/outcome field and check it, or drop the 'errored' claim from the comment."
+     }
+    ]
+   }
+  },
+  {
+   "model": "z-ai/glm-5.3-flash",
+   "mode": "batch",
+   "error": "not completed: two batches (ids batch-1791080396-*, batch-1791081717-*) were still in_progress after 60-90 min; abandoned"
+  }
+ ],
+ "judge": {
+  "model": "deepseek/deepseek-v4-pro",
+  "distinct_findings": 176
+ }
+}
