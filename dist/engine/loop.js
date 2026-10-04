@@ -42,7 +42,7 @@ export class Engine {
     get cacheStats() {
         return { ...this._cacheStats };
     }
-    async record(instruction, tdApi = this._opts.actions, options = {}) {
+    async record(instruction, uiApi = this._opts.actions, options = {}) {
         this._visionCalls = 0;
         this._steps = [];
         this._fingerprints = [];
@@ -76,7 +76,7 @@ export class Engine {
                 return this._result(false, action.reasoning);
             }
             const resolved = await this._resolveAction(action);
-            const nextObservation = await this._executeAction(tdApi, action);
+            const nextObservation = await this._executeAction(uiApi, action);
             const fingerprint = await this._buildFingerprint(instruction, action, resolved, response.model);
             this._fingerprints.push(fingerprint);
             this._steps.push({ instruction, action: action.action, ok: true, model: response.model });
@@ -603,18 +603,18 @@ export class Engine {
         }
         return { bbox: info, clickPoint: { x, y }, a11ySnippet: info.snippet };
     }
-    async _executeAction(tdApi, action) {
+    async _executeAction(uiApi, action) {
         switch (action.action) {
             case 'click':
-                return tdApi.click(Number.isFinite(action.x) ? action.x : 0, Number.isFinite(action.y) ? action.y : 0);
+                return uiApi.click(Number.isFinite(action.x) ? action.x : 0, Number.isFinite(action.y) ? action.y : 0);
             case 'type':
-                return tdApi.type(action.text ?? '');
+                return uiApi.type(action.text ?? '');
             case 'pressKeys':
-                return tdApi.pressKeys(action.keys ?? []);
+                return uiApi.pressKeys(action.keys ?? []);
             case 'scroll':
-                return tdApi.scroll(action.dx ?? 0, action.dy ?? 0);
+                return uiApi.scroll(action.dx ?? 0, action.dy ?? 0);
             case 'wait':
-                return tdApi.wait(action.ms ?? 0);
+                return uiApi.wait(action.ms ?? 0);
             default:
                 return this._opts.driver.observe({ grid: true });
         }
