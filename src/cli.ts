@@ -3082,7 +3082,20 @@ jobs:
         with:
           persist-credentials: false
           ref: \${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: duketopceo/Argus/action@75492b8a6b10338d1f141ac9f8544135edc34409 # v0.2.0
+      # Optional verdict-as-review: let Argus submit APPROVE / REQUEST_CHANGES
+      # so require_approving_reviews counts it. GITHUB_TOKEN cannot approve, so
+      # create + install your own GitHub App (docs/github-app.md), set the
+      # ARGUS_APP_ID variable and ARGUS_APP_PRIVATE_KEY secret, then uncomment:
+      #      - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+      #        id: argus-app
+      #        with:
+      #          app-id: \${{ vars.ARGUS_APP_ID }}
+      #          private-key: \${{ secrets.ARGUS_APP_PRIVATE_KEY }}
+      # and pass approval-token plus its evidence inputs to the action below:
+      #          approval-token: \${{ steps.argus-app.outputs.token }}
+      #          approval-evidence: 'npm test'   # command the approval stands on
+      #          approval-check: 'test'          # check-run name, green on head SHA
+      - uses: duketopceo/Argus/action@cd38ba901152ddc6e7cbed21c01079702b2501f1 # v0.3.1
         with:
           openrouter-api-key: \${{ secrets.OPENROUTER_API_KEY }}
 `
@@ -3119,7 +3132,7 @@ jobs:
       # Record commands need the app's dependencies to boot its target.
       # Uncomment if you use '@argus record':
       # - run: npm ci
-      - uses: duketopceo/Argus/action@75492b8a6b10338d1f141ac9f8544135edc34409 # v0.2.0
+      - uses: duketopceo/Argus/action@cd38ba901152ddc6e7cbed21c01079702b2501f1 # v0.3.1
         with:
           openrouter-api-key: \${{ secrets.OPENROUTER_API_KEY }}
       # '@argus record' uploads the generated test + flow cache as an

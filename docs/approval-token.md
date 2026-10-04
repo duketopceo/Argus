@@ -86,19 +86,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - id: token
-        run: echo "token=$(mint-installation-token)" >> "$GITHUB_OUTPUT"
+      - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        id: argus-app
+        with:
+          app-id: ${{ vars.ARGUS_APP_ID }}
+          private-key: ${{ secrets.ARGUS_APP_PRIVATE_KEY }}
       - uses: duketopceo/Argus/action@main
         with:
           openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
-          approval-token: ${{ steps.token.outputs.token }}
+          approval-token: ${{ steps.argus-app.outputs.token }}
           approval-evidence: 'python -m unittest discover -s tests && ruff check .'
           approval-check: 'test (22)'
           approval-check-app: 'github-actions'
 ```
 
 Mint the installation token in an earlier step and hand it to the action; the
-action never mints one itself.
+action never mints one itself. [`docs/github-app.md`](github-app.md) covers
+creating your own Argus app, installing it on your repositories, and where the
+`ARGUS_APP_ID` variable and `ARGUS_APP_PRIVATE_KEY` secret come from.
 
 `approval-evidence` is not optional once `approval-token` is set. The lane
 refuses to submit an approval that cites no command:
