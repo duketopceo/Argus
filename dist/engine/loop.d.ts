@@ -24,7 +24,7 @@ export interface VisionClient {
         model: string;
     }>;
 }
-export interface TestDriverApi {
+export interface UiDriverApi {
     click(x: number, y: number): Promise<Observation>;
     type(text: string): Promise<Observation>;
     pressKeys(keys: string[]): Promise<Observation>;
@@ -99,7 +99,7 @@ export declare class Engine {
     get assertEntries(): CachedAssert[];
     get visionCalls(): number;
     get cacheStats(): CacheStats;
-    record(instruction: string, tdApi?: TestDriverApi, options?: RecordOptions): Promise<RunResult>;
+    record(instruction: string, uiApi?: UiDriverApi, options?: RecordOptions): Promise<RunResult>;
     replay(flow: FlowCache, options?: ReplayOptions): Promise<RunResult>;
     /**
      * Resolve a single element for the `td.find()` DSL (R13). When `cached` is
