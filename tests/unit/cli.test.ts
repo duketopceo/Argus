@@ -752,7 +752,7 @@ describe('argus-reviewer CLI', () => {
     expect(workflow).toContain('ref: ${{ github.event.pull_request.head.sha || github.sha }}')
     expect(workflow).toMatch(/actions\/checkout@[0-9a-f]{40} # v7/)
     expect(workflow).toMatch(
-      /duketopceo\/Argus\/action@[0-9a-f]{40} # v0\.3\.1/,
+      /duketopceo\/Argus\/action@[0-9a-f]{40} # v0\.4\.0/,
     )
     // Second run without --force skips rather than overwriting
     const out2 = capture()
