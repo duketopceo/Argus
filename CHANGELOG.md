@@ -3,6 +3,15 @@
 All notable changes to argus-reviewer are documented here. The project is
 pre-1.0; breaking changes may ship without a major bump until `1.0.0`.
 
+## [0.4.1] — 2026-10-04
+
+### Fixed
+- The `init` scaffold's `duketopceo/Argus/action@` pin now references the
+  v0.4.0 release commit as a full 40-char SHA, so newly scaffolded
+  workflows run the action that includes the v0.4.0 finding-quality
+  filters — not the pre-release pin the 0.4.0 tarball shipped with.
+- Internal rename `TestDriverApi` → `UiDriverApi` (no behavior change).
+
 ## [0.4.0] - 2026-10-03
 
 A redesign and a quieter reviewer. Argus now looks and reads the same
