@@ -67,6 +67,8 @@ const defaults = {
         requestChanges: true,
         profiles: [],
         exclude: [...DEFAULT_REVIEW_EXCLUDE],
+        mode: 'realtime',
+        batchTimeoutMs: 480_000,
     },
 };
 export function defineConfig(input) {
@@ -207,6 +209,8 @@ export function resolveConfig(input = {}) {
             rawReview.exclude.every((g) => typeof g === 'string' && g !== '')
             ? [...rawReview.exclude]
             : [...DEFAULT_REVIEW_EXCLUDE];
+    review.mode = review.mode === 'batch' ? 'batch' : 'realtime';
+    review.batchTimeoutMs = posInt(review.batchTimeoutMs, defaults.review.batchTimeoutMs);
     const resolved = { ...defaults, ...input, provider, sandbox, explore, app, review };
     resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP);
     // Retention is a non-negative integer (0 = keep none) — a mis-typed or

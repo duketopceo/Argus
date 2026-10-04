@@ -271,6 +271,18 @@ export interface Config {
          * paths); `[]` excludes nothing.
          */
         exclude: string[];
+        /**
+         * `realtime` (default) calls the chat API per chunk. `batch` submits all
+         * chunks through OpenRouter's async Batch API (cheaper, slower: minutes),
+         * falling back to realtime on failure or timeout.
+         */
+        mode: 'realtime' | 'batch';
+        /**
+         * Poll deadline for a batch, ms. Must sit inside the CI job timeout
+         * (the shipped workflow's is 15 minutes) with room left for a realtime
+         * fallback. Default 480000.
+         */
+        batchTimeoutMs: number;
     };
 }
 export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review' | 'explore' | 'app'>> & {

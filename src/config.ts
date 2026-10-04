@@ -277,6 +277,18 @@ export interface Config {
      * paths); `[]` excludes nothing.
      */
     exclude: string[]
+    /**
+     * `realtime` (default) calls the chat API per chunk. `batch` submits all
+     * chunks through OpenRouter's async Batch API (cheaper, slower: minutes),
+     * falling back to realtime on failure or timeout.
+     */
+    mode: 'realtime' | 'batch'
+    /**
+     * Poll deadline for a batch, ms. Must sit inside the CI job timeout
+     * (the shipped workflow's is 15 minutes) with room left for a realtime
+     * fallback. Default 480000.
+     */
+    batchTimeoutMs: number
   }
 }
 
@@ -357,6 +369,8 @@ const defaults: Config = {
     requestChanges: true,
     profiles: [],
     exclude: [...DEFAULT_REVIEW_EXCLUDE],
+    mode: 'realtime',
+    batchTimeoutMs: 480_000,
   },
 }
 
@@ -504,6 +518,8 @@ export function resolveConfig(input: ConfigInput = {}): Config {
     rawReview.exclude.every((g) => typeof g === 'string' && g !== '')
       ? [...rawReview.exclude]
       : [...DEFAULT_REVIEW_EXCLUDE]
+  review.mode = review.mode === 'batch' ? 'batch' : 'realtime'
+  review.batchTimeoutMs = posInt(review.batchTimeoutMs, defaults.review.batchTimeoutMs)
   const resolved: Config = { ...defaults, ...input, provider, sandbox, explore, app, review }
   resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP)
   // Retention is a non-negative integer (0 = keep none) — a mis-typed or

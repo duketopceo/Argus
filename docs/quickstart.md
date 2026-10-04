@@ -170,6 +170,31 @@ cost so far; if the next chunk is not expected to fit, it stops without
 spending and the summary reads `Reviewed 3 of 7 chunks (...); N file(s) were
 not reviewed`.
 
+### Batch mode
+
+```ts
+review: { mode: 'batch', batchTimeoutMs: 480_000 }   // default mode: 'realtime'
+```
+
+`mode: 'batch'` submits every chunk in one request to OpenRouter's async Batch
+API (`POST /api/v1/batches`, then `GET /api/v1/batches/:id` until
+`completed`, `failed`, `expired` or `cancelled`) and maps each result back by
+`custom_id`. Override per run with `argus-reviewer code-review --mode batch` or
+`ARGUS_REVIEW_MODE=batch` (the operator lever for fork PRs, whose config never
+loads). The model is sent as its base slug; a `:batch` suffix is stripped.
+
+Batches finish in minutes (a real probe took about six). Polling stops at
+`batchTimeoutMs` (default 8 minutes) so the run stays inside the workflow's
+15-minute job timeout with room for the fallback: if the batch fails, expires,
+times out, or an individual request errors, those chunks run realtime. Cost is
+read from each batch response's usage and recorded in the same ledger as
+realtime calls. The final synthesis call (multi-chunk PRs) always runs realtime.
+`code-review.json` carries `batch: { used, chunks, retriedRealtime?, fellBack? }`.
+
+Budget caveat: a batch is submitted whole, so `codeReviewBudgetUsd` cannot stop
+it mid-way the way it stops realtime chunks; the spend is metered once the
+results arrive.
+
 ### Agent Zero delegation (optional)
 
 If you run an [Agent Zero](https://agent-zero.ai) instance — the launcher, a

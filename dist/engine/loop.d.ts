@@ -3,7 +3,7 @@ import { Actions } from './actions.js';
 import { Config, ProviderRules } from '../config.js';
 import { CallCost, CallKind } from '../vision/cost.js';
 import { Ledger } from '../vision/ledger.js';
-import { JsonSchema, Message } from '../vision/openrouter.js';
+import { BatchItemResult, BatchRequest, JsonSchema, Message } from '../vision/openrouter.js';
 import { FingerprintRecord, Point } from '../cache/fingerprint.js';
 import { CachedAssert, FlowCache } from '../cache/store.js';
 import { ErrorRecord } from '../journal/schema.js';
@@ -23,6 +23,13 @@ export interface VisionClient {
         cost: CallCost;
         model: string;
     }>;
+    /** Optional async Batch API path (code review `review.mode: batch`). */
+    completeBatch?(opts: {
+        model: string;
+        requests: BatchRequest[];
+        kind?: CallKind;
+        deadlineMs: number;
+    }): Promise<BatchItemResult[]>;
 }
 export interface TestDriverApi {
     click(x: number, y: number): Promise<Observation>;

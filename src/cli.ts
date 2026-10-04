@@ -91,7 +91,7 @@ import {
 } from './report/manifest.js'
 import { writeAtomicJson } from './fsutil.js'
 import { CallCost } from './vision/cost.js'
-import { JsonSchema, Message, OpenRouterClient } from './vision/openrouter.js'
+import { BatchItemResult, JsonSchema, Message, OpenRouterClient } from './vision/openrouter.js'
 import { Ledger } from './vision/ledger.js'
 import { selectionFromFlags } from './pipeline/contracts.js'
 import {
@@ -298,6 +298,9 @@ Options:
   --report-dir <dir> Report output dir (default: config reportDir or ./argus-reviewer-report)
   --fixture <dir>    Review a local fixture repo (ref argus-fixture-base vs HEAD)
                      instead of a live PR, with no GitHub API calls. Used by npm run demo.
+  --mode <mode>      realtime (default) | batch. batch submits the chunks through
+                     OpenRouter's async Batch API and falls back to realtime on
+                     failure or timeout. Overrides ARGUS_REVIEW_MODE and review.mode.
   -h, --help         Show this help`
 
 const CACHE_USAGE = `Usage: argus-reviewer cache <list|prune> [options]
@@ -431,34 +434,36 @@ function createClient(deps: CliDeps, config: Config, ctx: Ctx): VisionClient {
   // Lazy: a cache-hit replay makes zero vision calls and needs no key. The
   // error fires clearly on the first actual model call.
   let inner: OpenRouterClient | undefined
-  return {
-    complete: async (opts) => {
-      if (inner === undefined) {
-        const apiKey = ctx.env.OPENROUTER_API_KEY
-        if (apiKey === undefined || apiKey === '') {
-          throw new CliError(
-            'OPENROUTER_KEY_MISSING',
-            'OPENROUTER_API_KEY is not set; model calls bill through this key (BYOK)',
-          )
-        }
-        const envTrace = parseOpenRouterTrace(ctx.env)
-        const trace = { ...(envTrace ?? {}), ...(config.openrouter?.trace ?? {}) }
-        const headers = { ...(config.openrouter?.headers ?? {}) }
-        const traceOpt = Object.keys(trace).length > 0 ? trace : undefined
-        const headersOpt = Object.keys(headers).length > 0 ? headers : undefined
-        inner = new OpenRouterClient({
-          apiKey,
-          ...(traceOpt ? { trace: traceOpt } : {}),
-          ...(headersOpt ? { headers: headersOpt } : {}),
-          onCall: (call) => {
-            ctx.out(
-              `openrouter ${call.kind} ${call.model} ${call.tokens}tok $${call.costUsd.toFixed(6)}`,
-            )
-          },
-        })
+  const getInner = (): OpenRouterClient => {
+    if (inner === undefined) {
+      const apiKey = ctx.env.OPENROUTER_API_KEY
+      if (apiKey === undefined || apiKey === '') {
+        throw new CliError(
+          'OPENROUTER_KEY_MISSING',
+          'OPENROUTER_API_KEY is not set; model calls bill through this key (BYOK)',
+        )
       }
-      return inner.complete(opts)
-    },
+      const envTrace = parseOpenRouterTrace(ctx.env)
+      const trace = { ...(envTrace ?? {}), ...(config.openrouter?.trace ?? {}) }
+      const headers = { ...(config.openrouter?.headers ?? {}) }
+      const traceOpt = Object.keys(trace).length > 0 ? trace : undefined
+      const headersOpt = Object.keys(headers).length > 0 ? headers : undefined
+      inner = new OpenRouterClient({
+        apiKey,
+        ...(traceOpt ? { trace: traceOpt } : {}),
+        ...(headersOpt ? { headers: headersOpt } : {}),
+        onCall: (call) => {
+          ctx.out(
+            `openrouter ${call.kind} ${call.model} ${call.tokens}tok $${call.costUsd.toFixed(6)}`,
+          )
+        },
+      })
+    }
+    return inner
+  }
+  return {
+    complete: async (opts) => getInner().complete(opts),
+    completeBatch: async (opts) => getInner().completeBatch(opts),
   }
 }
 
@@ -1298,6 +1303,17 @@ export interface ReviewComment {
   dedupKey: string
 }
 
+export interface ReviewBatch {
+  /** True when the Batch API produced the chunk reviews. */
+  used: boolean
+  /** Chunks submitted. */
+  chunks: number
+  /** Batch chunks re-run realtime because their request errored. */
+  retriedRealtime?: number
+  /** Why the whole batch fell back to realtime. */
+  fellBack?: string
+}
+
 export interface ReviewScope {
   /** Changed files in the PR with a patch. */
   totalFiles: number
@@ -1345,6 +1361,8 @@ interface CodeReviewReport {
   findingAdjudication?: FindingAdjudicationAudit
   /** How much of the PR the review covered, and what was left out. */
   scope?: ReviewScope
+  /** Present when `review.mode` is batch: whether the batch served the review. */
+  batch?: ReviewBatch
   /** Findings dropped by deterministic validation, with reasons. */
   validation?: ValidationAudit
   /** Test-file findings capped at nit (bug/risk with no non-test citation). */
@@ -1771,6 +1789,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       help: { type: 'boolean', short: 'h', default: false },
       'report-dir': { type: 'string' },
       fixture: { type: 'string' },
+      mode: { type: 'string' },
     },
   })
   if (values.help) {
@@ -1827,6 +1846,18 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       .split(',')
       .map((s) => s.trim())
       .filter(isReviewProfile)
+  }
+  // Review mode: --mode beats the operator env, which beats config (same
+  // operator-env pattern as ARGUS_CODE_MODEL — the only lever in the
+  // untrusted lane, where PR-controlled config never executes).
+  const modeRaw = (values.mode ?? ctx.env.ARGUS_REVIEW_MODE ?? '').trim()
+  if (modeRaw === 'realtime' || modeRaw === 'batch') config.review.mode = modeRaw
+  else if (modeRaw !== '') {
+    if (values.mode !== undefined) {
+      usageError(ctx, 'code-review', `--mode must be realtime or batch, got "${modeRaw}"`, 'argus-reviewer code-review --mode batch')
+      return 2
+    }
+    ctx.err(`warning: ignoring invalid ARGUS_REVIEW_MODE="${modeRaw}"`)
   }
   const model = config.code_model ?? config.model
   const runNonce = runNonceFrom(ctx.env)
@@ -2021,37 +2052,89 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     }
     stage(`reviewing ${chunks.length} chunk(s) — model ${reviewModel}`)
 
-    let chunksReviewed = 0
+    // Batch mode: all chunks go out as one async batch up front. A whole-
+    // batch failure (or timeout) leaves `batched` empty so every chunk runs
+    // realtime below; a single errored request falls back for that chunk
+    // only. Synthesis stays realtime — it needs the merged chunk findings.
+    const batched = new Map<number, BatchItemResult['result']>()
+    let batchRecord: ReviewBatch | undefined
+    if (config.review.mode === 'batch') {
+      if (client.completeBatch === undefined || chunks.length === 0) {
+        batchRecord = { used: false, chunks: chunks.length, fellBack: 'client has no batch support' }
+      } else {
+        stage(`submitting ${chunks.length} chunk(s) as a batch, poll deadline ${Math.round(config.review.batchTimeoutMs / 1000)}s`)
+        try {
+          const items = await client.completeBatch({
+            model: reviewModel,
+            requests: chunks.map((chunk, i) => ({
+              customId: `chunk-${i}`,
+              messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles),
+              schema: CODE_REVIEW_SCHEMA,
+              provider: config.provider,
+            })),
+            kind: 'code',
+            deadlineMs: config.review.batchTimeoutMs,
+          })
+          items.forEach((item, i) => {
+            if (item.result !== undefined) batched.set(i, item.result)
+          })
+          batchRecord = {
+            used: true,
+            chunks: chunks.length,
+            retriedRealtime: chunks.length - batched.size,
+          }
+          if (batched.size < chunks.length) {
+            ctx.err(`code-review: ${chunks.length - batched.size} batch request(s) failed; running those chunks realtime`)
+          }
+        } catch (e) {
+          const reason = (e as Error).message
+          debug('code-review', `batch failed: ${reason}`)
+          ctx.err(`code-review: batch failed (${reason}); falling back to realtime`)
+          batchRecord = { used: false, chunks: chunks.length, fellBack: reason }
+        }
+      }
+    }
+
+    const reviewedChunks = new Set<number>()
+    let chunkSpend = 0
     for (let i = 0; i < chunks.length; i++) {
-      if (ledger.budgetExceeded) break
-      // Stop BEFORE a chunk the remaining budget cannot be expected to
-      // cover (projected at the mean cost so far) — checking only after
-      // the spend lets every run overshoot its cap by a whole chunk.
-      if (chunksReviewed > 0 && !ledger.canSpend(ledger.visionCostUsd / chunksReviewed)) {
-        ctx.err(`code-review: budget would be exceeded by chunk ${i + 1}; stopping early`)
-        break
+      const fromBatch = batched.get(i)
+      // Batch results are already paid for: always take them. Only
+      // realtime chunks are gated by the budget.
+      if (fromBatch === undefined) {
+        if (ledger.budgetExceeded) continue
+        // Stop BEFORE a chunk the remaining budget cannot be expected to
+        // cover (projected at the mean cost so far) — checking only after
+        // the spend lets every run overshoot its cap by a whole chunk.
+        if (reviewedChunks.size > 0 && !ledger.canSpend(chunkSpend / reviewedChunks.size)) {
+          ctx.err(`code-review: budget would be exceeded by chunk ${i + 1}; stopping early`)
+          continue
+        }
       }
       debug('code-review', `chunk=${i + 1}/${chunks.length}`)
       const chunk = chunks[i]
       if (chunk === undefined) continue
-      const response = await client.complete({
-        model: reviewModel,
-        messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles),
-        schema: CODE_REVIEW_SCHEMA,
-        kind: 'code',
-        provider: config.provider,
-      })
+      const response =
+        fromBatch ??
+        (await client.complete({
+          model: reviewModel,
+          messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles),
+          schema: CODE_REVIEW_SCHEMA,
+          kind: 'code',
+          provider: config.provider,
+        }))
       recordSpend(response.cost)
-      chunksReviewed++
+      chunkSpend += response.cost.costUsd
+      reviewedChunks.add(i)
       lastModel = response.model
       const parsed = parseCodeReview(response.content)
       allFindings.push(...parsed.findings)
       stage(`chunk ${i + 1}/${chunks.length} — ${parsed.findings.length} finding(s)`)
-      if (ledger.budgetExceeded) {
+      if (ledger.budgetExceeded && fromBatch === undefined) {
         ctx.err(`code-review: budget exceeded after chunk ${i + 1}; stopping early`)
-        break
       }
     }
+    const chunksReviewed = reviewedChunks.size
 
     let summary: string | undefined
     let verdict: 'pass' | 'needs_changes' | 'approve' | undefined
@@ -2106,7 +2189,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
 
     // Files with at least one reviewed chunk. A budget stop leaves the
     // tail of the plan unreviewed; the scope and summary must say so.
-    const reviewedSet = new Set(plan.slice(0, chunksReviewed).flatMap((c) => c.files))
+    const reviewedSet = new Set(plan.flatMap((c, i) => (reviewedChunks.has(i) ? c.files : [])))
     const unreviewed = files.length - reviewedSet.size
     const scope: ReviewScope = {
       totalFiles: allFiles.length,
@@ -2397,6 +2480,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       ...(triage !== undefined ? { triage } : {}),
       ...(findingAdjudication !== undefined ? { findingAdjudication } : {}),
       scope,
+      ...(batchRecord !== undefined ? { batch: batchRecord } : {}),
       ...(validation !== undefined ? { validation } : {}),
       ...(testFileCapped > 0 ? { testFileCapped } : {}),
       maxComments,

@@ -3,6 +3,15 @@
 All notable changes to argus-reviewer are documented here. The project is
 pre-1.0; breaking changes may ship without a major bump until `1.0.0`.
 
+## [Unreleased]
+
+### Added
+- Chunked review for large PRs: files are grouped by directory, oversized
+  files split at hunk boundaries, the run stops before a chunk the budget
+  cannot cover, and the summary says how many chunks and files were reviewed.
+- `review.mode: 'batch'` (also `--mode batch`, `ARGUS_REVIEW_MODE`): review
+  through OpenRouter's async Batch API with automatic realtime fallback.
+
 ## [0.4.0] - 2026-10-03
 
 A redesign and a quieter reviewer. Argus now looks and reads the same
