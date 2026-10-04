@@ -6,6 +6,8 @@ required. The app exists for one reason: **making the verdict a real review**
 [`approval-token.md`](approval-token.md) for why the Actions token and author
 PATs cannot do this.
 
+(Looking for the App that opens the onboarding PR on install? That is [`self-host-app.md`](self-host-app.md).)
+
 You create the app on **your** account, install it on **your** repositories,
 and your workflow mints a short-lived installation token at run time. No
 hosted service, no webhook, no shared credential — the same BYOK model as the

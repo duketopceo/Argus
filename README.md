@@ -29,6 +29,8 @@ npx argus-reviewer init          # config, a smoke test, and the PR workflow
 
 To onboard through a pull request instead of writing files into your checkout, run `npx argus-reviewer init --pr` (optional `--repo owner/name`, `--branch argus/onboarding`). It uses your own `git` and `gh`, opens a PR with the secrets checklist, what is sent to the provider, the default budget and how to stop, refuses to overwrite existing files, and reports the existing PR if one is already open. It never reads your OpenRouter key.
 
+To have an App open that PR when you install it on a repository, register and host your own: [`docs/self-host-app.md`](docs/self-host-app.md).
+
 Record a browser flow once, then replay it on every run:
 
 ```bash

@@ -2,7 +2,9 @@ name = "argus-app-worker"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
 
-# No public URL and no routes until U7 documents deployment.
+# No public URL until you add a route (or set workers_dev = true).
+# See docs/self-host-app.md. Example, on a zone in your own account:
+#   routes = [{ pattern = "argus.example.com/webhook", zone_name = "example.com" }]
 workers_dev = false
 preview_urls = false
 
