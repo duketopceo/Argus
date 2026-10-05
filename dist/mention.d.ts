@@ -7,7 +7,7 @@ import { type PrMeta } from './evidence/ci.js';
  * checkout with the PR diff fetched via the API — the same diff-only
  * posture `code-review` already uses.
  */
-export type MentionName = 'review' | 'record' | 'persist' | 'help';
+export type MentionName = 'review' | 'record' | 'persist' | 'generate' | 'help';
 export interface MentionCommand {
     name: MentionName;
     /** `record` flow description, quotes already stripped. */

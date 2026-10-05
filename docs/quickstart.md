@@ -597,6 +597,14 @@ an `issue_comment` workflow that answers PR comments starting with
   machine-readable payload), so persist works even though the probe file is
   deleted after review. Idempotent — re-running reuses the branch and open
   PR; a moved PR head is refused until `@argus review` re-runs
+- `@argus generate` — author spec coverage for the PR diff into
+  `argus/generated-tests-<head8>` and open a reviewable PR. Specs are
+  model-authored code: on the `pull_request` lane (`code-review
+  --generate-tests` or `review.generateTests.enabled: true`) they are
+  sandbox-validated green on the head checkout first; on this mention
+  lane (a base checkout) they ship explicitly unvalidated. Red/unsafe
+  specs stay off the PR and list as drafts in `code-review.json`.
+  Generation refuses fork PRs outright.
 - `@argus help` — the command menu
 
 Security posture: `issue_comment` runs carry secrets and a write-capable
@@ -604,5 +612,5 @@ Security posture: `issue_comment` runs carry secrets and a write-capable
 on the base ref and reviews the diff over the GitHub API. Only comments by
 MEMBER/OWNER/COLLABORATOR are answered; everything else is ignored
 silently. On fork-head PRs, commands additionally need the `argus-probe`
-label covering the current head SHA, and `record`/`persist` are refused
-outright.
+label covering the current head SHA, and `record`/`persist`/`generate`
+are refused outright.

@@ -10,6 +10,7 @@ import { type SecretsScanResult } from './review/secrets.js';
 import { type TriageRecord } from './review/triage.js';
 import { type FindingAdjudicationAudit } from './review/adjudicate.js';
 import { type ProbeRecord } from './probe/queue.js';
+import { type GenerateLaneResult } from './probe/generate.js';
 import { type HeadBinding } from './report/manifest.js';
 import { CallCost } from './vision/cost.js';
 import { Message } from './vision/openrouter.js';
@@ -122,6 +123,8 @@ interface CodeReviewReport {
     probes?: ProbeRecord[];
     /** Why an enabled lane bowed out (fork gate, no docker, no harness…). */
     probeLaneSkipped?: string;
+    /** U2 — diff-scoped spec generation records; present only when the lane was asked to run. */
+    generated?: GenerateLaneResult;
     /** Secrets-lane audit — masked candidates, adjudication verdicts, skip reason. */
     secretsScan?: SecretsScanResult | {
         skipped: string;

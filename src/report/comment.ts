@@ -58,6 +58,11 @@ export interface CodeReviewInput {
   }[]
   reviewComments?: { body?: string }[]
   headBinding?: { intendedSha?: string; status?: string; detail?: string }
+  /** U2 — generated-spec lane surface: per-spec status + the write PR URL. */
+  generated?: {
+    records?: { status?: string; validation?: string }[]
+    prUrl?: string
+  }
 }
 
 /** The subset of run.json the comment head reads. */
@@ -314,6 +319,17 @@ function findingsLine(cr: CodeReviewInput | undefined, missing = NO_REVIEW_REPOR
     ? cr.reviewComments.filter((c) => hasSuggestion(c.body ?? '')).length
     : findings.filter((f) => typeof f.suggestion === 'string' && f.suggestion !== '').length
   if (suggestions > 0) parts.push(`${plural(suggestions, 'suggestion')} ready to commit`)
+  const gen = cr.generated
+  if (Array.isArray(gen?.records) && gen.records.length > 0) {
+    const committed = gen.records.filter((r) => r.status === 'committed').length
+    const drafts = gen.records.length - committed
+    parts.push(
+      gen.prUrl !== undefined
+        ? `${plural(committed, 'generated spec')} -> [review PR](${cell(gen.prUrl, 400)})` +
+            (drafts > 0 ? `, ${drafts} draft${drafts === 1 ? '' : 's'}` : '')
+        : `${plural(gen.records.length, 'generated spec')} (no PR opened)`,
+    )
+  }
   return parts.join(' · ')
 }
 

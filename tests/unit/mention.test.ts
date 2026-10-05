@@ -27,6 +27,7 @@ describe('parseMention', () => {
     expect(parseMention('@argus review')).toEqual({ name: 'review' })
     expect(parseMention('@argus help')).toEqual({ name: 'help' })
     expect(parseMention('@argus persist')).toEqual({ name: 'persist' })
+    expect(parseMention('@argus generate')).toEqual({ name: 'generate' })
     expect(parseMention('@argus')).toEqual({ name: 'help' })
     expect(parseMention('@argus   ')).toEqual({ name: 'help' })
   })
@@ -79,14 +80,14 @@ describe('mayRunMention', () => {
   })
 
   it('allows execution commands on same-repo PRs', () => {
-    for (const name of ['review', 'record', 'persist'] as const) {
+    for (const name of ['review', 'record', 'persist', 'generate'] as const) {
       expect(mayRunMention({ name }, 'MEMBER', meta()).allowed).toBe(true)
     }
   })
 
-  it('disables record and persist entirely on fork PRs', () => {
+  it('disables record, persist and generate entirely on fork PRs', () => {
     const fork = meta({ isFork: true, labels: ['argus-probe'], labelApprovedAt: '2', pushedAt: '1' })
-    for (const name of ['record', 'persist'] as const) {
+    for (const name of ['record', 'persist', 'generate'] as const) {
       const gate = mayRunMention({ name }, 'OWNER', fork)
       expect(gate.allowed).toBe(false)
       expect(gate.reply).toContain('fork')
@@ -145,6 +146,7 @@ describe('MENTION_HELP', () => {
     expect(MENTION_HELP).toContain('@argus review')
     expect(MENTION_HELP).toContain('@argus record')
     expect(MENTION_HELP).toContain('@argus persist')
+    expect(MENTION_HELP).toContain('@argus generate')
     expect(MENTION_HELP).toContain('@argus help')
   })
 })

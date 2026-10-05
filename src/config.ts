@@ -316,6 +316,19 @@ export interface Config {
      * default 120000). Reasoning models need more than the default.
      */
     requestTimeoutMs: number
+    /**
+     * U2 — diff-scoped spec generation (`--generate-tests`, `@argus
+     * generate`). `enabled` is trusted-only in effect: `review` is not on
+     * the untrusted-config allowlist and the lane hard-refuses fork PRs.
+     * `maxSpecs` caps authored leafs (default 3); `budgetUsd` is the
+     * generation share of codeReviewBudgetUsd (unset = the full lane
+     * budget). Wrong-typed values degrade to the off/capped defaults.
+     */
+    generateTests: {
+      enabled: boolean
+      maxSpecs: number
+      budgetUsd: number | undefined
+    }
   }
 }
 
@@ -352,7 +365,9 @@ export function checkRequestTimeoutMs(v: unknown): string | undefined {
 export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review' | 'explore' | 'app'>> & {
   provider?: Partial<ProviderRules>
   sandbox?: Partial<Sandbox>
-  review?: Partial<Config['review']>
+  review?: Partial<Omit<Config['review'], 'generateTests'>> & {
+    generateTests?: Partial<Config['review']['generateTests']>
+  }
   explore?: Partial<Explore>
   app?: Partial<AppLane>
 }
@@ -462,6 +477,7 @@ const defaults: Config = {
     batchTimeoutMs: 480_000,
     batchModel: undefined,
     requestTimeoutMs: DEFAULT_REQUEST_TIMEOUT_MS,
+    generateTests: { enabled: false, maxSpecs: 3, budgetUsd: undefined },
   },
 }
 
@@ -618,7 +634,34 @@ export function resolveConfig(input: ConfigInput = {}): Config {
     const bad = checkRequestTimeoutMs(rawReview.requestTimeoutMs)
     if (bad !== undefined) throw new Error(`review.${bad}`)
   }
-  const resolved: Config = { ...defaults, ...input, provider, sandbox, explore, app, review }
+  // U2 — generation bounds degrade like every other knob: enabled only on
+  // a literal true, maxSpecs positive-int capped at the authoring-schema
+  // ceiling (GEN_SCHEMA_MAX in src/probe/generate.ts), budgetUsd only a
+  // positive finite share. `review` is not on the untrusted allowlist, so
+  // a fork PR can never reach this block anyway.
+  const rawGen =
+    typeof rawReview.generateTests === 'object' && rawReview.generateTests !== null
+      ? (rawReview.generateTests as Record<string, unknown>)
+      : {}
+  const generateTests: Config['review']['generateTests'] = {
+    enabled: rawGen.enabled === true,
+    maxSpecs: Math.min(posInt(rawGen.maxSpecs as number | undefined, defaults.review.generateTests.maxSpecs), 8),
+    budgetUsd:
+      typeof rawGen.budgetUsd === 'number' && Number.isFinite(rawGen.budgetUsd) && rawGen.budgetUsd > 0
+        ? rawGen.budgetUsd
+        : undefined,
+  }
+  const resolved: Config = {
+    ...defaults,
+    ...input,
+    provider,
+    sandbox,
+    explore,
+    app,
+    // `review` carries a Partial<>-typed generateTests from the rawReview
+    // spread — the normalized const re-asserts the full shape.
+    review: { ...review, generateTests },
+  }
   // 0 = explicit unlimited; anything not a finite non-negative number
   // (mis-typed, negative, null) degrades to the default cap, never to unlimited.
   const rawBudget = input.budgetUsd
