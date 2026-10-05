@@ -20,8 +20,13 @@ const FIXTURE_DIR = fileURLToPath(new URL('../fixtures/', import.meta.url))
 let fixtureServer: TargetProcess | undefined
 let SERVE_URL = ''
 
+// Sequential ports from a band no other test file draws from — random draws
+// collide once multiple servers in the file (or a parallel worker's server)
+// are alive at the same time.
+let nextPort = 7000 + Math.floor(Math.random() * 200)
+
 beforeAll(async () => {
-  const port = 6600 + Math.floor(Math.random() * 300)
+  const port = nextPort++
   fixtureServer = await TargetProcess.start({
     command: `${JSON.stringify(process.execPath)} ${JSON.stringify(SERVE_SCRIPT)} ${port} ${JSON.stringify(FIXTURE_DIR)}`,
     url: `http://127.0.0.1:${port}/`,
@@ -40,7 +45,7 @@ function capture(): { lines: string[]; fn: (line: string) => void } {
 }
 
 function serveTarget(): Target {
-  const port = 6600 + Math.floor(Math.random() * 300)
+  const port = nextPort++
   return {
     command: `${JSON.stringify(process.execPath)} ${JSON.stringify(SERVE_SCRIPT)} ${port} ${JSON.stringify(FIXTURE_DIR)}`,
     url: `http://127.0.0.1:${port}/`,
