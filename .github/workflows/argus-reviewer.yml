@@ -72,7 +72,10 @@ jobs:
           # deepseek-v4.1-flash (the pinned default's code_model) stalls on
           # review-sized prompts — verified 2026-10-05: ~43k-token prompts
           # hang past the 120s request timeout with zero output.
-          code-model: google/gemini-2.5-flash-lite
+          # v4-flash is the bake-off's realtime pick (recall 1.00/precision
+          # 0.93, ~$0.0006/8-chunk review) and completes 43k-token prompts
+          # in ~2s — better and cheaper than gemini-lite as the dogfood.
+          code-model: deepseek/deepseek-v4-flash
           cli: ${{ steps.trusted-cli.outputs.cli }}
           index: 'false'
           run: 'false'
