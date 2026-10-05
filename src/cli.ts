@@ -60,7 +60,8 @@ import { planChunks } from './review/chunks.js'
 import { partitionByExclude, rulesForFiles } from './review/scope.js'
 import { capTestFindings } from './review/testfiles.js'
 import { auditOf, validateFindings, type ValidationAudit } from './review/validate.js'
-import { materializeMergeBaseDiff, scanSecrets, type SecretsScanResult } from './review/secrets.js'
+import { materializeMergeBaseDiff, type SecretsScanResult } from './review/secrets.js'
+import { runRules, type RuleFinding, type RuleRecord } from './review/rules.js'
 import {
   buildTriageState,
   routeModel,
@@ -1594,6 +1595,17 @@ interface CodeReviewReport {
   generated?: GenerateLaneResult
   /** Secrets-lane audit — masked candidates, adjudication verdicts, skip reason. */
   secretsScan?: SecretsScanResult | { skipped: string }
+  /** U8 — deterministic ruleset-lane audit: every rule hit, suppression, failure. */
+  rulesScan?:
+    | {
+        /** Rule ids that ran. */
+        ran: string[]
+        /** Every hit — suppressed or finding-bound — rule-tagged. */
+        records: RuleRecord[]
+        /** Rules that threw; findings absent, lane completed anyway. */
+        failures: { rule: string; error: string }[]
+      }
+    | { skipped: string }
   /** U7 triage record: confidence-model pre-review signals (annotate/route, never gates). */
   triage?: TriageRecord
   /** U8 adjudication audit — per-finding p + suppressed records. */
@@ -3172,16 +3184,19 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       summary = `Head binding inconclusive: ${summary}`
     }
 
-    // Secrets lane: deterministic regex scan over the local merge-base
-    // diff — the PR-files API `patch` omits large/binary files, so the
-    // local diff is the complete scan surface. Findings union into
-    // finalFindings AFTER the synthesis replacement above so a
-    // prompt-injected synthesis can never erase them. Literals are
-    // masked in every output (confidence-model `state` is the documented exception).
+    // U8 — deterministic ruleset lane: pure rules over the local
+    // merge-base diff — the PR-files API `patch` omits large/binary
+    // files, so the local diff is the complete scan surface. Findings
+    // union into finalFindings AFTER the synthesis replacement above so
+    // a prompt-injected synthesis can never erase them; a throwing rule
+    // degrades to a failure audit entry and the lane completes. Literals
+    // are masked in every output (confidence-model `state` is the
+    // documented exception).
     let secretsScan: SecretsScanResult | { skipped: string } | undefined
-    const secretsFindings: SecretsScanResult['findings'] = []
+    let rulesScan: CodeReviewReport['rulesScan']
+    const rulesFindings: RuleFinding[] = []
     // U4 — an incremental run scans the incremental range, not the whole
-    // merge-base diff: already-reviewed commits' secrets stay out of scope.
+    // merge-base diff: already-reviewed commits stay out of scope.
     const secretsBaseSha = incremental?.since ?? prMeta?.baseSha
     if (secretsBaseSha !== undefined) {
       // Fixture mode already produced the same `git diff base..HEAD`
@@ -3200,34 +3215,50 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
             })
       if ('skipped' in materialized) {
         secretsScan = { skipped: materialized.skipped }
-        ctx.err(`secrets scan skipped: ${materialized.skipped}`)
-        stage(`secrets scan skipped — ${materialized.skipped}`)
+        rulesScan = { skipped: materialized.skipped }
+        ctx.err(`rules scan skipped: ${materialized.skipped}`)
+        stage(`rules scan skipped: ${materialized.skipped}`)
       } else {
-        secretsScan = await scanSecrets({
-          diff: materialized.diff,
-          threshold: config.review.secretsThreshold,
-          ...(decisionClient !== undefined ? { client: decisionClient } : {}),
-          ...(config.decisionModel !== undefined ? { model: config.decisionModel } : {}),
+        const result = await runRules(materialized.diff, {
+          enabled: config.review.rules,
+          secretsThreshold: config.review.secretsThreshold,
+          ...(decisionClient !== undefined ? { decisionClient } : {}),
+          ...(config.decisionModel !== undefined ? { decisionModel: config.decisionModel } : {}),
         })
-        if (secretsScan.findings.length > 0) {
-          ctx.err(`secrets scan: ${secretsScan.findings.length} finding(s)`)
+        secretsScan =
+          result.secretsScan ??
+          (result.ran.length === 0
+            ? { skipped: 'the rules lane is disabled (review.rules)' }
+            : { skipped: 'the secrets rule is not enabled (review.rules)' })
+        rulesScan = {
+          ran: result.ran,
+          records: result.records,
+          failures: result.failures,
+        }
+        if (result.findings.length > 0) {
+          ctx.err(`rules scan: ${result.findings.length} finding(s)`)
+        }
+        for (const f of result.failures) {
+          ctx.err(`rules scan: rule ${f.rule} threw: ${f.error}`)
         }
         stage(
-          `secrets scan — ${secretsScan.records.length} candidate(s), ` +
-            `${secretsScan.findings.length} finding(s)` +
-            (secretsScan.overflow > 0 ? `, +${secretsScan.overflow} over cap` : ''),
+          `rules scan: ${result.ran.length} rule(s), ` +
+            `${result.records.length} audited hit(s), ` +
+            `${result.findings.length} finding(s)` +
+            (result.failures.length > 0 ? `, ${result.failures.length} rule(s) failed` : ''),
         )
         // Union is deferred until adjudication resolves below —
-        // suppressed nits leave before secrets findings join.
-        secretsFindings.push(...secretsScan.findings)
+        // suppressed nits leave before rules findings join.
+        rulesFindings.push(...result.findings)
       }
     } else {
       // Distinguish "ran, clean" from "never ran" in the report.
       secretsScan = { skipped: 'no merge-base SHA, so the lane did not run' }
+      rulesScan = { skipped: 'no merge-base SHA, so the lane did not run' }
     }
 
     // Resolve the deferred adjudication kicked off above, then union —
-    // order preserved: adjudicated model findings first, secrets after.
+    // order preserved: adjudicated model findings first, rules after.
     if (adjudicationPromise !== undefined) {
       const adj = await adjudicationPromise
       finalFindings = adj.findings
@@ -3240,7 +3271,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
           (adj.overflow > 0 ? `, +${adj.overflow} over cap` : ''),
       )
     }
-    finalFindings = [...finalFindings, ...secretsFindings]
+    finalFindings = [...finalFindings, ...rulesFindings]
 
     const headSha = prMeta?.headSha
     const checkRuns =
@@ -3416,6 +3447,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       ...(probeLaneSkipped !== undefined ? { probeLaneSkipped } : {}),
       ...(generated !== undefined ? { generated } : {}),
       ...(secretsScan !== undefined ? { secretsScan } : {}),
+      ...(rulesScan !== undefined ? { rulesScan } : {}),
       ...(triage !== undefined ? { triage } : {}),
       ...(findingAdjudication !== undefined ? { findingAdjudication } : {}),
       ...(droppedUnanchored > 0 ? { droppedUnanchored } : {}),

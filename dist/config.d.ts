@@ -323,6 +323,12 @@ export interface Config {
             rule: string;
         }[];
         /**
+         * U8 — deterministic ruleset lane's enabled ids. A configured list
+         * replaces the default (all registered rules); `[]` disables the lane
+         * — including the secrets rule it now carries.
+         */
+        rules: string[];
+        /**
          * U2 — diff-scoped spec generation (`--generate-tests`, `@argus
          * generate`). `enabled` is trusted-only in effect: `review` is not on
          * the untrusted-config allowlist and the lane hard-refuses fork PRs.
@@ -404,6 +410,12 @@ export declare function parseInstructions(raw: unknown): {
     glob: string;
     rule: string;
 }[];
+/**
+ * U8 — validate `review.rules` ids against the registry. Unknown ids throw
+ * naming the entry: a typo silently deadening a detection rule is worse
+ * than failing the config load (same contract as `review.instructions`).
+ */
+export declare function parseRuleIds(raw: unknown): string[];
 export declare function resolveConfig(input?: ConfigInput): Config;
 export interface LoadConfigOpts {
     /**

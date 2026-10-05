@@ -7,6 +7,7 @@ import { type PrMeta } from './evidence/ci.js';
 import { type Evidence } from './evidence/link.js';
 import { type ValidationAudit } from './review/validate.js';
 import { type SecretsScanResult } from './review/secrets.js';
+import { type RuleRecord } from './review/rules.js';
 import { type TriageRecord } from './review/triage.js';
 import { type FindingAdjudicationAudit } from './review/adjudicate.js';
 import { type ProbeRecord } from './probe/queue.js';
@@ -129,6 +130,20 @@ interface CodeReviewReport {
     generated?: GenerateLaneResult;
     /** Secrets-lane audit — masked candidates, adjudication verdicts, skip reason. */
     secretsScan?: SecretsScanResult | {
+        skipped: string;
+    };
+    /** U8 — deterministic ruleset-lane audit: every rule hit, suppression, failure. */
+    rulesScan?: {
+        /** Rule ids that ran. */
+        ran: string[];
+        /** Every hit — suppressed or finding-bound — rule-tagged. */
+        records: RuleRecord[];
+        /** Rules that threw; findings absent, lane completed anyway. */
+        failures: {
+            rule: string;
+            error: string;
+        }[];
+    } | {
         skipped: string;
     };
     /** U7 triage record: confidence-model pre-review signals (annotate/route, never gates). */

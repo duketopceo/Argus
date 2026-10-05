@@ -198,6 +198,31 @@ export default defineConfig({
 rules on lanes where PR-controlled config never executes. Malformed entries
 fail config load naming the entry.
 
+### Deterministic ruleset lane
+
+Alongside the model, a registry of deterministic rules scans the same
+materialized diff for secret-shaped literals (the secrets lane, now one rule
+in the set), hardcoded endpoint URLs/IP literals, leftover `TODO`-style
+markers, and synchronous fs/process calls added in code paths. Every hit —
+surfaced or suppressed — is an audit entry in `code-review.json`'s
+`rulesScan`; the sticky comment summarizes it. Rules union after synthesis
+so nothing the model writes can erase a hit, and no rule may claim `bug`
+severity without confidence-model adjudication. The lane costs $0.
+
+```ts
+export default defineConfig({
+  review: {
+    // All four rules are on by default; list a subset to narrow, [] to
+    // disable the lane (including the secrets rule).
+    rules: ['secrets', 'hardcoded-endpoint', 'leftover-todo', 'sync-in-async'],
+  },
+})
+```
+
+Matches inside data/doc paths (manifests, fixtures, `.md`) and non-production
+paths (tests, scripts) are suppressed with a named reason in the audit rather
+than silently dropped.
+
 Spend is still yours:
 the `run.json` ledger records the per-run dollar figure regardless of which
 provider served the call.

@@ -1,6 +1,7 @@
 import { pathToFileURL } from 'node:url'
 
 import { DEFAULT_REVIEW_EXCLUDE } from './review/scope.js'
+import { REVIEW_RULE_IDS } from './review/rules.js'
 import { isReviewProfile, type ReviewProfile } from './review/packs.js'
 import type { Trust } from './trust.js'
 import { JEV_DEFAULT_MODEL } from './vision/decisions.js'
@@ -324,6 +325,12 @@ export interface Config {
      */
     instructions: { glob: string; rule: string }[]
     /**
+     * U8 — deterministic ruleset lane's enabled ids. A configured list
+     * replaces the default (all registered rules); `[]` disables the lane
+     * — including the secrets rule it now carries.
+     */
+    rules: string[]
+    /**
      * U2 — diff-scoped spec generation (`--generate-tests`, `@argus
      * generate`). `enabled` is trusted-only in effect: `review` is not on
      * the untrusted-config allowlist and the lane hard-refuses fork PRs.
@@ -480,6 +487,7 @@ const defaults: Config = {
     requestChanges: true,
     profiles: [],
     instructions: [],
+    rules: [...REVIEW_RULE_IDS],
     exclude: [...DEFAULT_REVIEW_EXCLUDE],
     mode: 'realtime',
     batchTimeoutMs: 480_000,
@@ -581,6 +589,29 @@ export function parseInstructions(
   })
 }
 
+/**
+ * U8 — validate `review.rules` ids against the registry. Unknown ids throw
+ * naming the entry: a typo silently deadening a detection rule is worse
+ * than failing the config load (same contract as `review.instructions`).
+ */
+export function parseRuleIds(raw: unknown): string[] {
+  if (raw === undefined || raw === null) return [...REVIEW_RULE_IDS]
+  if (!Array.isArray(raw)) throw new Error('review.rules must be an array')
+  return [
+    ...new Set(
+      raw.map((id, i) => {
+        if (typeof id !== 'string' || !REVIEW_RULE_IDS.includes(id)) {
+          throw new Error(
+            `review.rules[${i}] is not a registered rule id, got ${JSON.stringify(id)} ` +
+              `(registered: ${REVIEW_RULE_IDS.join(', ')})`,
+          )
+        }
+        return id
+      }),
+    ),
+  ]
+}
+
 export function resolveConfig(input: ConfigInput = {}): Config {
   const provider: ProviderRules = { ...defaults.provider, ...(input.provider ?? {}) }
   // Wrong-typed sandbox values (e.g. `sandbox: true`, `enabled: 'yes'`,
@@ -653,6 +684,7 @@ export function resolveConfig(input: ConfigInput = {}): Config {
     ? [...new Set(rawReview.profiles.filter(isReviewProfile))]
     : []
   review.instructions = parseInstructions(rawReview.instructions)
+  review.rules = parseRuleIds(rawReview.rules)
   review.exclude =
     Array.isArray(rawReview.exclude) &&
     rawReview.exclude.every((g) => typeof g === 'string' && g !== '')

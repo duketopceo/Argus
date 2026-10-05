@@ -764,6 +764,23 @@ function diagnosticsFold(manifest, report, codeReview) {
         )
       }
     }
+    // U8 ruleset-lane audit: per-rule hit counts; failures degrade open.
+    const rs = codeReview.rulesScan
+    if (rs) {
+      if (typeof rs.skipped === 'string') {
+        items.push(`Rules lane skipped: ${cell(rs.skipped)}`)
+      } else {
+        const recs = Array.isArray(rs.records) ? rs.records : []
+        const suppressed = recs.filter((r) => r.suppressed).length
+        const failed = Array.isArray(rs.failures) ? rs.failures.length : 0
+        const ran = Array.isArray(rs.ran) ? rs.ran.length : 0
+        items.push(
+          `Rules lane: ${ran} rule(s), ${recs.length} audited hit(s)` +
+            `${suppressed > 0 ? `, ${suppressed} suppressed` : ''}` +
+            `${failed > 0 ? `, ${failed} failed` : ''}`,
+        )
+      }
+    }
     // U8 adjudication audit: shows what the confidence model removed.
     const fa = codeReview.findingAdjudication
     if (fa && Array.isArray(fa.records)) {
