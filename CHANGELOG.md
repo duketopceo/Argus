@@ -86,6 +86,40 @@ spend cap makes runaway cost opt-in rather than default.
   cannot cover, and the summary says how many chunks and files were reviewed.
 - `review.mode: 'batch'` (also `--mode batch`, `ARGUS_REVIEW_MODE`): review
   through OpenRouter's async Batch API with automatic realtime fallback.
+- `code-review --base <ref>` reviews a local merge-base→worktree diff with
+  no PR and no posting; the report names the reviewed range and head binding
+  is marked `local`. `config.diffBase`/`ARGUS_DIFF_BASE` supply the default
+  only when no PR context exists (#151, #163).
+- Incremental review on `pull_request` and `@argus review` re-runs: only
+  commits since the last *verified* reviewed head are re-diffed. The sticky
+  comment carries an `argus:last-reviewed-sha` marker; a stored SHA counts
+  only when the compare API proves it an ancestor of the current head and
+  the repo's own `argus-reviewer` commit status exists there — forged,
+  equal, unreachable or truncated baselines fall back to the full diff.
+  `@argus review full` / `--full` / `ARGUS_REVIEW_FULL=1` forces a full
+  re-review (#147, #165).
+- `@argus fix` opens a PR applying every posted, still-valid inline
+  suggestion: comments are re-read from the API, bound to the current head
+  commit and Argus's own author login, re-validated against the live diff,
+  and committed to `argus/fix-<pr>-<head8>` onto the PR's head branch. The
+  head is re-verified before the PR opens; rotated anchors and oversized
+  spans are skipped and named. Fork PRs are refused (#148, #166).
+- `review.instructions[]` per-glob rules injected into the chunks that carry
+  matching files, plus `ARGUS_REVIEW_INSTRUCTIONS` (JSON) and the
+  `review-instructions` action input for lanes where PR config never runs
+  (#149, #164).
+- `run --keep-alive [--keep-alive-ttl <sec>]` and `verify --keep-alive`
+  hold a failed lane's argus-booted target for a bounded window so it can be
+  inspected in a headed browser; interactive terminals only, CI prints a
+  skip line (#146, #162).
+- `--generate-tests` / `@argus generate` authors spec coverage from the PR
+  diff into a reviewable PR on `argus/generated-tests-<head8>`; on the
+  pull_request lane specs are sandbox-validated green first, on the mention
+  lane they ship marked unvalidated (#146, #161).
+- Flow heal write-back: `flow.healWriteback: 'pr'` / the `heal-writeback`
+  action input proposes each model-relocated step back to the repo on
+  `argus/flow-heals-<sha7>` — relocation fields only; a heal that rewrote
+  the instruction, action kind, text, keys or timing is suppressed (#144, #160).
 
 ## [0.4.0] - 2026-10-03
 
