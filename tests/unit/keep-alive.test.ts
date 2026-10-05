@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -166,6 +166,7 @@ describe('runAppLane --keep-alive', () => {
         // Real browser + real lane-booted server; the claim-done reply
         // fails the expected-marker check so the lane ends 'failed'.
         createClient: () => new StubClient([{ content: CLAIM_DONE }]),
+        startTarget: (s) => TargetProcess.start(s),
         note: notes.fn,
         sleep: async (ms) => {
           sleepCalls++
@@ -209,6 +210,67 @@ describe('runAppLane --keep-alive', () => {
     expect(report.status).toBe('passed')
     expect(sleepCalls).toBe(0)
     expect(notes.lines.join('\n')).not.toContain('keep-alive')
+  }, 60_000)
+})
+
+describe('run --keep-alive cli surface', () => {
+  it('holds an argus-booted target after a failed flow, then tears down', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-ka-run-'))
+    const testsDir = join(cwd, 'tests')
+    await mkdir(testsDir, { recursive: true })
+    const spec = serveTarget()
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({
+        testsDir,
+        reportDir: join(cwd, 'report'),
+        budgetUsd: 1,
+        target: { command: spec.command, url: spec.url },
+      }),
+    )
+    await writeFile(
+      join(testsDir, 'failing.test.ts'),
+      `test('fails the marker', async (td) => {
+  const ok = await td.assert('an element that does not exist is visible')
+  if (ok.verdict !== 'pass') throw new Error(ok.reasoning)
+})
+`,
+    )
+    const { main } = await import('../../src/cli.js')
+    const out = capture()
+    let sleepCalls = 0
+    let aliveDuringHold: boolean | undefined
+    const code = await main(['run', '--keep-alive', '--keep-alive-ttl', '1'], {
+      cwd,
+      isTTY: true,
+      // Explicit env without CI/GITHUB_ACTIONS: the interactive gate must
+      // engage even when the suite itself runs under CI.
+      env: {
+        PATH: process.env.PATH ?? '',
+        HOME: process.env.HOME ?? '',
+        OPENROUTER_API_KEY: 'test-key',
+      },
+      out: out.fn,
+      err: () => undefined,
+      createClient: () =>
+        new StubClient([
+          { content: JSON.stringify({ verdict: 'fail', reasoning: 'not on screen' }) },
+        ]),
+      sleep: async (ms) => {
+        sleepCalls++
+        if (aliveDuringHold === undefined) {
+          aliveDuringHold = await urlAnswers(spec.url)
+        }
+        await new Promise((r) => setTimeout(r, Math.min(ms, 10)))
+      },
+    })
+    expect(code).toBe(1)
+    // The argus-booted server stayed reachable through the hold window and
+    // the finally tore it down after the TTL.
+    expect(sleepCalls).toBeGreaterThanOrEqual(1)
+    expect(aliveDuringHold).toBe(true)
+    expect(out.lines.join('\n')).toContain('keep-alive:')
+    expect(await urlAnswers(spec.url)).toBe(false)
   }, 60_000)
 })
 

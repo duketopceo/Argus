@@ -228,6 +228,15 @@ function parseKeepAliveTtl(raw) {
     return Math.min(seconds * 1000, KEEP_ALIVE_MAX_TTL_MS);
 }
 /**
+ * A run is interactive only on a real TTY outside CI. `CI` is the
+ * conventional marker; `GITHUB_ACTIONS` covers a workflow that overrode CI.
+ */
+function keepAliveInteractive(ctx) {
+    return (ctx.isTTY === true &&
+        envOr(ctx.env.CI) === undefined &&
+        envOr(ctx.env.GITHUB_ACTIONS) === undefined);
+}
+/**
  * U3 keep-alive: after a failed run, hold an argus-booted target up briefly
  * so a human can inspect the live app. Interactive sessions only: on CI or
  * under a headless agent there is nobody to attach, and the journal/report
@@ -236,7 +245,7 @@ function parseKeepAliveTtl(raw) {
  */
 async function maybeKeepAliveHold(ctx, deps, target, url, ttlMs) {
     try {
-        if (ctx.isTTY !== true || envOr(ctx.env.CI) !== undefined) {
+        if (!keepAliveInteractive(ctx)) {
             ctx.out('keep-alive: skipped (non-interactive or CI run)');
             return;
         }
@@ -2577,8 +2586,7 @@ async function cmdVerify(args, ctx, deps) {
     // the app lane holds whenever it receives keepAlive, so only the
     // interactive case is passed down.
     const keepAliveRequested = values['keep-alive'] === true || verifyKeepAliveTtl !== undefined;
-    const keepAliveInteractive = ctx.isTTY === true && envOr(ctx.env.CI) === undefined;
-    const verifyKeepAlive = keepAliveRequested && keepAliveInteractive
+    const verifyKeepAlive = keepAliveRequested && keepAliveInteractive(ctx)
         ? { ttlMs: verifyKeepAliveTtl ?? KEEP_ALIVE_DEFAULT_TTL_MS }
         : undefined;
     // Flag > env > config for lane booleans: `--no-app`/`--no-a0`/`--no-flow`
@@ -2733,7 +2741,7 @@ async function cmdVerify(args, ctx, deps) {
                     },
                 });
                 await writeAtomicJson(join(reportDir, APP_LANE_REPORT), report);
-                if (report.status !== 'passed' && keepAliveRequested && !keepAliveInteractive) {
+                if (report.status !== 'passed' && keepAliveRequested && !keepAliveInteractive(ctx)) {
                     ctx.out('keep-alive: skipped (non-interactive or CI run)');
                 }
                 ctx.out(`app lane: ${report.status}: ${report.summary ?? report.reason ?? 'no detail'}` +

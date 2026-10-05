@@ -9,7 +9,11 @@ const root = process.argv[3] ?? new URL('.', import.meta.url).pathname
 
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' }
 
-createServer((req, res) => {
+const server = createServer((req, res) => {
+  // Browsers abort connections on close/nav; an unhandled socket 'error'
+  // would crash the fixture mid-test.
+  req.on('error', () => {})
+  res.on('error', () => {})
   const path = req.url === '/' ? '/index.html' : (req.url ?? '/').split('?')[0]
   const file = normalize(join(root, path))
   readFile(file)
@@ -18,9 +22,12 @@ createServer((req, res) => {
       res.end(body)
     })
     .catch(() => {
+      if (res.destroyed) return
       res.writeHead(404)
       res.end('not found')
     })
-}).listen(port, '127.0.0.1', () => {
+})
+server.on('clientError', (_err, socket) => socket.destroy())
+server.listen(port, '127.0.0.1', () => {
   console.log(`serving ${root} on http://127.0.0.1:${port}`)
 })

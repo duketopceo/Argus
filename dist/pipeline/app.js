@@ -1,5 +1,6 @@
 import { BrowserDriver as launchBrowserDriver } from '../driver/browser.js';
 import { TargetProcess, holdTargetForDebug, waitForReady } from '../driver/target.js';
+import { inspectInstructions } from '../driver/browser.js';
 import { Actions } from '../engine/actions.js';
 import { runExplore, } from '../engine/explore.js';
 import { Ledger } from '../vision/ledger.js';
@@ -151,6 +152,32 @@ export async function runAppLane(input) {
     }
     let target;
     let driver;
+    /**
+     * U3 keep-alive gate: on a non-passed report, hold a spawned target up for
+     * the TTL; for an externally-served target nothing argus owns would die on
+     * teardown, so the inspect hint alone is the hold. Called only on paths
+     * where the app was actually reachable — a target that never booted or
+     * never answered has no live page worth inspecting.
+     */
+    const maybeHold = async (report) => {
+        if (input.keepAlive === undefined || report.status === 'passed')
+            return report;
+        const note = deps.note ?? (() => undefined);
+        if (target === undefined) {
+            for (const line of inspectInstructions(targetUrl))
+                note(`  ${line}`);
+            return report;
+        }
+        try {
+            await holdTargetForDebug(targetUrl, input.keepAlive.ttlMs, note, {
+                ...(deps.sleep !== undefined ? { sleep: deps.sleep } : {}),
+            });
+        }
+        catch (e) {
+            note(`keep-alive hold failed: ${e.message}`);
+        }
+        return report;
+    };
     try {
         if (config.target?.command !== undefined && config.target.command !== '') {
             const start = deps.startTarget ?? ((spec) => TargetProcess.start(spec));
@@ -185,7 +212,10 @@ export async function runAppLane(input) {
             driver = await launch(config);
         }
         catch (e) {
-            return done('unavailable', `browser failed to launch: ${e.message}`);
+            // The spawned target is still serving — keep-alive applies: a human
+            // can check the app even though argus got no browser. `return await`:
+            // bare `return` lets `finally` kill the target while the hold sleeps.
+            return await maybeHold(done('unavailable', `browser failed to launch: ${e.message}`));
         }
         if (deps.applyPageSetup !== undefined)
             await deps.applyPageSetup(driver);
@@ -193,7 +223,7 @@ export async function runAppLane(input) {
             await driver.goto(targetUrl);
         }
         catch (e) {
-            return done('unavailable', `target navigation failed: ${e.message}`);
+            return await maybeHold(done('unavailable', `target navigation failed: ${e.message}`));
         }
         const ledger = new Ledger(input.budgetLimitUsd ?? config.app.budgetUsd ?? config.budgetUsd);
         const client = deps.createClient?.(config) ?? missingClient();
@@ -236,21 +266,7 @@ export async function runAppLane(input) {
             visionCalls: result.visionCalls,
             visionCostUsd: result.visionCostUsd,
         });
-        // U3 keep-alive: hold the booted target so a human can inspect the live
-        // app before the finally tears it down. A lane without a spawned target
-        // (external server) or a passing lane has nothing to hold.
-        if (input.keepAlive !== undefined && target !== undefined && report.status !== 'passed') {
-            const note = deps.note ?? (() => undefined);
-            try {
-                await holdTargetForDebug(targetUrl, input.keepAlive.ttlMs, note, {
-                    ...(deps.sleep !== undefined ? { sleep: deps.sleep } : {}),
-                });
-            }
-            catch (e) {
-                note(`keep-alive hold failed: ${e.message}`);
-            }
-        }
-        return report;
+        return await maybeHold(report);
     }
     finally {
         await driver?.close().catch(() => undefined);

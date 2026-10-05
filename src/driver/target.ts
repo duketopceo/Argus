@@ -166,8 +166,11 @@ export async function holdTargetForDebug(
   const onSignal = (): void => {
     interrupted = true
   }
-  process.once('SIGINT', onSignal)
-  process.once('SIGTERM', onSignal)
+  // process.on, not once: a second Ctrl-C while the current sleep is in
+  // flight must still just end the hold — default SIGINT termination here
+  // would orphan the detached target tree the caller is about to stop.
+  process.on('SIGINT', onSignal)
+  process.on('SIGTERM', onSignal)
   try {
     for (;;) {
       const remaining = deadline - Date.now()

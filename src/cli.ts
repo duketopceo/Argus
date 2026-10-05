@@ -362,6 +362,18 @@ function parseKeepAliveTtl(raw: string | undefined): number | undefined {
 }
 
 /**
+ * A run is interactive only on a real TTY outside CI. `CI` is the
+ * conventional marker; `GITHUB_ACTIONS` covers a workflow that overrode CI.
+ */
+function keepAliveInteractive(ctx: Ctx): boolean {
+  return (
+    ctx.isTTY === true &&
+    envOr(ctx.env.CI) === undefined &&
+    envOr(ctx.env.GITHUB_ACTIONS) === undefined
+  )
+}
+
+/**
  * U3 keep-alive: after a failed run, hold an argus-booted target up briefly
  * so a human can inspect the live app. Interactive sessions only: on CI or
  * under a headless agent there is nobody to attach, and the journal/report
@@ -376,7 +388,7 @@ async function maybeKeepAliveHold(
   ttlMs: number,
 ): Promise<void> {
   try {
-    if (ctx.isTTY !== true || envOr(ctx.env.CI) !== undefined) {
+    if (!keepAliveInteractive(ctx)) {
       ctx.out('keep-alive: skipped (non-interactive or CI run)')
       return
     }
@@ -3093,9 +3105,8 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
   // interactive case is passed down.
   const keepAliveRequested =
     values['keep-alive'] === true || verifyKeepAliveTtl !== undefined
-  const keepAliveInteractive = ctx.isTTY === true && envOr(ctx.env.CI) === undefined
   const verifyKeepAlive =
-    keepAliveRequested && keepAliveInteractive
+    keepAliveRequested && keepAliveInteractive(ctx)
       ? { ttlMs: verifyKeepAliveTtl ?? KEEP_ALIVE_DEFAULT_TTL_MS }
       : undefined
 
@@ -3260,7 +3271,7 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
           },
         })
         await writeAtomicJson(join(reportDir, APP_LANE_REPORT), report)
-        if (report.status !== 'passed' && keepAliveRequested && !keepAliveInteractive) {
+        if (report.status !== 'passed' && keepAliveRequested && !keepAliveInteractive(ctx)) {
           ctx.out('keep-alive: skipped (non-interactive or CI run)')
         }
         ctx.out(
