@@ -34,6 +34,8 @@ export interface CliDeps {
     isTTY?: boolean;
     /** Terminal width for the summary block (default process.stdout.columns, else 80). */
     columns?: number;
+    /** Sleep step for the --keep-alive debug hold; injectable for tests. */
+    sleep?: (ms: number) => Promise<void>;
 }
 export declare function main(argv: string[], deps?: CliDeps): Promise<number>;
 interface PrFile {

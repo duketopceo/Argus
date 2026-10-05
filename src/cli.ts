@@ -33,8 +33,8 @@ import {
 } from './config.js'
 import { debug, setLiveDir } from './debug.js'
 import { defaultExec, detectEnvironment, resolveA0Host, type ExecFn, type ProbeFn } from './detect.js'
-import { BrowserDriver, PageCapture } from './driver/browser.js'
-import { TargetProcess, waitForReady } from './driver/target.js'
+import { BrowserDriver, PageCapture, inspectInstructions } from './driver/browser.js'
+import { TargetProcess, holdTargetForDebug, waitForReady } from './driver/target.js'
 import { Engine, VisionClient } from './engine/loop.js'
 import { Actions } from './engine/actions.js'
 import { runExplore, type ExploreResult } from './engine/explore.js'
@@ -150,6 +150,8 @@ export interface CliDeps {
   isTTY?: boolean
   /** Terminal width for the summary block (default process.stdout.columns, else 80). */
   columns?: number
+  /** Sleep step for the --keep-alive debug hold; injectable for tests. */
+  sleep?: (ms: number) => Promise<void>
 }
 
 interface Ctx {
@@ -165,6 +167,8 @@ interface Ctx {
   json: boolean
   /** `--debug` or ARGUS_DEBUG: stack traces and debug logs. */
   debug: boolean
+  /** Resolved TTY-ness (deps.isTTY or stdout.isTTY); gates interactive-only features. */
+  isTTY: boolean
   /** The invocation, for fix lines that say "re-run this". */
   rerun: string
   /** True when a command runs as a verify lane: the outer command prints the summary. */
@@ -304,6 +308,9 @@ Options:
   --dir <dir>        Tests directory (default: config testsDir or ./tests)
   --report-dir <dir> Report output dir (default: config reportDir or ./argus-reviewer-report)
   --cache-dir <dir>  Fingerprint cache dir (default: config cacheDir)
+  --keep-alive       On failure, hold an argus-booted target up for inspection
+                     (interactive sessions only; skipped on CI/non-TTY)
+  --keep-alive-ttl <sec>  Keep-alive window in seconds (default 300, max 3600)
   -h, --help         Show this help`
 
 const CODE_REVIEW_USAGE = `Usage: argus-reviewer code-review [options]
@@ -343,6 +350,62 @@ const TEST_FILE_RE = /\.test\.(ts|mts|mjs|js)$/
 const A0_HEAL_BUDGET_MS = 15 * 60_000
 /** Default delegation-count ceiling for heal:'a0' — a0.maxTasks overrides. */
 const A0_HEAL_MAX_DELEGATIONS = 5
+/** Default --keep-alive window: long enough to attach, short enough to never strand a target. */
+const KEEP_ALIVE_DEFAULT_TTL_MS = 5 * 60_000
+const KEEP_ALIVE_MAX_TTL_MS = 60 * 60_000
+
+function parseKeepAliveTtl(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined
+  const seconds = Number(raw)
+  if (!Number.isInteger(seconds) || seconds < 1) return undefined
+  return Math.min(seconds * 1000, KEEP_ALIVE_MAX_TTL_MS)
+}
+
+/**
+ * A run is interactive only on a real TTY outside CI. `CI` is the
+ * conventional marker; `GITHUB_ACTIONS` covers a workflow that overrode CI.
+ */
+function keepAliveInteractive(ctx: Ctx): boolean {
+  return (
+    ctx.isTTY === true &&
+    envOr(ctx.env.CI) === undefined &&
+    envOr(ctx.env.GITHUB_ACTIONS) === undefined
+  )
+}
+
+/**
+ * U3 keep-alive: after a failed run, hold an argus-booted target up briefly
+ * so a human can inspect the live app. Interactive sessions only: on CI or
+ * under a headless agent there is nobody to attach, and the journal/report
+ * is the debugging surface there (documented asymmetry, not a defect). Never
+ * throws: a debug affordance must not break teardown.
+ */
+async function maybeKeepAliveHold(
+  ctx: Ctx,
+  deps: CliDeps,
+  target: TargetProcess | undefined,
+  url: string,
+  ttlMs: number,
+): Promise<void> {
+  try {
+    if (!keepAliveInteractive(ctx)) {
+      ctx.out('keep-alive: skipped (non-interactive or CI run)')
+      return
+    }
+    if (target === undefined) {
+      // The app is served externally; nothing argus owns would die on
+      // teardown, so the inspect hint alone is the hold.
+      ctx.out('keep-alive: target was not booted by argus; it stays up on its own')
+      for (const line of inspectInstructions(url)) ctx.out(`  ${line}`)
+      return
+    }
+    await holdTargetForDebug(url, ttlMs, (line) => ctx.out(line), {
+      ...(deps.sleep !== undefined ? { sleep: deps.sleep } : {}),
+    })
+  } catch (e) {
+    ctx.err(`keep-alive hold failed: ${(e as Error).message}`)
+  }
+}
 
 export async function main(argv: string[], deps: CliDeps = {}): Promise<number> {
   // Global flags are accepted anywhere before a `--` terminator.
@@ -365,6 +428,7 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
     width: deps.columns ?? (deps.out === undefined ? (process.stdout.columns ?? 80) : 80),
     json: flags.has('--json'),
     debug: debugOn,
+    isTTY,
     rerun: ['argus-reviewer', ...args].map(shellQuote).join(' '),
   }
 
@@ -742,12 +806,23 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
       dir: { type: 'string' },
       'report-dir': { type: 'string' },
       'cache-dir': { type: 'string' },
+      'keep-alive': { type: 'boolean', default: false },
+      'keep-alive-ttl': { type: 'string' },
     },
   })
   if (values.help) {
     ctx.out(RUN_USAGE)
     return 0
   }
+  const keepAliveTtlMs = parseKeepAliveTtl(values['keep-alive-ttl'])
+  if (values['keep-alive-ttl'] !== undefined && keepAliveTtlMs === undefined) {
+    usageError(ctx, 'run', `--keep-alive-ttl must be a positive integer of seconds, got "${values['keep-alive-ttl']}"`)
+    return 2
+  }
+  const keepAlive =
+    values['keep-alive'] === true || keepAliveTtlMs !== undefined
+      ? { ttlMs: keepAliveTtlMs ?? KEEP_ALIVE_DEFAULT_TTL_MS }
+      : undefined
 
   const trustResult = await resolveCheckoutTrust(ctx)
   const { trust } = trustResult
@@ -1249,6 +1324,9 @@ async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<number> 
     runFailed = true
   } finally {
     restoreGlobals(patches)
+    if (keepAlive !== undefined && (runFailed || reports.some((r) => !r.ok))) {
+      await maybeKeepAliveHold(ctx, deps, target, url, keepAlive.ttlMs)
+    }
     await target?.stop()
     // Transpiled modules are pid-tagged per run — remove the whole dir or
     // stale copies accumulate inside the report directory consumers archive.
@@ -3000,6 +3078,8 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
       'expect-url': { type: 'string' },
       'expect-selector': { type: 'string' },
       'report-dir': { type: 'string' },
+      'keep-alive': { type: 'boolean', default: false },
+      'keep-alive-ttl': { type: 'string' },
     },
   })
   if (values.help) {
@@ -3008,11 +3088,27 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
         '[--app|--no-app] [--a0|--no-a0] ' +
         '[--url <target>] ' +
         '[--task "<task>" --expect-text <marker>|--expect-url <re>|--expect-selector <sel>] ' +
-        '[--report-dir <dir>]\n\n' +
-        'Runs the selected product lanes and writes run-manifest.json. Code review is selected by default; deeper lanes are explicit. --no-* vetoes the ARGUS_VERIFY_* env inputs.',
+        '[--keep-alive [--keep-alive-ttl <sec>]] [--report-dir <dir>]\n\n' +
+        'Runs the selected product lanes and writes run-manifest.json. Code review is selected by default; deeper lanes are explicit. --no-* vetoes the ARGUS_VERIFY_* env inputs. --keep-alive holds a failed run\'s target up for inspection (interactive only).',
     )
     return 0
   }
+  const verifyKeepAliveTtl = parseKeepAliveTtl(values['keep-alive-ttl'])
+  if (values['keep-alive-ttl'] !== undefined && verifyKeepAliveTtl === undefined) {
+    usageError(ctx, 'verify', `--keep-alive-ttl must be a positive integer of seconds, got "${values['keep-alive-ttl']}"`)
+    return 2
+  }
+  // Keep-alive is an interactive-only debug affordance: a CI or headless
+  // run has nobody to attach, so each failed lane prints a skip line and
+  // teardown proceeds normally. The flow lane re-checks this inside cmdRun;
+  // the app lane holds whenever it receives keepAlive, so only the
+  // interactive case is passed down.
+  const keepAliveRequested =
+    values['keep-alive'] === true || verifyKeepAliveTtl !== undefined
+  const verifyKeepAlive =
+    keepAliveRequested && keepAliveInteractive(ctx)
+      ? { ttlMs: verifyKeepAliveTtl ?? KEEP_ALIVE_DEFAULT_TTL_MS }
+      : undefined
 
   // Flag > env > config for lane booleans: `--no-app`/`--no-a0`/`--no-flow`
   // are explicit opt-outs that must beat an ambient ARGUS_VERIFY_*=1.
@@ -3122,7 +3218,24 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
     budgets,
     runners: {
       review: async () => cmdCodeReview(['--report-dir', reportDir], laneCtx, deps),
-      flow: async (url) => cmdRun(['--url', url, '--report-dir', reportDir], laneCtx, deps),
+      flow: async (url) =>
+        cmdRun(
+          [
+            '--url', url,
+            '--report-dir', reportDir,
+            // The flag rides down whenever requested; cmdRun's own gate
+            // prints the non-interactive skip line on failure.
+            ...(keepAliveRequested
+              ? [
+                  '--keep-alive',
+                  '--keep-alive-ttl',
+                  String(Math.round((verifyKeepAliveTtl ?? KEEP_ALIVE_DEFAULT_TTL_MS) / 1000)),
+                ]
+              : []),
+          ],
+          laneCtx,
+          deps,
+        ),
       app: async () => {
         // The lane writes its own detail record — every status path
         // (blocked/unavailable/inconclusive/failed/passed) lands in the
@@ -3136,6 +3249,7 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
           // The lane enforces the same cap the manifest reports —
           // app.budgetUsd ?? ARGUS_BUDGET_USD ?? budgetUsd.
           ...(appBudget !== undefined ? { budgetLimitUsd: appBudget } : {}),
+          ...(verifyKeepAlive !== undefined ? { keepAlive: verifyKeepAlive } : {}),
           deps: {
             ...(deps.launchDriver !== undefined ? { launchDriver: deps.launchDriver } : {}),
             createClient: (cfg) => createClient(deps, cfg, ctx),
@@ -3151,10 +3265,15 @@ async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promise<numbe
                 await rm(verifyTmp, { recursive: true, force: true })
               }
             },
+            note: ctx.out,
+            ...(deps.sleep !== undefined ? { sleep: deps.sleep } : {}),
             logger,
           },
         })
         await writeAtomicJson(join(reportDir, APP_LANE_REPORT), report)
+        if (report.status !== 'passed' && keepAliveRequested && !keepAliveInteractive(ctx)) {
+          ctx.out('keep-alive: skipped (non-interactive or CI run)')
+        }
         ctx.out(
           `app lane: ${report.status}: ${report.summary ?? report.reason ?? 'no detail'}` +
             (report.visionCalls > 0

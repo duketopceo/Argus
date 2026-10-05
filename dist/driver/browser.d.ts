@@ -94,3 +94,11 @@ export declare class BrowserDriver {
     close(): Promise<string | undefined>;
     private _withTimeout;
 }
+/**
+ * Headed-relaunch instructions for inspecting a still-serving target after a
+ * failed run: the `--keep-alive` connect story. Argus's own browser is
+ * headless and closed by the time these print, so "attach" means launching a
+ * new headed browser at the same URL: `playwright open` also opens the
+ * Inspector for stepping. The URL is single-quoted for shell safety.
+ */
+export declare function inspectInstructions(url: string): string[];

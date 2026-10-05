@@ -24,3 +24,17 @@ export declare class TargetProcess {
     /** Kill the spawned process tree (process group). Idempotent. */
     stop(): Promise<void>;
 }
+export interface KeepAliveHoldDeps {
+    /** Sleep step between deadline/signal checks — injectable for tests. */
+    sleep?: (ms: number) => Promise<void>;
+}
+/**
+ * Hold a still-running target for `ttlMs` after a failed run so a human can
+ * inspect the live app, then return so the caller's teardown proceeds.
+ * SIGINT/SIGTERM end the hold early: swallowing them would leak the
+ * detached process group the caller's `finally` is about to kill. The hold
+ * keeps the *server* only: argus's own browser is headless and already
+ * closed at this point, so the connect story is a headed relaunch
+ * (`inspectInstructions`).
+ */
+export declare function holdTargetForDebug(url: string, ttlMs: number, note: (line: string) => void, deps?: KeepAliveHoldDeps): Promise<void>;

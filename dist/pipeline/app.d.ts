@@ -97,6 +97,10 @@ export interface AppLaneDeps {
     startTarget?: (spec: Target) => Promise<TargetProcess>;
     /** Consumer page-setup hook (config.pageSetup module) — trusted only. */
     applyPageSetup?: (driver: BrowserDriver) => Promise<void>;
+    /** Sleep step for the keep-alive hold; injectable for tests. */
+    sleep?: (ms: number) => Promise<void>;
+    /** Human-facing lines during the keep-alive hold (ctx.out from the CLI). */
+    note?: (line: string) => void;
     logger?: Logger;
 }
 export interface AppLaneInput {
@@ -115,6 +119,14 @@ export interface AppLaneInput {
      * bound is exactly the one the manifest reports.
      */
     budgetLimitUsd?: number;
+    /**
+     * On a non-passed outcome with a booted target, hold the target up for
+     * `ttlMs` before teardown (`--keep-alive`). The caller decides
+     * interactivity; the lane just holds when asked.
+     */
+    keepAlive?: {
+        ttlMs: number;
+    };
     deps?: AppLaneDeps;
 }
 /**

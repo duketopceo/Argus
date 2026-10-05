@@ -1,7 +1,8 @@
 import type { AppExpectation, Config, Target } from '../config.js'
 import type { BrowserDriver, Observation, PageCapture } from '../driver/browser.js'
 import { BrowserDriver as launchBrowserDriver } from '../driver/browser.js'
-import { TargetProcess, waitForReady } from '../driver/target.js'
+import { TargetProcess, holdTargetForDebug, waitForReady } from '../driver/target.js'
+import { inspectInstructions } from '../driver/browser.js'
 import { Actions } from '../engine/actions.js'
 import {
   runExplore,
@@ -169,6 +170,10 @@ export interface AppLaneDeps {
   startTarget?: (spec: Target) => Promise<TargetProcess>
   /** Consumer page-setup hook (config.pageSetup module) — trusted only. */
   applyPageSetup?: (driver: BrowserDriver) => Promise<void>
+  /** Sleep step for the keep-alive hold; injectable for tests. */
+  sleep?: (ms: number) => Promise<void>
+  /** Human-facing lines during the keep-alive hold (ctx.out from the CLI). */
+  note?: (line: string) => void
   logger?: Logger
 }
 
@@ -188,6 +193,12 @@ export interface AppLaneInput {
    * bound is exactly the one the manifest reports.
    */
   budgetLimitUsd?: number
+  /**
+   * On a non-passed outcome with a booted target, hold the target up for
+   * `ttlMs` before teardown (`--keep-alive`). The caller decides
+   * interactivity; the lane just holds when asked.
+   */
+  keepAlive?: { ttlMs: number }
   deps?: AppLaneDeps
 }
 
@@ -269,6 +280,31 @@ export async function runAppLane(input: AppLaneInput): Promise<AppLaneReport> {
   }
   let target: TargetProcess | undefined
   let driver: BrowserDriver | undefined
+
+  /**
+   * U3 keep-alive gate: on a non-passed report, hold a spawned target up for
+   * the TTL; for an externally-served target nothing argus owns would die on
+   * teardown, so the inspect hint alone is the hold. Called only on paths
+   * where the app was actually reachable — a target that never booted or
+   * never answered has no live page worth inspecting.
+   */
+  const maybeHold = async (report: AppLaneReport): Promise<AppLaneReport> => {
+    if (input.keepAlive === undefined || report.status === 'passed') return report
+    const note = deps.note ?? (() => undefined)
+    if (target === undefined) {
+      for (const line of inspectInstructions(targetUrl)) note(`  ${line}`)
+      return report
+    }
+    try {
+      await holdTargetForDebug(targetUrl, input.keepAlive.ttlMs, note, {
+        ...(deps.sleep !== undefined ? { sleep: deps.sleep } : {}),
+      })
+    } catch (e) {
+      note(`keep-alive hold failed: ${(e as Error).message}`)
+    }
+    return report
+  }
+
   try {
     if (config.target?.command !== undefined && config.target.command !== '') {
       const start = deps.startTarget ?? ((spec: Target) => TargetProcess.start(spec))
@@ -301,14 +337,17 @@ export async function runAppLane(input: AppLaneInput): Promise<AppLaneReport> {
     try {
       driver = await launch(config)
     } catch (e) {
-      return done('unavailable', `browser failed to launch: ${(e as Error).message}`)
+      // The spawned target is still serving — keep-alive applies: a human
+      // can check the app even though argus got no browser. `return await`:
+      // bare `return` lets `finally` kill the target while the hold sleeps.
+      return await maybeHold(done('unavailable', `browser failed to launch: ${(e as Error).message}`))
     }
     if (deps.applyPageSetup !== undefined) await deps.applyPageSetup(driver)
 
     try {
       await driver.goto(targetUrl)
     } catch (e) {
-      return done('unavailable', `target navigation failed: ${(e as Error).message}`)
+      return await maybeHold(done('unavailable', `target navigation failed: ${(e as Error).message}`))
     }
 
     const ledger = new Ledger(
@@ -339,7 +378,7 @@ export async function runAppLane(input: AppLaneInput): Promise<AppLaneReport> {
     const summary = expectedMet
       ? `expected state verified (${result.steps.length} steps, ${result.visited} page(s))`
       : `expected state unmet after ${result.stopReason} (${result.steps.length} steps)`
-    return done(
+    const report = done(
       expectedMet ? 'passed' : verifyError !== undefined ? 'inconclusive' : 'failed',
       expectedMet
         ? undefined
@@ -361,6 +400,7 @@ export async function runAppLane(input: AppLaneInput): Promise<AppLaneReport> {
         visionCostUsd: result.visionCostUsd,
       },
     )
+    return await maybeHold(report)
   } finally {
     await driver?.close().catch(() => undefined)
     await target?.stop().catch(() => undefined)
