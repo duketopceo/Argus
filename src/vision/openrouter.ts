@@ -59,6 +59,35 @@ export interface OpenRouterClientOptions {
   }) => void
 }
 
+/** Chat-completions message array for the API (text parts first). */
+export function toApiMessages(messages: Message[]): unknown[] {
+  return messages.map((m) => ({
+    role: m.role,
+    content: m.content
+      .map((part) => {
+        if (part.type === 'text') {
+          return { type: 'text', text: part.text }
+        }
+        return {
+          type: 'image_url',
+          image_url: { url: `data:image/jpeg;base64,${part.source}` },
+        }
+      })
+      .sort((a) => (a.type === 'text' ? -1 : 1)),
+  }))
+}
+
+export function responseFormatOf(schema: JsonSchema): Record<string, unknown> {
+  return {
+    type: 'json_schema',
+    json_schema: {
+      name: schema.name,
+      schema: schema.schema,
+      strict: schema.strict ?? true,
+    },
+  }
+}
+
 export class OpenRouterClient {
   private _apiKey: string
   private _fetch: typeof fetch
@@ -181,14 +210,7 @@ export class OpenRouterClient {
       body.models = req.models
     }
     if (req.schema) {
-      body.response_format = {
-        type: 'json_schema',
-        json_schema: {
-          name: req.schema.name,
-          schema: req.schema.schema,
-          strict: req.schema.strict ?? true,
-        },
-      }
+      body.response_format = responseFormatOf(req.schema)
     }
     if (this._trace) {
       body.trace = this._trace
@@ -217,20 +239,7 @@ export class OpenRouterClient {
   }
 
   private _toApiMessages(messages: Message[]): unknown[] {
-    return messages.map((m) => ({
-      role: m.role,
-      content: m.content
-        .map((part) => {
-          if (part.type === 'text') {
-            return { type: 'text', text: part.text }
-          }
-          return {
-            type: 'image_url',
-            image_url: { url: `data:image/jpeg;base64,${part.source}` },
-          }
-        })
-        .sort((a) => (a.type === 'text' ? -1 : 1)),
-    }))
+    return toApiMessages(messages)
   }
 
   private _extractContent(response: OpenRouterResponse): string {

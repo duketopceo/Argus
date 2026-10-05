@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { OpenRouterBatchClient } from '../../src/vision/batch.js'
 import { lines, reply, runReview, ScriptedClient } from './review-pipeline.helpers.js'
 
 describe('review scope exclusions', () => {
@@ -131,5 +132,129 @@ describe('large PRs', () => {
   it('still fails when no chunk could be reviewed', async () => {
     const r = await runReview({ head, client: new ScriptedClient(Array.from({ length: 20 }, () => new Error('down'))) })
     expect(r.code).toBe(1)
+  })
+})
+
+describe('batch mode', () => {
+  const head = { 'src/a.ts': 'export const a = 1\n' }
+  const finding = { file: 'src/a.ts', line: 1, severity: 'nit', category: 'other', message: 'L1: n' }
+
+  function batchDeps(script: (c: { url: string; method: string; body?: string }) => { status?: number; json?: unknown }) {
+    const calls: { url: string; method: string; body?: string }[] = []
+    const fetchFn = (async (url: unknown, init?: RequestInit) => {
+      const c = {
+        url: String(url),
+        method: init?.method ?? 'GET',
+        ...(typeof init?.body === 'string' ? { body: init.body } : {}),
+      }
+      calls.push(c)
+      const r = script(c)
+      return new Response(JSON.stringify(r.json ?? {}), { status: r.status ?? 200 })
+    }) as unknown as typeof fetch
+    let t = 0
+    return {
+      calls,
+      deps: {
+        createBatchClient: (o: Record<string, unknown>) =>
+          new OpenRouterBatchClient({
+            ...(o as { apiKey: string }),
+            fetch: fetchFn,
+            sleep: async (ms: number) => {
+              t += ms
+            },
+            now: () => t,
+          }),
+      },
+    }
+  }
+
+  const completed = (text: string) => ({
+    json: {
+      id: 'b1',
+      status: 'completed',
+      model: 'batch/model',
+      usage: { total_tokens: 500, cost: 0.0042 },
+      results: [
+        {
+          custom_id: 'chunk-0',
+          response: { status_code: 200, body: { choices: [{ message: { content: text } }] } },
+          error: null,
+        },
+      ],
+    },
+  })
+
+  it('realtime is the default: no batch call', async () => {
+    const client = new ScriptedClient([reply([])])
+    const h = batchDeps(() => ({ status: 500 }))
+    await runReview({ head, client, deps: h.deps })
+    expect(h.calls).toHaveLength(0)
+    expect(client.prompts).toHaveLength(1)
+  })
+
+  it('batch mode submits chunks, uses inline results, and meters the batch cost', async () => {
+    const client = new ScriptedClient([])
+    const h = batchDeps((c) =>
+      c.method === 'POST' ? { status: 202, json: { id: 'b1', status: 'validating' } } : completed(JSON.stringify({ summary: 's', verdict: 'approve', findings: [finding] })),
+    )
+    const r = await runReview({
+      head,
+      client,
+      config: { review: { mode: 'batch', batchModel: 'cheap/batch-model' } },
+      deps: h.deps,
+    })
+    expect(r.code).toBe(0)
+    expect(client.prompts).toHaveLength(0)
+    expect(JSON.parse(h.calls[0]?.body ?? '{}').model).toBe('cheap/batch-model')
+    expect(r.report.findings).toHaveLength(1)
+    expect(r.report.visionCostUsd).toBeCloseTo(0.0042)
+    expect(r.report.calls).toHaveLength(1)
+    expect(r.report.batch).toMatchObject({ batchId: 'b1', model: 'cheap/batch-model', requests: 1 })
+    expect(r.report.batch.fallback).toBeUndefined()
+  })
+
+  it('--mode batch on the CLI overrides config', async () => {
+    const client = new ScriptedClient([])
+    const h = batchDeps((c) =>
+      c.method === 'POST' ? { json: { id: 'b1', status: 'validating' } } : completed(JSON.stringify({ summary: 's', verdict: 'pass', findings: [] })),
+    )
+    const r = await runReview({ head, client, args: ['--mode', 'batch'], deps: h.deps })
+    expect(h.calls.length).toBeGreaterThan(0)
+    expect(r.report.batch.batchId).toBe('b1')
+  })
+
+  it('falls back to realtime when the batch fails, and says so', async () => {
+    const client = new ScriptedClient([reply([finding], 'approve')])
+    const h = batchDeps((c) =>
+      c.method === 'POST' ? { json: { id: 'b1', status: 'validating' } } : { json: { id: 'b1', status: 'failed', error: { message: 'nope' } } },
+    )
+    const r = await runReview({ head, client, config: { review: { mode: 'batch' } }, deps: h.deps })
+    expect(r.code).toBe(0)
+    expect(client.prompts).toHaveLength(1)
+    expect(r.report.batch.fallback).toContain('failed')
+    expect(r.report.findings).toHaveLength(1)
+  })
+
+  it('falls back to realtime when the poll deadline passes', async () => {
+    const client = new ScriptedClient([reply([], 'pass')])
+    const h = batchDeps((c) =>
+      c.method === 'POST' ? { json: { id: 'b1', status: 'validating' } } : { json: { id: 'b1', status: 'in_progress' } },
+    )
+    const r = await runReview({ head, client, config: { review: { mode: 'batch' } }, deps: h.deps })
+    expect(client.prompts).toHaveLength(1)
+    expect(r.report.batch.fallback).toContain('timeout')
+    expect(h.calls.some((c) => c.url.endsWith('/cancel'))).toBe(true)
+  })
+
+  it('reviews a chunk whose individual batch request errored in realtime', async () => {
+    const client = new ScriptedClient([reply([], 'pass')])
+    const h = batchDeps((c) =>
+      c.method === 'POST'
+        ? { json: { id: 'b1', status: 'validating' } }
+        : { json: { id: 'b1', status: 'completed', usage: { total_tokens: 1, cost: 0.001 }, results: [{ custom_id: 'chunk-0', response: null, error: { message: 'x' } }] } },
+    )
+    const r = await runReview({ head, client, config: { review: { mode: 'batch' } }, deps: h.deps })
+    expect(client.prompts).toHaveLength(1)
+    expect(r.report.batch.fallbackChunks).toBe(1)
   })
 })

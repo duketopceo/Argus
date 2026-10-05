@@ -105,3 +105,19 @@ describe('resolveConfig explore', () => {
     expect(config.explore.enabled).toBe(false)
   })
 })
+
+describe('review.mode and review.batchModel', () => {
+  it('defaults to realtime with no batch model; rejects junk', async () => {
+    const { resolveConfig } = await import('../../src/config.js')
+    expect(resolveConfig({}).review.mode).toBe('realtime')
+    expect(resolveConfig({}).review.batchModel).toBeUndefined()
+    expect(resolveConfig({ review: { mode: 'batch', batchModel: 'a/b' } }).review).toMatchObject({
+      mode: 'batch',
+      batchModel: 'a/b',
+    })
+    expect(resolveConfig({ review: { mode: 'turbo' as never, batchModel: '' } }).review).toMatchObject({
+      mode: 'realtime',
+      batchModel: undefined,
+    })
+  })
+})
