@@ -118,6 +118,7 @@ const defaults = {
         findingThreshold: 1.0,
         requestChanges: true,
         profiles: [],
+        instructions: [],
         exclude: [...DEFAULT_REVIEW_EXCLUDE],
         mode: 'realtime',
         batchTimeoutMs: 480_000,
@@ -189,6 +190,27 @@ export function resolveMaxComments(env, config) {
     }
     return config.review.maxComments;
 }
+/**
+ * U6 — validate `review.instructions` entries. Throws naming the entry:
+ * a mistyped glob that silently deadens a rule is worse than failing the
+ * config load (same contract as `review.requestTimeoutMs`). Shared by the
+ * ARGUS_REVIEW_INSTRUCTIONS env path, which catches and warns instead.
+ */
+export function parseInstructions(raw) {
+    if (raw === undefined || raw === null)
+        return [];
+    if (!Array.isArray(raw))
+        throw new Error('review.instructions must be an array');
+    return raw.map((entry, i) => {
+        const e = entry;
+        const glob = typeof e?.glob === 'string' ? e.glob.trim() : '';
+        const rule = typeof e?.rule === 'string' ? e.rule.trim() : '';
+        if (glob === '' || rule === '') {
+            throw new Error(`review.instructions[${i}] must be {glob, rule} with non-empty strings, got ${JSON.stringify(entry)}`);
+        }
+        return { glob, rule };
+    });
+}
 export function resolveConfig(input = {}) {
     const provider = { ...defaults.provider, ...(input.provider ?? {}) };
     // Wrong-typed sandbox values (e.g. `sandbox: true`, `enabled: 'yes'`,
@@ -259,6 +281,7 @@ export function resolveConfig(input = {}) {
     review.profiles = Array.isArray(rawReview.profiles)
         ? [...new Set(rawReview.profiles.filter(isReviewProfile))]
         : [];
+    review.instructions = parseInstructions(rawReview.instructions);
     review.exclude =
         Array.isArray(rawReview.exclude) &&
             rawReview.exclude.every((g) => typeof g === 'string' && g !== '')

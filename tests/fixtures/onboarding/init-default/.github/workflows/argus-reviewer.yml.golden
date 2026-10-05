@@ -41,6 +41,9 @@ jobs:
       - uses: duketopceo/Argus/action@bc462fa66018e149eac1b32e36ac34b4f2eb2d56 # v0.4.2
         with:
           openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+      # Per-path review rules also exist as an action input (a JSON
+      # [{glob, rule}] string) for lanes where PR config never executes:
+      #          review-instructions: '[{"glob":"db/**","rule":"Check migration reversibility"}]'
       # Flow lane + heal write-back: 'run' replays committed flow
       # recordings (tests/argus/flows/*.json); 'heal-writeback: pr' opens a
       # PR with the relocated steps whenever a heal re-resolves an element —

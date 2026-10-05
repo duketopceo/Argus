@@ -313,6 +313,16 @@ export interface Config {
          */
         requestTimeoutMs: number;
         /**
+         * U6 — `{glob, rule}` entries resolved per chunk: a rule lands in a
+         * chunk's prompt when its glob matches any file the chunk carries
+         * (migrations get migration rules, UI gets a11y rules). Trusted-only
+         * in effect — `review` is not on the untrusted-config allowlist.
+         */
+        instructions: {
+            glob: string;
+            rule: string;
+        }[];
+        /**
          * U2 — diff-scoped spec generation (`--generate-tests`, `@argus
          * generate`). `enabled` is trusted-only in effect: `review` is not on
          * the untrusted-config allowlist and the lane hard-refuses fork PRs.
@@ -384,6 +394,16 @@ export declare function resolveBlockSeverities(config: Config): string[];
  * isn't on the untrusted allowlist). Anything else → `review.maxComments`.
  */
 export declare function resolveMaxComments(env: Record<string, string | undefined>, config: Config): number;
+/**
+ * U6 — validate `review.instructions` entries. Throws naming the entry:
+ * a mistyped glob that silently deadens a rule is worse than failing the
+ * config load (same contract as `review.requestTimeoutMs`). Shared by the
+ * ARGUS_REVIEW_INSTRUCTIONS env path, which catches and warns instead.
+ */
+export declare function parseInstructions(raw: unknown): {
+    glob: string;
+    rule: string;
+}[];
 export declare function resolveConfig(input?: ConfigInput): Config;
 export interface LoadConfigOpts {
     /**

@@ -62,6 +62,10 @@ inputs:
     description: "Optional comma-separated review lenses appended to the review prompt: security, perf, debloat (e.g. 'security,perf'). Wins over the checkout's config review.profiles."
     default: ''
     required: false
+  review-instructions:
+    description: 'Optional JSON array of {"glob", "rule"} per-path review rules resolved per chunk (e.g. [{"glob":"db/**","rule":"Check migration reversibility"}]). Wins over the checkout''s config review.instructions.'
+    default: ''
+    required: false
   install-consumer-dependencies:
     description: Explicitly install the consumer project's dependencies for a trusted runtime lane. Disabled by default so code review never runs PR-controlled lifecycle scripts beside secrets.
     default: 'false'
@@ -198,6 +202,7 @@ runs:
         ARGUS_MAX_COMMENTS: ${{ inputs.max-comments }}
         ARGUS_CODE_MODEL: ${{ inputs.code-model }}
         ARGUS_REVIEW_PROFILES: ${{ inputs.review-profiles }}
+        ARGUS_REVIEW_INSTRUCTIONS: ${{ inputs.review-instructions }}
       run: node "$ARGUS_ACTION_PATH/bootstrap.mjs"
 
     - name: Reject executable lanes on untrusted pull requests
@@ -298,6 +303,7 @@ runs:
         ARGUS_MAX_COMMENTS: ${{ inputs.max-comments }}
         ARGUS_CODE_MODEL: ${{ inputs.code-model }}
         ARGUS_REVIEW_PROFILES: ${{ inputs.review-profiles }}
+        ARGUS_REVIEW_INSTRUCTIONS: ${{ inputs.review-instructions }}
         ARGUS_DEBUG: '1'
         ARGUS_REVIEWER_TRACE: >-
           {"repo":"${{ github.repository }}",
@@ -336,6 +342,7 @@ runs:
         ARGUS_BUDGET_USD: ${{ inputs.budget-usd }}
         ARGUS_CODE_MODEL: ${{ inputs.code-model }}
         ARGUS_REVIEW_PROFILES: ${{ inputs.review-profiles }}
+        ARGUS_REVIEW_INSTRUCTIONS: ${{ inputs.review-instructions }}
         ARGUS_HEAL_WRITEBACK: ${{ inputs.heal-writeback }}
         ARGUS_REVIEWER_TRACE: >-
           {"repo":"${{ github.repository }}",
