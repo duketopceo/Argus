@@ -191,6 +191,11 @@ Options:
   --report-dir <dir> Report output dir (default: config reportDir or ./argus-reviewer-report)
   --fixture <dir>    Review a local fixture repo (ref argus-fixture-base vs HEAD)
                      instead of a live PR, with no GitHub API calls. Used by npm run demo.
+  --base <ref>       Review the local merge-base..worktree diff of <ref> -
+                     no GitHub context needed (the agent "review my diff" path).
+                     Without it, diffBase/ARGUS_DIFF_BASE supply the default base
+                     only when no PR context exists. Posts nothing; read
+                     code-review.json for the verdict.
   --mode <mode>      realtime (default) | batch. batch submits the chunks through
                      OpenRouter's async Batch API and falls back to realtime on
                      failure or timeout. Overrides ARGUS_REVIEW_MODE and review.mode.
@@ -1289,6 +1294,15 @@ export function filesFromUnifiedDiff(diff) {
     }
     return files;
 }
+// diff.* user config (mnemonicPrefix, srcPrefix, noprefix) rewrites the
+// a/ and b/ headers filesFromUnifiedDiff parses — force them so a user's
+// gitconfig cannot silently empty the review surface.
+const DIFF_PREFIX_FLAGS = [
+    'diff.mnemonicPrefix=false',
+    'diff.noprefix=false',
+    'diff.srcPrefix=a/',
+    'diff.dstPrefix=b/',
+].flatMap((kv) => ['-c', kv]);
 /**
  * `--fixture <dir>` seam: the dir is a real git repo with an
  * `argus-fixture-base` ref (the merge base) and HEAD at the PR head —
@@ -1306,7 +1320,7 @@ export async function loadFixture(dir, exec = defaultExec) {
         return { skipped: 'fixture has no HEAD commit' };
     const baseSha = base.stdout.trim();
     const headSha = head.stdout.trim();
-    const diff = await exec('git', ['-c', 'core.quotePath=false', '-C', dir, 'diff', `${baseSha}..${headSha}`], 60_000);
+    const diff = await exec('git', [...DIFF_PREFIX_FLAGS, '-c', 'core.quotePath=false', '-C', dir, 'diff', `${baseSha}..${headSha}`], 60_000);
     if (diff.code !== 0) {
         return { skipped: `git diff failed: ${diff.stderr.trim().slice(0, 200)}` };
     }
@@ -1323,6 +1337,68 @@ export async function loadFixture(dir, exec = defaultExec) {
         body: undefined,
     };
     return { files: filesFromUnifiedDiff(diff.stdout), meta, diff: diff.stdout };
+}
+/**
+ * `--base <ref>` seam: review the local diff with zero GitHub context —
+ * the canonical "review my work" path for agents and local users (U16).
+ * The diff runs merge-base against the WORKING TREE so committed and
+ * uncommitted changes both land; a clean checkout reduces to base..HEAD.
+ * `git diff` never names untracked files, so each is materialized through
+ * `git diff --no-index /dev/null <file>` — a new file the agent just wrote
+ * is precisely the local-change case. The index is never touched
+ * (`git add -N`/`stash` would mutate the user's repo state).
+ */
+export async function loadLocalDiff(cwd, baseRef, exec = defaultExec, opts = {}) {
+    const base = await exec('git', ['-C', cwd, 'rev-parse', '--verify', `${baseRef}^{commit}`], 30_000);
+    if (base.code !== 0) {
+        return { error: `base ref "${baseRef}" does not resolve to a commit` };
+    }
+    const head = await exec('git', ['-C', cwd, 'rev-parse', 'HEAD'], 30_000);
+    if (head.code !== 0)
+        return { error: 'checkout has no HEAD commit' };
+    // Merge-base picks PR-style semantics ("what my branch changed"), not
+    // whatever happened to land on the base ref since. Unrelated histories
+    // fall back to the ref itself.
+    const mb = await exec('git', ['-C', cwd, 'merge-base', base.stdout.trim(), 'HEAD'], 30_000);
+    const baseSha = mb.code === 0 && mb.stdout.trim() !== '' ? mb.stdout.trim() : base.stdout.trim();
+    const headSha = head.stdout.trim();
+    const diff = await exec('git', [...DIFF_PREFIX_FLAGS, '-c', 'core.quotePath=false', '-C', cwd, 'diff', baseSha], 60_000);
+    if (diff.code !== 0) {
+        return { error: `git diff failed: ${diff.stderr.trim().slice(0, 200)}` };
+    }
+    const untracked = await exec('git', ['-C', cwd, 'ls-files', '-z', '--others', '--exclude-standard'], 30_000);
+    if (untracked.code !== 0) {
+        return { error: `git ls-files failed: ${untracked.stderr.trim().slice(0, 200)}` };
+    }
+    // Argus's own output dirs (report dir, live-log cache dir) exist before
+    // the diff is materialized — reviewing live.ndjson mid-write is
+    // self-referential noise, so untracked paths under them never land.
+    const excluded = (opts.excludeDirs ?? [])
+        .map((d) => relative(cwd, d).replace(/\\/g, '/').replace(/\/?$/, '/'))
+        .filter((p) => p !== '/' && !p.startsWith('../'));
+    let combined = diff.stdout;
+    for (const name of untracked.stdout.split('\0').filter((n) => n !== '')) {
+        if (excluded.some((p) => name.startsWith(p)))
+            continue;
+        // --no-index exits 1 on differences — that is the success case here.
+        const part = await exec('git', [...DIFF_PREFIX_FLAGS, '-C', cwd, 'diff', '--no-index', '--', '/dev/null', name], 30_000);
+        if (part.code !== 0 && part.code !== 1)
+            continue;
+        combined += part.stdout;
+    }
+    const meta = {
+        headSha,
+        baseSha,
+        baseRef: undefined,
+        isFork: false,
+        authorAssociation: 'OWNER',
+        labels: [],
+        pushedAt: undefined,
+        labelApprovedAt: undefined,
+        title: undefined,
+        body: undefined,
+    };
+    return { files: filesFromUnifiedDiff(combined), meta, diff: combined };
 }
 export function buildPatchChunks(files, contexts = {}) {
     return planChunks(files, contexts).map((c) => c.text);
@@ -1718,6 +1794,7 @@ async function cmdCodeReview(args, ctx, deps) {
             help: { type: 'boolean', short: 'h', default: false },
             'report-dir': { type: 'string' },
             fixture: { type: 'string' },
+            base: { type: 'string' },
             mode: { type: 'string' },
             'batch-model': { type: 'string' },
             'generate-tests': { type: 'boolean', default: false },
@@ -1750,13 +1827,43 @@ async function cmdCodeReview(args, ctx, deps) {
     // HEAD) with zero GitHub API calls — the demo path. Trust still resolves
     // (locally → trusted) and every downstream lane runs its real code.
     const fixtureDir = values.fixture !== undefined ? resolve(ctx.cwd, values.fixture) : undefined;
+    const baseFlag = values.base?.trim();
+    if (fixtureDir !== undefined && baseFlag !== undefined && baseFlag !== '') {
+        usageError(ctx, 'code-review', '--base cannot be combined with --fixture', 'argus-reviewer code-review --base main');
+        return 2;
+    }
+    // --base reviews the local merge-base..worktree diff with zero GitHub
+    // context (U16). diffBase/ARGUS_DIFF_BASE supply the default base only
+    // when no PR context exists — that config already feeds flow-lane diff
+    // invalidation and must not silently hijack a real PR lane.
+    const traceRepo = trace?.repo ?? ctx.env.GITHUB_REPOSITORY;
+    const tracePr = trace?.pr || trustResult.pr;
+    const baseToken = ctx.env.GITHUB_TOKEN ?? ctx.env.GH_TOKEN;
+    const configuredBase = (config.diffBase ?? '').trim() || (ctx.env.ARGUS_DIFF_BASE ?? '').trim();
+    const hasPrContext = traceRepo !== undefined &&
+        traceRepo !== '' &&
+        tracePr !== undefined &&
+        tracePr !== '' &&
+        baseToken !== undefined &&
+        baseToken !== '';
+    const localBaseRef = fixtureDir === undefined
+        ? baseFlag !== undefined && baseFlag !== ''
+            ? baseFlag
+            : hasPrContext
+                ? undefined
+                : configuredBase !== ''
+                    ? configuredBase
+                    : undefined
+        : undefined;
     const repo = fixtureDir !== undefined
         ? basename(fixtureDir)
-        : (trace?.repo ?? ctx.env.GITHUB_REPOSITORY);
+        : localBaseRef !== undefined
+            ? basename(ctx.cwd)
+            : traceRepo;
     // `||` not `??`: the action renders `pr` as "" on issue_comment events
     // (github.event.pull_request.number is empty), and '' is not nullish.
-    const pr = fixtureDir !== undefined ? '0' : trace?.pr || trustResult.pr;
-    const token = ctx.env.GITHUB_TOKEN ?? ctx.env.GH_TOKEN;
+    const pr = fixtureDir !== undefined || localBaseRef !== undefined ? '0' : tracePr;
+    const token = baseToken;
     // ARGUS_CODE_MODEL is an operator surface (workflow/plugin env) and wins
     // over checkout config — in the untrusted lane it is the only way to pick
     // the review model, since PR-controlled config never executes.
@@ -1802,6 +1909,9 @@ async function cmdCodeReview(args, ctx, deps) {
     const model = config.code_model ?? config.model;
     const runNonce = runNonceFrom(ctx.env);
     debug('code-review', `repo=${repo ?? 'none'} pr=${pr ?? 'none'} model=${model} budget=${config.codeReviewBudgetUsd ?? 'UNCAPPED'}`);
+    // Declared before `skip` so the empty-diff skip report can carry the
+    // reviewed range; populated after the PR-context guard below.
+    let localReview = undefined;
     const skip = async (reason) => {
         ctx.out(`code-review: skipping: ${reason}`);
         stage(`skipped — ${reason}`);
@@ -1821,15 +1931,29 @@ async function cmdCodeReview(args, ctx, deps) {
             tokens: 0,
             model,
             budgetExceeded: false,
-            headBinding: classifyHeadBinding(undefined, undefined, fixtureDir !== undefined ? 'fixture' : 'github'),
+            headBinding: classifyHeadBinding(undefined, undefined, fixtureDir !== undefined
+                ? 'fixture'
+                : localBaseRef !== undefined
+                    ? 'local'
+                    : 'github'),
+            ...(localReview !== undefined && !('error' in localReview)
+                ? {
+                    diffRange: {
+                        base: localBaseRef,
+                        baseSha: localReview.meta.baseSha,
+                        headSha: localReview.meta.headSha,
+                    },
+                }
+                : {}),
             ...(runNonce !== undefined ? { runNonce } : {}),
         };
         await writeAtomicJson(codeReviewPath, skipped);
         return 0;
     };
-    if (fixtureDir === undefined) {
-        if (!repo || !pr)
-            return await skip('missing repo/pr in trace');
+    if (fixtureDir === undefined && localBaseRef === undefined) {
+        if (!repo || !pr) {
+            return await skip('missing repo/pr in trace; pass --base <ref> or set diffBase to review the local diff');
+        }
         if (!token)
             return await skip('missing GITHUB_TOKEN');
     }
@@ -1837,6 +1961,16 @@ async function cmdCodeReview(args, ctx, deps) {
     const fixture = fixtureDir !== undefined ? await loadFixture(fixtureDir, deps.exec) : undefined;
     if (fixture !== undefined && 'skipped' in fixture) {
         return await skip(`fixture: ${fixture.skipped}`);
+    }
+    localReview =
+        localBaseRef !== undefined
+            ? await loadLocalDiff(ctx.cwd, localBaseRef, deps.exec ?? defaultExec, {
+                excludeDirs: [liveDir, reportDir],
+            })
+            : undefined;
+    if (localReview !== undefined && 'error' in localReview) {
+        usageError(ctx, 'code-review', localReview.error, `argus-reviewer code-review --base ${localBaseRef}`);
+        return 2;
     }
     // Narrowed: fixture mode sets both; the guards above return early in
     // live-PR mode when either is missing.
@@ -1857,14 +1991,21 @@ async function cmdCodeReview(args, ctx, deps) {
     const [allFiles, index] = await Promise.all([
         fixture !== undefined
             ? Promise.resolve(fixture.files)
-            : fetchPrFiles(repoName, prNum, ghToken, ctx),
+            : localReview !== undefined
+                ? Promise.resolve(localReview.files)
+                : fetchPrFiles(repoName, prNum, ghToken, ctx),
         readIndex(indexPath),
     ]);
-    if (!allFiles || allFiles.length === 0)
-        return await skip('could not fetch PR diff');
+    if (!allFiles || allFiles.length === 0) {
+        return await skip(localReview !== undefined
+            ? `no diff vs base ${localBaseRef}`
+            : 'could not fetch PR diff');
+    }
     stage(fixture !== undefined
         ? `fixture mode — ${allFiles.length} changed file(s) from ${basename(fixtureDir)}`
-        : `fetched ${allFiles.length} changed file(s)`);
+        : localReview !== undefined
+            ? `local diff - ${allFiles.length} changed file(s) vs ${localBaseRef}`
+            : `fetched ${allFiles.length} changed file(s)`);
     // Generated/fixture/vendored paths never reach the review model; the
     // count and a sample land in the report's scope record (never silent).
     const { kept: files, excluded } = partitionByExclude(allFiles, config.review.exclude);
@@ -1893,7 +2034,9 @@ async function cmdCodeReview(args, ctx, deps) {
             : readCheckoutSha(ctx.cwd, deps.exec ?? defaultExec);
         const prMetaPromise = fixture !== undefined
             ? Promise.resolve(fixture.meta)
-            : fetchPrMeta(repoName, prNum, ghToken, ctx).catch(() => undefined);
+            : localReview !== undefined
+                ? Promise.resolve(localReview.meta)
+                : fetchPrMeta(repoName, prNum, ghToken, ctx).catch(() => undefined);
         const allFindings = [];
         const allCalls = [];
         let totalTokens = 0;
@@ -2275,7 +2418,7 @@ async function cmdCodeReview(args, ctx, deps) {
         // evidence linkage here.
         const prMeta = await prMetaPromise;
         const checkoutSha = await checkoutShaPromise;
-        const headBinding = classifyHeadBinding(prMeta?.headSha, checkoutSha, fixture !== undefined ? 'fixture' : 'github');
+        const headBinding = classifyHeadBinding(prMeta?.headSha, checkoutSha, fixture !== undefined ? 'fixture' : localReview !== undefined ? 'local' : 'github');
         stage(`head binding — ${headBinding.status}: ${headBinding.detail}`);
         if (!isHeadBindingConclusive(headBinding)) {
             summary = `Head binding inconclusive: ${summary}`;
@@ -2294,12 +2437,14 @@ async function cmdCodeReview(args, ctx, deps) {
             // out again (the scan surface is identical).
             const materialized = fixture !== undefined
                 ? { diff: fixture.diff }
-                : await materializeMergeBaseDiff({
-                    cwd: ctx.cwd,
-                    baseSha: prMeta.baseSha,
-                    ...(token !== undefined ? { token } : {}),
-                    ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
-                });
+                : localReview !== undefined
+                    ? { diff: localReview.diff }
+                    : await materializeMergeBaseDiff({
+                        cwd: ctx.cwd,
+                        baseSha: prMeta.baseSha,
+                        ...(token !== undefined ? { token } : {}),
+                        ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
+                    });
             if ('skipped' in materialized) {
                 secretsScan = { skipped: materialized.skipped };
                 ctx.err(`secrets scan skipped: ${materialized.skipped}`);
@@ -2341,7 +2486,7 @@ async function cmdCodeReview(args, ctx, deps) {
         }
         finalFindings = [...finalFindings, ...secretsFindings];
         const headSha = prMeta?.headSha;
-        const checkRuns = headSha === undefined || fixture !== undefined
+        const checkRuns = headSha === undefined || fixture !== undefined || localReview !== undefined
             ? undefined
             : await fetchCheckRuns(repoName, headSha, ghToken, ctx);
         const linkedFindings = linkFindings(finalFindings, index, checkRuns);
@@ -2453,7 +2598,8 @@ async function cmdCodeReview(args, ctx, deps) {
                     token: ghToken,
                     // Fixture mode reviews a repo other than the checkout — writing
                     // a PR against `repo` there would be fiction. Drafts only.
-                    repo: fixtureDir === undefined ? repoName : undefined,
+                    // Local mode has no GitHub repo/pr to write against — drafts only.
+                    repo: fixtureDir === undefined && localReview === undefined ? repoName : undefined,
                     pr: prNum,
                     client,
                     model,
@@ -2521,6 +2667,15 @@ async function cmdCodeReview(args, ctx, deps) {
             model: lastModel,
             budgetExceeded: ledger.budgetExceeded,
             headBinding,
+            ...(localReview !== undefined
+                ? {
+                    diffRange: {
+                        base: localBaseRef,
+                        baseSha: localReview.meta.baseSha,
+                        headSha: localReview.meta.headSha,
+                    },
+                }
+                : {}),
             ...(runNonce !== undefined ? { runNonce } : {}),
             ...(persistPayload !== undefined ? { persistPayload } : {}),
         };

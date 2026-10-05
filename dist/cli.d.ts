@@ -158,6 +158,12 @@ interface CodeReviewReport {
     budgetExceeded: boolean;
     /** Identity relationship between the report source and checkout. */
     headBinding?: HeadBinding;
+    /** U16 — the reviewed range on local-diff runs (`--base`). */
+    diffRange?: {
+        base: string;
+        baseSha: string;
+        headSha: string;
+    };
     /** Workflow-run nonce (GITHUB_RUN_ID) — see runNonceFrom. */
     runNonce?: string;
     /**
@@ -186,6 +192,28 @@ export declare function loadFixture(dir: string, exec?: ExecFn): Promise<{
     diff: string;
 } | {
     skipped: string;
+}>;
+/**
+ * `--base <ref>` seam: review the local diff with zero GitHub context —
+ * the canonical "review my work" path for agents and local users (U16).
+ * The diff runs merge-base against the WORKING TREE so committed and
+ * uncommitted changes both land; a clean checkout reduces to base..HEAD.
+ * `git diff` never names untracked files, so each is materialized through
+ * `git diff --no-index /dev/null <file>` — a new file the agent just wrote
+ * is precisely the local-change case. The index is never touched
+ * (`git add -N`/`stash` would mutate the user's repo state).
+ */
+export declare function loadLocalDiff(cwd: string, baseRef: string, exec?: ExecFn, opts?: {
+    excludeDirs?: string[];
+}): Promise<{
+    files: PrFile[];
+    meta: PrMeta & {
+        headSha: string;
+        baseSha: string;
+    };
+    diff: string;
+} | {
+    error: string;
 }>;
 export declare function buildPatchChunks(files: PrFile[], contexts?: Record<string, string>): string[];
 export declare function buildCodeReviewMessages(repo: string, pr: string, patchText: string, chunkIndex?: number, totalChunks?: number, profiles?: readonly string[]): Message[];

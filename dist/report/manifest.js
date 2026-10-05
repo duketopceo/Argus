@@ -31,6 +31,15 @@ export function classifyHeadBinding(intendedSha, checkoutSha, source) {
             detail: 'fixture diff is bound to its local fixture head',
         };
     }
+    if (source === 'local') {
+        return {
+            intendedSha,
+            checkoutSha,
+            status: 'not_applicable',
+            source,
+            detail: 'local diff is bound to the working tree, not a pushed head',
+        };
+    }
     if (intendedSha === undefined || intendedSha === '') {
         return {
             intendedSha,

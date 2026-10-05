@@ -526,6 +526,17 @@ against it: the real chunking, model review, secrets scan and
 confidence-model adjudication, with zero GitHub API calls. Run
 `npm run watch` in a second terminal to stream the stage lines live. Requires `OPENROUTER_API_KEY` (BYOK, real model calls).
 
+### Review a local diff (`code-review --base <ref>`)
+
+Inside any git checkout, `argus-reviewer code-review --base main` reviews
+the merge-base..worktree diff: committed branch changes plus uncommitted
+modifications and new (untracked) files. No GitHub context is needed, nothing
+is posted, and the verdict lives in `code-review.json` (`diffRange` names the
+reviewed range; `headBinding.source` is `local`). When no PR context exists,
+`diffBase`/`ARGUS_DIFF_BASE` supply the default base; with a real PR context
+they keep their flow-invalidation meaning and never hijack the review.
+Requires `OPENROUTER_API_KEY` (BYOK).
+
 ### README casts (`npm run demo:record`, contributors)
 
 The terminal casts in the README are VHS tapes in `assets/demo/`. After
