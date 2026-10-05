@@ -1,5 +1,6 @@
 import { defaultExec } from '../detect.js';
 import { debug } from '../debug.js';
+import { addedLines } from './difftext.js';
 import { describeDecisionError, isNoulAnswer, MAX_CANDIDATES, } from '../vision/decisions.js';
 // Owned by vision/decisions.ts — re-exported here so existing import
 // paths (tests, lanes) keep resolving.
@@ -30,41 +31,11 @@ const PATTERNS = [
  * Removed/context lines are not scanned — a rotated-out-but-live secret
  * in a `-` line is a deliberate open question (plan OQ), and context
  * lines would re-flag pre-existing secrets the PR did not introduce.
+ * The added-lines walk is shared with the rules lane (`difftext.ts`).
  */
 export function scanDiffForSecrets(diffText) {
     const out = [];
-    let file = '';
-    let newLine = 0;
-    // `+++ `/`--- ` are file headers only in the pre-hunk zone — inside a
-    // hunk they are added/removed content lines (`+` + `++ x`, `-` + `-- x`)
-    // and must not reset `file` or `inHunk`.
-    let inHunk = false;
-    for (const raw of diffText.split('\n')) {
-        if (raw.startsWith('diff --git')) {
-            inHunk = false;
-            continue;
-        }
-        if (raw.startsWith('@@')) {
-            inHunk = true;
-            const m = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw);
-            newLine = m !== null ? parseInt(m[1], 10) : 0;
-            continue;
-        }
-        if (!inHunk) {
-            if (raw.startsWith('+++ ')) {
-                const m = /^\+\+\+ b\/(.+)$/.exec(raw);
-                file = m?.[1] ?? '';
-            }
-            continue;
-        }
-        // Context lines consume a new-file line number; `-` lines don't.
-        if (raw.startsWith(' ')) {
-            newLine++;
-            continue;
-        }
-        if (!raw.startsWith('+') || file === '')
-            continue;
-        const text = raw.slice(1);
+    for (const { file, line, text } of addedLines(diffText)) {
         for (const { cls, re, group } of PATTERNS) {
             const m = re.exec(text);
             if (m === null)
@@ -72,7 +43,7 @@ export function scanDiffForSecrets(diffText) {
             const literal = group !== undefined ? (m[group] ?? m[0]) : m[0];
             out.push({
                 file,
-                line: newLine,
+                line,
                 patternClass: cls,
                 contextExcerpt: text.replaceAll(literal, '***'),
                 literal,
@@ -80,7 +51,6 @@ export function scanDiffForSecrets(diffText) {
             });
             break; // first matching class wins — one candidate per line
         }
-        newLine++;
     }
     return out;
 }

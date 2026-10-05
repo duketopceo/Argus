@@ -73,19 +73,6 @@ export interface CodeReviewInput {
         }[];
         prUrl?: string;
     };
-    /** U8 — deterministic ruleset-lane audit: per-rule hits, suppressions, failures. */
-    rulesScan?: {
-        ran?: string[];
-        records?: {
-            rule?: string;
-            suppressed?: string;
-        }[];
-        failures?: {
-            rule?: string;
-            error?: string;
-        }[];
-        skipped?: string;
-    };
 }
 /** The subset of run.json the comment head reads. */
 export type ReportInput = Pick<RunReport, 'ok' | 'durationMs'> & {

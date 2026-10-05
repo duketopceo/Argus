@@ -59,6 +59,7 @@ export declare const DEFAULT_SECRETS_THRESHOLD = 0.3;
  * Removed/context lines are not scanned — a rotated-out-but-live secret
  * in a `-` line is a deliberate open question (plan OQ), and context
  * lines would re-flag pre-existing secrets the PR did not introduce.
+ * The added-lines walk is shared with the rules lane (`difftext.ts`).
  */
 export declare function scanDiffForSecrets(diffText: string): SecretCandidate[];
 /**

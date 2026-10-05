@@ -58,7 +58,7 @@ describe('runRules', () => {
       expect.objectContaining({
         rule: 'hardcoded-endpoint',
         file: 'fixtures/sample.yaml',
-        suppressed: 'non-code path',
+        suppressed: 'data/prose path',
       }),
     )
   })
@@ -74,7 +74,7 @@ describe('runRules', () => {
       expect.objectContaining({
         rule: 'leftover-todo',
         file: 'docs/guide.md',
-        suppressed: 'non-code path',
+        suppressed: 'data/prose path',
       }),
     )
   })
@@ -124,11 +124,24 @@ describe('runRules', () => {
       enabled: ['explodes', 'leftover-todo'],
     })
     expect(r.failures).toEqual([{ rule: 'explodes', error: 'kaboom' }])
-    expect(r.records).toContainEqual(
-      expect.objectContaining({ rule: 'explodes', suppressed: 'rule-error' }),
-    )
+    // Failures are the audit channel — no double-record under records.
+    expect(r.records.some((x) => x.rule === 'explodes')).toBe(false)
     // The surviving rule still produced its finding.
     expect(r.findings.some((f) => f.category === 'maintainability')).toBe(true)
+  })
+
+  it('a swapped-in registry runs by default when enabled is omitted', async () => {
+    const custom: ReviewRule = {
+      id: 'custom-rule',
+      description: 'test rule',
+      run: () => ({
+        findings: [{ file: 'src/x.ts', severity: 'nit', message: 'custom ran' }],
+        records: [],
+      }),
+    }
+    const r = await runRules(diffOf('src/x.ts', [`anything`]), { rules: [custom] })
+    expect(r.ran).toEqual(['custom-rule'])
+    expect(r.findings.some((f) => f.message === 'custom ran')).toBe(true)
   })
 
   it('severity ceiling: an unadjudicated bug claim is demoted to risk and audited', async () => {

@@ -1,9 +1,11 @@
 import type { DecisionClient } from '../vision/decisions.js'
+import { addedLines } from './difftext.js'
 import {
   scanSecrets,
   type SecretsScanResult,
   type SecretScanRecord,
 } from './secrets.js'
+import { isTestPath } from './testfiles.js'
 
 /**
  * U8 — named deterministic ruleset lane. Pure functions over the PR's
@@ -84,52 +86,6 @@ export interface RulesRunResult {
 /** Per-rule hit cap — a formatter churning TODOs must not flood the report. */
 export const RULE_HITS_CAP = 200
 
-interface AddedLine {
-  file: string
-  /** Line number in the post-change file. */
-  line: number
-  text: string
-}
-
-/**
- * Iterate added (`+`) lines of a unified diff with post-change
- * coordinates. Same walk as `scanDiffForSecrets`: `+++`/`---` are file
- * headers only before the first `@@`; inside a hunk they are content.
- */
-function addedLines(diff: string): AddedLine[] {
-  const out: AddedLine[] = []
-  let file = ''
-  let newLine = 0
-  let inHunk = false
-  for (const raw of diff.split('\n')) {
-    if (raw.startsWith('diff --git')) {
-      inHunk = false
-      continue
-    }
-    if (raw.startsWith('@@')) {
-      inHunk = true
-      const m = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw)
-      newLine = m !== null ? parseInt(m[1] as string, 10) : 0
-      continue
-    }
-    if (!inHunk) {
-      if (raw.startsWith('+++ ')) {
-        const m = /^\+\+\+ b\/(.+)$/.exec(raw)
-        file = m?.[1] ?? ''
-      }
-      continue
-    }
-    if (raw.startsWith(' ')) {
-      newLine++
-      continue
-    }
-    if (!raw.startsWith('+') || file === '') continue
-    out.push({ file, line: newLine, text: raw.slice(1) })
-    newLine++
-  }
-  return out
-}
-
 /**
  * Paths where a pattern hit is data or prose, not code — sample
  * manifests, docs, fixtures. Hits there are suppressed WITH a record
@@ -138,11 +94,26 @@ function addedLines(diff: string): AddedLine[] {
 const DATA_PATH_RE =
   /(^|\/)(docs?|examples?|samples?|fixtures?|testdata|goldens?|__snapshots__)\/|\.(md|mdx|txt|rst|jsonc?|ya?ml|toml|lock|snap|golden|sample|example)$/i
 
-/** Tests/scripts where sync IO and marker comments are idiomatic. */
-const NON_PROD_PATH_RE = /(^|\/)(tests?|__tests__|e2e|scripts?|evals?)\/|\.(test|spec)\.[jt]sx?$/i
+/** Script/eval dirs where sync IO is idiomatic — test paths ride isTestPath. */
+const SCRIPT_PATH_RE = /(^|\/)(scripts?|evals?)\//i
+
+const isNonProdPath = (file: string): boolean =>
+  isTestPath(file) || SCRIPT_PATH_RE.test(file)
 
 /** Loopback/unspecified addresses — a hardcoded 127.0.0.1 is not a hit. */
 const LOCAL_IP_RE = /^(?:127\.|0\.0\.0\.0$)/
+
+/**
+ * Why a hit was suppressed — data/prose paths and non-production paths
+ * (tests, scripts, evals) are different reasons and stay distinguishable
+ * in the audit.
+ */
+const suppressedReason = (file: string): string | undefined =>
+  DATA_PATH_RE.test(file)
+    ? 'data/prose path'
+    : isNonProdPath(file)
+      ? 'non-production path'
+      : undefined
 
 function secretRecord(r: SecretScanRecord): Omit<RuleRecord, 'rule'> {
   return {
@@ -177,9 +148,9 @@ const secretsRule: ReviewRule = {
   },
 }
 
-const IP_URL_RE = /https?:\/\/\d{1,3}(?:\.\d{1,3}){3}/
+const IP_URL_RE = /https?:\/\/(\d{1,3}(?:\.\d{1,3}){3})/
 const IP_ASSIGN_RE =
-  /\b(?:host|addr|address|ip|endpoint|server|url|baseurl|base_url)\w*\s*[:=]\s*['"`]?\d{1,3}(?:\.\d{1,3}){3}/i
+  /\b(?:host|addr|address|ip|endpoint|server|url|baseurl|base_url)\w*\s*[:=]\s*['"`]?(\d{1,3}(?:\.\d{1,3}){3})/i
 
 const hardcodedEndpointRule: ReviewRule = {
   id: 'hardcoded-endpoint',
@@ -188,14 +159,16 @@ const hardcodedEndpointRule: ReviewRule = {
     const findings: RuleFinding[] = []
     const records: Omit<RuleRecord, 'rule'>[] = []
     for (const { file, line, text } of addedLines(diff)) {
-      const m = IP_URL_RE.exec(text) ?? IP_ASSIGN_RE.exec(text)
+      const url = IP_URL_RE.exec(text)
+      const m = url ?? IP_ASSIGN_RE.exec(text)
       if (m === null) continue
-      const detail = IP_URL_RE.exec(text) !== null ? 'url-with-ip-host' : 'ip-literal-assignment'
-      if (DATA_PATH_RE.test(file) || NON_PROD_PATH_RE.test(file)) {
-        records.push({ file, line, detail, suppressed: 'non-code path' })
+      const detail = url !== null ? 'url-with-ip-host' : 'ip-literal-assignment'
+      const suppressed = suppressedReason(file)
+      if (suppressed !== undefined) {
+        records.push({ file, line, detail, suppressed })
         continue
       }
-      if (LOCAL_IP_RE.test(/(\d{1,3}(?:\.\d{1,3}){3})/.exec(m[0])?.[1] ?? '')) {
+      if (LOCAL_IP_RE.test(m[1] ?? '')) {
         records.push({ file, line, detail, suppressed: 'loopback/unspecified host' })
         continue
       }
@@ -224,8 +197,10 @@ const leftoverTodoRule: ReviewRule = {
     const records: Omit<RuleRecord, 'rule'>[] = []
     for (const { file, line, text } of addedLines(diff)) {
       if (!TODO_RE.test(text)) continue
+      // Only data/prose suppresses — TODOs in tests stay flagged
+      // (skipped-coverage markers are real signal).
       if (DATA_PATH_RE.test(file)) {
-        records.push({ file, line, detail: 'todo-marker', suppressed: 'non-code path' })
+        records.push({ file, line, detail: 'todo-marker', suppressed: 'data/prose path' })
         continue
       }
       findings.push({
@@ -244,7 +219,7 @@ const leftoverTodoRule: ReviewRule = {
 }
 
 const SYNC_CALL_RE =
-  /\b(?:execSync|execFileSync|spawnSync|readFileSync|writeFileSync|appendFileSync|readdirSync|mkdirSync|rmSync)\s*\(/
+  /\b(execSync|execFileSync|spawnSync|readFileSync|writeFileSync|appendFileSync|readdirSync|mkdirSync|rmSync)\s*\(/
 
 const syncInAsyncRule: ReviewRule = {
   id: 'sync-in-async',
@@ -255,8 +230,10 @@ const syncInAsyncRule: ReviewRule = {
     for (const { file, line, text } of addedLines(diff)) {
       const m = SYNC_CALL_RE.exec(text)
       if (m === null) continue
-      if (DATA_PATH_RE.test(file) || NON_PROD_PATH_RE.test(file)) {
-        records.push({ file, line, detail: m[0].replace(/\($/, ''), suppressed: 'non-production path' })
+      const call = m[1] ?? m[0]
+      const suppressed = suppressedReason(file)
+      if (suppressed !== undefined) {
+        records.push({ file, line, detail: call, suppressed })
         continue
       }
       findings.push({
@@ -265,10 +242,10 @@ const syncInAsyncRule: ReviewRule = {
         severity: 'nit',
         category: 'performance',
         message:
-          `L${line}: nit: synchronous call \`${m[0].replace(/\($/, '')}\` added at \`${file}\` - ` +
+          `L${line}: nit: synchronous call \`${call}\` added at \`${file}\` - ` +
           'it blocks the event loop; prefer the async variant.',
       })
-      records.push({ file, line, detail: m[0].replace(/\($/, '') })
+      records.push({ file, line, detail: call })
     }
     return { findings, records }
   },
@@ -299,36 +276,42 @@ export async function runRules(
     rules?: ReviewRule[]
   } & RuleRunContext = {},
 ): Promise<RulesRunResult> {
-  const enabled = opts.enabled ?? REVIEW_RULE_IDS
+  const registry = opts.rules ?? REVIEW_RULES
+  const enabled = opts.enabled ?? registry.map((r) => r.id)
+  // Rules see only the context contract, never the runner's opts bag.
+  const ctx: RuleRunContext = {
+    ...(opts.secretsThreshold !== undefined ? { secretsThreshold: opts.secretsThreshold } : {}),
+    ...(opts.decisionClient !== undefined ? { decisionClient: opts.decisionClient } : {}),
+    ...(opts.decisionModel !== undefined ? { decisionModel: opts.decisionModel } : {}),
+  }
   const findings: RuleFinding[] = []
   const records: RuleRecord[] = []
   const failures: RuleFailure[] = []
   let secretsScan: SecretsScanResult | undefined
   const ran: string[] = []
-  for (const rule of opts.rules ?? REVIEW_RULES) {
+  for (const rule of registry) {
     if (!enabled.includes(rule.id)) continue
     ran.push(rule.id)
     let out: RuleOutput
     try {
-      out = await rule.run(diff, opts)
+      out = await rule.run(diff, ctx)
     } catch (e) {
-      const error = e instanceof Error ? e.message : String(e)
-      failures.push({ rule: rule.id, error })
-      records.push({
-        rule: rule.id,
-        file: '-',
-        detail: `rule threw: ${error.slice(0, 160)}`,
-        suppressed: 'rule-error',
-      })
+      // Failures are the audit channel for a throwing rule — no
+      // double-record under `records`.
+      failures.push({ rule: rule.id, error: e instanceof Error ? e.message : String(e) })
       continue
     }
     if (out.secretsScan !== undefined) secretsScan = out.secretsScan
-    for (const r of out.records) records.push({ rule: rule.id, ...r })
-    const capped: RuleFinding[] = []
+    for (const r of out.records) records.push({ ...r, rule: rule.id })
+    // Severity ceiling + hit cap in one pass — records stay complete
+    // (every hit is an audit entry) while findings bound the union.
+    let emitted = 0
+    let over = 0
     for (const f of out.findings) {
+      let g = f
       if (f.severity === 'bug' && f.p === undefined) {
-        // Severity ceiling — a deterministic hit cannot claim `bug`
-        // without adjudicated confidence riding on it.
+        // A deterministic hit cannot claim `bug` without adjudicated
+        // confidence riding on it.
         records.push({
           rule: rule.id,
           file: f.file,
@@ -336,16 +319,16 @@ export async function runRules(
           detail: 'unadjudicated bug claim',
           suppressed: 'severity-ceiling',
         })
-        capped.push({ ...f, severity: 'risk' })
+        g = { ...f, severity: 'risk' }
+      }
+      if (emitted < RULE_HITS_CAP) {
+        findings.push(g)
+        emitted++
       } else {
-        capped.push(f)
+        over++
       }
     }
-    // Findings bound the union; records stay complete (every hit is an
-    // audit entry) — over-cap findings collapse into one aggregate.
-    if (capped.length > RULE_HITS_CAP) {
-      const over = capped.length - RULE_HITS_CAP
-      findings.push(...capped.slice(0, RULE_HITS_CAP))
+    if (over > 0) {
       findings.push({
         file: '-',
         severity: 'nit',
@@ -359,8 +342,6 @@ export async function runRules(
         detail: `${over} finding(s) over cap`,
         suppressed: 'hit-cap',
       })
-    } else {
-      findings.push(...capped)
     }
   }
   return {

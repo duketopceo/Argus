@@ -61,7 +61,7 @@ import { partitionByExclude, rulesForFiles } from './review/scope.js'
 import { capTestFindings } from './review/testfiles.js'
 import { auditOf, validateFindings, type ValidationAudit } from './review/validate.js'
 import { materializeMergeBaseDiff, type SecretsScanResult } from './review/secrets.js'
-import { runRules, type RuleFinding, type RuleRecord } from './review/rules.js'
+import { runRules, type RuleFailure, type RuleFinding, type RuleRecord } from './review/rules.js'
 import {
   buildTriageState,
   routeModel,
@@ -1595,7 +1595,12 @@ interface CodeReviewReport {
   generated?: GenerateLaneResult
   /** Secrets-lane audit — masked candidates, adjudication verdicts, skip reason. */
   secretsScan?: SecretsScanResult | { skipped: string }
-  /** U8 — deterministic ruleset-lane audit: every rule hit, suppression, failure. */
+  /**
+   * U8 — deterministic ruleset-lane audit: every rule hit, suppression,
+   * failure. The secrets rule's records appear here AND under
+   * `secretsScan` — rulesScan is the complete lane audit; secretsScan
+   * is the frozen pre-U8 report shape.
+   */
   rulesScan?:
     | {
         /** Rule ids that ran. */
@@ -1603,7 +1608,7 @@ interface CodeReviewReport {
         /** Every hit — suppressed or finding-bound — rule-tagged. */
         records: RuleRecord[]
         /** Rules that threw; findings absent, lane completed anyway. */
-        failures: { rule: string; error: string }[]
+        failures: RuleFailure[]
       }
     | { skipped: string }
   /** U7 triage record: confidence-model pre-review signals (annotate/route, never gates). */
@@ -3140,12 +3145,12 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     }
 
     // U8 finding adjudication — one batched confidence-model noul per synthesized
-    // finding. Runs on the model findings only (secrets findings carry
-    // their own adjudication) and BEFORE the secrets union below so a
-    // suppressed nit can never reach a secret record. bug/risk are
-    // never suppressed, so the verdict computed above is unaffected.
-    // Kicked off as a promise — its decide() round-trip overlaps the
-    // secrets lane's materialize+scan below (the two lanes are
+    // finding. Runs on the model findings only (rules-lane findings carry
+    // their own adjudication or severity ceiling) and BEFORE the rules
+    // union below so a suppressed nit can never reach a rule record.
+    // bug/risk are never suppressed, so the verdict computed above is
+    // unaffected. Kicked off as a promise — its decide() round-trip
+    // overlaps the rules lane's materialize+scan below (the two lanes are
     // independent; results apply in order: adjudication, then union).
     // Skipped when the budget is already blown — no trailing spend.
     // blockSeverities (resolved above, before the anchor filters) flows
@@ -3197,8 +3202,8 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     const rulesFindings: RuleFinding[] = []
     // U4 — an incremental run scans the incremental range, not the whole
     // merge-base diff: already-reviewed commits stay out of scope.
-    const secretsBaseSha = incremental?.since ?? prMeta?.baseSha
-    if (secretsBaseSha !== undefined) {
+    const scanBaseSha = incremental?.since ?? prMeta?.baseSha
+    if (scanBaseSha !== undefined) {
       // Fixture mode already produced the same `git diff base..HEAD`
       // output inside the fixture repo — reuse it rather than shelling
       // out again (the scan surface is identical).
@@ -3209,7 +3214,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
             ? { diff: localReview.diff }
             : await materializeMergeBaseDiff({
               cwd: ctx.cwd,
-              baseSha: secretsBaseSha,
+              baseSha: scanBaseSha,
               ...(token !== undefined ? { token } : {}),
               ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
             })
@@ -3227,9 +3232,11 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
         })
         secretsScan =
           result.secretsScan ??
-          (result.ran.length === 0
-            ? { skipped: 'the rules lane is disabled (review.rules)' }
-            : { skipped: 'the secrets rule is not enabled (review.rules)' })
+          (result.ran.includes('secrets')
+            ? { skipped: 'the secrets rule failed; see rulesScan.failures' }
+            : result.ran.length === 0
+              ? { skipped: 'the rules lane is disabled (review.rules)' }
+              : { skipped: 'the secrets rule is not enabled (review.rules)' })
         rulesScan = {
           ran: result.ran,
           records: result.records,
