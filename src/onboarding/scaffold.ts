@@ -61,7 +61,15 @@ export default defineConfig({
   // maxSteps caps acts per run; budgetUsd caps explore model spend (falls
   // back to budgetUsd). Point it at disposable targets only — clicks and
   // form submits have real side effects.
-  // explore: { enabled: true, maxSteps: 20, budgetUsd: 0.25 },${a0Block}
+  // explore: { enabled: true, maxSteps: 20, budgetUsd: 0.25 },
+  // Per-path review rules: a rule lands in any review chunk whose files
+  // match its glob (migrations get migration rules, UI files a11y rules).
+  // review: {
+  //   instructions: [
+  //     { glob: 'db/migrations/**', rule: 'Every migration must be reversible' },
+  //     { glob: 'src/ui/**', rule: 'Flag missing aria labels' },
+  //   ],
+  // },${a0Block}
 })
 `
 }
@@ -115,6 +123,9 @@ jobs:
       - uses: duketopceo/Argus/action@@@ACTION_PIN@@
         with:
           openrouter-api-key: \${{ secrets.OPENROUTER_API_KEY }}
+      # Per-path review rules also exist as an action input (a JSON
+      # [{glob, rule}] string) for lanes where PR config never executes:
+      #          review-instructions: '[{"glob":"db/**","rule":"Check migration reversibility"}]'
       # Flow lane + heal write-back: 'run' replays committed flow
       # recordings (tests/argus/flows/*.json); 'heal-writeback: pr' opens a
       # PR with the relocated steps whenever a heal re-resolves an element —

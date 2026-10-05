@@ -20,6 +20,14 @@ export default defineConfig({
   // back to budgetUsd). Point it at disposable targets only — clicks and
   // form submits have real side effects.
   // explore: { enabled: true, maxSteps: 20, budgetUsd: 0.25 },
+  // Per-path review rules: a rule lands in any review chunk whose files
+  // match its glob (migrations get migration rules, UI files a11y rules).
+  // review: {
+  //   instructions: [
+  //     { glob: 'db/migrations/**', rule: 'Every migration must be reversible' },
+  //     { glob: 'src/ui/**', rule: 'Flag missing aria labels' },
+  //   ],
+  // },
   // Optional: Agent Zero detected at https://a0.example.com. Nothing below runs unless
   // you ask for it — both stays commented until you opt in deliberately.
   //   a0: { url: "https://a0.example.com" },  // enables `verify --a0` (self-reported, unmetered)

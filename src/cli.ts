@@ -23,6 +23,7 @@ import {
   DEFAULT_RECORD_STEP_CAP,
   loadConfig,
   parseBudgetSetting,
+  parseInstructions,
   resolveBatchModel,
   resolveBlockSeverities,
   resolveConfig,
@@ -54,7 +55,7 @@ import { linkFindings, type Evidence } from './evidence/link.js'
 import { DecisionClient } from './vision/decisions.js'
 import { isReviewProfile, packRubric } from './review/packs.js'
 import { planChunks } from './review/chunks.js'
-import { partitionByExclude } from './review/scope.js'
+import { partitionByExclude, rulesForFiles } from './review/scope.js'
 import { capTestFindings } from './review/testfiles.js'
 import { auditOf, validateFindings, type ValidationAudit } from './review/validate.js'
 import { materializeMergeBaseDiff, scanSecrets, type SecretsScanResult } from './review/secrets.js'
@@ -1818,9 +1819,16 @@ export function buildCodeReviewMessages(
   chunkIndex = 0,
   totalChunks = 1,
   profiles: readonly string[] = [],
+  instructions: readonly string[] = [],
 ): Message[] {
   const rubric = packRubric(profiles)
-  const rubricBlock = rubric !== undefined ? `\n\n${rubric}` : ''
+  // Per-path rules (U6) join the profile rubric as a second rubric block —
+  // same slot, same authority.
+  const rulesBlock =
+    instructions.length > 0
+      ? `\n\nRepo rules for files in this chunk:\n${instructions.map((r) => `- ${r}`).join('\n')}`
+      : ''
+  const rubricBlock = (rubric !== undefined ? `\n\n${rubric}` : '') + rulesBlock
   return [
     {
       role: 'system',
@@ -2367,6 +2375,17 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       .map((s) => s.trim())
       .filter(isReviewProfile)
   }
+  // ARGUS_REVIEW_INSTRUCTIONS (JSON [{glob, rule}]) follows the same
+  // operator-env pattern — the only lever in the untrusted lane. Invalid
+  // JSON or a malformed entry warns and keeps the config value.
+  const envInstructions = ctx.env.ARGUS_REVIEW_INSTRUCTIONS?.trim()
+  if (envInstructions !== undefined && envInstructions !== '') {
+    try {
+      config.review.instructions = parseInstructions(JSON.parse(envInstructions))
+    } catch (e) {
+      ctx.err(`warning: ignoring invalid ARGUS_REVIEW_INSTRUCTIONS: ${(e as Error).message}`)
+    }
+  }
   // Review mode: --mode beats the operator env, which beats config (same
   // operator-env pattern as ARGUS_CODE_MODEL — the only lever in the
   // untrusted lane, where PR-controlled config never executes).
@@ -2670,7 +2689,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       } else {
         const allRequests = chunks.map((chunk, i) => ({
           customId: `chunk-${i}`,
-          messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles),
+          messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles, rulesForFiles(config.review.instructions, plan[i]?.files ?? [])),
           schema: CODE_REVIEW_SCHEMA,
           provider: config.provider,
         }))
@@ -2742,7 +2761,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
         fromBatch ??
         (await client.complete({
           model: reviewModel,
-          messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles),
+          messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles, rulesForFiles(config.review.instructions, plan[i]?.files ?? [])),
           schema: CODE_REVIEW_SCHEMA,
           kind: 'code',
           provider: config.provider,

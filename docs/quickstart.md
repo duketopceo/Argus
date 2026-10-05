@@ -178,6 +178,26 @@ deterministic secrets scan — the rubric steers the model toward
 exploitability; the regex lane catches secret-shaped literals even when the
 model doesn't.
 
+Per-path rules come from `review.instructions` — `{glob, rule}` entries
+resolved per chunk, so a rule lands only in chunks carrying matching files
+(migrations get migration rules, UI gets a11y rules):
+
+```ts
+export default defineConfig({
+  review: {
+    instructions: [
+      { glob: 'db/migrations/**', rule: 'Every migration must be reversible' },
+      { glob: 'src/ui/**', rule: 'Flag missing aria labels' },
+    ],
+  },
+})
+```
+
+`ARGUS_REVIEW_INSTRUCTIONS` (a JSON `[{glob, rule}]` string; action input
+`review-instructions`) overrides the config value and is the only way to set
+rules on lanes where PR-controlled config never executes. Malformed entries
+fail config load naming the entry.
+
 Spend is still yours:
 the `run.json` ledger records the per-run dollar figure regardless of which
 provider served the call.

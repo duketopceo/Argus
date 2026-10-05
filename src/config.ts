@@ -317,6 +317,13 @@ export interface Config {
      */
     requestTimeoutMs: number
     /**
+     * U6 — `{glob, rule}` entries resolved per chunk: a rule lands in a
+     * chunk's prompt when its glob matches any file the chunk carries
+     * (migrations get migration rules, UI gets a11y rules). Trusted-only
+     * in effect — `review` is not on the untrusted-config allowlist.
+     */
+    instructions: { glob: string; rule: string }[]
+    /**
      * U2 — diff-scoped spec generation (`--generate-tests`, `@argus
      * generate`). `enabled` is trusted-only in effect: `review` is not on
      * the untrusted-config allowlist and the lane hard-refuses fork PRs.
@@ -472,6 +479,7 @@ const defaults: Config = {
     findingThreshold: 1.0,
     requestChanges: true,
     profiles: [],
+    instructions: [],
     exclude: [...DEFAULT_REVIEW_EXCLUDE],
     mode: 'realtime',
     batchTimeoutMs: 480_000,
@@ -549,6 +557,30 @@ export function resolveMaxComments(
   return config.review.maxComments
 }
 
+/**
+ * U6 — validate `review.instructions` entries. Throws naming the entry:
+ * a mistyped glob that silently deadens a rule is worse than failing the
+ * config load (same contract as `review.requestTimeoutMs`). Shared by the
+ * ARGUS_REVIEW_INSTRUCTIONS env path, which catches and warns instead.
+ */
+export function parseInstructions(
+  raw: unknown,
+): { glob: string; rule: string }[] {
+  if (raw === undefined || raw === null) return []
+  if (!Array.isArray(raw)) throw new Error('review.instructions must be an array')
+  return raw.map((entry, i) => {
+    const e = entry as Record<string, unknown>
+    const glob = typeof e?.glob === 'string' ? e.glob.trim() : ''
+    const rule = typeof e?.rule === 'string' ? e.rule.trim() : ''
+    if (glob === '' || rule === '') {
+      throw new Error(
+        `review.instructions[${i}] must be {glob, rule} with non-empty strings, got ${JSON.stringify(entry)}`,
+      )
+    }
+    return { glob, rule }
+  })
+}
+
 export function resolveConfig(input: ConfigInput = {}): Config {
   const provider: ProviderRules = { ...defaults.provider, ...(input.provider ?? {}) }
   // Wrong-typed sandbox values (e.g. `sandbox: true`, `enabled: 'yes'`,
@@ -620,6 +652,7 @@ export function resolveConfig(input: ConfigInput = {}): Config {
   review.profiles = Array.isArray(rawReview.profiles)
     ? [...new Set(rawReview.profiles.filter(isReviewProfile))]
     : []
+  review.instructions = parseInstructions(rawReview.instructions)
   review.exclude =
     Array.isArray(rawReview.exclude) &&
     rawReview.exclude.every((g) => typeof g === 'string' && g !== '')

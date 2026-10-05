@@ -216,7 +216,7 @@ export declare function loadLocalDiff(cwd: string, baseRef: string, exec?: ExecF
     error: string;
 }>;
 export declare function buildPatchChunks(files: PrFile[], contexts?: Record<string, string>): string[];
-export declare function buildCodeReviewMessages(repo: string, pr: string, patchText: string, chunkIndex?: number, totalChunks?: number, profiles?: readonly string[]): Message[];
+export declare function buildCodeReviewMessages(repo: string, pr: string, patchText: string, chunkIndex?: number, totalChunks?: number, profiles?: readonly string[], instructions?: readonly string[]): Message[];
 export declare function parseCodeReview(content: string): {
     summary: string;
     verdict: 'pass' | 'needs_changes' | 'approve';

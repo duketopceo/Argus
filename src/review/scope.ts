@@ -61,6 +61,22 @@ export function globMatch(glob: string, path: string): boolean {
   return globToRegExp(glob).test(path)
 }
 
+/**
+ * Per-path review rules (U6): resolve `review.instructions[]` against a
+ * chunk's file set. A rule lands when its glob matches any file in the
+ * chunk; a file matching two globs contributes both rules in entry order.
+ */
+export function rulesForFiles(
+  instructions: readonly { glob: string; rule: string }[],
+  files: readonly string[],
+): string[] {
+  const rules: string[] = []
+  for (const { glob, rule } of instructions) {
+    if (files.some((f) => globMatch(glob, f))) rules.push(rule)
+  }
+  return rules
+}
+
 export function partitionByExclude<T extends { filename: string }>(
   files: T[],
   exclude: readonly string[],
