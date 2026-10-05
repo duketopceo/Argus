@@ -107,3 +107,31 @@ export function auditOf(dropped: DroppedFinding[]): ValidationAudit {
   for (const d of dropped) byReason[d.reason] = (byReason[d.reason] ?? 0) + 1
   return { dropped: dropped.length, byReason, examples: dropped.slice(0, MAX_EXAMPLES) }
 }
+
+/** RIGHT-side line numbers covered by a unified-diff patch — parity with
+ *  `rightSideLines` in action/sticky-comment.cjs (every line in a hunk's
+ *  `+c,d` range is a valid RIGHT-side anchor; `-` lines aren't counted). */
+export function rightSideLines(patch: string): Set<number> {
+  const lines = new Set<number>()
+  for (const m of patch.matchAll(/@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/g)) {
+    const start = Number.parseInt(m[1] ?? '0', 10)
+    const count = m[2] === undefined ? 1 : Number.parseInt(m[2], 10)
+    for (let l = start; l < start + count; l++) lines.add(l)
+  }
+  return lines
+}
+
+/** True when an anchor is inside the live diff — path in the file list and
+ *  `line` (plus `startLine` when present) on a RIGHT-side hunk line. Parity
+ *  with `isOnDiff` in action/sticky-comment.cjs. */
+export function isOnDiff(
+  c: { path: string; line: number; startLine?: number },
+  diffLines: ReadonlyMap<string, ReadonlySet<number>>,
+): boolean {
+  const valid = diffLines.get(c.path)
+  return (
+    valid !== undefined &&
+    valid.has(c.line) &&
+    (c.startLine === undefined || valid.has(c.startLine))
+  )
+}

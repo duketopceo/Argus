@@ -1,6 +1,6 @@
 import { isTrustedAssociation, PROBE_LABEL } from './evidence/ci.js';
 import { labelCoversHead } from './evidence/gate.js';
-const NAMES = new Set(['review', 'record', 'persist', 'generate', 'help']);
+const NAMES = new Set(['review', 'record', 'persist', 'generate', 'fix', 'help']);
 /**
  * Parse a comment body into a whitelisted mention command. The mention must
  * open the comment — a bare `@argus` in the middle of prose is not a command.
@@ -53,10 +53,13 @@ export function mayRunMention(cmd, association, meta) {
     }
     if (!meta.isFork)
         return { allowed: true };
-    if (cmd.name === 'record' || cmd.name === 'persist' || cmd.name === 'generate') {
+    if (cmd.name === 'record' ||
+        cmd.name === 'persist' ||
+        cmd.name === 'generate' ||
+        cmd.name === 'fix') {
         return {
             allowed: false,
-            reply: `\`@argus ${cmd.name}\` isn't available on fork PRs — record, persist and generate run inside the repo's trust boundary.`,
+            reply: `\`@argus ${cmd.name}\` isn't available on fork PRs — record, persist, generate and fix run inside the repo's trust boundary.`,
         };
     }
     if (!meta.labels.includes(PROBE_LABEL) || !labelCoversHead(meta)) {
@@ -71,6 +74,7 @@ export const MENTION_HELP = 'Commands: `@argus review` — re-run code review on
     '`@argus record "<flow>"` — record a test flow against the app · ' +
     '`@argus persist` — turn a reproduced probe into a regression-test PR · ' +
     '`@argus generate` - author spec coverage from the diff into a reviewable PR · ' +
+    '`@argus fix` - open a PR applying the posted suggestions that still anchor · ' +
     '`@argus help` — this menu.';
 const GH_API = 'https://api.github.com';
 /**

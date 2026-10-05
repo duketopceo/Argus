@@ -39,3 +39,15 @@ export declare function validateFindings<T extends {
     dropped: DroppedFinding[];
 };
 export declare function auditOf(dropped: DroppedFinding[]): ValidationAudit;
+/** RIGHT-side line numbers covered by a unified-diff patch — parity with
+ *  `rightSideLines` in action/sticky-comment.cjs (every line in a hunk's
+ *  `+c,d` range is a valid RIGHT-side anchor; `-` lines aren't counted). */
+export declare function rightSideLines(patch: string): Set<number>;
+/** True when an anchor is inside the live diff — path in the file list and
+ *  `line` (plus `startLine` when present) on a RIGHT-side hunk line. Parity
+ *  with `isOnDiff` in action/sticky-comment.cjs. */
+export declare function isOnDiff(c: {
+    path: string;
+    line: number;
+    startLine?: number;
+}, diffLines: ReadonlyMap<string, ReadonlySet<number>>): boolean;

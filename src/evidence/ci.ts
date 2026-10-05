@@ -29,6 +29,8 @@ export interface PrMeta {
   baseSha: string | undefined
   /** PR base branch name (e.g. `main`) — the persist lane's PR target. */
   baseRef: string | undefined
+  /** PR head branch name — the `@argus fix` PR target (same-repo only). */
+  headRef: string | undefined
   /** `head.repo.fork` — true when the PR head branch lives in a fork. */
   isFork: boolean
   /**
@@ -148,7 +150,7 @@ export async function fetchPrMeta(
 ): Promise<PrMeta | undefined> {
   const data = (await ghGet(`${GH_API}/repos/${repo}/pulls/${pr}`, token, ctx)) as
     | {
-        head?: { sha?: string; repo?: { fork?: boolean; pushed_at?: string } | null }
+        head?: { sha?: string; ref?: string; repo?: { fork?: boolean; pushed_at?: string } | null }
         base?: { sha?: string; ref?: string }
         author_association?: string
         labels?: ({ name?: string } | null)[] | null
@@ -182,6 +184,7 @@ export async function fetchPrMeta(
     headSha,
     baseSha: mergeBase ?? baseSha,
     baseRef: typeof data.base?.ref === 'string' ? data.base.ref : undefined,
+    headRef: typeof data.head?.ref === 'string' ? data.head.ref : undefined,
     // head.repo is null when the source fork was deleted — fail closed and
     // treat it as a fork so the probe gate still applies.
     isFork: data.head?.repo?.fork !== false,
@@ -369,4 +372,85 @@ export async function fetchCheckRuns(
     page++
   }
   return runs
+}
+
+/** One posted PR review comment — the `@argus fix` surface. */
+export interface ReviewComment {
+  id: number
+  path: string | undefined
+  line: number | undefined
+  startLine: number | undefined
+  side: string | undefined
+  /** `commit_id` — the commit the comment was authored on. */
+  commitId: string | undefined
+  body: string
+  htmlUrl: string | undefined
+}
+
+/** Paginated `GET /pulls/{pr}/comments` — posted inline review comments. */
+export async function fetchReviewComments(
+  repo: string,
+  pr: string,
+  token: string,
+  ctx: Ctx,
+): Promise<ReviewComment[] | undefined> {
+  const out: ReviewComment[] = []
+  let page = 1
+  while (page <= MAX_CHECK_RUN_PAGES) {
+    const data = (await ghGet(
+      `${GH_API}/repos/${repo}/pulls/${pr}/comments?per_page=100&page=${page}`,
+      token,
+      ctx,
+    )) as
+      | {
+          id?: number
+          path?: string
+          line?: number | null
+          start_line?: number | null
+          side?: string
+          commit_id?: string
+          body?: string
+          html_url?: string
+        }[]
+      | undefined
+    if (!Array.isArray(data)) return undefined
+    for (const c of data) {
+      out.push({
+        id: typeof c.id === 'number' ? c.id : 0,
+        path: c.path,
+        line: typeof c.line === 'number' ? c.line : undefined,
+        startLine: typeof c.start_line === 'number' ? c.start_line : undefined,
+        side: c.side,
+        commitId: c.commit_id,
+        body: c.body ?? '',
+        htmlUrl: c.html_url,
+      })
+    }
+    if (data.length < 100) break
+    page++
+  }
+  return out
+}
+
+/**
+ * `GET /contents/{path}?ref={ref}` → decoded utf8 file content. undefined on
+ * failure or when the response carries no inline content (>1MB files return
+ * a different shape — treated as unfixable input, not an error).
+ */
+export async function fetchFileContent(
+  repo: string,
+  path: string,
+  ref: string,
+  token: string,
+  ctx: Ctx,
+): Promise<string | undefined> {
+  const data = (await ghGet(
+    `${GH_API}/repos/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`,
+    token,
+    ctx,
+  )) as { content?: string; encoding?: string } | undefined
+  if (data === undefined || typeof data.content !== 'string' || data.encoding !== 'base64') {
+    return undefined
+  }
+  return Buffer.from(data.content, 'base64').toString('utf8')
 }

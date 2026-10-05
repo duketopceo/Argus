@@ -50,6 +50,7 @@ import { OpenRouterClient } from './vision/openrouter.js';
 import { Ledger } from './vision/ledger.js';
 import { selectionFromFlags } from './pipeline/contracts.js';
 import { MENTION_HELP, mayRunMention, parseMention, postIssueComment, } from './mention.js';
+import { applyFixes } from './github/apply-fixes.js';
 import { affordableBatchPrefix } from './pipeline/budget.js';
 import { runVerify, writeEvidenceReport } from './pipeline/verify.js';
 import { APP_LANE_DEFAULT_TIMEOUT_MS, APP_LANE_REPORT, runAppLane, } from './pipeline/app.js';
@@ -1416,6 +1417,7 @@ export async function loadFixture(dir, exec = defaultExec) {
         headSha,
         baseSha,
         baseRef: undefined,
+        headRef: undefined,
         isFork: false,
         authorAssociation: 'OWNER',
         labels: [],
@@ -1478,6 +1480,7 @@ export async function loadLocalDiff(cwd, baseRef, exec = defaultExec, opts = {})
         headSha,
         baseSha,
         baseRef: undefined,
+        headRef: undefined,
         isFork: false,
         authorAssociation: 'OWNER',
         labels: [],
@@ -3213,7 +3216,7 @@ number; runs nothing unless the comment is on a pull request and starts
 with @argus. Never checks out the PR head: review runs API-diff-only
 against the base checkout.
 
-Commands: @argus review [full] · @argus record "<flow>" · @argus persist · @argus generate · @argus help`;
+Commands: @argus review [full] · @argus record "<flow>" · @argus persist · @argus generate · @argus fix · @argus help`;
 /**
  * `argus-reviewer mention` — the E3.U5 dispatch lane. Everything upstream
  * of the command handler is a gate: untrusted commenters are ignored
@@ -3376,6 +3379,53 @@ async function cmdMention(args, ctx, deps) {
                     (gen.records[0]?.detail ?? 'see code-review.json for details'));
         }
         return code;
+    }
+    if (parsed.name === 'fix') {
+        // U5 — apply posted inline suggestions to a branch off the exact head
+        // SHA and open one PR back onto the PR's head branch. Anchors are
+        // re-validated against the live diff; the head is re-verified before
+        // the PR opens. Forks are refused upstream by mayRunMention.
+        if (repo === undefined || token === undefined) {
+            ctx.err('mention: fix needs GITHUB_REPOSITORY + GITHUB_TOKEN');
+            return 2;
+        }
+        if (meta === undefined || meta.headSha === undefined || meta.headRef === undefined) {
+            await reply("I couldn't resolve this PR's head - fix is unavailable right now.");
+            return 0;
+        }
+        const files = await fetchPrFiles(repo, issueNum, token, ctx);
+        if (files === undefined) {
+            await reply("I couldn't list this PR's files - fix is unavailable right now.");
+            return 0;
+        }
+        const result = await applyFixes({ repo, pr: issueNum, meta, files }, token, ctx);
+        if (result.stale === true) {
+            await reply('the PR head moved while I was applying suggestions - re-run `@argus fix` to retry.');
+            return 0;
+        }
+        if (result.error !== undefined && result.applied.length === 0) {
+            await reply(result.error);
+            return 1;
+        }
+        const named = result.skipped
+            .slice(0, 5)
+            .map((s) => `\`${s.path ?? '?'}\`${s.line !== undefined ? ` L${s.line}` : ''} (${s.reason})`)
+            .join(', ');
+        const skippedNote = result.skipped.length === 0
+            ? ''
+            : ` Skipped ${result.skipped.length}: ${named}${result.skipped.length > 5 ? ', …' : ''}.`;
+        if (result.applied.length === 0) {
+            await reply(`no suggestions could be applied.${skippedNote}`);
+            return 0;
+        }
+        if (result.error !== undefined) {
+            await reply(`applied ${result.applied.length} suggestion(s) but the PR did not open: ${result.error}.${skippedNote}`);
+            return 1;
+        }
+        await reply(result.prUrl !== undefined
+            ? `opened ${result.prUrl} - applied ${result.applied.length} suggestion(s).${skippedNote}`
+            : `applied ${result.applied.length} suggestion(s) but no PR URL came back.${skippedNote}`);
+        return 0;
     }
     // review — `full` is the U4 manual escape: it bypasses the incremental
     // baseline and re-diffs the whole PR.

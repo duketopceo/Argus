@@ -672,6 +672,14 @@ an `issue_comment` workflow that answers PR comments starting with
   lane (a base checkout) they ship explicitly unvalidated. Red/unsafe
   specs stay off the PR and list as drafts in `code-review.json`.
   Generation refuses fork PRs outright.
+- `@argus fix` — apply the posted inline suggestions that still anchor on
+  the live diff, committed to `argus/fix-<pr>-<head8>` and opened as a PR
+  onto the PR's own head branch. Each suggestion is re-read from the PR's
+  review comments (never a stored artifact), bound to the current head
+  commit, and re-validated against the current diff — rotated anchors are
+  skipped and named in the reply. The head is re-verified after the writes
+  and before the PR opens; if it moved, no PR is opened and a re-run is
+  safe (the branch is reused). Refuses fork PRs outright.
 - `@argus help` — the command menu
 
 Security posture: `issue_comment` runs carry secrets and a write-capable
