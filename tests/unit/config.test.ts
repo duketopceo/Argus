@@ -81,6 +81,26 @@ describe('resolveConfig sandbox', () => {
   })
 })
 
+describe('resolveConfig flow.healWriteback', () => {
+  it('defaults to off and honors the pr opt-in', () => {
+    expect(resolveConfig().flow.healWriteback).toBe('off')
+    expect(resolveConfig({ flow: { healWriteback: 'pr' } }).flow.healWriteback).toBe('pr')
+  })
+
+  it('wrong-typed values degrade to off — never self-enable a write path', () => {
+    for (const bad of [
+      { flow: 'pr' },
+      { flow: { healWriteback: true } },
+      { flow: { healWriteback: 'yes' } },
+      { flow: { healWriteback: 1 } },
+      { flow: null },
+    ]) {
+      const config = resolveConfig(bad as never)
+      expect(config.flow.healWriteback, JSON.stringify(bad)).toBe('off')
+    }
+  })
+})
+
 describe('resolveConfig explore', () => {
   it('populates disabled defaults when explore is absent', () => {
     const config = resolveConfig({})

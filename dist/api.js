@@ -83,7 +83,8 @@ export class TdSession {
     }
     static async create(opts) {
         const flow = opts.flowName !== undefined && opts.config.cacheDir !== undefined
-            ? await loadFlow(opts.config.cacheDir, opts.flowName)
+            ? (await loadFlow(opts.config.cacheDir, opts.flowName)) ??
+                (opts.flowsDir !== undefined ? await loadFlow(opts.flowsDir, opts.flowName) : undefined)
             : undefined;
         return new TdSession(opts, flow);
     }
@@ -106,20 +107,32 @@ export class TdSession {
     get ledgerState() {
         return this.ledger.state;
     }
+    /** The session's final fingerprint set — healed records included. */
+    get fingerprintRecords() {
+        return [...this.fingerprints];
+    }
+    /** Assertion entries in the cache's shape — persisted alongside steps. */
+    get assertEntries() {
+        return this.engine.assertEntries;
+    }
     /** Persist the (possibly healed) fingerprints back to the cache (R4, R5). */
     async save() {
         if (this.opts.flowName !== undefined && this.opts.config.cacheDir !== undefined) {
             await saveFlow(this.opts.config.cacheDir, this.opts.flowName, this.fingerprints, this.engine.assertEntries);
         }
     }
-    _record(record) {
+    _record(record, healDetail) {
         this.steps.push(record);
         if (!record.ok) {
             this._failed = true;
             this._failureReason = record.reason ?? `${record.action} failed`;
         }
         if (record.healed) {
-            this.healEvents.push({ instruction: record.instruction, model: record.model });
+            this.healEvents.push({
+                instruction: record.instruction,
+                model: record.model,
+                ...healDetail,
+            });
         }
     }
     async _locate(description) {
@@ -145,7 +158,7 @@ export class TdSession {
             healed: result.healed,
             model: result.model,
             reason: undefined,
-        });
+        }, result.healed ? { index, before: cached, after: result.fingerprint } : undefined);
         return result.point;
     }
     _makeTd() {

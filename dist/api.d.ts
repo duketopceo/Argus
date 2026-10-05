@@ -2,6 +2,7 @@ import { BrowserDriver } from './driver/browser.js';
 import { VisionClient } from './engine/loop.js';
 import { AssertionResult } from './engine/prompts.js';
 import { FingerprintRecord } from './cache/fingerprint.js';
+import { CachedAssert } from './cache/store.js';
 import { Ledger, LedgerState } from './vision/ledger.js';
 import { Config, defineConfig } from './config.js';
 import { ErrorRecord } from './journal/schema.js';
@@ -56,6 +57,12 @@ export interface TdAssertRecord extends AssertionResult {
 export interface HealEvent {
     instruction: string;
     model: string | undefined;
+    /** Step position in the loaded flow — set for write-back diffing. */
+    index?: number | undefined;
+    /** The record the session loaded pre-heal. */
+    before?: FingerprintRecord | undefined;
+    /** The healed record the model re-resolved. */
+    after?: FingerprintRecord | undefined;
 }
 export interface TdSessionOptions {
     driver: BrowserDriver;
@@ -63,6 +70,12 @@ export interface TdSessionOptions {
     config: Config;
     /** Flow name used to load/save the fingerprint cache for this test. */
     flowName?: string;
+    /**
+     * Committed recordings dir (`<testsDir>/flows`) — the canonical fallback
+     * when no cache entry exists. Read-only here; write-back lands via
+     * `flow.healWriteback` (PR in CI, working-tree write locally).
+     */
+    flowsDir?: string;
     env?: NodeJS.ProcessEnv;
     /**
      * Set by the run path when diff-aware invalidation fired — marks every
@@ -98,6 +111,10 @@ export declare class TdSession {
     get failed(): boolean;
     get failureReason(): string | undefined;
     get ledgerState(): LedgerState;
+    /** The session's final fingerprint set — healed records included. */
+    get fingerprintRecords(): FingerprintRecord[];
+    /** Assertion entries in the cache's shape — persisted alongside steps. */
+    get assertEntries(): CachedAssert[];
     /** Persist the (possibly healed) fingerprints back to the cache (R4, R5). */
     save(): Promise<void>;
     private _record;

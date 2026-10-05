@@ -70,6 +70,14 @@ inputs:
     description: Run the browser-flow lane (`argus-reviewer run`). Disabled by default for public code-review-only repositories. Requires an explicit target and a trusted runtime path.
     default: 'false'
     required: false
+  heal-writeback:
+    description: >-
+      'pr' turns each healed flow step into a write-back proposal: a PR
+      updating the committed recordings under tests/flows (relocation fields
+      only). Requires the job's `contents: write` permission; trusted lanes
+      only; fork PRs never hold the write token.
+    default: ''
+    required: false
   app:
     description: >-
       Enable the application task lane (`verify --app`): a directed task
@@ -328,6 +336,7 @@ runs:
         ARGUS_BUDGET_USD: ${{ inputs.budget-usd }}
         ARGUS_CODE_MODEL: ${{ inputs.code-model }}
         ARGUS_REVIEW_PROFILES: ${{ inputs.review-profiles }}
+        ARGUS_HEAL_WRITEBACK: ${{ inputs.heal-writeback }}
         ARGUS_REVIEWER_TRACE: >-
           {"repo":"${{ github.repository }}",
           "pr":"${{ github.event.pull_request.number }}",

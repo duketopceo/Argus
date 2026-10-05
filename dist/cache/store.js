@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { writeAtomicJson } from '../fsutil.js';
+import { writeAtomicText } from '../fsutil.js';
 export const FLOW_CACHE_SCHEMA_VERSION = 1;
 function sortKeys(_, value) {
     if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
@@ -44,5 +44,13 @@ export async function loadFlow(cacheDir, flowName) {
     }
 }
 export async function saveFlow(cacheDir, flowName, steps, asserts) {
-    await writeAtomicJson(flowPath(cacheDir, flowName), { schemaVersion: FLOW_CACHE_SCHEMA_VERSION, steps, asserts: asserts ?? [] }, sortKeys);
+    await writeAtomicText(flowPath(cacheDir, flowName), serializeFlow(steps, asserts));
+}
+/**
+ * Canonical serialization for a flow file — committed recordings
+ * (`tests/argus/flows/*.json`) and cache writes share one byte-stable format
+ * so write-back diffs show only what healed.
+ */
+export function serializeFlow(steps, asserts) {
+    return `${JSON.stringify({ schemaVersion: FLOW_CACHE_SCHEMA_VERSION, steps, asserts: asserts ?? [] }, sortKeys, 2)}\n`;
 }

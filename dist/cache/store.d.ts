@@ -17,3 +17,9 @@ export interface FlowCache {
 export declare function flowPath(cacheDir: string, flowName: string): string;
 export declare function loadFlow(cacheDir: string, flowName: string): Promise<FlowCache | undefined>;
 export declare function saveFlow(cacheDir: string, flowName: string, steps: FingerprintRecord[], asserts?: CachedAssert[]): Promise<void>;
+/**
+ * Canonical serialization for a flow file — committed recordings
+ * (`tests/argus/flows/*.json`) and cache writes share one byte-stable format
+ * so write-back diffs show only what healed.
+ */
+export declare function serializeFlow(steps: FingerprintRecord[], asserts?: CachedAssert[]): string;

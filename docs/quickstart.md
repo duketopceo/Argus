@@ -37,7 +37,10 @@ export default defineConfig({
 npx argus-reviewer record "sign in and open the dashboard" --name dashboard
 ```
 
-This writes the cache and generates `e2e/dashboard.test.ts`.
+This writes the cache, the committed recording `e2e/flows/dashboard.json`,
+and generates `e2e/dashboard.test.ts`. Commit the test and the recording
+together — the recording is what makes replay cache-hit cheap on a fresh CI
+checkout (the `.argus-reviewer-cache/` dir is local and gitignored).
 
 ## 4. Run the test
 
@@ -301,6 +304,25 @@ Login-gated instances authenticate headless via `A0_USERNAME`/`A0_PASSWORD`
 them). Interactively, `a0 --connect` with remember-host stores a session
 instead. `heal: 'a0'` reuses the same host and caps delegations per run at
 `a0.maxTasks` (default 5) inside a shared 15-minute wall-clock budget.
+
+### Flow heal write-back
+
+When a replayed step misses its fingerprint (the element moved since
+recording), the vision model re-resolves it and the run heals. With
+`flow.healWriteback: 'pr'` in config (or action input `heal-writeback: 'pr'`),
+each healed step is proposed back to the repo: a pull request updating the
+committed `flows/*.json` recording in CI, or a working-tree write you review
+with `git diff` locally.
+
+Only relocation fields may change in a written-back step — bbox, clickPoint,
+regionHash, a11ySnippet. A heal that rewrote the action kind, its typed text,
+keys, or timing is suppressed and the recorded step stays. The PR body renders
+one step card per heal so the before/after is legible without reading JSON.
+
+Write-back needs `contents: write` on the job (the default scaffold grants
+`read` — flip it when you opt in) and only runs on trusted lanes; a fork PR
+never holds the write token. The generated PR is ordinary reviewable source —
+merge it and replays go back to $0 cache hits.
 
 ### Manifest history
 
