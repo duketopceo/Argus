@@ -220,6 +220,17 @@ export interface Config {
      */
     heal: 'local' | 'a0' | undefined;
     /**
+     * Committed-recording policy for flow heals. `healWriteback: 'pr'` turns
+     * each model heal into a write-back proposal — a reviewable PR updating
+     * `tests/argus/flows/*.json` in CI, a working-tree write locally — so
+     * replayed recordings survive across runs. Relocation fields only; a heal
+     * that rewrote the action payload is suppressed. Default 'off'. The key is
+     * not on the untrusted allowlist — a fork PR's config cannot opt itself in.
+     */
+    flow: {
+        healWriteback: 'off' | 'pr';
+    };
+    /**
      * Sandbox probe lane for `code-review` (Phase B.2). Always populated after
      * `resolveConfig` — `enabled: false` by default so the lane is opt-in.
      */

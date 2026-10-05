@@ -732,8 +732,14 @@ describe('argus-reviewer CLI', () => {
     await main(['init'], { cwd, out: capture().fn, err: capture().fn })
     const workflow = await readFile(join(cwd, '.github/workflows/argus-reviewer.yml'), 'utf8')
     // Review-only: the action's `run` input stays at its 'false' default —
-    // no executable lanes are enabled by the scaffold.
-    expect(workflow).not.toMatch(/run:\s*['"]?true/)
+    // no executable lanes are enabled by the scaffold. Comment lines are
+    // stripped: the template documents the commented opt-ins.
+    const active = workflow
+      .split('\n')
+      .filter((l) => !l.trimStart().startsWith('#'))
+      .join('\n')
+    expect(active).not.toMatch(/run:\s*['"]?true/)
+    expect(active).not.toMatch(/heal-writeback:\s*['"]?pr/)
     expect(workflow).toContain('contents: read')
     expect(workflow).toContain('issues: write')
     expect(workflow).toContain('pull-requests: write')

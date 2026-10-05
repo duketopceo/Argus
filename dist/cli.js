@@ -2,7 +2,7 @@
 import { existsSync, realpathSync } from 'node:fs';
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { bindSession, renderTestFile, takeTests, td, test as registerTest, TdSession, } from './api.js';
@@ -41,9 +41,10 @@ import { createLogger, resolveLogLevel } from './log.js';
 import { liveLog } from './live.js';
 import { writeJunitXml } from './report/junit.js';
 import { buildRunReport, writeRunReport } from './report/run.js';
-import { flowPath, loadFlow } from './cache/store.js';
+import { flowPath, loadFlow, serializeFlow } from './cache/store.js';
+import { isSafeFlowName, writebackHealsLocal, writebackHealsToPr, } from './flow/writeback.js';
 import { archiveManifest, classifyHeadBinding, isHeadBindingConclusive, LANE_IDS, readCheckoutSha, } from './report/manifest.js';
-import { writeAtomicJson } from './fsutil.js';
+import { writeAtomicJson, writeAtomicText } from './fsutil.js';
 import { OpenRouterClient } from './vision/openrouter.js';
 import { Ledger } from './vision/ledger.js';
 import { selectionFromFlags } from './pipeline/contracts.js';
@@ -409,6 +410,10 @@ async function cmdRecord(args, ctx, deps) {
         return 2;
     }
     const flowName = values.name ?? slugify(description);
+    if (!isSafeFlowName(flowName)) {
+        usageError(ctx, 'record', `flow name "${flowName}" is not a safe recording name; use lowercase letters, digits, '-', '_'`, `${ctx.rerun} --name my-flow`);
+        return 2;
+    }
     const maxSteps = values['max-steps'] !== undefined ? Number(values['max-steps']) : undefined;
     if (maxSteps !== undefined && (!Number.isInteger(maxSteps) || maxSteps < 1)) {
         usageError(ctx, 'record', `--max-steps must be a positive integer, got "${values['max-steps']}"`);
@@ -450,6 +455,12 @@ async function cmdRecord(args, ctx, deps) {
             ctx.out(`wrote test file: ${testFile}`);
             if (config.cacheDir !== undefined)
                 ctx.out(`wrote cache: ${flowPath(cacheDir, flowName)}`);
+            // The committed recording — canonical flow state that survives CI
+            // checkouts (the cache dir is local/gitignored). Commit alongside the
+            // test file; heal write-back updates it via PR.
+            const flowFile = join(testsDir, 'flows', `${flowName}.json`);
+            await writeAtomicText(flowFile, serializeFlow(flow?.steps ?? [], flow?.asserts));
+            ctx.out(`wrote flow recording: ${flowFile}; commit it with the test file`);
         }
         return result.ok ? 0 : 1;
     }
@@ -562,7 +573,8 @@ async function cmdRun(args, ctx, deps) {
         ctx.out(RUN_USAGE);
         return 0;
     }
-    const { trust } = await resolveCheckoutTrust(ctx);
+    const trustResult = await resolveCheckoutTrust(ctx);
+    const { trust } = trustResult;
     const config = await loadCliConfig(ctx, trust);
     warnUnknownProviders(config, ctx);
     if (values['cache-dir'] !== undefined) {
@@ -578,6 +590,16 @@ async function cmdRun(args, ctx, deps) {
         config.budgetUsd = applied;
     if (config.budgetUsd === undefined)
         ctx.err(UNCAPPED_WARNING);
+    // Action input surface: 'pr' enables write-back, 'off' disables, anything
+    // else warns and defers to config. The trusted-lane gate still owns the
+    // actual write.
+    const envHealWriteback = envOr(ctx.env.ARGUS_HEAL_WRITEBACK);
+    if (envHealWriteback === 'pr' || envHealWriteback === 'off') {
+        config.flow.healWriteback = envHealWriteback;
+    }
+    else if (envHealWriteback !== undefined) {
+        ctx.err(`warning: ignoring invalid ARGUS_HEAL_WRITEBACK="${envHealWriteback}"`);
+    }
     const liveDir = resolve(ctx.cwd, config.cacheDir ?? '.argus-reviewer-cache');
     // liveLog's mkdir is non-recursive by design — create a custom nested
     // cache dir (and ancestors) here once so the first live write lands.
@@ -598,6 +620,7 @@ async function cmdRun(args, ctx, deps) {
     }
     const pattern = positionals[0];
     const testsDir = resolve(ctx.cwd, values.dir ?? config.testsDir ?? 'tests');
+    const flowsDir = join(testsDir, 'flows');
     const reportDir = resolve(ctx.cwd, values['report-dir'] ?? config.reportDir ?? 'argus-reviewer-report');
     const allFiles = await discoverTestFiles(testsDir);
     const files = pattern === undefined ? allFiles : allFiles.filter((f) => f.includes(pattern));
@@ -648,10 +671,28 @@ async function cmdRun(args, ctx, deps) {
         client,
         config,
         flowName,
+        flowsDir,
         env: ctx.env,
         ...(staleReason !== undefined ? { staleReason } : {}),
         logger,
     });
+    // Heal write-back (flow.healWriteback): sessions that healed collect their
+    // before/after records here; sanitized relocations are proposed back to
+    // the committed recordings once the lane finishes.
+    const writebackFlows = [];
+    const collectWriteback = (session, flowName) => {
+        if (config.flow.healWriteback !== 'pr')
+            return;
+        const heals = session.healEvents.filter((e) => e.index !== undefined && e.before !== undefined && e.after !== undefined);
+        if (heals.length === 0)
+            return;
+        writebackFlows.push({
+            flowName,
+            steps: session.fingerprintRecords,
+            asserts: session.assertEntries,
+            heals: heals.map((e) => ({ index: e.index, before: e.before, after: e.after })),
+        });
+    };
     // Evidence store: one immutable journal record per run — attempted on
     // every exit path, including an aborted test loop.
     let headSha;
@@ -738,6 +779,7 @@ async function cmdRun(args, ctx, deps) {
                         cache: fileSession.cacheStats,
                     });
                     await fileSession.save();
+                    collectWriteback(fileSession, fileSlug);
                     runErrors.push(...tagErrors(fileSession.errorRecords, fileSlug));
                     ctx.out(`${ok ? 'PASS' : 'FAIL'} ${fileSlug} (${fileName})`);
                     if (!ok && failureMessage !== undefined)
@@ -788,6 +830,7 @@ async function cmdRun(args, ctx, deps) {
                             cache: session.cacheStats,
                         });
                         await session.save();
+                        collectWriteback(session, sessionFlowName);
                         runErrors.push(...tagErrors(session.errorRecords, registeredTest.name));
                         ctx.out(`${ok ? 'PASS' : 'FAIL'} ${registeredTest.name} (${fileName})`);
                         if (!ok && failureMessage !== undefined)
@@ -936,6 +979,61 @@ async function cmdRun(args, ctx, deps) {
                         ctx.err(`a0 delegation failed for "${r.name}": ${res.output}`);
                     }
                 }
+            }
+        }
+        // Heal write-back: propose sanitized healed recordings back to the repo.
+        // Trusted lanes only — an untrusted (fork) lane never holds a write
+        // token, and a working-tree write under a hostile checkout is still a
+        // write the PR's own code influenced. Never fails the run.
+        if (config.flow.healWriteback === 'pr' && writebackFlows.length > 0) {
+            try {
+                if (trust !== 'trusted') {
+                    ctx.err('heal write-back: skipped; untrusted lane cannot write back');
+                }
+                else {
+                    const wbToken = ctx.env.GITHUB_TOKEN ?? ctx.env.GH_TOKEN;
+                    const wbTrace = parseOpenRouterTrace(ctx.env);
+                    const wbRepo = wbTrace?.repo ?? envOr(ctx.env.GITHUB_REPOSITORY);
+                    const wbPr = wbTrace?.pr || trustResult.pr;
+                    const flowsRelDir = relative(ctx.cwd, flowsDir).split(sep).join('/');
+                    const wbSha = (await gitInfo(ctx.cwd)).commitSha;
+                    let wbBase = envOr(ctx.env.GITHUB_BASE_REF) ??
+                        envOr(ctx.env.GITHUB_REF_NAME);
+                    if (wbBase === undefined &&
+                        wbRepo !== undefined &&
+                        wbToken !== undefined &&
+                        wbPr !== undefined) {
+                        wbBase = (await fetchPrMeta(wbRepo, wbPr, wbToken, ctx))?.baseRef;
+                    }
+                    if (wbRepo !== undefined && wbToken !== undefined && wbBase !== undefined) {
+                        const outcome = await writebackHealsToPr(writebackFlows, flowsRelDir, {
+                            repo: wbRepo,
+                            baseRef: wbBase,
+                            token: wbToken,
+                            headSha: wbSha,
+                            ...(wbPr !== undefined ? { pr: wbPr } : {}),
+                        }, ctx);
+                        if (outcome.skipped !== undefined) {
+                            ctx.out(`heal write-back: ${outcome.skipped}`);
+                        }
+                        else if (outcome.result !== undefined) {
+                            ctx.out(`heal write-back: ${outcome.result.existing === true ? 'updated' : 'opened'} ${outcome.result.prUrl}`);
+                        }
+                    }
+                    else {
+                        const outcome = await writebackHealsLocal(writebackFlows, flowsDir, ctx);
+                        if (outcome.skipped !== undefined) {
+                            ctx.out(`heal write-back: ${outcome.skipped}`);
+                        }
+                        else {
+                            ctx.out(`heal write-back: updated ${relative(ctx.cwd, flowsDir)}; ` +
+                                `review the git diff before committing`);
+                        }
+                    }
+                }
+            }
+            catch (e) {
+                ctx.err(`heal write-back failed: ${e.message}`);
             }
         }
     }

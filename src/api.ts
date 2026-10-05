@@ -3,7 +3,7 @@ import { Actions } from './engine/actions.js'
 import { Engine, VisionClient } from './engine/loop.js'
 import { AssertionResult } from './engine/prompts.js'
 import { FingerprintRecord } from './cache/fingerprint.js'
-import { FlowCache, loadFlow, saveFlow } from './cache/store.js'
+import { CachedAssert, FlowCache, loadFlow, saveFlow } from './cache/store.js'
 import { Ledger, LedgerState } from './vision/ledger.js'
 import { Config, defineConfig } from './config.js'
 import { ErrorRecord } from './journal/schema.js'
@@ -73,6 +73,12 @@ export interface TdAssertRecord extends AssertionResult {
 export interface HealEvent {
   instruction: string
   model: string | undefined
+  /** Step position in the loaded flow — set for write-back diffing. */
+  index?: number | undefined
+  /** The record the session loaded pre-heal. */
+  before?: FingerprintRecord | undefined
+  /** The healed record the model re-resolved. */
+  after?: FingerprintRecord | undefined
 }
 
 export interface TdSessionOptions {
@@ -81,6 +87,12 @@ export interface TdSessionOptions {
   config: Config
   /** Flow name used to load/save the fingerprint cache for this test. */
   flowName?: string
+  /**
+   * Committed recordings dir (`<testsDir>/flows`) — the canonical fallback
+   * when no cache entry exists. Read-only here; write-back lands via
+   * `flow.healWriteback` (PR in CI, working-tree write locally).
+   */
+  flowsDir?: string
   env?: NodeJS.ProcessEnv
   /**
    * Set by the run path when diff-aware invalidation fired — marks every
@@ -173,7 +185,8 @@ export class TdSession {
   static async create(opts: TdSessionOptions): Promise<TdSession> {
     const flow =
       opts.flowName !== undefined && opts.config.cacheDir !== undefined
-        ? await loadFlow(opts.config.cacheDir, opts.flowName)
+        ? (await loadFlow(opts.config.cacheDir, opts.flowName)) ??
+          (opts.flowsDir !== undefined ? await loadFlow(opts.flowsDir, opts.flowName) : undefined)
         : undefined
     return new TdSession(opts, flow)
   }
@@ -203,6 +216,16 @@ export class TdSession {
     return this.ledger.state
   }
 
+  /** The session's final fingerprint set — healed records included. */
+  get fingerprintRecords(): FingerprintRecord[] {
+    return [...this.fingerprints]
+  }
+
+  /** Assertion entries in the cache's shape — persisted alongside steps. */
+  get assertEntries(): CachedAssert[] {
+    return this.engine.assertEntries
+  }
+
   /** Persist the (possibly healed) fingerprints back to the cache (R4, R5). */
   async save(): Promise<void> {
     if (this.opts.flowName !== undefined && this.opts.config.cacheDir !== undefined) {
@@ -215,14 +238,21 @@ export class TdSession {
     }
   }
 
-  private _record(record: TdStepRecord): void {
+  private _record(
+    record: TdStepRecord,
+    healDetail?: Pick<HealEvent, 'index' | 'before' | 'after'>,
+  ): void {
     this.steps.push(record)
     if (!record.ok) {
       this._failed = true
       this._failureReason = record.reason ?? `${record.action} failed`
     }
     if (record.healed) {
-      this.healEvents.push({ instruction: record.instruction, model: record.model })
+      this.healEvents.push({
+        instruction: record.instruction,
+        model: record.model,
+        ...healDetail,
+      })
     }
   }
 
@@ -242,14 +272,17 @@ export class TdSession {
       throw new Error(`td.find("${description}") failed: ${result.reason ?? 'unknown reason'}`)
     }
     this.fingerprints.push(result.fingerprint)
-    this._record({
-      instruction: description,
-      action: 'find',
-      ok: true,
-      healed: result.healed,
-      model: result.model,
-      reason: undefined,
-    })
+    this._record(
+      {
+        instruction: description,
+        action: 'find',
+        ok: true,
+        healed: result.healed,
+        model: result.model,
+        reason: undefined,
+      },
+      result.healed ? { index, before: cached, after: result.fingerprint } : undefined,
+    )
     return result.point
   }
 

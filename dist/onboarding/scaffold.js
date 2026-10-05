@@ -98,6 +98,14 @@ jobs:
       - uses: duketopceo/Argus/action@@@ACTION_PIN@@
         with:
           openrouter-api-key: \${{ secrets.OPENROUTER_API_KEY }}
+      # Flow lane + heal write-back: 'run' replays committed flow
+      # recordings (tests/argus/flows/*.json); 'heal-writeback: pr' opens a
+      # PR with the relocated steps whenever a heal re-resolves an element —
+      # relocation fields only, model-authored, always reviewable, fork
+      # lanes never get the token. Write-back also needs the job's contents
+      # permission flipped to 'write' above. Uncomment:
+      #          run: 'true'
+      #          heal-writeback: 'pr'
 `.replace('@@ACTION_PIN@@', ACTION_PIN);
 export const INIT_MENTION_WORKFLOW = `name: argus-mention
 

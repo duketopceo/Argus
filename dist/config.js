@@ -105,6 +105,7 @@ const defaults = {
     recordStepCap: DEFAULT_RECORD_STEP_CAP,
     a0: undefined,
     heal: 'local',
+    flow: { healWriteback: 'off' },
     sandbox: { ...DEFAULT_SANDBOX },
     explore: { ...DEFAULT_EXPLORE },
     app: { ...DEFAULT_APP },
@@ -302,6 +303,10 @@ export function resolveConfig(input = {}) {
             : undefined;
     if (resolved.heal !== 'a0')
         resolved.heal = 'local';
+    // Same wrong-typed degrade: a mis-typed write-back flag must never
+    // self-enable a write path.
+    const rawFlow = typeof input.flow === 'object' && input.flow !== null ? input.flow : {};
+    resolved.flow = { healWriteback: rawFlow.healWriteback === 'pr' ? 'pr' : 'off' };
     if (resolved.a0 !== undefined) {
         // A0 bounds degrade like every other numeric knob — a hostile or
         // mis-typed cap must not become unlimited tasks or no timeout.

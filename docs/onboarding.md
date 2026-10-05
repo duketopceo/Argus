@@ -52,6 +52,7 @@ For organizations that will not install a third-party App, the plan is a manifes
 
 - [ ] `OPENROUTER_API_KEY` as a repository secret (Settings, Secrets and variables, Actions). Direct link: `https://github.com/<owner>/<repo>/settings/secrets/actions/new?name=OPENROUTER_API_KEY`, or `gh secret set OPENROUTER_API_KEY --repo <owner>/<repo>` from your own terminal.
 - [ ] Optional, only if you want Argus to submit real approving or change-requesting reviews: a GitHub App token and the `approval-evidence` and `approval-check` inputs. See [`approval-token.md`](approval-token.md) and [`github-app.md`](github-app.md).
+- [ ] Optional, for flow heal write-back PRs: flip `contents: read` to `write` in the workflow's job permissions and set the `heal-writeback: 'pr'` action input. See "Flow heal write-back" in [`quickstart.md`](quickstart.md).
 - [ ] Do not commit keys to the config or test files. Values in `secrets` are interpolated into test steps and sent to the target app.
 
 ## What is sent to the model provider
