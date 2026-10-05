@@ -312,6 +312,19 @@ export interface Config {
          * default 120000). Reasoning models need more than the default.
          */
         requestTimeoutMs: number;
+        /**
+         * U2 — diff-scoped spec generation (`--generate-tests`, `@argus
+         * generate`). `enabled` is trusted-only in effect: `review` is not on
+         * the untrusted-config allowlist and the lane hard-refuses fork PRs.
+         * `maxSpecs` caps authored leafs (default 3); `budgetUsd` is the
+         * generation share of codeReviewBudgetUsd (unset = the full lane
+         * budget). Wrong-typed values degrade to the off/capped defaults.
+         */
+        generateTests: {
+            enabled: boolean;
+            maxSpecs: number;
+            budgetUsd: number | undefined;
+        };
     };
 }
 export declare const DEFAULT_REQUEST_TIMEOUT_MS = 120000;
@@ -324,7 +337,9 @@ export declare function checkRequestTimeoutMs(v: unknown): string | undefined;
 export type ConfigInput = Partial<Omit<Config, 'provider' | 'sandbox' | 'review' | 'explore' | 'app'>> & {
     provider?: Partial<ProviderRules>;
     sandbox?: Partial<Sandbox>;
-    review?: Partial<Config['review']>;
+    review?: Partial<Omit<Config['review'], 'generateTests'>> & {
+        generateTests?: Partial<Config['review']['generateTests']>;
+    };
     explore?: Partial<Explore>;
     app?: Partial<AppLane>;
 };

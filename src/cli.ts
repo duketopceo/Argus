@@ -67,6 +67,7 @@ import {
 } from './review/triage.js'
 import { adjudicateFindings, type FindingAdjudicationAudit } from './review/adjudicate.js'
 import { runProbeLane, type ProbeRecord } from './probe/queue.js'
+import { runGenerateLane, type GenerateLaneResult } from './probe/generate.js'
 import { decodeProbePayload, encodeProbePayload, persistProbes } from './probe/persist.js'
 import { SENTINEL } from './report/comment.js'
 import { REPORT_HTML } from './report/html.js'
@@ -320,6 +321,9 @@ Options:
   --batch-model <slug>  Model for batch mode (a :batch slug; default
                      deepseek/deepseek-v4.1-flash:batch). Overrides
                      ARGUS_BATCH_MODEL and review.batchModel.
+  --generate-tests   Author spec leafs from the diff (review.generateTests bounds),
+                     sandbox-validate when the head checkout is real, and deposit
+                     them on a reviewable PR under testsDir. Fork PRs refuse.
   Env: ARGUS_REQUEST_TIMEOUT_MS sets the per-request timeout (default 120000,
                      max 900000; also review.requestTimeoutMs).
   -h, --help         Show this help`
@@ -1496,6 +1500,8 @@ interface CodeReviewReport {
   probes?: ProbeRecord[]
   /** Why an enabled lane bowed out (fork gate, no docker, no harness…). */
   probeLaneSkipped?: string
+  /** U2 — diff-scoped spec generation records; present only when the lane was asked to run. */
+  generated?: GenerateLaneResult
   /** Secrets-lane audit — masked candidates, adjudication verdicts, skip reason. */
   secretsScan?: SecretsScanResult | { skipped: string }
   /** U7 triage record: confidence-model pre-review signals (annotate/route, never gates). */
@@ -2086,6 +2092,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       fixture: { type: 'string' },
       mode: { type: 'string' },
       'batch-model': { type: 'string' },
+      'generate-tests': { type: 'boolean', default: false },
     },
   })
   if (values.help) {
@@ -2845,6 +2852,65 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       }
     }
 
+    // U2 — diff-scoped spec generation: model-authored test leafs under
+    // testsDir, sandbox-validated green on head when the checkout really
+    // is the PR head, deposited on a reviewable PR via createFilesPr.
+    // Opt-in via --generate-tests or review.generateTests.enabled. Fork
+    // PRs are refused inside the lane; like probes it is strictly
+    // additive — failures degrade to draft records and never touch the
+    // verdict (KTD8).
+    let generated: GenerateLaneResult | undefined
+    const wantGenerate =
+      values['generate-tests'] === true || config.review.generateTests.enabled
+    if (wantGenerate) {
+      try {
+        stage('generate lane running')
+        // Validation only proves something when the sandbox runs the real
+        // PR head — a base checkout (mention lane) or inconclusive head
+        // binding would "validate" the wrong tree, so those paths ship
+        // unvalidated drafts instead.
+        const genSandbox =
+          fixtureDir === undefined && sandbox.enabled && isHeadBindingConclusive(headBinding)
+            ? sandbox
+            : undefined
+        generated = await runGenerateLane({
+          cwd: ctx.cwd,
+          reportDir,
+          testsDir: config.testsDir ?? 'tests',
+          diff: files.map((f) => `--- ${f.filename}\n${f.patch ?? ''}`).join('\n'),
+          changedPaths: files.map((f) => f.filename),
+          sandbox: genSandbox,
+          meta: prMeta,
+          token: ghToken,
+          // Fixture mode reviews a repo other than the checkout — writing
+          // a PR against `repo` there would be fiction. Drafts only.
+          repo: fixtureDir === undefined ? repoName : undefined,
+          pr: prNum,
+          client,
+          model,
+          provider: config.provider,
+          ledger,
+          budgetUsd: config.review.generateTests.budgetUsd ?? budget,
+          maxSpecs: config.review.generateTests.maxSpecs,
+          index,
+          calls: allCalls,
+          exec: deps.exec,
+          log: (line) => ctx.err(line),
+        })
+        totalCost += generated.costUsd
+        totalTokens += generated.tokens
+        stage(
+          generated.skipReason !== undefined
+            ? `generate lane skipped - ${generated.skipReason}`
+            : `generate lane done - ${generated.records.length} spec record(s)` +
+                (generated.prUrl !== undefined ? `, PR ${generated.prUrl}` : ''),
+        )
+      } catch (e) {
+        debug('code-review', `generate lane failed: ${(e as Error).message}`)
+        ctx.err(`code-review generate lane failed: ${(e as Error).message}`)
+      }
+    }
+
     // KTD2/KTD3 — the poster-facing surface is computed here, once, on
     // linkedFindings (post-probe `evidence`, adjudicated/carried `p`), and
     // serialized: posters read `reviewEvent` and POST `reviewComments`
@@ -2870,6 +2936,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       commentsOverflow: rendered.overflow,
       ...(probes !== undefined ? { probes } : {}),
       ...(probeLaneSkipped !== undefined ? { probeLaneSkipped } : {}),
+      ...(generated !== undefined ? { generated } : {}),
       ...(secretsScan !== undefined ? { secretsScan } : {}),
       ...(triage !== undefined ? { triage } : {}),
       ...(findingAdjudication !== undefined ? { findingAdjudication } : {}),
@@ -3231,7 +3298,7 @@ number; runs nothing unless the comment is on a pull request and starts
 with @argus. Never checks out the PR head: review runs API-diff-only
 against the base checkout.
 
-Commands: @argus review · @argus record "<flow>" · @argus persist · @argus help`
+Commands: @argus review · @argus record "<flow>" · @argus persist · @argus generate · @argus help`
 
 interface IssueCommentPayload {
   issue?: { number?: number; pull_request?: unknown }
@@ -3387,6 +3454,36 @@ async function cmdMention(args: string[], ctx: Ctx, deps: CliDeps): Promise<numb
         ? `recorded \`${parsed.arg}\` — the generated test and flow cache are in the run's artifacts.${runLink}`
         : `record failed for \`${parsed.arg}\` — see the workflow log.${runLink}`,
     )
+    return code
+  }
+
+  if (parsed.name === 'generate') {
+    // U2 — runs the review path with --generate-tests: the mention lane is
+    // a base checkout, so sandbox validation is impossible here and every
+    // authored spec lands as an unvalidated draft on the write PR. Forks
+    // are refused upstream by mayRunMention.
+    ctx.out(`mention: generating spec coverage for PR #${issueNum}`)
+    await reply('generating spec coverage - the specs land on a reviewable PR linked below.')
+    const code = await cmdCodeReview(['--report-dir', reportDir, '--generate-tests'], ctx, deps)
+    const report = (await readFile(join(reportDir, 'code-review.json'), 'utf8')
+      .then((raw) => JSON.parse(raw) as { generated?: GenerateLaneResult })
+      .catch(() => undefined))
+    const gen = report?.generated
+    if (gen === undefined) {
+      await reply('the generate lane did not run - check the workflow log for the reason.')
+    } else if (gen.skipReason !== undefined) {
+      await reply(`generation skipped: ${gen.skipReason}`)
+    } else {
+      const committed = gen.records.filter((r) => r.status === 'committed').length
+      const drafts = gen.records.length - committed
+      await reply(
+        gen.prUrl !== undefined
+          ? `generated ${committed} spec(s)${drafts > 0 ? ` (${drafts} held back as drafts)` : ''} - ` +
+              `reviewable PR: ${gen.prUrl}`
+          : `${committed} spec(s) authored but no PR opened - ` +
+              (gen.records[0]?.detail ?? 'see code-review.json for details'),
+      )
+    }
     return code
   }
 

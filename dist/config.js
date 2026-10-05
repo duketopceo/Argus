@@ -123,6 +123,7 @@ const defaults = {
         batchTimeoutMs: 480_000,
         batchModel: undefined,
         requestTimeoutMs: DEFAULT_REQUEST_TIMEOUT_MS,
+        generateTests: { enabled: false, maxSpecs: 3, budgetUsd: undefined },
     },
 };
 export function defineConfig(input) {
@@ -273,7 +274,32 @@ export function resolveConfig(input = {}) {
         if (bad !== undefined)
             throw new Error(`review.${bad}`);
     }
-    const resolved = { ...defaults, ...input, provider, sandbox, explore, app, review };
+    // U2 — generation bounds degrade like every other knob: enabled only on
+    // a literal true, maxSpecs positive-int capped at the authoring-schema
+    // ceiling (GEN_SCHEMA_MAX in src/probe/generate.ts), budgetUsd only a
+    // positive finite share. `review` is not on the untrusted allowlist, so
+    // a fork PR can never reach this block anyway.
+    const rawGen = typeof rawReview.generateTests === 'object' && rawReview.generateTests !== null
+        ? rawReview.generateTests
+        : {};
+    const generateTests = {
+        enabled: rawGen.enabled === true,
+        maxSpecs: Math.min(posInt(rawGen.maxSpecs, defaults.review.generateTests.maxSpecs), 8),
+        budgetUsd: typeof rawGen.budgetUsd === 'number' && Number.isFinite(rawGen.budgetUsd) && rawGen.budgetUsd > 0
+            ? rawGen.budgetUsd
+            : undefined,
+    };
+    const resolved = {
+        ...defaults,
+        ...input,
+        provider,
+        sandbox,
+        explore,
+        app,
+        // `review` carries a Partial<>-typed generateTests from the rawReview
+        // spread — the normalized const re-asserts the full shape.
+        review: { ...review, generateTests },
+    };
     // 0 = explicit unlimited; anything not a finite non-negative number
     // (mis-typed, negative, null) degrades to the default cap, never to unlimited.
     const rawBudget = input.budgetUsd;

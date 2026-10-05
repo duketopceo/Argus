@@ -48,6 +48,14 @@ export interface CodeReviewInput {
         status?: string;
         detail?: string;
     };
+    /** U2 — generated-spec lane surface: per-spec status + the write PR URL. */
+    generated?: {
+        records?: {
+            status?: string;
+            validation?: string;
+        }[];
+        prUrl?: string;
+    };
 }
 /** The subset of run.json the comment head reads. */
 export type ReportInput = Pick<RunReport, 'ok' | 'durationMs'> & {

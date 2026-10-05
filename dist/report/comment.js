@@ -203,6 +203,15 @@ function findingsLine(cr, missing = NO_REVIEW_REPORT) {
         : findings.filter((f) => typeof f.suggestion === 'string' && f.suggestion !== '').length;
     if (suggestions > 0)
         parts.push(`${plural(suggestions, 'suggestion')} ready to commit`);
+    const gen = cr.generated;
+    if (Array.isArray(gen?.records) && gen.records.length > 0) {
+        const committed = gen.records.filter((r) => r.status === 'committed').length;
+        const drafts = gen.records.length - committed;
+        parts.push(gen.prUrl !== undefined
+            ? `${plural(committed, 'generated spec')} -> [review PR](${cell(gen.prUrl, 400)})` +
+                (drafts > 0 ? `, ${drafts} draft${drafts === 1 ? '' : 's'}` : '')
+            : `${plural(gen.records.length, 'generated spec')} (no PR opened)`);
+    }
     return parts.join(' · ');
 }
 function footer(meta) {

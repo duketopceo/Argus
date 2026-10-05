@@ -49,3 +49,6 @@ jobs:
       # permission flipped to 'write' above. Uncomment:
       #          run: 'true'
       #          heal-writeback: 'pr'
+      # Spec generation ('--generate-tests' / review.generateTests) opens
+      # its PR through the same write path — set it in the trusted
+      # argus-reviewer.config.ts and flip contents to 'write'.

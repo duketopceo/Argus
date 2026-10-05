@@ -106,14 +106,19 @@ jobs:
       # permission flipped to 'write' above. Uncomment:
       #          run: 'true'
       #          heal-writeback: 'pr'
+      # Spec generation ('--generate-tests' / review.generateTests) opens
+      # its PR through the same write path — set it in the trusted
+      # argus-reviewer.config.ts and flip contents to 'write'.
 `.replace('@@ACTION_PIN@@', ACTION_PIN);
 export const INIT_MENTION_WORKFLOW = `name: argus-mention
 
 # @argus mention commands on PR comments — '@argus review', '@argus
-# record "<flow>"', '@argus persist', '@argus help'. issue_comment is
-# strictly more privileged than pull_request (secrets + write token are
-# present), so the checkout below deliberately resolves the BASE ref —
-# never the PR head. Argus reviews the head diff over the API.
+# record "<flow>"', '@argus persist', '@argus generate', '@argus help'.
+# issue_comment is strictly more privileged than pull_request (secrets +
+# write token are present), so the checkout below deliberately resolves
+# the BASE ref — never the PR head. Argus reviews the head diff over the
+# API. 'generate' therefore authors specs without sandbox validation —
+# they land on the write PR marked unvalidated.
 on:
   issue_comment:
     types: [created]
@@ -123,8 +128,9 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.issue.pull_request && startsWith(github.event.comment.body, '@argus')
     permissions:
-      # contents: write — '@argus persist' commits reproduced probes to an
-      # argus/ branch via the git/refs + contents APIs and opens a PR.
+      # contents: write — '@argus persist' and '@argus generate' commit
+      # authored tests to an argus/ branch via the git/refs + contents
+      # APIs and open a PR.
       contents: write
       issues: write
       pull-requests: write
