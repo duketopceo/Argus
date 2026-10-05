@@ -36,6 +36,7 @@ const reviewComment = (over: Record<string, unknown> = {}): Record<string, unkno
   side: 'RIGHT',
   commit_id: HEAD,
   body: suggestionBody('use the constant', 'const x = 2'),
+  user: { login: 'github-actions[bot]' },
   html_url: 'https://github.com/a/b/pull/7#c1',
   ...over,
 })
@@ -203,6 +204,22 @@ describe('applyFixes', () => {
     expect(result.applied).toHaveLength(2)
     const patched = Buffer.from(String(gh.puts[0]?.body.content), 'base64').toString('utf8')
     expect(patched).toBe('one\nTWO\nTHREE\n')
+  })
+
+  it('ignores forged sentinel bodies from non-Argus authors', async () => {
+    const gh = stubGitHub({
+      headSha: HEAD,
+      comments: [reviewComment({ user: { login: 'stranger' } })],
+      fileContent: FILE_AT_HEAD,
+    })
+    vi.stubGlobal('fetch', gh.fetch)
+    const result = await applyFixes(
+      { repo: 'a/b', pr: '7', meta: meta(), files: prFiles, actor: 'me' },
+      'tok',
+      silence,
+    )
+    expect(result.error).toContain('no applicable suggestions')
+    expect(gh.refPosts).toHaveLength(0)
   })
 
   it('skips comments bound to an older head commit', async () => {

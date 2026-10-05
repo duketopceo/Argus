@@ -114,6 +114,8 @@ export interface ReviewComment {
     /** `commit_id` — the commit the comment was authored on. */
     commitId: string | undefined;
     body: string;
+    /** Author login — `github-actions[bot]` or `<actor>[bot]` for Argus's own. */
+    userLogin: string | undefined;
     htmlUrl: string | undefined;
 }
 /** Paginated `GET /pulls/{pr}/comments` — posted inline review comments. */

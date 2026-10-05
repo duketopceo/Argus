@@ -3398,7 +3398,7 @@ async function cmdMention(args, ctx, deps) {
             await reply("I couldn't list this PR's files - fix is unavailable right now.");
             return 0;
         }
-        const result = await applyFixes({ repo, pr: issueNum, meta, files }, token, ctx);
+        const result = await applyFixes({ repo, pr: issueNum, meta, files, actor: ctx.env.GITHUB_ACTOR }, token, ctx);
         if (result.stale === true) {
             await reply('the PR head moved while I was applying suggestions - re-run `@argus fix` to retry.');
             return 0;

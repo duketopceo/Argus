@@ -384,6 +384,8 @@ export interface ReviewComment {
   /** `commit_id` — the commit the comment was authored on. */
   commitId: string | undefined
   body: string
+  /** Author login — `github-actions[bot]` or `<actor>[bot]` for Argus's own. */
+  userLogin: string | undefined
   htmlUrl: string | undefined
 }
 
@@ -410,6 +412,7 @@ export async function fetchReviewComments(
           side?: string
           commit_id?: string
           body?: string
+          user?: { login?: string }
           html_url?: string
         }[]
       | undefined
@@ -423,6 +426,7 @@ export async function fetchReviewComments(
         side: c.side,
         commitId: c.commit_id,
         body: c.body ?? '',
+        userLogin: c.user?.login,
         htmlUrl: c.html_url,
       })
     }

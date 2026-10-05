@@ -81,11 +81,18 @@ function safePath(path: string): boolean {
  * CURRENT `/pulls/{pr}/files` list (the anchor re-validation surface).
  */
 export async function applyFixes(
-  opts: { repo: string; pr: string; meta: PrMeta; files: { filename: string; patch?: string }[] },
+  opts: {
+    repo: string
+    pr: string
+    meta: PrMeta
+    files: { filename: string; patch?: string }[]
+    /** GITHUB_ACTOR — the workflow actor, whose `[bot]` login Argus posts as. */
+    actor?: string | undefined
+  },
   token: string,
   ctx: Ctx,
 ): Promise<ApplyFixesResult> {
-  const { repo, pr, meta, files } = opts
+  const { repo, pr, meta, files, actor } = opts
   const empty: ApplyFixesResult = { applied: [], skipped: [] }
   const headSha = meta.headSha
   const headRef = meta.headRef
@@ -97,10 +104,18 @@ export async function applyFixes(
   if (comments === undefined) return { ...empty, error: 'could not list review comments' }
 
   // Bound to comments posted at the current head — an older commit_id means
-  // the suggestion was rendered against code that has since moved.
+  // the suggestion was rendered against code that has since moved. Author
+  // must be Argus's own login: the sentinel string is copyable, so a forged
+  // body alone is not proof Argus rendered the comment (isSelfLogin parity).
+  const selfLogins = new Set(
+    ['github-actions[bot]', actor, actor !== undefined && actor !== '' ? `${actor}[bot]` : undefined]
+      .filter((l): l is string => typeof l === 'string'),
+  )
   const candidates = comments.filter(
     (c) =>
       c.commitId === headSha &&
+      typeof c.userLogin === 'string' &&
+      selfLogins.has(c.userLogin) &&
       isArgusInlineBody(c.body) &&
       extractSuggestion(c.body) !== '' &&
       typeof c.path === 'string' &&

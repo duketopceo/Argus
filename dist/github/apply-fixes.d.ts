@@ -58,5 +58,7 @@ export declare function applyFixes(opts: {
         filename: string;
         patch?: string;
     }[];
+    /** GITHUB_ACTOR — the workflow actor, whose `[bot]` login Argus posts as. */
+    actor?: string | undefined;
 }, token: string, ctx: Ctx): Promise<ApplyFixesResult>;
 export {};

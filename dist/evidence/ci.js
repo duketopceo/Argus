@@ -258,6 +258,7 @@ export async function fetchReviewComments(repo, pr, token, ctx) {
                 side: c.side,
                 commitId: c.commit_id,
                 body: c.body ?? '',
+                userLogin: c.user?.login,
                 htmlUrl: c.html_url,
             });
         }
