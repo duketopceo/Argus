@@ -615,6 +615,45 @@ describe('sticky review top block (U4)', () => {
     expect(body.split('repo index')).toHaveLength(2)
     expect(diagnostics).toContain(`- CI evidence inconclusive for 3 findings: no repo index; run \`argus-reviewer index\` first`)
   })
+
+  it('states a skipped rules lane in Diagnostics (U8)', () => {
+    const cr = review({
+      secretsScan: { skipped: 'the rules lane is disabled (review.rules)' },
+      rulesScan: { skipped: 'the rules lane is disabled (review.rules)' },
+    })
+    const body = renderReviewOnlyBody(cr, 'https://github.com/run/1', false, undefined)
+    const diagnostics = body.slice(body.indexOf('<summary>Diagnostics</summary>'))
+    expect(diagnostics).toContain(
+      'Secrets scan skipped: the rules lane is disabled (review.rules)',
+    )
+    expect(diagnostics).toContain(
+      'Rules lane skipped: the rules lane is disabled (review.rules)',
+    )
+  })
+
+  it('states rules-lane hit/suppression/failure counts in Diagnostics (U8)', () => {
+    const cr = review({
+      rulesScan: {
+        ran: ['secrets', 'hardcoded-endpoint', 'leftover-todo', 'sync-in-async'],
+        records: [
+          { rule: 'secrets', file: 'a.ts', line: 2, detail: 'aws-access-key' },
+          {
+            rule: 'hardcoded-endpoint',
+            file: 'b.ts',
+            line: 4,
+            detail: 'url-with-ip-host',
+            suppressed: 'loopback/unspecified host',
+          },
+        ],
+        failures: [{ rule: 'leftover-todo', error: 'kaboom' }],
+      },
+    })
+    const body = renderReviewOnlyBody(cr, 'https://github.com/run/1', false, undefined)
+    const diagnostics = body.slice(body.indexOf('<summary>Diagnostics</summary>'))
+    expect(diagnostics).toContain(
+      'Rules lane: 4 rule(s), 2 audited hit(s), 1 suppressed, 1 failed',
+    )
+  })
 })
 
 // U3 — the poster consumes the serialized `reviewComments[]`/`reviewEvent`

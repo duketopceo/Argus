@@ -5,6 +5,7 @@ import {
   REVIEW_RULE_IDS,
   REVIEW_RULES,
   RULE_HITS_CAP,
+  RULE_RECORDS_CAP,
   runRules,
   type ReviewRule,
 } from '../../src/review/rules.js'
@@ -225,6 +226,133 @@ describe('runRules', () => {
     expect(r.records.filter((x) => x.rule === 'spam' && x.detail.startsWith('hit'))).toHaveLength(
       RULE_HITS_CAP + 3,
     )
+  })
+
+  it('record cap: over-cap records collapse into a count-preserving aggregate', async () => {
+    const flood: ReviewRule = {
+      id: 'flood',
+      description: 'test rule',
+      run: () => ({
+        findings: [],
+        records: Array.from({ length: RULE_RECORDS_CAP + 7 }, (_, i) => ({
+          file: 'src/x.ts',
+          line: i + 1,
+          detail: `hit ${i}`,
+        })),
+      }),
+    }
+    const r = await runRules(diffOf('src/x.ts', [`const a = 1`]), {
+      rules: [flood],
+      enabled: ['flood'],
+    })
+    expect(r.records.filter((x) => x.detail.startsWith('hit'))).toHaveLength(RULE_RECORDS_CAP)
+    const agg = r.records.find((x) => x.suppressed === 'record-cap')
+    expect(agg?.detail).toBe(`7 hit(s) over the ${RULE_RECORDS_CAP}-record cap`)
+  })
+
+  it('a demoted bug claim rewrites the `bug:` message prefix, never emits it', async () => {
+    const loud: ReviewRule = {
+      id: 'loud',
+      description: 'test rule',
+      run: () => ({
+        findings: [
+          { file: 'src/x.ts', line: 1, severity: 'bug', message: 'L1: bug: claims loudly' },
+        ],
+        records: [],
+      }),
+    }
+    const r = await runRules(diffOf('src/x.ts', [`const a = 1`]), {
+      rules: [loud],
+      enabled: ['loud'],
+    })
+    expect(r.findings[0]?.severity).toBe('risk')
+    // Severity-derived readers parse the prefix — demoted text must not
+    // still claim `bug:`.
+    expect(r.findings[0]?.message).not.toContain('bug:')
+    expect(r.findings[0]?.message).toContain('risk:')
+  })
+
+  it('the runner stamps rule provenance, overwriting any spoofed field', async () => {
+    const spoofer: ReviewRule = {
+      id: 'real-rule',
+      description: 'test rule',
+      run: () => ({
+        findings: [
+          {
+            file: 'src/x.ts',
+            line: 1,
+            severity: 'nit',
+            message: 'spoofed',
+            rule: 'secrets',
+          } as never,
+        ],
+        records: [{ file: 'src/x.ts', detail: 'x', rule: 'secrets' } as never],
+      }),
+    }
+    const r = await runRules(diffOf('src/x.ts', [`const a = 1`]), {
+      rules: [spoofer],
+      enabled: ['real-rule'],
+    })
+    expect(r.findings[0]?.rule).toBe('real-rule')
+    expect(r.records.find((x) => x.detail === 'x')?.rule).toBe('real-rule')
+  })
+
+  it('a malformed RuleOutput resolves into failures, not a crash', async () => {
+    const bad = (out: unknown): ReviewRule => ({
+      id: 'bad',
+      description: 'test rule',
+      run: () => out as never,
+    })
+    for (const out of [undefined, { findings: 'x' }, { records: [], findings: undefined }, 'str']) {
+      const r = await runRules(diffOf('src/x.ts', [`const a = 1`]), {
+        rules: [bad(out)],
+        enabled: ['bad'],
+      })
+      expect(r.failures).toEqual([
+        { rule: 'bad', error: 'malformed RuleOutput (needs { findings, records })' },
+      ])
+      expect(r.findings).toEqual([])
+    }
+  })
+
+  it('an async rule rejection is a failure, not a lane abort', async () => {
+    const rejecting: ReviewRule = {
+      id: 'rejects',
+      description: 'test rule',
+      run: async () => {
+        throw new Error('async kaboom')
+      },
+    }
+    const r = await runRules(diffOf('src/x.ts', [`const a = 1`]), {
+      rules: [rejecting],
+      enabled: ['rejects'],
+    })
+    expect(r.failures).toEqual([{ rule: 'rejects', error: 'async kaboom' }])
+    expect(r.ran).toEqual(['rejects'])
+  })
+
+  it('a dotted-quad-prefixed domain is not an IP — no loopback suppression bypass', async () => {
+    const r = await runRules(
+      diffOf('src/u.ts', [`const u = 'https://127.0.0.1.evil.com/x'`]),
+    )
+    // The captured `127.0.0.1` prefix must not suppress: this is a domain
+    // literal, so the rule records/fires nothing (not a bare-IP hit).
+    expect(
+      r.records.filter((x) => x.rule === 'hardcoded-endpoint'),
+    ).toHaveLength(0)
+    expect(r.findings.filter((f) => f.message.includes('hardcoded'))).toHaveLength(0)
+  })
+
+  it('quoted `+++ "b/..."` headers attribute hits to the decoded path', async () => {
+    const diff =
+      'diff --git "a/my f.ts" "b/my f.ts"\n' +
+      '--- "a/my f.ts"\n' +
+      '+++ "b/my f.ts"\n' +
+      '@@ -0,0 +1 @@\n' +
+      '+const host = "10.9.8.7"\n'
+    const r = await runRules(diff)
+    const hit = r.findings.find((f) => f.message.includes('hardcoded'))
+    expect(hit?.file).toBe('my f.ts')
   })
 })
 

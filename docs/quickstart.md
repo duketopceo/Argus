@@ -173,10 +173,10 @@ export default defineConfig({
 ```
 
 or per deployment: `ARGUS_REVIEW_PROFILES="security,perf"` (action input
-`review-profiles`). The `security` lens runs alongside the always-on
-deterministic secrets scan — the rubric steers the model toward
-exploitability; the regex lane catches secret-shaped literals even when the
-model doesn't.
+`review-profiles`). The `security` lens runs alongside the deterministic
+secrets scan (on by default — `review.rules` controls it) — the rubric
+steers the model toward exploitability; the regex lane catches
+secret-shaped literals even when the model doesn't.
 
 Per-path rules come from `review.instructions` — `{glob, rule}` entries
 resolved per chunk, so a rule lands only in chunks carrying matching files
@@ -207,14 +207,16 @@ markers, and synchronous fs/process calls added in code paths. Every hit —
 surfaced or suppressed — is an audit entry in `code-review.json`'s
 `rulesScan`; the sticky comment summarizes it. Rules union after synthesis
 so nothing the model writes can erase a hit, and no rule may claim `bug`
-severity without confidence-model adjudication. The lane costs $0.
+severity without confidence-model adjudication. Matching is $0 (the
+secrets rule's adjudication still uses the decision model when
+`decisionModel` is configured).
 
 ```ts
 export default defineConfig({
   review: {
-    // All four rules are on by default; list a subset to narrow, [] to
-    // disable the lane (including the secrets rule).
-    rules: ['secrets', 'hardcoded-endpoint', 'leftover-todo', 'sync-in-async'],
+    // Every registered rule is on by default; list a subset to narrow,
+    // [] to disable the lane (including the secrets rule).
+    rules: ['secrets', 'hardcoded-endpoint'],
   },
 })
 ```

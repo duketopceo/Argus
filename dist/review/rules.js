@@ -4,6 +4,13 @@ import { isTestPath } from './testfiles.js';
 /** Per-rule hit cap — a formatter churning TODOs must not flood the report. */
 export const RULE_HITS_CAP = 200;
 /**
+ * Per-rule audit-record bound — records stay complete for realistic
+ * inputs; a pathological diff (generated churn) collapses past the cap
+ * into one count-preserving aggregate record instead of an unbounded
+ * report payload.
+ */
+export const RULE_RECORDS_CAP = 2000;
+/**
  * Paths where a pattern hit is data or prose, not code — sample
  * manifests, docs, fixtures. Hits there are suppressed WITH a record
  * (the audit keeps them inspectable), never silently dropped.
@@ -55,8 +62,11 @@ const secretsRule = {
         return { findings: res.findings, records, secretsScan: res };
     },
 };
-const IP_URL_RE = /https?:\/\/(\d{1,3}(?:\.\d{1,3}){3})/;
-const IP_ASSIGN_RE = /\b(?:host|addr|address|ip|endpoint|server|url|baseurl|base_url)\w*\s*[:=]\s*['"`]?(\d{1,3}(?:\.\d{1,3}){3})/i;
+// The `(?![\w.])` right boundary stops `127.0.0.1.evil.com` capturing
+// `127.0.0.1` and suppressing as loopback — a dotted-quad-prefixed
+// domain is a domain, not an IP literal.
+const IP_URL_RE = /https?:\/\/(\d{1,3}(?:\.\d{1,3}){3})(?![\w.])/;
+const IP_ASSIGN_RE = /\b(?:host|addr|address|ip|endpoint|server|url|baseurl|base_url)\w*\s*[:=]\s*['"`]?(\d{1,3}(?:\.\d{1,3}){3})(?![\w.])/i;
 const hardcodedEndpointRule = {
     id: 'hardcoded-endpoint',
     description: 'hardcoded URLs/IP literals added in code',
@@ -168,11 +178,7 @@ export async function runRules(diff, opts = {}) {
     const registry = opts.rules ?? REVIEW_RULES;
     const enabled = opts.enabled ?? registry.map((r) => r.id);
     // Rules see only the context contract, never the runner's opts bag.
-    const ctx = {
-        ...(opts.secretsThreshold !== undefined ? { secretsThreshold: opts.secretsThreshold } : {}),
-        ...(opts.decisionClient !== undefined ? { decisionClient: opts.decisionClient } : {}),
-        ...(opts.decisionModel !== undefined ? { decisionModel: opts.decisionModel } : {}),
-    };
+    const { enabled: _enabled, rules: _rules, ...ctx } = opts;
     const findings = [];
     const records = [];
     const failures = [];
@@ -185,6 +191,14 @@ export async function runRules(diff, opts = {}) {
         let out;
         try {
             out = await rule.run(diff, ctx);
+            // A malformed resolve escapes the contract — count it as a rule
+            // failure inside the same boundary so the lane still completes.
+            if (out === null ||
+                typeof out !== 'object' ||
+                !Array.isArray(out.findings) ||
+                !Array.isArray(out.records)) {
+                throw new Error('malformed RuleOutput (needs { findings, records })');
+            }
         }
         catch (e) {
             // Failures are the audit channel for a throwing rule — no
@@ -194,8 +208,20 @@ export async function runRules(diff, opts = {}) {
         }
         if (out.secretsScan !== undefined)
             secretsScan = out.secretsScan;
-        for (const r of out.records)
+        // Findings cap at RULE_HITS_CAP; records keep every hit up to
+        // RULE_RECORDS_CAP, then collapse into a count-preserving aggregate.
+        const overflow = Math.max(0, out.records.length - RULE_RECORDS_CAP);
+        for (const r of out.records.slice(0, RULE_RECORDS_CAP)) {
             records.push({ ...r, rule: rule.id });
+        }
+        if (overflow > 0) {
+            records.push({
+                rule: rule.id,
+                file: '-',
+                detail: `${overflow} hit(s) over the ${RULE_RECORDS_CAP}-record cap`,
+                suppressed: 'record-cap',
+            });
+        }
         // Severity ceiling + hit cap in one pass — records stay complete
         // (every hit is an audit entry) while findings bound the union.
         let emitted = 0;
@@ -204,7 +230,9 @@ export async function runRules(diff, opts = {}) {
             let g = f;
             if (f.severity === 'bug' && f.p === undefined) {
                 // A deterministic hit cannot claim `bug` without adjudicated
-                // confidence riding on it.
+                // confidence riding on it. The `bug:` token inside the message
+                // text must demote with the field — downstream readers derive
+                // severity from that prefix.
                 records.push({
                     rule: rule.id,
                     file: f.file,
@@ -212,10 +240,10 @@ export async function runRules(diff, opts = {}) {
                     detail: 'unadjudicated bug claim',
                     suppressed: 'severity-ceiling',
                 });
-                g = { ...f, severity: 'risk' };
+                g = { ...f, severity: 'risk', message: f.message.replace(/\bbug:/, 'risk:') };
             }
             if (emitted < RULE_HITS_CAP) {
-                findings.push(g);
+                findings.push({ ...g, rule: rule.id });
                 emitted++;
             }
             else {

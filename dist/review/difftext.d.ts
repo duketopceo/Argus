@@ -8,6 +8,13 @@
  * Lines under `+++ /dev/null` (deleted files) yield `file === ''` and are
  * skipped by consumers.
  */
+/**
+ * git `-c` pins every diff producer feeding this lane must use — ambient
+ * gitconfig (`diff.noprefix`, `diff.dstPrefix`, `core.quotePath`) rewrites
+ * or C-quotes the `+++` headers the walker parses, silently emptying the
+ * scan surface.
+ */
+export declare const GIT_DIFF_PATH_FLAGS: string[];
 export interface AddedLine {
     file: string;
     /** Line number in the post-change file. */

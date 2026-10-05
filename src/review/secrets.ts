@@ -1,6 +1,6 @@
 import { defaultExec, type ExecFn } from '../detect.js'
 import { debug } from '../debug.js'
-import { addedLines } from './difftext.js'
+import { addedLines, GIT_DIFF_PATH_FLAGS } from './difftext.js'
 import {
   DecisionClient,
   describeDecisionError,
@@ -12,7 +12,7 @@ import {
  * Deterministic secrets scan over the PR's local merge-base diff,
  * optionally adjudicated by the Decisions API (the confidence model). The lane is
  * additive-only: findings are unioned into the review AFTER model
- * synthesis so a prompt-injected synthesis can never erase them, and a
+ * synthesis so a prompt-injected synthesis can never erase them.
  * A confidence-model outage degrades to regex-only findings rather than silence.
  *
  * Masking contract: raw literals transit to the confidence model inside `state` (KTD9 —
@@ -170,11 +170,13 @@ export async function materializeMergeBaseDiff(opts: {
   if (!have) {
     return { skipped: `base ${opts.baseSha.slice(0, 12)} not available locally and unfetchable` }
   }
-  // core.quotePath=false — the default C-escapes non-ASCII/odd-byte paths
-  // ("b/\"f\\303\\251e.ts\""), mangling `file` in findings.
+  // GIT_DIFF_PATH_FLAGS pins path-header config: ambient gitconfig
+  // (noprefix/dstPrefix/mnemonicPrefix) rewrites the `+++ b/` headers the
+  // lane parses — silently emptying the scan — and core.quotePath C-quotes
+  // odd-byte paths.
   const diff = await exec(
     'git',
-    ['-c', 'core.quotePath=false', '-C', opts.cwd, 'diff', `${opts.baseSha}..HEAD`],
+    [...GIT_DIFF_PATH_FLAGS, '-C', opts.cwd, 'diff', `${opts.baseSha}..HEAD`],
     60_000,
   )
   if (diff.code !== 0) {

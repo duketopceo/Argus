@@ -24,6 +24,8 @@ export interface RuleFinding {
     message: string;
     /** Adjudicated confidence (secrets rule) — the only `bug` license. */
     p?: number;
+    /** Stamped by the runner — provenance survives the post-synthesis union. */
+    rule?: string;
 }
 export interface RuleRecord {
     rule: string;
@@ -70,6 +72,13 @@ export interface RulesRunResult {
 }
 /** Per-rule hit cap — a formatter churning TODOs must not flood the report. */
 export declare const RULE_HITS_CAP = 200;
+/**
+ * Per-rule audit-record bound — records stay complete for realistic
+ * inputs; a pathological diff (generated churn) collapses past the cap
+ * into one count-preserving aggregate record instead of an unbounded
+ * report payload.
+ */
+export declare const RULE_RECORDS_CAP = 2000;
 /** The rule registry — curated, not a plugin surface. */
 export declare const REVIEW_RULES: readonly ReviewRule[];
 /** All registered rule ids — the default `review.rules` enabled set. */

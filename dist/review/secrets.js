@@ -1,6 +1,6 @@
 import { defaultExec } from '../detect.js';
 import { debug } from '../debug.js';
-import { addedLines } from './difftext.js';
+import { addedLines, GIT_DIFF_PATH_FLAGS } from './difftext.js';
 import { describeDecisionError, isNoulAnswer, MAX_CANDIDATES, } from '../vision/decisions.js';
 // Owned by vision/decisions.ts — re-exported here so existing import
 // paths (tests, lanes) keep resolving.
@@ -89,9 +89,11 @@ export async function materializeMergeBaseDiff(opts) {
     if (!have) {
         return { skipped: `base ${opts.baseSha.slice(0, 12)} not available locally and unfetchable` };
     }
-    // core.quotePath=false — the default C-escapes non-ASCII/odd-byte paths
-    // ("b/\"f\\303\\251e.ts\""), mangling `file` in findings.
-    const diff = await exec('git', ['-c', 'core.quotePath=false', '-C', opts.cwd, 'diff', `${opts.baseSha}..HEAD`], 60_000);
+    // GIT_DIFF_PATH_FLAGS pins path-header config: ambient gitconfig
+    // (noprefix/dstPrefix/mnemonicPrefix) rewrites the `+++ b/` headers the
+    // lane parses — silently emptying the scan — and core.quotePath C-quotes
+    // odd-byte paths.
+    const diff = await exec('git', [...GIT_DIFF_PATH_FLAGS, '-C', opts.cwd, 'diff', `${opts.baseSha}..HEAD`], 60_000);
     if (diff.code !== 0) {
         return { skipped: `git diff failed: ${diff.stderr.trim().slice(0, 200)}` };
     }

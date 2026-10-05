@@ -62,6 +62,7 @@ import { capTestFindings } from './review/testfiles.js'
 import { auditOf, validateFindings, type ValidationAudit } from './review/validate.js'
 import { materializeMergeBaseDiff, type SecretsScanResult } from './review/secrets.js'
 import { runRules, type RuleFailure, type RuleFinding, type RuleRecord } from './review/rules.js'
+import { GIT_DIFF_PATH_FLAGS } from './review/difftext.js'
 import {
   buildTriageState,
   routeModel,
@@ -1813,15 +1814,11 @@ export function filesFromUnifiedDiff(diff: string): PrFile[] {
   return files
 }
 
-// diff.* user config (mnemonicPrefix, srcPrefix, noprefix) rewrites the
-// a/ and b/ headers filesFromUnifiedDiff parses — force them so a user's
-// gitconfig cannot silently empty the review surface.
-const DIFF_PREFIX_FLAGS = [
-  'diff.mnemonicPrefix=false',
-  'diff.noprefix=false',
-  'diff.srcPrefix=a/',
-  'diff.dstPrefix=b/',
-].flatMap((kv) => ['-c', kv])
+// diff.* user config (mnemonicPrefix, srcPrefix, noprefix, quotePath)
+// rewrites the a/ and b/ headers filesFromUnifiedDiff and the rules
+// lane's addedLines walker parse — GIT_DIFF_PATH_FLAGS pins them so a
+// user's gitconfig cannot silently empty the scan surface.
+const DIFF_PREFIX_FLAGS = GIT_DIFF_PATH_FLAGS
 
 /**
  * `--fixture <dir>` seam: the dir is a real git repo with an
@@ -1844,7 +1841,7 @@ export async function loadFixture(
   const headSha = head.stdout.trim()
   const diff = await exec(
     'git',
-    [...DIFF_PREFIX_FLAGS, '-c', 'core.quotePath=false', '-C', dir, 'diff', `${baseSha}..${headSha}`],
+    [...DIFF_PREFIX_FLAGS, '-C', dir, 'diff', `${baseSha}..${headSha}`],
     60_000,
   )
   if (diff.code !== 0) {
@@ -1907,7 +1904,7 @@ export async function loadLocalDiff(
   const headSha = head.stdout.trim()
   const diff = await exec(
     'git',
-    [...DIFF_PREFIX_FLAGS, '-c', 'core.quotePath=false', '-C', cwd, 'diff', baseSha],
+    [...DIFF_PREFIX_FLAGS, '-C', cwd, 'diff', baseSha],
     60_000,
   )
   if (diff.code !== 0) {
@@ -2337,6 +2334,9 @@ function sanitizeCommentText(s: string): string {
     .replace(/\s+/g, ' ')
     .replace(/([`~])\1{2,}/g, (run) => `${run[0]}\u200B${run.slice(1)}`)
     .replace(/@(?=[A-Za-z0-9])/g, '@\u200B')
+    // `](` → break markdown links — an attacker-controlled file path or
+    // finding text must not render a clickable URL.
+    .replace(/\]\(/g, ']\u200B(')
     .trim()
     .slice(0, MAX_COMMENT_MESSAGE)
 }
@@ -3051,34 +3051,16 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       }
     }
 
-    // Verdict describes the emitted findings against the operator's gate —
-    // derived from the post-filter set on every path, so a filtered-out
+    // Verdict describes the emitted findings against the operator's gate,
+    // derived post-filter and post-union on every path — a filtered-out
     // finding can never flip the gate open (dropped bug -> 'pass') nor
     // leave an inconsistent 'needs_changes' over an empty findings list.
-    // needs_changes means "a blocking severity is present" — same set the
-    // ok flag and reviewEvent are computed from, so verdict, ok, and
-    // reviewEvent can never disagree. The model's own verdict is recorded
-    // when it diverges, never trusted.
-    let verdict: 'pass' | 'needs_changes' | 'approve'
-    let summary: string
-    if (finalFindings.length === 0) {
-      const dropped = droppedUnanchored + droppedReverted
-      summary =
-        dropped > 0
-          ? `No issues found – ${dropped} model finding(s) dropped as off-diff or self-reverting`
-          : 'No issues found'
-      verdict = 'pass'
-    } else if (finalFindings.some((f) => blockSeverities.includes(f.severity))) {
-      summary = `${finalFindings.length} finding(s) include a blocking severity`
-      verdict = 'needs_changes'
-    } else {
-      summary = `${finalFindings.length} low-severity finding(s)`
-      verdict = 'approve'
-    }
-    if (modelVerdict === verdict && modelSummary !== undefined) summary = modelSummary
-
-    // Files with at least one reviewed chunk. A budget stop leaves the
-    // tail of the plan unreviewed; the scope and summary must say so.
+    // R8: verdict, ok, and reviewEvent describe one finding set, so the
+    // derivation sits AFTER the rules-lane union below — the union is
+    // deferred past adjudication so model output can never erase a
+    // deterministic hit, and a pre-union verdict would diverge from the
+    // gate. The model's own verdict is recorded when it diverges, never
+    // trusted.
     const reviewedSet = new Set(plan.flatMap((c, i) => (reviewedChunks.has(i) ? c.files : [])))
     const unreviewed = files.length - reviewedSet.size
     const scope: ReviewScope = {
@@ -3089,16 +3071,6 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       chunksTotal: chunks.length,
       chunksReviewed,
       unreviewedFiles: unreviewed,
-    }
-    if (chunks.length > 1) {
-      const coverage =
-        chunksReviewed === chunks.length
-          ? `Reviewed all ${chunks.length} chunks (${reviewedSet.size} of ${files.length} files).`
-          : `Reviewed ${chunksReviewed} of ${chunks.length} chunks (${reviewedSet.size} of ${files.length} files); ${unreviewed} file(s) were not reviewed.`
-      summary = `${coverage} ${summary}`
-    }
-    if (excluded.length > 0) {
-      summary = `Reviewed ${files.length} of ${allFiles.length} changed files (${excluded.length} excluded by review.exclude). ${summary}`
     }
 
     // Deterministic validation: anchors outside the reviewed diff are
@@ -3121,21 +3093,11 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
         if (checked.dropped.length > 0) {
           validation = auditOf(checked.dropped)
           stage(`validation dropped ${checked.dropped.length} finding(s) outside the diff`)
-          summary = `${summary} ${checked.dropped.length} finding(s) dropped: anchored outside the reviewed diff.`
         }
         if (capped.capped > 0) {
           stage(`capped ${capped.capped} test-file finding(s) at nit`)
         }
-        const stillBlocking = finalFindings.some((f) => ['bug', 'risk'].includes(f.severity))
-        if (verdict === 'needs_changes' && !stillBlocking) {
-          verdict = finalFindings.length === 0 ? 'pass' : 'approve'
-        }
       }
-    }
-
-    if (ledger.budgetExceeded) {
-      summary = `Budget exceeded, review stopped early. ${summary}`
-      if (verdict !== 'needs_changes') verdict = 'needs_changes'
     }
     // Annotate-mode triage overlapped the chunk loop — resolve it here,
     // before the probe lane and report read the record.
@@ -3148,8 +3110,9 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     // finding. Runs on the model findings only (rules-lane findings carry
     // their own adjudication or severity ceiling) and BEFORE the rules
     // union below so a suppressed nit can never reach a rule record.
-    // bug/risk are never suppressed, so the verdict computed above is
-    // unaffected. Kicked off as a promise — its decide() round-trip
+    // bug/risk are never suppressed, so adjudication cannot move the
+    // verdict — it derives from the post-union set below. Kicked off as
+    // a promise — its decide() round-trip
     // overlaps the rules lane's materialize+scan below (the two lanes are
     // independent; results apply in order: adjudication, then union).
     // Skipped when the budget is already blown — no trailing spend.
@@ -3185,9 +3148,6 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       fixture !== undefined ? 'fixture' : localReview !== undefined ? 'local' : 'github',
     )
     stage(`head binding — ${headBinding.status}: ${headBinding.detail}`)
-    if (!isHeadBindingConclusive(headBinding)) {
-      summary = `Head binding inconclusive: ${summary}`
-    }
 
     // U8 — deterministic ruleset lane: pure rules over the local
     // merge-base diff — the PR-files API `patch` omits large/binary
@@ -3203,7 +3163,7 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     // U4 — an incremental run scans the incremental range, not the whole
     // merge-base diff: already-reviewed commits stay out of scope.
     const scanBaseSha = incremental?.since ?? prMeta?.baseSha
-    if (scanBaseSha !== undefined) {
+    if (scanBaseSha !== undefined && config.review.rules.length > 0) {
       // Fixture mode already produced the same `git diff base..HEAD`
       // output inside the fixture repo — reuse it rather than shelling
       // out again (the scan surface is identical).
@@ -3259,9 +3219,14 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
         rulesFindings.push(...result.findings)
       }
     } else {
-      // Distinguish "ran, clean" from "never ran" in the report.
-      secretsScan = { skipped: 'no merge-base SHA, so the lane did not run' }
-      rulesScan = { skipped: 'no merge-base SHA, so the lane did not run' }
+      // Distinguish "ran, clean" from "never ran" in the report — a
+      // disabled lane must not pay the materialize (fetch+diff) cost.
+      const skipped =
+        config.review.rules.length === 0
+          ? 'the rules lane is disabled (review.rules)'
+          : 'no merge-base SHA, so the lane did not run'
+      secretsScan = { skipped }
+      rulesScan = { skipped }
     }
 
     // Resolve the deferred adjudication kicked off above, then union —
@@ -3279,6 +3244,52 @@ async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       )
     }
     finalFindings = [...finalFindings, ...rulesFindings]
+
+    // R8 — verdict/summary derive here, on the post-union set, so they
+    // agree with ok/reviewEvent below. Model findings passed
+    // validation/capping above; rules findings keep their own audit and
+    // severity ceiling (the runner cannot claim `bug` without
+    // adjudicated confidence).
+    let verdict: 'pass' | 'needs_changes' | 'approve'
+    let summary: string
+    if (finalFindings.length === 0) {
+      const dropped = droppedUnanchored + droppedReverted
+      summary =
+        dropped > 0
+          ? `No issues found – ${dropped} model finding(s) dropped as off-diff or self-reverting`
+          : 'No issues found'
+      verdict = 'pass'
+    } else if (finalFindings.some((f) => blockSeverities.includes(f.severity))) {
+      summary = `${finalFindings.length} finding(s) include a blocking severity`
+      verdict = 'needs_changes'
+    } else {
+      summary = `${finalFindings.length} low-severity finding(s)`
+      verdict = 'approve'
+    }
+    if (modelVerdict === verdict && modelSummary !== undefined) summary = modelSummary
+    // A budget stop leaves the tail of the plan unreviewed; the scope and
+    // summary must say so. Decorations preserve pre-U8 ordering: coverage,
+    // exclusions, validation drops, budget, head binding.
+    if (chunks.length > 1) {
+      const coverage =
+        chunksReviewed === chunks.length
+          ? `Reviewed all ${chunks.length} chunks (${reviewedSet.size} of ${files.length} files).`
+          : `Reviewed ${chunksReviewed} of ${chunks.length} chunks (${reviewedSet.size} of ${files.length} files); ${unreviewed} file(s) were not reviewed.`
+      summary = `${coverage} ${summary}`
+    }
+    if (excluded.length > 0) {
+      summary = `Reviewed ${files.length} of ${allFiles.length} changed files (${excluded.length} excluded by review.exclude). ${summary}`
+    }
+    if (validation !== undefined && validation.dropped > 0) {
+      summary = `${summary} ${validation.dropped} finding(s) dropped: anchored outside the reviewed diff.`
+    }
+    if (ledger.budgetExceeded) {
+      summary = `Budget exceeded, review stopped early. ${summary}`
+      if (verdict !== 'needs_changes') verdict = 'needs_changes'
+    }
+    if (!isHeadBindingConclusive(headBinding)) {
+      summary = `Head binding inconclusive: ${summary}`
+    }
 
     const headSha = prMeta?.headSha
     const checkRuns =

@@ -4,7 +4,7 @@ import { DecisionClient } from '../vision/decisions.js';
  * Deterministic secrets scan over the PR's local merge-base diff,
  * optionally adjudicated by the Decisions API (the confidence model). The lane is
  * additive-only: findings are unioned into the review AFTER model
- * synthesis so a prompt-injected synthesis can never erase them, and a
+ * synthesis so a prompt-injected synthesis can never erase them.
  * A confidence-model outage degrades to regex-only findings rather than silence.
  *
  * Masking contract: raw literals transit to the confidence model inside `state` (KTD9 —
