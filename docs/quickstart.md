@@ -50,6 +50,25 @@ npx argus-reviewer run
 
 Results and cost are written to `argus-reviewer-report/`.
 
+### Keep-alive debugging
+
+When a run fails locally, `--keep-alive` holds an argus-booted target (a
+server started via `config.target.command`) up for a window so you can click
+through the live app yourself:
+
+```bash
+npx argus-reviewer run --keep-alive            # 5-minute window
+npx argus-reviewer run --keep-alive-ttl 900    # custom window in seconds (max 3600)
+```
+
+While the window is open, argus prints a connect story: `npx playwright open
+<url>` relaunches a headed browser with the Inspector against the still-live
+app. Ctrl-C ends the window early and teardown still runs. The flag is a
+debug affordance for a human at a terminal: non-interactive shells and CI
+print a skip line instead, since nobody is there to attach (the journal and
+report remain the headless debugging surface). `verify --keep-alive` applies
+the same hold to the flow and app lanes.
+
 ## 5. Add the GitHub Action
 
 Create `.github/workflows/argus-reviewer.yml`:

@@ -339,3 +339,17 @@ export class BrowserDriver {
     ])
   }
 }
+
+/**
+ * Headed-relaunch instructions for inspecting a still-serving target after a
+ * failed run: the `--keep-alive` connect story. Argus's own browser is
+ * headless and closed by the time these print, so "attach" means launching a
+ * new headed browser at the same URL: `playwright open` also opens the
+ * Inspector for stepping. The URL is single-quoted for shell safety.
+ */
+export function inspectInstructions(url: string): string[] {
+  return [
+    `inspect: npx playwright open '${url.replaceAll("'", `'\\''`)}'  (headed browser + Inspector)`,
+    `or open ${url} in any browser while the target is up`,
+  ]
+}

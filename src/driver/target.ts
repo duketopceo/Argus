@@ -1,11 +1,14 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 
 import type { Target } from '../config.js'
+import { inspectInstructions } from './browser.js'
 
 const POLL_INTERVAL_MS = 250
 const STOP_GRACE_MS = 3_000
 const DEFAULT_READY_TIMEOUT_MS = 30_000
 const PER_REQUEST_TIMEOUT_MS = 5_000
+/** Sleep granularity during a keep-alive hold: small enough for a snappy Ctrl-C. */
+const HOLD_POLL_MS = 1_000
 
 /**
  * Poll `url` until it answers with HTTP 2xx/3xx or the timeout elapses.
@@ -133,4 +136,47 @@ export class TargetProcess {
       // already gone
     }
   }
+}
+
+export interface KeepAliveHoldDeps {
+  /** Sleep step between deadline/signal checks — injectable for tests. */
+  sleep?: (ms: number) => Promise<void>
+}
+
+/**
+ * Hold a still-running target for `ttlMs` after a failed run so a human can
+ * inspect the live app, then return so the caller's teardown proceeds.
+ * SIGINT/SIGTERM end the hold early: swallowing them would leak the
+ * detached process group the caller's `finally` is about to kill. The hold
+ * keeps the *server* only: argus's own browser is headless and already
+ * closed at this point, so the connect story is a headed relaunch
+ * (`inspectInstructions`).
+ */
+export async function holdTargetForDebug(
+  url: string,
+  ttlMs: number,
+  note: (line: string) => void,
+  deps: KeepAliveHoldDeps = {},
+): Promise<void> {
+  note(`keep-alive: ${url} stays up for ${Math.round(ttlMs / 1000)}s (Ctrl-C to stop early)`)
+  for (const line of inspectInstructions(url)) note(`  ${line}`)
+  const sleep = deps.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms)))
+  const deadline = Date.now() + ttlMs
+  let interrupted = false
+  const onSignal = (): void => {
+    interrupted = true
+  }
+  process.once('SIGINT', onSignal)
+  process.once('SIGTERM', onSignal)
+  try {
+    for (;;) {
+      const remaining = deadline - Date.now()
+      if (interrupted || remaining <= 0) break
+      await sleep(Math.min(remaining, HOLD_POLL_MS))
+    }
+  } finally {
+    process.off('SIGINT', onSignal)
+    process.off('SIGTERM', onSignal)
+  }
+  note('keep-alive: window ended; target teardown resumes')
 }

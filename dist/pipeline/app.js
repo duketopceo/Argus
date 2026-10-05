@@ -1,5 +1,5 @@
 import { BrowserDriver as launchBrowserDriver } from '../driver/browser.js';
-import { TargetProcess, waitForReady } from '../driver/target.js';
+import { TargetProcess, holdTargetForDebug, waitForReady } from '../driver/target.js';
 import { Actions } from '../engine/actions.js';
 import { runExplore, } from '../engine/explore.js';
 import { Ledger } from '../vision/ledger.js';
@@ -219,7 +219,7 @@ export async function runAppLane(input) {
         const summary = expectedMet
             ? `expected state verified (${result.steps.length} steps, ${result.visited} page(s))`
             : `expected state unmet after ${result.stopReason} (${result.steps.length} steps)`;
-        return done(expectedMet ? 'passed' : verifyError !== undefined ? 'inconclusive' : 'failed', expectedMet
+        const report = done(expectedMet ? 'passed' : verifyError !== undefined ? 'inconclusive' : 'failed', expectedMet
             ? undefined
             : verifyError !== undefined
                 ? `expected-state verification failed: ${verifyError}`
@@ -236,6 +236,21 @@ export async function runAppLane(input) {
             visionCalls: result.visionCalls,
             visionCostUsd: result.visionCostUsd,
         });
+        // U3 keep-alive: hold the booted target so a human can inspect the live
+        // app before the finally tears it down. A lane without a spawned target
+        // (external server) or a passing lane has nothing to hold.
+        if (input.keepAlive !== undefined && target !== undefined && report.status !== 'passed') {
+            const note = deps.note ?? (() => undefined);
+            try {
+                await holdTargetForDebug(targetUrl, input.keepAlive.ttlMs, note, {
+                    ...(deps.sleep !== undefined ? { sleep: deps.sleep } : {}),
+                });
+            }
+            catch (e) {
+                note(`keep-alive hold failed: ${e.message}`);
+            }
+        }
+        return report;
     }
     finally {
         await driver?.close().catch(() => undefined);
