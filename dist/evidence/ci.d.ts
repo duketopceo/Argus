@@ -70,6 +70,36 @@ export declare function ghWrite(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', url
  * evaluates. One `/pulls/{pr}` request; undefined when the request fails.
  */
 export declare function fetchPrMeta(repo: string, pr: string, token: string, ctx: Ctx): Promise<PrMeta | undefined>;
+export interface CompareFilesResult {
+    /** `ahead` = head strictly contains base; `identical`/`behind`/`diverged` fail the ancestor check. */
+    status: string | undefined;
+    /** Commits in base..head as counted by the compare API. */
+    totalCommits: number | undefined;
+    /** Changed files in base..head — same {filename, patch} shape as the pulls/files API. */
+    files: {
+        filename: string;
+        patch: string;
+        previous_filename?: string;
+    }[];
+}
+/**
+ * `GET /compare/{base}...{head}` — U4 incremental review needs both the
+ * ancestry verdict (`status`) and the per-file patches for the range.
+ * `files` paginates like pulls/files; a page short of `per_page` ends the
+ * walk. undefined means the compare itself failed (shallow clone, SHA not
+ * reachable from this repo) — callers fail closed to a full diff.
+ */
+export declare function fetchCompare(repo: string, base: string, head: string, token: string, ctx: Ctx): Promise<CompareFilesResult | undefined>;
+/** The commit-status context the action posts on every reviewed head. */
+export declare const REVIEW_STATUS_CONTEXT = "argus-reviewer";
+/**
+ * Whether an Argus commit status exists on `sha` — the API-verifiable half
+ * of the U4 baseline check. A stored SHA in a sticky comment is attacker-
+ * editable, so it is honored only when the repo's own Argus run is on record
+ * for that commit (writing a status needs `statuses: write`; a same-repo
+ * author who can forge it can already push unreviewed commits).
+ */
+export declare function fetchReviewedStatus(repo: string, sha: string, token: string, ctx: Ctx): Promise<boolean | undefined>;
 /** Check-runs on a commit — the consumer's own CI signal. */
 export declare function fetchCheckRuns(repo: string, sha: string, token: string, ctx: Ctx): Promise<CheckRun[] | undefined>;
 export {};

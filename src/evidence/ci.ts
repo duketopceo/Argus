@@ -211,6 +211,91 @@ async function fetchMergeBase(
   return data?.merge_base_commit?.sha
 }
 
+export interface CompareFilesResult {
+  /** `ahead` = head strictly contains base; `identical`/`behind`/`diverged` fail the ancestor check. */
+  status: string | undefined
+  /** Commits in base..head as counted by the compare API. */
+  totalCommits: number | undefined
+  /** Changed files in base..head — same {filename, patch} shape as the pulls/files API. */
+  files: { filename: string; patch: string; previous_filename?: string }[]
+}
+
+const MAX_COMPARE_FILE_PAGES = 10
+
+/**
+ * `GET /compare/{base}...{head}` — U4 incremental review needs both the
+ * ancestry verdict (`status`) and the per-file patches for the range.
+ * `files` paginates like pulls/files; a page short of `per_page` ends the
+ * walk. undefined means the compare itself failed (shallow clone, SHA not
+ * reachable from this repo) — callers fail closed to a full diff.
+ */
+export async function fetchCompare(
+  repo: string,
+  base: string,
+  head: string,
+  token: string,
+  ctx: Ctx,
+): Promise<CompareFilesResult | undefined> {
+  let status: string | undefined
+  let totalCommits: number | undefined
+  const files: CompareFilesResult['files'] = []
+  for (let page = 1; page <= MAX_COMPARE_FILE_PAGES; page++) {
+    const data = (await ghGet(
+      `${GH_API}/repos/${repo}/compare/${base}...${head}?per_page=100&page=${page}`,
+      token,
+      ctx,
+    )) as
+      | {
+          status?: string
+          total_commits?: number
+          files?: { filename?: string; patch?: string; previous_filename?: string }[] | null
+        }
+      | undefined
+    if (data === undefined) return undefined
+    if (page === 1) {
+      status = typeof data.status === 'string' ? data.status : undefined
+      totalCommits = typeof data.total_commits === 'number' ? data.total_commits : undefined
+    }
+    const batch = Array.isArray(data.files) ? data.files : []
+    for (const f of batch) {
+      if (typeof f.filename !== 'string' || typeof f.patch !== 'string' || f.patch === '') continue
+      files.push({
+        filename: f.filename,
+        patch: f.patch,
+        ...(typeof f.previous_filename === 'string'
+          ? { previous_filename: f.previous_filename }
+          : {}),
+      })
+    }
+    if (batch.length < 100) break
+  }
+  return { status, totalCommits, files }
+}
+
+/** The commit-status context the action posts on every reviewed head. */
+export const REVIEW_STATUS_CONTEXT = 'argus-reviewer'
+
+/**
+ * Whether an Argus commit status exists on `sha` — the API-verifiable half
+ * of the U4 baseline check. A stored SHA in a sticky comment is attacker-
+ * editable, so it is honored only when the repo's own Argus run is on record
+ * for that commit (writing a status needs `statuses: write`; a same-repo
+ * author who can forge it can already push unreviewed commits).
+ */
+export async function fetchReviewedStatus(
+  repo: string,
+  sha: string,
+  token: string,
+  ctx: Ctx,
+): Promise<boolean | undefined> {
+  const data = (await ghGet(`${GH_API}/repos/${repo}/commits/${sha}/status`, token, ctx)) as
+    | { statuses?: { context?: string }[] | null }
+    | undefined
+  if (data === undefined) return undefined
+  if (!Array.isArray(data.statuses)) return false
+  return data.statuses.some((s) => s?.context === REVIEW_STATUS_CONTEXT)
+}
+
 /**
  * Newest `labeled` event for `argus-probe` on the PR's issue events feed.
  * The label on the payload proves it's currently applied; the event

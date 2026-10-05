@@ -285,6 +285,12 @@ describe('code-review --base', () => {
     expect(urls.some((u) => u.includes('/pulls/7/files'))).toBe(true)
     const report = JSON.parse(await readFile(join(reportDir, 'code-review.json'), 'utf8'))
     expect(report.headBinding.source).toBe('github')
-    expect(report.diffRange).toBeUndefined()
+    // U4 names the reviewed range on PR runs — built from PR metadata
+    // (merge base -> head), never from ARGUS_DIFF_BASE.
+    expect(report.diffRange).toEqual({
+      base: 'main',
+      baseSha: 'b'.repeat(40),
+      headSha: 'a'.repeat(40),
+    })
   })
 })

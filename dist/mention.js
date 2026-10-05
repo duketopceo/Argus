@@ -19,11 +19,11 @@ export function parseMention(body) {
     if (!NAMES.has(verb))
         return 'unknown';
     const name = verb;
-    if (name !== 'record')
+    if (name !== 'record' && name !== 'review')
         return { name };
-    // `record "sign in with google"` — quotes optional; cap the flow text.
-    // Newlines/backticks are stripped: the arg is commenter-controlled text
-    // echoed into a public reply.
+    // `record "sign in with google"` / `review full` — quotes optional; cap
+    // the flow text. Newlines/backticks are stripped: the arg is
+    // commenter-controlled text echoed into a public reply.
     const arg = rest
         .slice(verb.length)
         .trim()
@@ -67,7 +67,7 @@ export function mayRunMention(cmd, association, meta) {
     }
     return { allowed: true };
 }
-export const MENTION_HELP = 'Commands: `@argus review` — re-run code review on the latest head · ' +
+export const MENTION_HELP = 'Commands: `@argus review` — re-run code review on the latest head (`review full` re-diffs the whole PR) · ' +
     '`@argus record "<flow>"` — record a test flow against the app · ' +
     '`@argus persist` — turn a reproduced probe into a regression-test PR · ' +
     '`@argus generate` - author spec coverage from the diff into a reviewable PR · ' +

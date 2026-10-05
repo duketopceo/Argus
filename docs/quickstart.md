@@ -537,6 +537,21 @@ the probe lane, no finding can be proven, so the event is always
 head binding matches the PR head before posting, so a stale or planted
 `code-review.json` can never produce comments or a blocking review.
 
+Re-reviews are **incremental** by default (U4): the sticky comment carries a
+machine-readable `argus:last-reviewed-sha` marker, and the next run reviews
+only `lastReviewed..head`. Because a comment body is editable by any
+same-repo author, the stored SHA is honored only when the compare API calls
+it a strict ancestor of head *and* the repo's own `argus-reviewer` commit
+status exists on it — a hand-edited marker can never shrink the reviewed
+range. A force-push, an unreachable SHA (shallow clone), a missing status,
+or no marker all fall back to the full PR diff with the reason in
+`code-review.json` (`incremental.rejected`) and the run log. A head that is
+already the reviewed SHA produces an informational skip, not a
+verdict-bearing empty run. `@argus review full` (or
+`code-review --full` / `ARGUS_REVIEW_FULL=1`) bypasses the baseline and
+re-diffs everything; the secrets lane scans the incremental range too, and
+`diffRange` in the report always names what was actually covered.
+
 ### Local demo (`npm run demo`, contributors)
 
 From a clone of this repo, `npm run demo` shows the whole pipeline without a
@@ -638,7 +653,9 @@ an `issue_comment` workflow that answers PR comments starting with
 `@argus`:
 
 - `@argus review` — re-run code review on the latest head; the sticky
-  comment updates in place
+  comment updates in place. Incremental by default — only commits since the
+  last verified review are re-diffed; `@argus review full` forces a full
+  re-review
 - `@argus record "<flow>"` — record a test flow against the base-checkout
   app; the generated test + flow cache upload as a workflow artifact
 - `@argus persist` — commit a reproduced probe to `argus/probe-regression-pr-<n>`

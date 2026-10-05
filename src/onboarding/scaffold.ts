@@ -141,7 +141,7 @@ jobs:
 
 export const INIT_MENTION_WORKFLOW = `name: argus-mention
 
-# @argus mention commands on PR comments — '@argus review', '@argus
+# @argus mention commands on PR comments — '@argus review [full]', '@argus
 # record "<flow>"', '@argus persist', '@argus generate', '@argus help'.
 # issue_comment is strictly more privileged than pull_request (secrets +
 # write token are present), so the checkout below deliberately resolves

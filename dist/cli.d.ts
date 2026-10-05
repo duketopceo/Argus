@@ -158,11 +158,22 @@ interface CodeReviewReport {
     budgetExceeded: boolean;
     /** Identity relationship between the report source and checkout. */
     headBinding?: HeadBinding;
-    /** U16 — the reviewed range on local-diff runs (`--base`). */
+    /** U16 — the reviewed range on local-diff runs (`--base`) and PR runs
+     *  (merge base or a verified incremental baseline). */
     diffRange?: {
         base: string;
         baseSha: string;
         headSha: string;
+    };
+    /** U4 — head SHA a completed, non-budget-exceeded review covered; the
+     *  sticky poster carries it as the `argus:last-reviewed-sha` marker. */
+    reviewedHeadSha?: string;
+    /** U4 — incremental-review audit: the verified baseline the diff ranged
+     *  from (`since`), or why a stored baseline was rejected (`rejected`). */
+    incremental?: {
+        since?: string;
+        commits?: number;
+        rejected?: string;
     };
     /** Workflow-run nonce (GITHUB_RUN_ID) — see runNonceFrom. */
     runNonce?: string;

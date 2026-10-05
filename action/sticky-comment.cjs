@@ -313,6 +313,13 @@ function verdictLine({ rows, codeReview, headSha, binding, costUsd, durationMs }
   const bits = [verdictLead(rows, codeReview)]
   if (typeof headSha === 'string' && headSha !== '') bits.push(`head ${code(headSha.slice(0, 7))}`)
   if (binding && binding.status === 'mismatch') bits.push('head binding mismatch')
+  // U4 — a verified incremental run names its range: "2 commits since abc1234".
+  const inc = codeReview && codeReview.incremental
+  if (inc && typeof inc.since === 'string' && inc.since !== '') {
+    bits.push(
+      `${typeof inc.commits === 'number' ? plural(inc.commits, 'commit') : 'incremental diff'} since ${code(inc.since.slice(0, 7))}`,
+    )
+  }
   bits.push(formatUsd(costUsd))
   const duration = formatDuration(durationMs)
   if (duration !== undefined) bits.push(duration)
@@ -413,6 +420,14 @@ function layout({ status, verdict, rows, summary, folds, meta, runUrl }) {
       else fold(lines, title, body)
     }
     lines.push(footer(meta, runUrl))
+    // U4 — the incremental baseline marker rides inside the budget so the
+    // collapse loop accounts for it. Emitted only from a completed review's
+    // reviewedHeadSha (40-hex gate: a tampered report cannot plant text).
+    const marker =
+      typeof meta.markerSha === 'string' && /^[0-9a-f]{40}$/i.test(meta.markerSha)
+        ? `<!-- argus:last-reviewed-sha:${meta.markerSha} -->`
+        : undefined
+    if (marker !== undefined) lines.push(marker)
     lines.push('')
     return lines.join('\n')
   }
@@ -1009,10 +1024,17 @@ function renderSticky(ev, baseMeta = {}) {
   const manifest = ms.state === 'ok' ? ms.manifest : undefined
   // report.html is written beside the manifest by the same verify run. Only
   // a fresh, valid manifest vouches for it; otherwise it may be residue.
-  const meta =
-    manifest !== undefined && typeof ev.reportHtml === 'string' && ev.reportHtml !== ''
+  const meta = {
+    ...(manifest !== undefined && typeof ev.reportHtml === 'string' && ev.reportHtml !== ''
       ? { ...baseMeta, reportHtml: ev.reportHtml }
-      : baseMeta
+      : baseMeta),
+    // U4 — completed reviews carry the baseline forward; skipped/capped
+    // runs never set reviewedHeadSha, so the marker stays absent and the
+    // next run still diffs from the last fully-reviewed head.
+    ...(typeof ev.codeReview?.reviewedHeadSha === 'string'
+      ? { markerSha: ev.codeReview.reviewedHeadSha }
+      : {}),
+  }
   const named = ms.state !== 'ok' && manifestExpected(ms, ev.eventName)
   const notices = []
   if (named) {
