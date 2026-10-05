@@ -19,6 +19,16 @@ import {
 export const SENTINEL = '<!-- argus-reviewer -->'
 
 /**
+ * U4 incremental baseline — the machine-readable marker the sticky comment
+ * carries so the next run can offer a new-commits-only diff. Emitted from a
+ * completed review's `reviewedHeadSha` (never from skipped or
+ * budget-exceeded runs); read back by `code-review`, which verifies the
+ * stored SHA via the compare API + the commit status before honoring it —
+ * the comment body is attacker-editable.
+ */
+export const LAST_REVIEWED_RE = /<!--\s*argus:last-reviewed-sha:([0-9a-f]{40})\s*-->/i
+
+/**
  * Reference renderer for the sticky PR comment (plan U4, R6). NOT wired into
  * the action: `action/sticky-comment.cjs` is self-contained CJS and ships the
  * live renderer. This file renders the same grammar from the shared
@@ -58,6 +68,10 @@ export interface CodeReviewInput {
   }[]
   reviewComments?: { body?: string }[]
   headBinding?: { intendedSha?: string; status?: string; detail?: string }
+  /** U4 — head SHA a completed review covered; the sticky baseline marker source. */
+  reviewedHeadSha?: string
+  /** U4 — incremental-review audit: verified baseline + covered commits. */
+  incremental?: { since?: string; commits?: number; rejected?: string }
   /** U2 — generated-spec lane surface: per-spec status + the write PR URL. */
   generated?: {
     records?: { status?: string; validation?: string }[]
@@ -278,6 +292,12 @@ function verdictLine(p: {
   const sha = shortSha(p.headSha)
   if (sha !== undefined) bits.push(`head ${code(sha)}`)
   if (p.binding?.status === 'mismatch') bits.push('head binding mismatch')
+  const inc = p.cr?.incremental
+  if (inc?.since !== undefined) {
+    bits.push(
+      `${typeof inc.commits === 'number' ? plural(inc.commits, 'commit') : 'incremental diff'} since ${code(shortSha(inc.since) ?? '?')}`,
+    )
+  }
   bits.push(formatUsd(p.costUsd))
   const duration = formatDuration(p.durationMs)
   if (duration !== undefined) bits.push(duration)

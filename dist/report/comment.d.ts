@@ -3,6 +3,15 @@ import { RunReport } from './run.js';
 import { type LaneView, type ProofLevel } from './viewmodel.js';
 export declare const SENTINEL = "<!-- argus-reviewer -->";
 /**
+ * U4 incremental baseline — the machine-readable marker the sticky comment
+ * carries so the next run can offer a new-commits-only diff. Emitted from a
+ * completed review's `reviewedHeadSha` (never from skipped or
+ * budget-exceeded runs); read back by `code-review`, which verifies the
+ * stored SHA via the compare API + the commit status before honoring it —
+ * the comment body is attacker-editable.
+ */
+export declare const LAST_REVIEWED_RE: RegExp;
+/**
  * Reference renderer for the sticky PR comment (plan U4, R6). NOT wired into
  * the action: `action/sticky-comment.cjs` is self-contained CJS and ships the
  * live renderer. This file renders the same grammar from the shared
@@ -47,6 +56,14 @@ export interface CodeReviewInput {
         intendedSha?: string;
         status?: string;
         detail?: string;
+    };
+    /** U4 — head SHA a completed review covered; the sticky baseline marker source. */
+    reviewedHeadSha?: string;
+    /** U4 — incremental-review audit: verified baseline + covered commits. */
+    incremental?: {
+        since?: string;
+        commits?: number;
+        rejected?: string;
     };
     /** U2 — generated-spec lane surface: per-spec status + the write PR URL. */
     generated?: {

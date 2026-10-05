@@ -1,5 +1,14 @@
 import { formatUsd, manifestToRunView, maskSecrets, PROOF_LEVELS, proofMeter, SEVERITY_GLYPH, shortSha, STATUS_GLYPH, VERDICT_LABEL, VERDICT_STATUS, } from './viewmodel.js';
 export const SENTINEL = '<!-- argus-reviewer -->';
+/**
+ * U4 incremental baseline — the machine-readable marker the sticky comment
+ * carries so the next run can offer a new-commits-only diff. Emitted from a
+ * completed review's `reviewedHeadSha` (never from skipped or
+ * budget-exceeded runs); read back by `code-review`, which verifies the
+ * stored SHA via the compare API + the commit status before honoring it —
+ * the comment body is attacker-editable.
+ */
+export const LAST_REVIEWED_RE = /<!--\s*argus:last-reviewed-sha:([0-9a-f]{40})\s*-->/i;
 /** Cell semantics mirror the action: flatten newlines, escape pipes, mask secrets, cap length. */
 function cell(s, max = 200) {
     return maskSecrets(String(s ?? '')
@@ -160,6 +169,10 @@ function verdictLine(p) {
         bits.push(`head ${code(sha)}`);
     if (p.binding?.status === 'mismatch')
         bits.push('head binding mismatch');
+    const inc = p.cr?.incremental;
+    if (inc?.since !== undefined) {
+        bits.push(`${typeof inc.commits === 'number' ? plural(inc.commits, 'commit') : 'incremental diff'} since ${code(shortSha(inc.since) ?? '?')}`);
+    }
     bits.push(formatUsd(p.costUsd));
     const duration = formatDuration(p.durationMs);
     if (duration !== undefined)

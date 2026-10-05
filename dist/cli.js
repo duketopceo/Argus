@@ -18,7 +18,7 @@ import { buildReviewContext, CONTEXT_PREFIX } from './index/context.js';
 import { diffChangedFiles } from './index/diff.js';
 import { invalidateForDiff } from './index/invalidate.js';
 import { readIndex, scanRepo, writeIndex } from './index/scan.js';
-import { fetchCheckRuns, fetchPrMeta, ghGet, isTrustedAssociation, } from './evidence/ci.js';
+import { fetchCheckRuns, fetchCompare, fetchPrMeta, fetchReviewedStatus, ghGet, isTrustedAssociation, } from './evidence/ci.js';
 import { resolveTrust } from './trust.js';
 import { linkFindings } from './evidence/link.js';
 import { DecisionClient } from './vision/decisions.js';
@@ -33,7 +33,7 @@ import { adjudicateFindings } from './review/adjudicate.js';
 import { runProbeLane } from './probe/queue.js';
 import { runGenerateLane } from './probe/generate.js';
 import { decodeProbePayload, encodeProbePayload, persistProbes } from './probe/persist.js';
-import { SENTINEL } from './report/comment.js';
+import { LAST_REVIEWED_RE, SENTINEL } from './report/comment.js';
 import { REPORT_HTML } from './report/html.js';
 import { A0_DEFAULT_TIMEOUT_MS, A0_LANE_MAX_TASKS, A0_LANE_REPORT, a0TaskPrompt, isLoopback, runA0Lane, runA0Task, } from './executor/a0.js';
 import { buildJournalEntry } from './journal/build.js';
@@ -205,6 +205,9 @@ Options:
   --generate-tests   Author spec leafs from the diff (review.generateTests bounds),
                      sandbox-validate when the head checkout is real, and deposit
                      them on a reviewable PR under testsDir. Fork PRs refuse.
+  --full             Re-review the whole PR diff, bypassing the incremental
+                     baseline in the sticky comment (U4). Same effect as
+                     ARGUS_REVIEW_FULL=1 or '@argus review full'.
   Env: ARGUS_REQUEST_TIMEOUT_MS sets the per-request timeout (default 120000,
                      max 900000; also review.requestTimeoutMs).
   -h, --help         Show this help`;
@@ -1275,6 +1278,91 @@ async function fetchPrFiles(repo, pr, token, ctx) {
     }
     return files;
 }
+const MAX_COMMENT_PAGES = 3;
+/**
+ * The `argus:last-reviewed-sha` marker off the PR's sticky comment. The
+ * marker is attacker-editable by design — every caller verifies the stored
+ * SHA (compare ancestry + the repo's own Argus commit status) before it
+ * may shrink a review range.
+ */
+async function fetchLastReviewedSha(repo, pr, token, ctx) {
+    for (let page = 1; page <= MAX_COMMENT_PAGES; page++) {
+        const comments = (await ghGet(`https://api.github.com/repos/${repo}/issues/${pr}/comments?per_page=100&page=${page}`, token, ctx));
+        if (!Array.isArray(comments))
+            return undefined;
+        const sticky = comments.find((c) => typeof c.body === 'string' && c.body.includes(SENTINEL));
+        if (sticky !== undefined)
+            return LAST_REVIEWED_RE.exec(sticky.body)?.[1];
+        if (comments.length < 100)
+            break;
+    }
+    return undefined;
+}
+/**
+ * U4 — incremental baseline. A stored SHA earns the range only when
+ * (a) `compare` calls it a strict ancestor of head (`status === 'ahead'`)
+ * and (b) the repo's own `argus-reviewer` commit status exists on it —
+ * statuses need `statuses: write`, which a comment-body editor does not
+ * have. Every failure falls back to a full diff; `identical` becomes a
+ * skipped "already reviewed" report, never a verdict-bearing empty run.
+ */
+async function resolveIncrementalBaseline(repo, pr, headSha, token, ctx) {
+    const candidate = await fetchLastReviewedSha(repo, pr, token, ctx);
+    if (candidate === undefined)
+        return { kind: 'full' };
+    if (candidate === headSha) {
+        // Cheap equal-check — but still needs the status verify below, or a
+        // forged marker naming head could silence the review of head.
+        const reviewed = await fetchReviewedStatus(repo, candidate, token, ctx);
+        return reviewed === true
+            ? { kind: 'equal', since: candidate }
+            : {
+                kind: 'full',
+                rejected: reviewed === undefined
+                    ? `stored baseline ${candidate.slice(0, 8)} could not be verified against the status API`
+                    : `stored baseline ${candidate.slice(0, 8)} carries no Argus commit status (forged marker?)`,
+            };
+    }
+    const [compare, reviewed] = await Promise.all([
+        fetchCompare(repo, candidate, headSha, token, ctx),
+        fetchReviewedStatus(repo, candidate, token, ctx),
+    ]);
+    if (compare === undefined) {
+        return {
+            kind: 'full',
+            rejected: `stored baseline ${candidate.slice(0, 8)} is unreachable in this repo (force-push or shallow clone)`,
+        };
+    }
+    if (compare.status !== 'ahead') {
+        return {
+            kind: 'full',
+            rejected: `stored baseline ${candidate.slice(0, 8)} is not an ancestor of head (compare: ${compare.status ?? 'unknown'})`,
+        };
+    }
+    if (reviewed !== true) {
+        return {
+            kind: 'full',
+            rejected: reviewed === undefined
+                ? `stored baseline ${candidate.slice(0, 8)} could not be verified against the status API`
+                : `stored baseline ${candidate.slice(0, 8)} carries no Argus commit status (forged marker?)`,
+        };
+    }
+    // The compare endpoint truncates its files list at 300 — a range that
+    // size is within a factor of a full PR anyway, so fail to the full diff
+    // rather than silently review a subset.
+    if (compare.files.length >= 300) {
+        return {
+            kind: 'full',
+            rejected: `incremental range ${candidate.slice(0, 8)}..${headSha.slice(0, 8)} hit the compare API's file cap`,
+        };
+    }
+    return {
+        kind: 'incremental',
+        since: candidate,
+        commits: compare.totalCommits,
+        files: compare.files,
+    };
+}
 /**
  * Split `git diff` text into per-file PrFile entries — the local-diff
  * equivalent of the PR-files API response (which also reports `patch`
@@ -1795,6 +1883,7 @@ async function cmdCodeReview(args, ctx, deps) {
             'report-dir': { type: 'string' },
             fixture: { type: 'string' },
             base: { type: 'string' },
+            full: { type: 'boolean', default: false },
             mode: { type: 'string' },
             'batch-model': { type: 'string' },
             'generate-tests': { type: 'boolean', default: false },
@@ -1912,7 +2001,7 @@ async function cmdCodeReview(args, ctx, deps) {
     // Declared before `skip` so the empty-diff skip report can carry the
     // reviewed range; populated after the PR-context guard below.
     let localReview = undefined;
-    const skip = async (reason) => {
+    const skip = async (reason, extra) => {
         ctx.out(`code-review: skipping: ${reason}`);
         stage(`skipped — ${reason}`);
         const skipped = {
@@ -1945,6 +2034,10 @@ async function cmdCodeReview(args, ctx, deps) {
                     },
                 }
                 : {}),
+            ...(extra?.reviewedHeadSha !== undefined
+                ? { reviewedHeadSha: extra.reviewedHeadSha }
+                : {}),
+            ...(extra?.incremental !== undefined ? { incremental: extra.incremental } : {}),
             ...(runNonce !== undefined ? { runNonce } : {}),
         };
         await writeAtomicJson(codeReviewPath, skipped);
@@ -1988,24 +2081,76 @@ async function cmdCodeReview(args, ctx, deps) {
     const budget = config.codeReviewBudgetUsd;
     if (budget === undefined)
         ctx.err(UNCAPPED_WARNING);
+    // PR metadata resolves before the file fetch — U4 needs headSha to verify
+    // the sticky baseline, and triage/evidence/head-binding reuse the same
+    // promise below (fixture/local modes supply it synchronously).
+    const prMetaPromise = fixture !== undefined
+        ? Promise.resolve(fixture.meta)
+        : localReview !== undefined
+            ? Promise.resolve(localReview.meta)
+            : fetchPrMeta(repoName, prNum, ghToken, ctx).catch(() => undefined);
+    // U4 incremental review — PR mode only. A verified sticky baseline swaps
+    // the pulls/files diff for `compare(lastReviewed..head)`; every failure
+    // fails closed to the full PR diff with a named reason in the report.
+    const prMetaEarly = await prMetaPromise;
+    let incremental;
+    let prFiles;
+    if (fixture === undefined && localReview === undefined) {
+        const headShaEarly = prMetaEarly?.headSha;
+        const fullRequested = values.full === true || ctx.env.ARGUS_REVIEW_FULL === '1';
+        const baseline = !fullRequested && headShaEarly !== undefined
+            ? await resolveIncrementalBaseline(repoName, prNum, headShaEarly, ghToken, ctx)
+            : undefined;
+        if (baseline?.kind === 'equal' && headShaEarly !== undefined) {
+            return await skip(`head ${headShaEarly.slice(0, 8)} is unchanged since the last Argus review`, {
+                reviewedHeadSha: headShaEarly,
+                incremental: { since: baseline.since, commits: 0 },
+            });
+        }
+        if (baseline?.kind === 'incremental') {
+            incremental = {
+                since: baseline.since,
+                ...(baseline.commits !== undefined ? { commits: baseline.commits } : {}),
+            };
+            prFiles = baseline.files;
+            stage(`incremental review - ${baseline.commits ?? '?'} commit(s) since ` +
+                `${baseline.since.slice(0, 8)}`);
+        }
+        else {
+            if (baseline?.rejected !== undefined) {
+                incremental = { rejected: baseline.rejected };
+                ctx.err(`warning: ${baseline.rejected} - reviewing the full diff`);
+            }
+            prFiles = await fetchPrFiles(repoName, prNum, ghToken, ctx);
+        }
+    }
     const [allFiles, index] = await Promise.all([
         fixture !== undefined
             ? Promise.resolve(fixture.files)
             : localReview !== undefined
                 ? Promise.resolve(localReview.files)
-                : fetchPrFiles(repoName, prNum, ghToken, ctx),
+                : Promise.resolve(prFiles),
         readIndex(indexPath),
     ]);
     if (!allFiles || allFiles.length === 0) {
-        return await skip(localReview !== undefined
-            ? `no diff vs base ${localBaseRef}`
-            : 'could not fetch PR diff');
+        return await skip(incremental?.since !== undefined
+            ? `no file changes since last reviewed head ${incremental.since.slice(0, 8)}`
+            : localReview !== undefined
+                ? `no diff vs base ${localBaseRef}`
+                : 'could not fetch PR diff', 
+        // An empty incremental range never advances the baseline marker —
+        // dropped patches on the compare side are indistinguishable from a
+        // genuinely empty range, so the stored SHA stays and the next run
+        // re-verifies.
+        incremental !== undefined ? { incremental } : undefined);
     }
     stage(fixture !== undefined
         ? `fixture mode — ${allFiles.length} changed file(s) from ${basename(fixtureDir)}`
         : localReview !== undefined
             ? `local diff - ${allFiles.length} changed file(s) vs ${localBaseRef}`
-            : `fetched ${allFiles.length} changed file(s)`);
+            : incremental?.since !== undefined
+                ? `${allFiles.length} changed file(s) since ${incremental.since.slice(0, 8)}`
+                : `fetched ${allFiles.length} changed file(s)`);
     // Generated/fixture/vendored paths never reach the review model; the
     // count and a sample land in the report's scope record (never silent).
     const { kept: files, excluded } = partitionByExclude(allFiles, config.review.exclude);
@@ -2026,17 +2171,12 @@ async function cmdCodeReview(args, ctx, deps) {
     try {
         const client = createClient(deps, config, ctx);
         const ledger = new Ledger(budget);
-        // Kick off PR metadata now — it only needs repo/pr/token and its
-        // round-trip hides behind the model calls. Degrades to undefined.
-        // Fixture mode supplies it locally — same shape, no API call.
+        // Checkout SHA still kicks off here — its `git` call overlaps the model
+        // round-trips. prMeta was hoisted above the file fetch for the U4
+        // baseline check; the same resolved promise feeds evidence + binding.
         const checkoutShaPromise = fixture !== undefined
             ? Promise.resolve(undefined)
             : readCheckoutSha(ctx.cwd, deps.exec ?? defaultExec);
-        const prMetaPromise = fixture !== undefined
-            ? Promise.resolve(fixture.meta)
-            : localReview !== undefined
-                ? Promise.resolve(localReview.meta)
-                : fetchPrMeta(repoName, prNum, ghToken, ctx).catch(() => undefined);
         const allFindings = [];
         const allCalls = [];
         let totalTokens = 0;
@@ -2431,7 +2571,10 @@ async function cmdCodeReview(args, ctx, deps) {
         // masked in every output (confidence-model `state` is the documented exception).
         let secretsScan;
         const secretsFindings = [];
-        if (prMeta?.baseSha !== undefined) {
+        // U4 — an incremental run scans the incremental range, not the whole
+        // merge-base diff: already-reviewed commits' secrets stay out of scope.
+        const secretsBaseSha = incremental?.since ?? prMeta?.baseSha;
+        if (secretsBaseSha !== undefined) {
             // Fixture mode already produced the same `git diff base..HEAD`
             // output inside the fixture repo — reuse it rather than shelling
             // out again (the scan surface is identical).
@@ -2441,7 +2584,7 @@ async function cmdCodeReview(args, ctx, deps) {
                     ? { diff: localReview.diff }
                     : await materializeMergeBaseDiff({
                         cwd: ctx.cwd,
-                        baseSha: prMeta.baseSha,
+                        baseSha: secretsBaseSha,
                         ...(token !== undefined ? { token } : {}),
                         ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
                     });
@@ -2667,6 +2810,14 @@ async function cmdCodeReview(args, ctx, deps) {
             model: lastModel,
             budgetExceeded: ledger.budgetExceeded,
             headBinding,
+            // U4 — the baseline marker advances only on a completed, uncapped
+            // review; skipped and budget-exceeded runs leave it where it was.
+            ...(fixture === undefined &&
+                !ledger.budgetExceeded &&
+                headBinding?.intendedSha !== undefined
+                ? { reviewedHeadSha: headBinding.intendedSha }
+                : {}),
+            ...(incremental !== undefined ? { incremental } : {}),
             ...(localReview !== undefined
                 ? {
                     diffRange: {
@@ -2675,7 +2826,19 @@ async function cmdCodeReview(args, ctx, deps) {
                         headSha: localReview.meta.headSha,
                     },
                 }
-                : {}),
+                : fixture === undefined &&
+                    (incremental?.since ?? prMeta?.baseSha) !== undefined &&
+                    prMeta?.headSha !== undefined
+                    ? {
+                        diffRange: {
+                            base: incremental?.since !== undefined
+                                ? 'last-reviewed'
+                                : (prMeta.baseRef ?? 'merge-base'),
+                            baseSha: (incremental?.since ?? prMeta.baseSha),
+                            headSha: prMeta.headSha,
+                        },
+                    }
+                    : {}),
             ...(runNonce !== undefined ? { runNonce } : {}),
             ...(persistPayload !== undefined ? { persistPayload } : {}),
         };
@@ -3033,7 +3196,7 @@ number; runs nothing unless the comment is on a pull request and starts
 with @argus. Never checks out the PR head: review runs API-diff-only
 against the base checkout.
 
-Commands: @argus review · @argus record "<flow>" · @argus persist · @argus generate · @argus help`;
+Commands: @argus review [full] · @argus record "<flow>" · @argus persist · @argus generate · @argus help`;
 /**
  * `argus-reviewer mention` — the E3.U5 dispatch lane. Everything upstream
  * of the command handler is a gate: untrusted commenters are ignored
@@ -3197,10 +3360,15 @@ async function cmdMention(args, ctx, deps) {
         }
         return code;
     }
-    // review
+    // review — `full` is the U4 manual escape: it bypasses the incremental
+    // baseline and re-diffs the whole PR.
+    if (parsed.arg !== undefined && parsed.arg !== 'full') {
+        await reply('unknown argument - try `@argus review` or `@argus review full`.');
+        return 0;
+    }
     ctx.out(`mention: running review on PR #${issueNum}`);
     await reply('running review — results land in the Argus comment below.');
-    return cmdCodeReview(['--report-dir', reportDir], ctx, deps);
+    return cmdCodeReview(['--report-dir', reportDir, ...(parsed.arg === 'full' ? ['--full'] : [])], ctx, deps);
 }
 const DELEGATE_USAGE = `Usage: argus-reviewer delegate "<task>" [options]
 

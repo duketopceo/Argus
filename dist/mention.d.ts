@@ -10,7 +10,7 @@ import { type PrMeta } from './evidence/ci.js';
 export type MentionName = 'review' | 'record' | 'persist' | 'generate' | 'help';
 export interface MentionCommand {
     name: MentionName;
-    /** `record` flow description, quotes already stripped. */
+    /** `record` flow description or `review`'s `full` arg, quotes already stripped. */
     arg?: string;
 }
 /**

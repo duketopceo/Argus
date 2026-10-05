@@ -19,11 +19,11 @@ export function parseMention(body) {
     if (!NAMES.has(verb))
         return 'unknown';
     const name = verb;
-    if (name !== 'record')
+    if (name !== 'record' && name !== 'review')
         return { name };
-    // `record "sign in with google"` — quotes optional; cap the flow text.
-    // Newlines/backticks are stripped: the arg is commenter-controlled text
-    // echoed into a public reply.
+    // `record "sign in with google"` / `review full` — quotes optional; cap
+    // the flow text. Newlines/backticks are stripped: the arg is
+    // commenter-controlled text echoed into a public reply.
     const arg = rest
         .slice(verb.length)
         .trim()
