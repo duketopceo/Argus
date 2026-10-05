@@ -69,13 +69,14 @@ jobs:
         uses: duketopceo/Argus/action@119cacdce427046d1300da7b1eb386bcc4ed52a5
         with:
           openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
-          # deepseek-v4.1-flash (the pinned default's code_model) stalls on
-          # review-sized prompts — verified 2026-10-05: ~43k-token prompts
-          # hang past the 120s request timeout with zero output.
-          # v4-flash is the bake-off's realtime pick (recall 1.00/precision
-          # 0.93, ~$0.0006/8-chunk review) and completes 43k-token prompts
-          # in ~2s — better and cheaper than gemini-lite as the dogfood.
-          code-model: deepseek/deepseek-v4-flash
+          # deepseek v4 AND v4.1 both stall on large prompts: v4.1 hung
+          # past the 120s request timeout on ~43k-token prompts, and
+          # v4-flash timed out on the U8 PR diff (~2.2k lines incl. dist/
+          # rebuilds). The pinned action ref predates review.exclude, so
+          # dist/** cannot be filtered — the model must absorb the whole
+          # diff. gemini-2.5-flash-lite (1M ctx) completes 43k-token
+          # prompts in ~2s and is proven green on this lane (#167/#169).
+          code-model: google/gemini-2.5-flash-lite
           cli: ${{ steps.trusted-cli.outputs.cli }}
           index: 'false'
           run: 'false'
