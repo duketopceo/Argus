@@ -67,7 +67,7 @@ export function mayRunMention(cmd, association, meta) {
     }
     return { allowed: true };
 }
-export const MENTION_HELP = 'Commands: `@argus review` — re-run code review on the latest head · ' +
+export const MENTION_HELP = 'Commands: `@argus review` — re-run code review on the latest head (`review full` re-diffs the whole PR) · ' +
     '`@argus record "<flow>"` — record a test flow against the app · ' +
     '`@argus persist` — turn a reproduced probe into a regression-test PR · ' +
     '`@argus generate` - author spec coverage from the diff into a reviewable PR · ' +
