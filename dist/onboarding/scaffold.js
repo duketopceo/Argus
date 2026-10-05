@@ -124,7 +124,8 @@ jobs:
 export const INIT_MENTION_WORKFLOW = `name: argus-mention
 
 # @argus mention commands on PR comments — '@argus review [full]', '@argus
-# record "<flow>"', '@argus persist', '@argus generate', '@argus help'.
+# record "<flow>"', '@argus persist', '@argus generate', '@argus fix',
+# '@argus help'.
 # issue_comment is strictly more privileged than pull_request (secrets +
 # write token are present), so the checkout below deliberately resolves
 # the BASE ref — never the PR head. Argus reviews the head diff over the
@@ -139,9 +140,9 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.issue.pull_request && startsWith(github.event.comment.body, '@argus')
     permissions:
-      # contents: write — '@argus persist' and '@argus generate' commit
-      # authored tests to an argus/ branch via the git/refs + contents
-      # APIs and open a PR.
+      # contents: write — '@argus persist', '@argus generate' and
+      # '@argus fix' commit to an argus/ branch via the git/refs +
+      # contents APIs and open a PR.
       contents: write
       issues: write
       pull-requests: write

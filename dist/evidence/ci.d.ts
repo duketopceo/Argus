@@ -23,6 +23,8 @@ export interface PrMeta {
     baseSha: string | undefined;
     /** PR base branch name (e.g. `main`) — the persist lane's PR target. */
     baseRef: string | undefined;
+    /** PR head branch name — the `@argus fix` PR target (same-repo only). */
+    headRef: string | undefined;
     /** `head.repo.fork` — true when the PR head branch lives in a fork. */
     isFork: boolean;
     /**
@@ -102,4 +104,26 @@ export declare const REVIEW_STATUS_CONTEXT = "argus-reviewer";
 export declare function fetchReviewedStatus(repo: string, sha: string, token: string, ctx: Ctx): Promise<boolean | undefined>;
 /** Check-runs on a commit — the consumer's own CI signal. */
 export declare function fetchCheckRuns(repo: string, sha: string, token: string, ctx: Ctx): Promise<CheckRun[] | undefined>;
+/** One posted PR review comment — the `@argus fix` surface. */
+export interface ReviewComment {
+    id: number;
+    path: string | undefined;
+    line: number | undefined;
+    startLine: number | undefined;
+    side: string | undefined;
+    /** `commit_id` — the commit the comment was authored on. */
+    commitId: string | undefined;
+    body: string;
+    /** Author login — `github-actions[bot]` or `<actor>[bot]` for Argus's own. */
+    userLogin: string | undefined;
+    htmlUrl: string | undefined;
+}
+/** Paginated `GET /pulls/{pr}/comments` — posted inline review comments. */
+export declare function fetchReviewComments(repo: string, pr: string, token: string, ctx: Ctx): Promise<ReviewComment[] | undefined>;
+/**
+ * `GET /contents/{path}?ref={ref}` → decoded utf8 file content. undefined on
+ * failure or when the response carries no inline content (>1MB files return
+ * a different shape — treated as unfixable input, not an error).
+ */
+export declare function fetchFileContent(repo: string, path: string, ref: string, token: string, ctx: Ctx): Promise<string | undefined>;
 export {};

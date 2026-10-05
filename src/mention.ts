@@ -10,7 +10,7 @@ import { labelCoversHead } from './evidence/gate.js'
  * posture `code-review` already uses.
  */
 
-export type MentionName = 'review' | 'record' | 'persist' | 'generate' | 'help'
+export type MentionName = 'review' | 'record' | 'persist' | 'generate' | 'fix' | 'help'
 
 export interface MentionCommand {
   name: MentionName
@@ -18,7 +18,7 @@ export interface MentionCommand {
   arg?: string
 }
 
-const NAMES = new Set<MentionName>(['review', 'record', 'persist', 'generate', 'help'])
+const NAMES = new Set<MentionName>(['review', 'record', 'persist', 'generate', 'fix', 'help'])
 
 /**
  * Parse a comment body into a whitelisted mention command. The mention must
@@ -76,10 +76,15 @@ export function mayRunMention(
     return { allowed: false, reply: "I can't see this PR's metadata — try again in a moment." }
   }
   if (!meta.isFork) return { allowed: true }
-  if (cmd.name === 'record' || cmd.name === 'persist' || cmd.name === 'generate') {
+  if (
+    cmd.name === 'record' ||
+    cmd.name === 'persist' ||
+    cmd.name === 'generate' ||
+    cmd.name === 'fix'
+  ) {
     return {
       allowed: false,
-      reply: `\`@argus ${cmd.name}\` isn't available on fork PRs — record, persist and generate run inside the repo's trust boundary.`,
+      reply: `\`@argus ${cmd.name}\` isn't available on fork PRs — record, persist, generate and fix run inside the repo's trust boundary.`,
     }
   }
   if (!meta.labels.includes(PROBE_LABEL) || !labelCoversHead(meta)) {
@@ -96,6 +101,7 @@ export const MENTION_HELP =
   '`@argus record "<flow>"` — record a test flow against the app · ' +
   '`@argus persist` — turn a reproduced probe into a regression-test PR · ' +
   '`@argus generate` - author spec coverage from the diff into a reviewable PR · ' +
+  '`@argus fix` - open a PR applying the posted suggestions that still anchor · ' +
   '`@argus help` — this menu.'
 
 const GH_API = 'https://api.github.com'

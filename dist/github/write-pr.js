@@ -6,10 +6,12 @@ const GH_API = 'https://api.github.com';
  * branch is returned rather than duplicated.
  */
 export async function createFilesPr(opts, token, ctx) {
-    const { repo, baseRef, branch, files, title, body, exists } = opts;
+    const { repo, baseRef, baseSha: forkSha, branch, files, title, body, exists, preOpen } = opts;
     const empty = { written: [], updated: [], skipped: [] };
-    const base = (await ghGet(`${GH_API}/repos/${repo}/git/ref/heads/${baseRef}`, token, ctx));
-    const baseSha = base?.object?.sha;
+    const base = forkSha
+        ? undefined
+        : (await ghGet(`${GH_API}/repos/${repo}/git/ref/heads/${baseRef}`, token, ctx));
+    const baseSha = forkSha ?? base?.object?.sha;
     if (typeof baseSha !== 'string') {
         return { ...empty, error: `couldn't resolve base ref ${baseRef}` };
     }
@@ -52,6 +54,12 @@ export async function createFilesPr(opts, token, ctx) {
                 skipped,
                 error: `couldn't write ${file.path} (github ${put.status})`,
             };
+        }
+    }
+    if (preOpen !== undefined) {
+        const abort = await preOpen();
+        if (typeof abort === 'string') {
+            return { written, updated, skipped, error: abort };
         }
     }
     const owner = repo.split('/')[0] ?? repo;

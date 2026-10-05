@@ -113,6 +113,7 @@ export async function fetchPrMeta(repo, pr, token, ctx) {
         headSha,
         baseSha: mergeBase ?? baseSha,
         baseRef: typeof data.base?.ref === 'string' ? data.base.ref : undefined,
+        headRef: typeof data.head?.ref === 'string' ? data.head.ref : undefined,
         // head.repo is null when the source fork was deleted — fail closed and
         // treat it as a fork so the probe gate still applies.
         isFork: data.head?.repo?.fork !== false,
@@ -239,4 +240,43 @@ export async function fetchCheckRuns(repo, sha, token, ctx) {
         page++;
     }
     return runs;
+}
+/** Paginated `GET /pulls/{pr}/comments` — posted inline review comments. */
+export async function fetchReviewComments(repo, pr, token, ctx) {
+    const out = [];
+    let page = 1;
+    while (page <= MAX_CHECK_RUN_PAGES) {
+        const data = (await ghGet(`${GH_API}/repos/${repo}/pulls/${pr}/comments?per_page=100&page=${page}`, token, ctx));
+        if (!Array.isArray(data))
+            return undefined;
+        for (const c of data) {
+            out.push({
+                id: typeof c.id === 'number' ? c.id : 0,
+                path: c.path,
+                line: typeof c.line === 'number' ? c.line : undefined,
+                startLine: typeof c.start_line === 'number' ? c.start_line : undefined,
+                side: c.side,
+                commitId: c.commit_id,
+                body: c.body ?? '',
+                userLogin: c.user?.login,
+                htmlUrl: c.html_url,
+            });
+        }
+        if (data.length < 100)
+            break;
+        page++;
+    }
+    return out;
+}
+/**
+ * `GET /contents/{path}?ref={ref}` → decoded utf8 file content. undefined on
+ * failure or when the response carries no inline content (>1MB files return
+ * a different shape — treated as unfixable input, not an error).
+ */
+export async function fetchFileContent(repo, path, ref, token, ctx) {
+    const data = (await ghGet(`${GH_API}/repos/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`, token, ctx));
+    if (data === undefined || typeof data.content !== 'string' || data.encoding !== 'base64') {
+        return undefined;
+    }
+    return Buffer.from(data.content, 'base64').toString('utf8');
 }

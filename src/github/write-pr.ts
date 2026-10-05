@@ -28,6 +28,19 @@ export interface CreateFilesPrOpts {
   repo: string
   /** Base branch the PR targets and the write branch forks from. */
   baseRef: string
+  /**
+   * Exact commit the write branch forks from. When set it replaces the
+   * `baseRef` resolution — `@argus fix` uses this to bind the branch to the
+   * reviewed head SHA rather than wherever the head ref has moved to.
+   */
+  baseSha?: string
+  /**
+   * Hook evaluated after the file writes, before the PR is opened. Return a
+   * string to abort the open with that reason in `error` (commits stay on
+   * the branch — idempotent for a re-run). `@argus fix` uses it to re-verify
+   * the head SHA (TOCTOU) between write and open.
+   */
+  preOpen?: () => Promise<string | undefined>
   /** Dedicated branch name — `argus/…` prefix by convention. */
   branch: string
   files: WritePrFile[]
@@ -68,13 +81,15 @@ export async function createFilesPr(
   token: string,
   ctx: Ctx,
 ): Promise<CreateFilesPrResult> {
-  const { repo, baseRef, branch, files, title, body, exists } = opts
+  const { repo, baseRef, baseSha: forkSha, branch, files, title, body, exists, preOpen } = opts
   const empty: CreateFilesPrResult = { written: [], updated: [], skipped: [] }
 
-  const base = (await ghGet(`${GH_API}/repos/${repo}/git/ref/heads/${baseRef}`, token, ctx)) as
-    | { object?: { sha?: string } }
-    | undefined
-  const baseSha = base?.object?.sha
+  const base = forkSha
+    ? undefined
+    : ((await ghGet(`${GH_API}/repos/${repo}/git/ref/heads/${baseRef}`, token, ctx)) as
+        | { object?: { sha?: string } }
+        | undefined)
+  const baseSha = forkSha ?? base?.object?.sha
   if (typeof baseSha !== 'string') {
     return { ...empty, error: `couldn't resolve base ref ${baseRef}` }
   }
@@ -126,6 +141,13 @@ export async function createFilesPr(
         skipped,
         error: `couldn't write ${file.path} (github ${put.status})`,
       }
+    }
+  }
+
+  if (preOpen !== undefined) {
+    const abort = await preOpen()
+    if (typeof abort === 'string') {
+      return { written, updated, skipped, error: abort }
     }
   }
 

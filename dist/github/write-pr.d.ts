@@ -24,6 +24,19 @@ export interface CreateFilesPrOpts {
     repo: string;
     /** Base branch the PR targets and the write branch forks from. */
     baseRef: string;
+    /**
+     * Exact commit the write branch forks from. When set it replaces the
+     * `baseRef` resolution — `@argus fix` uses this to bind the branch to the
+     * reviewed head SHA rather than wherever the head ref has moved to.
+     */
+    baseSha?: string;
+    /**
+     * Hook evaluated after the file writes, before the PR is opened. Return a
+     * string to abort the open with that reason in `error` (commits stay on
+     * the branch — idempotent for a re-run). `@argus fix` uses it to re-verify
+     * the head SHA (TOCTOU) between write and open.
+     */
+    preOpen?: () => Promise<string | undefined>;
     /** Dedicated branch name — `argus/…` prefix by convention. */
     branch: string;
     files: WritePrFile[];
