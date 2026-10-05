@@ -121,7 +121,7 @@ const leftoverTodoRule = {
                 file,
                 line,
                 severity: 'nit',
-                category: 'maintainability',
+                category: 'convention',
                 message: `L${line}: nit: leftover TODO/FIXME-style marker added at \`${file}\` - ` +
                     'resolve it or link a tracking issue.',
             });

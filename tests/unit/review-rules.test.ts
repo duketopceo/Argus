@@ -68,7 +68,7 @@ describe('runRules', () => {
     const r = await runRules(
       diffOf('src/x.ts', [`// TODO: wire retry`]) + diffOf('docs/guide.md', [`TODO: fill in`]),
     )
-    const todo = r.findings.filter((f) => f.category === 'maintainability')
+    const todo = r.findings.filter((f) => f.category === 'convention')
     expect(todo).toHaveLength(1)
     expect(todo[0]?.file).toBe('src/x.ts')
     expect(r.records).toContainEqual(
@@ -128,7 +128,7 @@ describe('runRules', () => {
     // Failures are the audit channel — no double-record under records.
     expect(r.records.some((x) => x.rule === 'explodes')).toBe(false)
     // The surviving rule still produced its finding.
-    expect(r.findings.some((f) => f.category === 'maintainability')).toBe(true)
+    expect(r.findings.some((f) => f.category === 'convention')).toBe(true)
   })
 
   it('a swapped-in registry runs by default when enabled is omitted', async () => {
