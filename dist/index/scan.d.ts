@@ -28,6 +28,8 @@ export interface SynthesizedDiff {
 }
 /** Files above this size are skipped during diff synthesis. */
 export declare const SCAN_FILE_CAP_BYTES: number;
+/** Total synthesized-diff cap — pathological trees degrade to filesSkipped. */
+export declare const SCAN_DIFF_CAP_BYTES: number;
 /**
  * U7 — synthesize a unified diff treating every walked file as new
  * (`--- /dev/null` / `+++ b/`), so the deterministic lanes (rules,
@@ -39,7 +41,9 @@ export declare function synthesizeTreeDiff(root: string, entries: readonly {
     path: string;
 }[]): Promise<SynthesizedDiff>;
 /** Scan a repo into a RepoIndex. Never throws on individual file failures. */
-export declare function scanRepo(root: string): Promise<RepoIndex>;
+export declare function scanRepo(root: string, opts?: {
+    includeDotfile?: (name: string) => boolean;
+}): Promise<RepoIndex>;
 export declare function writeIndex(index: RepoIndex, outPath: string): Promise<void>;
 /** Load a previously written index; undefined when absent, oversized, or malformed. */
 export declare function readIndex(path: string): Promise<RepoIndex | undefined>;

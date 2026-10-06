@@ -5,14 +5,22 @@ import ts from 'typescript';
 import { writeAtomicJson } from '../fsutil.js';
 export const INDEX_SCHEMA_VERSION = 1;
 const EXCLUDE_DIRS = new Set([
-    'node_modules', 'dist', 'dist-e2e-vision', '.git', 'coverage',
-    '.vision-e2e-cache', '.argus-reviewer-cache', 'argus-reviewer-report', 'vision-e2e-report', 'journal',
+    'node_modules',
+    'dist',
+    'dist-e2e-vision',
+    '.git',
+    'coverage',
+    '.vision-e2e-cache',
+    '.argus-reviewer-cache',
+    'argus-reviewer-report',
+    'vision-e2e-report',
+    'journal',
 ]);
 const SOURCE_RE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
 const LOCKFILE_RE = /^(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb|composer\.lock|Gemfile\.lock|Cargo\.lock|poetry\.lock)$/;
 const BINARY_RE = /\.(png|jpe?g|gif|webp|ico|woff2?|ttf|otf|eot|mp4|webm|pdf|zip|gz|tar|wasm|so|dylib|exe|bin)$/i;
 const MAX_FILES = 50_000;
-async function walk(root, dir, out) {
+async function walk(root, dir, out, includeDotfile) {
     if (out.length >= MAX_FILES)
         return;
     let entries;
@@ -25,13 +33,17 @@ async function walk(root, dir, out) {
     for (const e of entries) {
         if (out.length >= MAX_FILES)
             return;
-        if (e.name.startsWith('.') && e.name !== '.storybook')
-            continue;
+        if (e.name.startsWith('.') && e.name !== '.storybook') {
+            // Scan mode opts credential-shaped dotfiles back in — dotDIRS stay
+            // excluded (descending .git/.ssh would defeat the point).
+            if (!(e.isFile() && includeDotfile?.(e.name)))
+                continue;
+        }
         const p = join(dir, e.name);
         if (e.isDirectory()) {
             if (EXCLUDE_DIRS.has(e.name))
                 continue;
-            await walk(root, p, out);
+            await walk(root, p, out, includeDotfile);
         }
         else if (e.isFile()) {
             if (LOCKFILE_RE.test(e.name) || BINARY_RE.test(e.name))
@@ -49,7 +61,11 @@ function resolveImport(spec, fromFile, files) {
         return undefined;
     const base = resolve(dirname(fromFile), spec);
     const exts = ['ts', 'tsx', 'js', 'jsx', 'mts', 'cts', 'mjs', 'cjs'];
-    const candidates = [base, ...exts.map((e) => `${base}.${e}`), ...exts.map((e) => `${base}/index.${e}`)];
+    const candidates = [
+        base,
+        ...exts.map((e) => `${base}.${e}`),
+        ...exts.map((e) => `${base}/index.${e}`),
+    ];
     for (const cand of candidates) {
         if (files.has(cand))
             return cand;
@@ -90,11 +106,16 @@ function inferPurpose(source, isSource) {
         return undefined;
     const doc = source.match(/^\s*\/\*\*([\s\S]*?)\*\//);
     if (doc) {
-        const first = (doc[1] ?? '').split('\n').map((l) => l.replace(/^\s*\*\s?/, '').trim()).filter(Boolean)[0];
+        const first = (doc[1] ?? '')
+            .split('\n')
+            .map((l) => l.replace(/^\s*\*\s?/, '').trim())
+            .filter(Boolean)[0];
         if (first !== undefined && first !== '')
             return first.slice(0, 160);
     }
-    const exports_ = [...source.matchAll(/export\s+(?:async\s+)?(?:function|class|const|interface|type)\s+(\w+)/g)]
+    const exports_ = [
+        ...source.matchAll(/export\s+(?:async\s+)?(?:function|class|const|interface|type)\s+(\w+)/g),
+    ]
         .map((m) => m[1])
         .slice(0, 4);
     if (exports_.length > 0)
@@ -103,6 +124,14 @@ function inferPurpose(source, isSource) {
 }
 /** Files above this size are skipped during diff synthesis. */
 export const SCAN_FILE_CAP_BYTES = 512 * 1024;
+/** Total synthesized-diff cap — pathological trees degrade to filesSkipped. */
+export const SCAN_DIFF_CAP_BYTES = 64 * 1024 * 1024;
+/**
+ * POSIX filenames may contain line terminators — interpolating one into a
+ * header would split it into injected diff lines (evasion or attribution
+ * spoofing through `addedLines`). Git C-quotes these; we skip them.
+ */
+const UNSAFE_PATH_RE = /[\n\r\u2028\u2029]/;
 /**
  * U7 — synthesize a unified diff treating every walked file as new
  * (`--- /dev/null` / `+++ b/`), so the deterministic lanes (rules,
@@ -115,9 +144,14 @@ export async function synthesizeTreeDiff(root, entries) {
     const parts = [];
     let filesWritten = 0;
     let filesSkipped = 0;
+    let totalBytes = 0;
     const CONCURRENCY = 64;
     for (let i = 0; i < entries.length; i += CONCURRENCY) {
         const results = await Promise.allSettled(entries.slice(i, i + CONCURRENCY).map(async (e) => {
+            if (UNSAFE_PATH_RE.test(e.path))
+                return 'skipped';
+            if (totalBytes > SCAN_DIFF_CAP_BYTES)
+                return 'skipped';
             const buf = await readFile(join(abs, e.path));
             if (buf.length > SCAN_FILE_CAP_BYTES)
                 return 'skipped';
@@ -140,6 +174,7 @@ export async function synthesizeTreeDiff(root, entries) {
             else if (r.status === 'fulfilled' && typeof r.value === 'string') {
                 parts.push(r.value);
                 filesWritten++;
+                totalBytes += r.value.length;
             }
             else
                 filesSkipped++;
@@ -148,10 +183,10 @@ export async function synthesizeTreeDiff(root, entries) {
     return { diff: parts.join('\n'), filesWritten, filesSkipped };
 }
 /** Scan a repo into a RepoIndex. Never throws on individual file failures. */
-export async function scanRepo(root) {
+export async function scanRepo(root, opts = {}) {
     const abs = resolve(root);
     const files = [];
-    await walk(abs, abs, files);
+    await walk(abs, abs, files, opts.includeDotfile);
     const fileSet = new Set(files);
     const pkgCache = new Map();
     // Bounded concurrency — Promise.all over up to 50k files would exhaust
@@ -176,7 +211,10 @@ export async function scanRepo(root) {
             if (isSource && text !== undefined) {
                 try {
                     const info = ts.preProcessFile(text, true, true);
-                    for (const spec of [...info.importedFiles.map((f) => f.fileName), ...info.referencedFiles.map((f) => f.fileName)]) {
+                    for (const spec of [
+                        ...info.importedFiles.map((f) => f.fileName),
+                        ...info.referencedFiles.map((f) => f.fileName),
+                    ]) {
                         const dep = resolveImport(spec, file, fileSet);
                         if (dep !== undefined)
                             imports.push(relative(abs, dep));

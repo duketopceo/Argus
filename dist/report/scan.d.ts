@@ -53,8 +53,12 @@ export interface ScanReport {
     /** Model-pass summary — present only under --model. */
     model?: {
         model: string;
+        /** Chunks actually reviewed (≤ chunksPlanned when budget stopped early). */
         chunks: number;
+        chunksPlanned: number;
         findings: number;
+        /** Model findings dropped by diff-anchor validation. */
+        dropped: number;
         budgetExceeded: boolean;
     };
     /** Real spend — always {0,0,0} without --model. */

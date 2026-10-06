@@ -40,13 +40,18 @@ export interface ScanReport {
    * The deterministic lane's audit trail — `ran` lists rules that ran;
    * `skipped` is set when the lane itself could not run.
    */
-  rulesScan?: { ran: string[]; records: RuleRecord[]; failures: RuleFailure[] } | { skipped: string }
+  rulesScan?:
+    { ran: string[]; records: RuleRecord[]; failures: RuleFailure[] } | { skipped: string }
   secretsScan?: SecretsScanResult | { skipped: string }
   /** Model-pass summary — present only under --model. */
   model?: {
     model: string
+    /** Chunks actually reviewed (≤ chunksPlanned when budget stopped early). */
     chunks: number
+    chunksPlanned: number
     findings: number
+    /** Model findings dropped by diff-anchor validation. */
+    dropped: number
     budgetExceeded: boolean
   }
   /** Real spend — always {0,0,0} without --model. */
