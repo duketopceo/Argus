@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url';
 import { DEFAULT_REVIEW_EXCLUDE } from './review/scope.js';
+import { REVIEW_RULE_IDS } from './review/rules.js';
 import { isReviewProfile } from './review/packs.js';
 import { JEV_DEFAULT_MODEL } from './vision/decisions.js';
 export const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
@@ -119,6 +120,7 @@ const defaults = {
         requestChanges: true,
         profiles: [],
         instructions: [],
+        rules: [...REVIEW_RULE_IDS],
         exclude: [...DEFAULT_REVIEW_EXCLUDE],
         mode: 'realtime',
         batchTimeoutMs: 480_000,
@@ -211,6 +213,26 @@ export function parseInstructions(raw) {
         return { glob, rule };
     });
 }
+/**
+ * U8 — validate `review.rules` ids against the registry. Unknown ids throw
+ * naming the entry: a typo silently deadening a detection rule is worse
+ * than failing the config load (same contract as `review.instructions`).
+ */
+export function parseRuleIds(raw) {
+    if (raw === undefined || raw === null)
+        return [...REVIEW_RULE_IDS];
+    if (!Array.isArray(raw))
+        throw new Error('review.rules must be an array');
+    return [
+        ...new Set(raw.map((id, i) => {
+            if (typeof id !== 'string' || !REVIEW_RULE_IDS.includes(id)) {
+                throw new Error(`review.rules[${i}] is not a registered rule id, got ${JSON.stringify(id)} ` +
+                    `(registered: ${REVIEW_RULE_IDS.join(', ')})`);
+            }
+            return id;
+        })),
+    ];
+}
 export function resolveConfig(input = {}) {
     const provider = { ...defaults.provider, ...(input.provider ?? {}) };
     // Wrong-typed sandbox values (e.g. `sandbox: true`, `enabled: 'yes'`,
@@ -282,6 +304,7 @@ export function resolveConfig(input = {}) {
         ? [...new Set(rawReview.profiles.filter(isReviewProfile))]
         : [];
     review.instructions = parseInstructions(rawReview.instructions);
+    review.rules = parseRuleIds(rawReview.rules);
     review.exclude =
         Array.isArray(rawReview.exclude) &&
             rawReview.exclude.every((g) => typeof g === 'string' && g !== '')

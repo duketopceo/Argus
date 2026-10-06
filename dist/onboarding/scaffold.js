@@ -54,6 +54,11 @@ export default defineConfig({
   //     { glob: 'db/migrations/**', rule: 'Every migration must be reversible' },
   //     { glob: 'src/ui/**', rule: 'Flag missing aria labels' },
   //   ],
+  //   // Deterministic ruleset lane — secrets, hardcoded endpoints, leftover
+  //   // TODOs, sync fs/process calls. Matching is $0 (the secrets rule's
+  //   // adjudication uses the decision model when configured). Default is
+  //   // every registered rule; a list narrows it, [] disables the lane.
+  //   rules: ['secrets', 'hardcoded-endpoint'],
   // },${a0Block}
 })
 `;

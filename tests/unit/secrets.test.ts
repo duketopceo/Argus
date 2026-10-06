@@ -206,9 +206,19 @@ describe('materializeMergeBaseDiff', () => {
     const exec: ExecFn = async (_cmd, args) => {
       if (args.includes('cat-file')) return { code: 0, stdout: '', stderr: '' }
       if (args.includes('diff')) {
-        // core.quotePath=false keeps non-ASCII paths raw — the default
-        // C-escapes them and mangles `file` in findings.
-        expect(args.join(' ')).toContain('core.quotePath=false')
+        // Ambient gitconfig (noprefix/dstPrefix/mnemonicPrefix) rewrites
+        // the `+++ b/` headers the lane parses — the scan surface must be
+        // pinned; quotePath=false keeps non-ASCII paths raw.
+        const argv = args.join(' ')
+        for (const pin of [
+          'diff.mnemonicPrefix=false',
+          'diff.noprefix=false',
+          'diff.srcPrefix=a/',
+          'diff.dstPrefix=b/',
+          'core.quotePath=false',
+        ]) {
+          expect(argv).toContain(pin)
+        }
         return { code: 0, stdout: 'diff body', stderr: '' }
       }
       return { code: 1, stdout: '', stderr: 'unexpected' }

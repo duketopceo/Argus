@@ -4,7 +4,7 @@ import { DecisionClient } from '../vision/decisions.js';
  * Deterministic secrets scan over the PR's local merge-base diff,
  * optionally adjudicated by the Decisions API (the confidence model). The lane is
  * additive-only: findings are unioned into the review AFTER model
- * synthesis so a prompt-injected synthesis can never erase them, and a
+ * synthesis so a prompt-injected synthesis can never erase them.
  * A confidence-model outage degrades to regex-only findings rather than silence.
  *
  * Masking contract: raw literals transit to the confidence model inside `state` (KTD9 —
@@ -59,6 +59,7 @@ export declare const DEFAULT_SECRETS_THRESHOLD = 0.3;
  * Removed/context lines are not scanned — a rotated-out-but-live secret
  * in a `-` line is a deliberate open question (plan OQ), and context
  * lines would re-flag pre-existing secrets the PR did not introduce.
+ * The added-lines walk is shared with the rules lane (`difftext.ts`).
  */
 export declare function scanDiffForSecrets(diffText: string): SecretCandidate[];
 /**

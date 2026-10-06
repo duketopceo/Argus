@@ -1,5 +1,6 @@
 import { defaultExec } from '../detect.js';
 import { debug } from '../debug.js';
+import { addedLines, GIT_DIFF_PATH_FLAGS } from './difftext.js';
 import { describeDecisionError, isNoulAnswer, MAX_CANDIDATES, } from '../vision/decisions.js';
 // Owned by vision/decisions.ts — re-exported here so existing import
 // paths (tests, lanes) keep resolving.
@@ -30,41 +31,11 @@ const PATTERNS = [
  * Removed/context lines are not scanned — a rotated-out-but-live secret
  * in a `-` line is a deliberate open question (plan OQ), and context
  * lines would re-flag pre-existing secrets the PR did not introduce.
+ * The added-lines walk is shared with the rules lane (`difftext.ts`).
  */
 export function scanDiffForSecrets(diffText) {
     const out = [];
-    let file = '';
-    let newLine = 0;
-    // `+++ `/`--- ` are file headers only in the pre-hunk zone — inside a
-    // hunk they are added/removed content lines (`+` + `++ x`, `-` + `-- x`)
-    // and must not reset `file` or `inHunk`.
-    let inHunk = false;
-    for (const raw of diffText.split('\n')) {
-        if (raw.startsWith('diff --git')) {
-            inHunk = false;
-            continue;
-        }
-        if (raw.startsWith('@@')) {
-            inHunk = true;
-            const m = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw);
-            newLine = m !== null ? parseInt(m[1], 10) : 0;
-            continue;
-        }
-        if (!inHunk) {
-            if (raw.startsWith('+++ ')) {
-                const m = /^\+\+\+ b\/(.+)$/.exec(raw);
-                file = m?.[1] ?? '';
-            }
-            continue;
-        }
-        // Context lines consume a new-file line number; `-` lines don't.
-        if (raw.startsWith(' ')) {
-            newLine++;
-            continue;
-        }
-        if (!raw.startsWith('+') || file === '')
-            continue;
-        const text = raw.slice(1);
+    for (const { file, line, text } of addedLines(diffText)) {
         for (const { cls, re, group } of PATTERNS) {
             const m = re.exec(text);
             if (m === null)
@@ -72,7 +43,7 @@ export function scanDiffForSecrets(diffText) {
             const literal = group !== undefined ? (m[group] ?? m[0]) : m[0];
             out.push({
                 file,
-                line: newLine,
+                line,
                 patternClass: cls,
                 contextExcerpt: text.replaceAll(literal, '***'),
                 literal,
@@ -80,7 +51,6 @@ export function scanDiffForSecrets(diffText) {
             });
             break; // first matching class wins — one candidate per line
         }
-        newLine++;
     }
     return out;
 }
@@ -119,9 +89,11 @@ export async function materializeMergeBaseDiff(opts) {
     if (!have) {
         return { skipped: `base ${opts.baseSha.slice(0, 12)} not available locally and unfetchable` };
     }
-    // core.quotePath=false — the default C-escapes non-ASCII/odd-byte paths
-    // ("b/\"f\\303\\251e.ts\""), mangling `file` in findings.
-    const diff = await exec('git', ['-c', 'core.quotePath=false', '-C', opts.cwd, 'diff', `${opts.baseSha}..HEAD`], 60_000);
+    // GIT_DIFF_PATH_FLAGS pins path-header config: ambient gitconfig
+    // (noprefix/dstPrefix/mnemonicPrefix) rewrites the `+++ b/` headers the
+    // lane parses — silently emptying the scan — and core.quotePath C-quotes
+    // odd-byte paths.
+    const diff = await exec('git', [...GIT_DIFF_PATH_FLAGS, '-C', opts.cwd, 'diff', `${opts.baseSha}..HEAD`], 60_000);
     if (diff.code !== 0) {
         return { skipped: `git diff failed: ${diff.stderr.trim().slice(0, 200)}` };
     }

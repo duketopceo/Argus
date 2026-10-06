@@ -173,10 +173,10 @@ export default defineConfig({
 ```
 
 or per deployment: `ARGUS_REVIEW_PROFILES="security,perf"` (action input
-`review-profiles`). The `security` lens runs alongside the always-on
-deterministic secrets scan — the rubric steers the model toward
-exploitability; the regex lane catches secret-shaped literals even when the
-model doesn't.
+`review-profiles`). The `security` lens runs alongside the deterministic
+secrets scan (on by default — `review.rules` controls it) — the rubric
+steers the model toward exploitability; the regex lane catches
+secret-shaped literals even when the model doesn't.
 
 Per-path rules come from `review.instructions` — `{glob, rule}` entries
 resolved per chunk, so a rule lands only in chunks carrying matching files
@@ -197,6 +197,33 @@ export default defineConfig({
 `review-instructions`) overrides the config value and is the only way to set
 rules on lanes where PR-controlled config never executes. Malformed entries
 fail config load naming the entry.
+
+### Deterministic ruleset lane
+
+Alongside the model, a registry of deterministic rules scans the same
+materialized diff for secret-shaped literals (the secrets lane, now one rule
+in the set), hardcoded endpoint URLs/IP literals, leftover `TODO`-style
+markers, and synchronous fs/process calls added in code paths. Every hit —
+surfaced or suppressed — is an audit entry in `code-review.json`'s
+`rulesScan`; the sticky comment summarizes it. Rules union after synthesis
+so nothing the model writes can erase a hit, and no rule may claim `bug`
+severity without confidence-model adjudication. Matching is $0 (the
+secrets rule's adjudication still uses the decision model when
+`decisionModel` is configured).
+
+```ts
+export default defineConfig({
+  review: {
+    // Every registered rule is on by default; list a subset to narrow,
+    // [] to disable the lane (including the secrets rule).
+    rules: ['secrets', 'hardcoded-endpoint'],
+  },
+})
+```
+
+Matches inside data/doc paths (manifests, fixtures, `.md`) and non-production
+paths (tests, scripts) are suppressed with a named reason in the audit rather
+than silently dropped.
 
 Spend is still yours:
 the `run.json` ledger records the per-run dollar figure regardless of which

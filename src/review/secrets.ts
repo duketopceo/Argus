@@ -1,5 +1,6 @@
 import { defaultExec, type ExecFn } from '../detect.js'
 import { debug } from '../debug.js'
+import { addedLines, GIT_DIFF_PATH_FLAGS } from './difftext.js'
 import {
   DecisionClient,
   describeDecisionError,
@@ -11,7 +12,7 @@ import {
  * Deterministic secrets scan over the PR's local merge-base diff,
  * optionally adjudicated by the Decisions API (the confidence model). The lane is
  * additive-only: findings are unioned into the review AFTER model
- * synthesis so a prompt-injected synthesis can never erase them, and a
+ * synthesis so a prompt-injected synthesis can never erase them.
  * A confidence-model outage degrades to regex-only findings rather than silence.
  *
  * Masking contract: raw literals transit to the confidence model inside `state` (KTD9 —
@@ -94,47 +95,18 @@ const PATTERNS: { cls: string; re: RegExp; group?: number }[] = [
  * Removed/context lines are not scanned — a rotated-out-but-live secret
  * in a `-` line is a deliberate open question (plan OQ), and context
  * lines would re-flag pre-existing secrets the PR did not introduce.
+ * The added-lines walk is shared with the rules lane (`difftext.ts`).
  */
 export function scanDiffForSecrets(diffText: string): SecretCandidate[] {
   const out: SecretCandidate[] = []
-  let file = ''
-  let newLine = 0
-  // `+++ `/`--- ` are file headers only in the pre-hunk zone — inside a
-  // hunk they are added/removed content lines (`+` + `++ x`, `-` + `-- x`)
-  // and must not reset `file` or `inHunk`.
-  let inHunk = false
-  for (const raw of diffText.split('\n')) {
-    if (raw.startsWith('diff --git')) {
-      inHunk = false
-      continue
-    }
-    if (raw.startsWith('@@')) {
-      inHunk = true
-      const m = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw)
-      newLine = m !== null ? parseInt(m[1] as string, 10) : 0
-      continue
-    }
-    if (!inHunk) {
-      if (raw.startsWith('+++ ')) {
-        const m = /^\+\+\+ b\/(.+)$/.exec(raw)
-        file = m?.[1] ?? ''
-      }
-      continue
-    }
-    // Context lines consume a new-file line number; `-` lines don't.
-    if (raw.startsWith(' ')) {
-      newLine++
-      continue
-    }
-    if (!raw.startsWith('+') || file === '') continue
-    const text = raw.slice(1)
+  for (const { file, line, text } of addedLines(diffText)) {
     for (const { cls, re, group } of PATTERNS) {
       const m = re.exec(text)
       if (m === null) continue
       const literal = group !== undefined ? (m[group] ?? m[0]) : m[0]
       out.push({
         file,
-        line: newLine,
+        line,
         patternClass: cls,
         contextExcerpt: text.replaceAll(literal, '***'),
         literal,
@@ -142,7 +114,6 @@ export function scanDiffForSecrets(diffText: string): SecretCandidate[] {
       })
       break // first matching class wins — one candidate per line
     }
-    newLine++
   }
   return out
 }
@@ -199,11 +170,13 @@ export async function materializeMergeBaseDiff(opts: {
   if (!have) {
     return { skipped: `base ${opts.baseSha.slice(0, 12)} not available locally and unfetchable` }
   }
-  // core.quotePath=false — the default C-escapes non-ASCII/odd-byte paths
-  // ("b/\"f\\303\\251e.ts\""), mangling `file` in findings.
+  // GIT_DIFF_PATH_FLAGS pins path-header config: ambient gitconfig
+  // (noprefix/dstPrefix/mnemonicPrefix) rewrites the `+++ b/` headers the
+  // lane parses — silently emptying the scan — and core.quotePath C-quotes
+  // odd-byte paths.
   const diff = await exec(
     'git',
-    ['-c', 'core.quotePath=false', '-C', opts.cwd, 'diff', `${opts.baseSha}..HEAD`],
+    [...GIT_DIFF_PATH_FLAGS, '-C', opts.cwd, 'diff', `${opts.baseSha}..HEAD`],
     60_000,
   )
   if (diff.code !== 0) {

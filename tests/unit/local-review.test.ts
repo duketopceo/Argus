@@ -61,11 +61,15 @@ function materializeRepo(
 
 const PASS = { content: JSON.stringify({ summary: 'ok', verdict: 'pass', findings: [] }) }
 
-async function writeConfig(cwd: string, reportDir: string): Promise<void> {
+async function writeConfig(
+  cwd: string,
+  reportDir: string,
+  extra: Record<string, unknown> = {},
+): Promise<void> {
   // decisionModel '' disables adjudication — deterministic regex-only lane.
   await writeFile(
     join(cwd, 'argus-reviewer.config.json'),
-    JSON.stringify({ decisionModel: '', reportDir }),
+    JSON.stringify({ decisionModel: '', reportDir, ...extra }),
   )
 }
 
@@ -207,6 +211,109 @@ describe('code-review --base', () => {
     )
     expect(code).toBe(2)
     expect(err.join('\n')).toContain('--fixture')
+  })
+
+  it('serializes rulesScan audit fields into code-review.json', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'argus-local-'))
+    materializeRepo(repo, { 'a.ts': 'x\n' }, { 'a.ts': 'y\n', 'src/t.ts': '// TODO: ship\n' })
+    const reportDir = join(repo, 'report')
+    await writeConfig(repo, reportDir)
+    const code = await main(['code-review', '--base', 'main', '--report-dir', reportDir], {
+      cwd: repo,
+      env: { ...MIN_ENV, OPENROUTER_API_KEY: 'test-key' },
+      out: () => {},
+      err: () => {},
+      createClient: () => new StubClient([PASS]),
+    })
+    expect(code).toBe(0)
+    const report = JSON.parse(await readFile(join(reportDir, 'code-review.json'), 'utf8'))
+    expect(Array.isArray(report.rulesScan.ran)).toBe(true)
+    expect(report.rulesScan.ran).toContain('leftover-todo')
+    // The TODO hit is audited — and it unioned into findings with rule provenance.
+    const todo = report.findings.find(
+      (f: { rule?: string }) => f.rule === 'leftover-todo',
+    )
+    expect(todo).toBeDefined()
+    expect(report.rulesScan.records.some((r: { rule: string }) => r.rule === 'leftover-todo')).toBe(
+      true,
+    )
+  })
+
+  it('a model-pass plus a rules-lane nit leaves verdict/summary/facade consistent', async () => {
+    // R8 — verdict derives post-union: a deterministic finding must move
+    // 'pass' to 'approve', matching ok/reviewEvent.
+    const repo = await mkdtemp(join(tmpdir(), 'argus-local-'))
+    materializeRepo(repo, { 'a.ts': 'x\n' }, { 'a.ts': 'y\n', 'src/t.ts': '// TODO: fix\n' })
+    const reportDir = join(repo, 'report')
+    await writeConfig(repo, reportDir)
+    const code = await main(['code-review', '--base', 'main', '--report-dir', reportDir], {
+      cwd: repo,
+      env: { ...MIN_ENV, OPENROUTER_API_KEY: 'test-key' },
+      out: () => {},
+      err: () => {},
+      createClient: () => new StubClient([PASS]),
+    })
+    expect(code).toBe(0)
+    const report = JSON.parse(await readFile(join(reportDir, 'code-review.json'), 'utf8'))
+    expect(report.verdict).toBe('approve')
+    expect(report.ok).toBe(true)
+    expect(report.reviewEvent).toBe('comment')
+    expect(report.summary).toContain('low-severity finding')
+  })
+
+  it('a rules-lane blocker flips verdict to needs_changes — not just ok', async () => {
+    // severityGate 'risk' makes the unadjudicated secret (severity risk)
+    // blocking: pre-union verdict would be 'pass' while ok said false —
+    // the post-union derivation must agree. reviewEvent stays 'comment':
+    // that gate needs a PROVEN blocker (p or reproduced evidence), and an
+    // unadjudicated hit degrades open by design.
+    const repo = await mkdtemp(join(tmpdir(), 'argus-local-'))
+    materializeRepo(
+      repo,
+      { 'a.ts': 'x\n' },
+      { 'a.ts': 'y\n', 'cfg.env': 'api_key = "demo0123456789abcdef"\n' },
+    )
+    const reportDir = join(repo, 'report')
+    await writeConfig(repo, reportDir, { review: { severityGate: 'risk' } })
+    const code = await main(['code-review', '--base', 'main', '--report-dir', reportDir], {
+      cwd: repo,
+      env: { ...MIN_ENV, OPENROUTER_API_KEY: 'test-key' },
+      out: () => {},
+      err: () => {},
+      createClient: () => new StubClient([PASS]),
+    })
+    expect(code).toBe(0)
+    const report = JSON.parse(await readFile(join(reportDir, 'code-review.json'), 'utf8'))
+    expect(report.verdict).toBe('needs_changes')
+    expect(report.ok).toBe(false)
+    expect(report.reviewEvent).toBe('comment')
+    expect(report.summary).toContain('blocking severity')
+  })
+
+  it('review.rules: [] disables the lane — skipped audits, zero findings', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'argus-local-'))
+    materializeRepo(
+      repo,
+      { 'a.ts': 'x\n' },
+      { 'a.ts': 'y\n', 'cfg.env': 'api_key = "demo0123456789abcdef"\n' },
+    )
+    const reportDir = join(repo, 'report')
+    await writeConfig(repo, reportDir, { review: { rules: [] } })
+    const code = await main(['code-review', '--base', 'main', '--report-dir', reportDir], {
+      cwd: repo,
+      env: { ...MIN_ENV, OPENROUTER_API_KEY: 'test-key' },
+      out: () => {},
+      err: () => {},
+      createClient: () => new StubClient([PASS]),
+    })
+    expect(code).toBe(0)
+    const report = JSON.parse(await readFile(join(reportDir, 'code-review.json'), 'utf8'))
+    // Both lanes report the same skip reason — 'disabled', not 'clean'.
+    expect(report.secretsScan.skipped).toBe('the rules lane is disabled (review.rules)')
+    expect(report.rulesScan.skipped).toBe('the rules lane is disabled (review.rules)')
+    // The planted secret never surfaced — the lane truly did not run.
+    expect(report.findings).toHaveLength(0)
+    expect(report.verdict).toBe('pass')
   })
 
   it('ARGUS_DIFF_BASE selects local mode only when no PR context exists', async () => {

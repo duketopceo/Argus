@@ -521,7 +521,10 @@ each audited.
 
 **Files:**
 - `src/review/rules.ts` (new) — rule registry + runner
-- `src/review/secrets.ts` — becomes a rule inside the engine
+- `src/review/secrets.ts` — `scanDiffForSecrets` (the pure diff→candidates
+  scan) becomes a rule inside the engine; `scanSecrets`'s confidence-model
+  adjudication wrapper stays as that rule's adjudication hook — it is the
+  `state`-field semantics the severity ceiling defers to
 - `src/cli.ts` — post-synthesis union + `rulesScan` audit field (the
   union and report assembly live here)
 - `src/report/comment.ts`, `action/sticky-comment.cjs` — render the new
@@ -531,9 +534,13 @@ each audited.
 
 **Approach:** deliberately boring first rules: secret patterns (existing
 lane moved in), hardcoded URLs/IPs added, leftover `TODO` at nit level,
-sync-in-async hot spots. Severity ceiling: nothing deterministic may emit
-`bug` without adjudication. Every rule hit is an audit entry —
-precision stays inspectable via the `dropped finding` contract.
+sync-in-async hot spots. The engine consumes the run's single
+materialized scan diff — the same surface the secrets lane already
+selects (`fixture.diff` / `localReview.diff` / merge-base or incremental
+fetch); no per-rule re-materialization. Severity ceiling: nothing
+deterministic may emit `bug` without adjudication. Every rule hit is an
+audit entry — precision stays inspectable via the `dropped finding`
+contract.
 
 **Test scenarios:**
 - Happy: hardcoded IP in a diff → `nit` finding citing pattern class
