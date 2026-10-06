@@ -7,7 +7,7 @@ import { type PrMeta } from './evidence/ci.js';
 import { type Evidence } from './evidence/link.js';
 import { type ValidationAudit } from './review/validate.js';
 import { type SecretsScanResult } from './review/secrets.js';
-import { type RuleFailure, type RuleRecord } from './review/rules.js';
+import { runRules, type RuleFailure, type RuleRecord } from './review/rules.js';
 import { type TriageRecord } from './review/triage.js';
 import { type FindingAdjudicationAudit } from './review/adjudicate.js';
 import { type ProbeRecord } from './probe/queue.js';
@@ -26,6 +26,8 @@ export interface CliDeps {
     launchDriver?: (config: Config) => Promise<BrowserDriver>;
     /** Inject a subprocess runner (tests stub `a0`/`gh` detection + delegation). */
     exec?: ExecFn;
+    /** Inject the rules-lane runner (tests force lane-level failure). */
+    rulesRunner?: typeof runRules;
     /** Inject the host reachability probe (tests stub a0 detection). */
     probe?: ProbeFn;
     /**

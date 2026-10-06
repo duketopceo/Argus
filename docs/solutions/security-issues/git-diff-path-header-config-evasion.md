@@ -81,8 +81,19 @@ A machine-parsed `git diff` is a schema contract, and git makes that schema user
 - **Suppression boundary rule**: any regex whose capture drives a suppression reason needs a right boundary — verify a hostile suffix (`<literal>.evil.com`, `<literal>-bad`) cannot reach the suppression path. `tests/unit/review-rules.test.ts` covers the loopback-suffix case.
 - **When reviewing a new diff consumer**, ask which gitconfig knobs could reshape its output and whether each is pinned or accepted.
 
+## Follow-up: U7 scan mode added two more members of the class
+
+Adversarial review of `argus scan` (U7) found the same class in two new places:
+
+**`diff.external` executes attacker commands.** `loadLocalDiff` ran `git diff` without `--no-ext-diff` — a scanned repo's own `.git/config` (`[diff] external = <cmd>`) or `GIT_EXTERNAL_DIFF` env turns the audit itself into command execution, strictly worse than schema rewriting. Every `git diff` invocation (including `--no-index`) now pins `--no-ext-diff`; `tests/unit/scan.test.ts` plants `diff.external = touch <marker>` and asserts the marker is never created.
+
+**Synthesized diffs can be header-injected from filenames.** `synthesizeTreeDiff` interpolated `e.path` raw into `diff --git a/X b/X` and `+++ b/X` — a POSIX-legal filename containing `\n`, `\r`, U+2028, or U+2029 splits a header into attacker-chosen diff lines, reattributing the file's `+` lines to a path that earns suppression (e.g. `+++ b/docs/x.md` hits `DATA_PATH_RE`) or truncating the file's scanned surface. Git C-quotes such paths when it emits diffs; emitting raw reintroduces the hole the quoted-header parser just closed. The synthesizer now skips paths matching `/[\n\r\u2028\u2029]/` and counts them in `filesSkipped`.
+
+The audit rule generalizes: **any diff the tool parses — whether git emits it or the tool synthesizes it — must have its path-header schema defended on both sides.** Producers pin config; synthesizers reject unquotable paths; parsers accept quoted forms.
+
 ## Related Issues
 
 - `docs/solutions/architecture-patterns/deterministic-post-parse-filters-and-verdict-derivation.md` — sibling contract: the other half of "the report must describe what the deterministic lanes actually saw" is that status signals derive from the post-filter, post-union finding set.
 - `src/review/difftext.ts` — the shared added-line walker and `GIT_DIFF_PATH_FLAGS`; `src/review/secrets.ts` `materializeMergeBaseDiff` was the unpinned producer.
 - Issue #152 / PR for `feat/u8-ruleset-lane` — the U8 ruleset lane where adversarial review surfaced the class.
+- Issue #150 / `feat/u7-scan-mode` — the scan lane where the class recurred on new surfaces.
