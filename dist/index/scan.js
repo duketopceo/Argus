@@ -172,6 +172,12 @@ export async function synthesizeTreeDiff(root, entries) {
             if (r.status === 'fulfilled' && r.value === 'skipped')
                 filesSkipped++;
             else if (r.status === 'fulfilled' && typeof r.value === 'string') {
+                // Post-check too: the pre-read check races the whole batch, so a
+                // section produced past the cap must still be counted skipped.
+                if (totalBytes > SCAN_DIFF_CAP_BYTES) {
+                    filesSkipped++;
+                    continue;
+                }
                 parts.push(r.value);
                 filesWritten++;
                 totalBytes += r.value.length;

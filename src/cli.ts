@@ -4595,8 +4595,9 @@ Options:
   --report-dir <dir> Report output dir (default: config reportDir or ./argus-reviewer-report)
   -h, --help         Show this help
 
-Spend is $0 unless --model is passed. Credential-shaped files (keys, certs,
-.env, credentials) never reach model context, even under --model.`
+Spend is $0 unless --model is passed. Credential-shaped dotfiles (.env,
+.netrc, ...) are scanned locally by the secrets lane but never reach model
+context; dot-directories stay excluded.`
 
 /**
  * Credential-shaped paths are excluded from MODEL context only — the
@@ -4800,13 +4801,19 @@ async function cmdScan(args: string[], ctx: Ctx, deps: CliDeps): Promise<number>
       const budget = config.codeReviewBudgetUsd
       let budgetExceeded = false
       let reviewedChunks = 0
+      let modelSpend = 0
       const rawFindings: RuleFinding[] = []
       try {
         const client = createClient(deps, config, ctx)
         for (let i = 0; i < chunks.length; i++) {
-          if (budget !== undefined && spend.costUsd >= budget) {
-            budgetExceeded = true
-            break
+          if (budget !== undefined) {
+            // Project the next chunk from the mean of reviewed ones —
+            // secrets decide() calls still run unprojected (documented).
+            const projected = reviewedChunks > 0 ? modelSpend / reviewedChunks : 0
+            if (spend.costUsd >= budget || spend.costUsd + projected > budget) {
+              budgetExceeded = true
+              break
+            }
           }
           const response = await client.complete({
             model,
@@ -4817,6 +4824,7 @@ async function cmdScan(args: string[], ctx: Ctx, deps: CliDeps): Promise<number>
           spend.calls++
           spend.tokens += response.cost.tokens
           spend.costUsd += response.cost.costUsd
+          modelSpend += response.cost.costUsd
           rawFindings.push(...(parseCodeReview(response.content).findings as RuleFinding[]))
         }
       } catch (e) {
