@@ -1,0 +1,4 @@
+import { type Ctx, type CliDeps } from './shared.js';
+export declare const DELEGATE_USAGE = "Usage: argus-reviewer delegate \"<task>\" [options]\n\nSends a task to an Agent Zero instance (a0 headless). The agent works\nautonomously in its own browser/desktop and streams back its result. Every\ndelegation is a full-cost agent run; use for exploratory tasks and failure\ntriage, not as a replay path.\n\nOptions:\n  --url <url>      App URL the task applies to (falls back to config.target.url)\n  --host <url>     Agent Zero base URL (falls back to config a0.url, then a0\n                   CLI discovery: AGENT_ZERO_HOST, ~/.agent-zero/.env, localhost)\n  --timeout <ms>   Give up after N ms (default 600000)\n\n  -h, --help       Show this help";
+/** `argus-reviewer delegate` — hand a task to an Agent Zero instance. */
+export declare function cmdDelegate(args: string[], ctx: Ctx, deps: CliDeps): Promise<number>;
