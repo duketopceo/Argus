@@ -60,7 +60,7 @@ const TEXT_EXT = new Set([...JS_EXT, '.html', '.yml', '.yaml', '.json', '.css', 
 
 /** Functions in src/cli.ts whose literals may carry emoji: model input, not output. */
 const PERMANENT: Record<string, ReadonlySet<string>> = {
-  'src/cli.ts': new Set(['deriveSeverity', 'buildCodeReviewMessages']),
+  'src/cli.ts': new Set(['deriveSeverity', 'buildCodeReviewMessages', 'buildScanMessages']),
 }
 
 interface Allowance {

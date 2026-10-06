@@ -17,7 +17,7 @@ import { runExplore } from './engine/explore.js';
 import { buildReviewContext, CONTEXT_PREFIX } from './index/context.js';
 import { diffChangedFiles } from './index/diff.js';
 import { invalidateForDiff } from './index/invalidate.js';
-import { readIndex, scanRepo, writeIndex } from './index/scan.js';
+import { readIndex, scanRepo, synthesizeTreeDiff, writeIndex } from './index/scan.js';
 import { fetchCheckRuns, fetchCompare, fetchPrMeta, fetchReviewedStatus, ghGet, isTrustedAssociation, } from './evidence/ci.js';
 import { resolveTrust } from './trust.js';
 import { linkFindings } from './evidence/link.js';
@@ -48,6 +48,7 @@ import { flowPath, loadFlow, serializeFlow } from './cache/store.js';
 import { isSafeFlowName, writebackHealsLocal, writebackHealsToPr, } from './flow/writeback.js';
 import { archiveManifest, classifyHeadBinding, isHeadBindingConclusive, LANE_IDS, readCheckoutSha, } from './report/manifest.js';
 import { writeAtomicJson, writeAtomicText } from './fsutil.js';
+import { SCAN_REPORT_SCHEMA_VERSION } from './report/scan.js';
 import { OpenRouterClient } from './vision/openrouter.js';
 import { Ledger } from './vision/ledger.js';
 import { selectionFromFlags } from './pipeline/contracts.js';
@@ -131,6 +132,10 @@ const HELP_GROUPS = [
             [['cache list [--dir <cacheDir>]'], 'List cached flows.'],
             [['cache prune [name|--all] [--dir <cacheDir>]'], 'Delete one flow cache, or all of them.'],
             [['index [--dir <repo>]'], 'Scan the repo into argus.index.json.'],
+            [
+                ['scan [path] [--model] [--base <ref>]', '  [--report-dir <dir>]'],
+                'Audit a tree: deterministic rules + secrets; --model adds model findings.',
+            ],
             [
                 ['delegate "<task>" [--url <target>] [--host <a0-url>]'],
                 'Send a task to an Agent Zero instance.',
@@ -332,6 +337,8 @@ async function dispatch(argv, ctx, deps) {
             return cmdCache(rest, ctx);
         case 'index':
             return cmdIndex(rest, ctx);
+        case 'scan':
+            return cmdScan(rest, ctx, deps);
         case 'init':
             return cmdInit(rest, ctx, deps);
         default:
@@ -3719,6 +3726,235 @@ if (invokedAsScript) {
         console.error(`argus-reviewer: ${e.message}`);
         process.exitCode = 1;
     });
+}
+const SCAN_USAGE = `Usage: argus-reviewer scan [path] [options]
+
+Audits a tree with no PR: walks the tree (dotfiles, VCS internals, lockfiles
+and binaries excluded), synthesizes a unified diff, and runs the
+deterministic rules + secrets lanes over it. Writes scan-report.json.
+
+Options:
+  [path]             Directory to audit (default: .)
+  --base <ref>       Audit 'git diff <ref>..worktree' instead of the whole tree
+  --model            Add model findings over the same exclusion contract
+  --report-dir <dir> Report output dir (default: config reportDir or ./argus-reviewer-report)
+  -h, --help         Show this help
+
+Spend is $0 unless --model is passed. Credential-shaped files (keys, certs,
+.env, credentials) never reach model context, even under --model.`;
+/**
+ * Credential-shaped paths are excluded from MODEL context only — the
+ * deterministic secrets lane still scans them locally (that is their
+ * purpose), but their contents must never leave the machine.
+ */
+const CREDENTIAL_PATH_RE = /(^|\/)(\.env(\..*)?|\.netrc|\.npmrc|\.pypirc|[^/]*\.(pem|key|p12|pfx|keystore|jks)|id_(rsa|dsa|ecdsa|ed25519)(\.pub)?|credentials?\.[^/]*|secrets?\.(json|ya?ml|toml))$/i;
+/** Scan-flavored review prompt — same findings contract as code-review. */
+function buildScanMessages(patchText, chunkIndex, totalChunks) {
+    return [
+        {
+            role: 'system',
+            content: [
+                {
+                    type: 'text',
+                    text: 'You are a senior engineer auditing a repository tree. Every file is shown as newly added. Output terse, actionable findings.',
+                },
+            ],
+        },
+        {
+            role: 'user',
+            content: [
+                {
+                    type: 'text',
+                    text: `Audit chunk ${chunkIndex + 1} of ${totalChunks}.\n\n${patchText}\n\n` +
+                        `Return JSON: summary, verdict (pass/needs_changes/approve), and findings[].\n\n` +
+                        `Each finding must include:\n- file\n- line\n- severity: bug | risk | nit | q\n` +
+                        `- category: correctness | security | performance | usability | convention | other\n` +
+                        '- message: one line in this format: `L<line>: <emoji> <severity>: <problem>. <fix>.`\n\n' +
+                        'Severity emojis:\n- bug = 🔴\n- risk = 🟡\n- nit = 🔵\n- q = ❓\n\n' +
+                        'Rules for the message:\n- Start with `L<line>: `\n- Then the emoji and keyword\n' +
+                        '- State the concrete problem and a concrete fix\n- Put exact symbol/variable/function names in backticks\n' +
+                        'Cite only files and line numbers shown above; never invent paths. ' +
+                        'Only report real, high-confidence problems.',
+                },
+            ],
+        },
+    ];
+}
+/**
+ * `argus scan` — U7 audit mode. Deterministic rules + secrets over a
+ * synthesized tree diff (or `git diff <base>`), optional model pass under
+ * the same exclusion contract, standalone scan-report.json.
+ */
+async function cmdScan(args, ctx, deps) {
+    const { values, positionals } = parseArgs({
+        args,
+        options: {
+            base: { type: 'string' },
+            model: { type: 'boolean', default: false },
+            'report-dir': { type: 'string' },
+            help: { type: 'boolean', short: 'h', default: false },
+        },
+        allowPositionals: true,
+    });
+    if (values.help) {
+        ctx.out(SCAN_USAGE);
+        return 0;
+    }
+    const root = resolve(ctx.cwd, positionals[0] ?? '.');
+    ctx.out(`scan root: ${root}`);
+    const stat = await import('node:fs/promises')
+        .then((fs) => fs.stat(root))
+        .catch(() => undefined);
+    if (stat === undefined || !stat.isDirectory()) {
+        ctx.err(`scan: ${positionals[0] ?? '.'} is not a directory`);
+        return 1;
+    }
+    const { trust } = await resolveCheckoutTrust(ctx);
+    const config = await loadCliConfig(ctx, trust);
+    const exec = deps.exec ?? defaultExec;
+    const gitProbe = await exec('git', ['-C', root, 'rev-parse', '--is-inside-work-tree'], 10_000);
+    const gitRepo = gitProbe.code === 0 && gitProbe.stdout.trim() === 'true';
+    if (!gitRepo && values.base === undefined) {
+        ctx.err('scan: not a git work tree - auditing the tree as-is');
+    }
+    const skipped = [];
+    const spend = { calls: 0, tokens: 0, costUsd: 0 };
+    const findings = [];
+    let diff;
+    let filesScanned;
+    let filesSkipped = 0;
+    let diffRange;
+    let contexts = {};
+    if (values.base !== undefined) {
+        if (!gitRepo) {
+            ctx.err(`scan: --base ${values.base} needs a git work tree; ${root} is not one`);
+            return 1;
+        }
+        const local = await loadLocalDiff(root, values.base, exec);
+        if ('error' in local) {
+            ctx.err(`scan: ${local.error}`);
+            return 1;
+        }
+        diff = local.diff;
+        filesScanned = local.files.length;
+        diffRange = { base: values.base, baseSha: local.meta.baseSha, headSha: local.meta.headSha };
+    }
+    else {
+        const index = await scanRepo(root);
+        if (index.entries.length === 0) {
+            ctx.err(`scan: no scannable files under ${root}`);
+            return 1;
+        }
+        const synth = await synthesizeTreeDiff(root, index.entries);
+        diff = synth.diff;
+        filesScanned = synth.filesWritten;
+        filesSkipped = synth.filesSkipped;
+        if (filesSkipped > 0) {
+            skipped.push({ lane: 'walk', reason: `${filesSkipped} file(s) oversized or unreadable` });
+        }
+        contexts = Object.fromEntries(index.entries.filter((e) => e.purpose !== undefined).map((e) => [e.path, e.purpose]));
+    }
+    // Deterministic lane — disabled by review.rules: [], lane-level throw
+    // degrades to a skipped entry and the report is still written.
+    let rulesScan;
+    let secretsScan;
+    if (config.review.rules.length === 0) {
+        const reason = 'the rules lane is disabled (review.rules)';
+        rulesScan = { skipped: reason };
+        secretsScan = { skipped: reason };
+    }
+    else {
+        try {
+            const result = await (deps.rulesRunner ?? runRules)(diff, {
+                enabled: config.review.rules,
+                secretsThreshold: config.review.secretsThreshold,
+            });
+            rulesScan = { ran: result.ran, records: result.records, failures: result.failures };
+            secretsScan = result.secretsScan;
+            findings.push(...result.findings);
+            for (const f of result.failures) {
+                ctx.err(`scan: rule ${f.rule} threw: ${f.error}`);
+            }
+        }
+        catch (e) {
+            const reason = e.message;
+            skipped.push({ lane: 'rules', reason });
+            rulesScan = { skipped: reason };
+        }
+    }
+    // Optional model pass — content policy holds: review.exclude globs plus
+    // credential-shaped paths never reach model context.
+    let modelSummary;
+    if (values.model) {
+        const model = config.code_model ?? config.model;
+        if (model === undefined) {
+            skipped.push({ lane: 'model', reason: 'no code model configured' });
+        }
+        else {
+            const files = filesFromUnifiedDiff(diff);
+            const { kept, excluded } = partitionByExclude(files, config.review.exclude);
+            const eligible = kept.filter((f) => !CREDENTIAL_PATH_RE.test(f.filename));
+            const droppedForPolicy = excluded.length + kept.length - eligible.length;
+            if (droppedForPolicy > 0) {
+                ctx.err(`scan: ${droppedForPolicy} file(s) withheld from model context (content policy)`);
+            }
+            const chunks = planChunks(eligible, contexts);
+            const budget = config.codeReviewBudgetUsd;
+            let budgetExceeded = false;
+            const rawFindings = [];
+            try {
+                const client = createClient(deps, config, ctx);
+                for (let i = 0; i < chunks.length; i++) {
+                    if (budget !== undefined && spend.costUsd >= budget) {
+                        budgetExceeded = true;
+                        break;
+                    }
+                    const response = await client.complete({
+                        model,
+                        messages: buildScanMessages(chunks[i]?.text ?? '', i, chunks.length),
+                        kind: 'code',
+                    });
+                    spend.calls++;
+                    spend.tokens += response.cost.tokens;
+                    spend.costUsd += response.cost.costUsd;
+                    rawFindings.push(...parseCodeReview(response.content).findings);
+                }
+            }
+            catch (e) {
+                skipped.push({ lane: 'model', reason: e.message });
+            }
+            const vetted = validateFindings(rawFindings, eligible);
+            findings.push(...vetted.kept);
+            modelSummary = { model, chunks: chunks.length, findings: vetted.kept.length, budgetExceeded };
+        }
+    }
+    const blockSeverities = resolveBlockSeverities(config);
+    const verdict = findings.length === 0
+        ? 'pass'
+        : findings.some((f) => blockSeverities.includes(f.severity))
+            ? 'needs_changes'
+            : 'approve';
+    const reportDir = resolve(ctx.cwd, values['report-dir'] ?? config.reportDir ?? 'argus-reviewer-report');
+    const report = {
+        schemaVersion: SCAN_REPORT_SCHEMA_VERSION,
+        generatedAt: new Date().toISOString(),
+        root,
+        gitRepo,
+        filesScanned,
+        filesSkipped,
+        ...(diffRange !== undefined ? { diffRange } : {}),
+        verdict,
+        findings,
+        ...(rulesScan !== undefined ? { rulesScan } : {}),
+        ...(secretsScan !== undefined ? { secretsScan } : {}),
+        ...(modelSummary !== undefined ? { model: modelSummary } : {}),
+        spend,
+        skipped,
+    };
+    await writeAtomicJson(join(reportDir, 'scan-report.json'), report);
+    ctx.out(`scan: ${filesScanned} file(s), ${findings.length} finding(s), verdict ${verdict}` +
+        `, spend $${spend.costUsd.toFixed(6)} → ${join(reportDir, 'scan-report.json')}`);
+    return 0;
 }
 /** `argus index` — scan a repo into argus.index.json. */
 async function cmdIndex(args, ctx) {

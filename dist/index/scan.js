@@ -101,6 +101,52 @@ function inferPurpose(source, isSource) {
         return `exports: ${exports_.join(', ')}`;
     return undefined;
 }
+/** Files above this size are skipped during diff synthesis. */
+export const SCAN_FILE_CAP_BYTES = 512 * 1024;
+/**
+ * U7 — synthesize a unified diff treating every walked file as new
+ * (`--- /dev/null` / `+++ b/`), so the deterministic lanes (rules,
+ * secrets) can consume a plain tree the way they consume a PR diff.
+ * Emitting the diff ourselves means headers are always `b/` and never
+ * C-quoted — the ambient-gitconfig evasion class cannot apply.
+ */
+export async function synthesizeTreeDiff(root, entries) {
+    const abs = resolve(root);
+    const parts = [];
+    let filesWritten = 0;
+    let filesSkipped = 0;
+    const CONCURRENCY = 64;
+    for (let i = 0; i < entries.length; i += CONCURRENCY) {
+        const results = await Promise.allSettled(entries.slice(i, i + CONCURRENCY).map(async (e) => {
+            const buf = await readFile(join(abs, e.path));
+            if (buf.length > SCAN_FILE_CAP_BYTES)
+                return 'skipped';
+            const text = buf.toString('utf8');
+            const lines = text.split('\n');
+            // A trailing newline yields a final empty element — not a line.
+            if (lines.length > 0 && lines[lines.length - 1] === '')
+                lines.pop();
+            const body = lines.map((l) => `+${l}`).join('\n');
+            return (`diff --git a/${e.path} b/${e.path}\n` +
+                `new file mode 100644\n` +
+                `--- /dev/null\n` +
+                `+++ b/${e.path}\n` +
+                `@@ -0,0 +1,${lines.length} @@\n` +
+                body);
+        }));
+        for (const r of results) {
+            if (r.status === 'fulfilled' && r.value === 'skipped')
+                filesSkipped++;
+            else if (r.status === 'fulfilled' && typeof r.value === 'string') {
+                parts.push(r.value);
+                filesWritten++;
+            }
+            else
+                filesSkipped++;
+        }
+    }
+    return { diff: parts.join('\n'), filesWritten, filesSkipped };
+}
 /** Scan a repo into a RepoIndex. Never throws on individual file failures. */
 export async function scanRepo(root) {
     const abs = resolve(root);
