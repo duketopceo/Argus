@@ -48,9 +48,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: duketopceo/Argus
-          # v0.4.2 — carries review.exclude defaults, per-comment evidence
-          # footer fix, and the ruleset lane. Re-anchor to the next tag when
-          # one is cut; must match the action pin below.
+          # v0.5.0 — nit fold, deterministic rules, sanitizer, hardened eval
+          # corpus. Re-anchor to the next tag when one is cut; must match the
+          # action pin below.
           ref: 27887be6438ad284566073835939210edc4cdeb8
           path: trusted-argus
           persist-credentials: false
