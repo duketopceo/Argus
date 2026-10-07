@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { main } from '../../src/cli.js'
+import { ACTION_PIN_TAG } from '../../src/onboarding/scaffold.js'
 import { TargetProcess } from '../../src/driver/target.js'
 import { VisionClient } from '../../src/engine/loop.js'
 import { CallCost, CallKind } from '../../src/vision/cost.js'
@@ -758,7 +759,9 @@ describe('argus-reviewer CLI', () => {
     expect(workflow).toContain('ref: ${{ github.event.pull_request.head.sha || github.sha }}')
     expect(workflow).toMatch(/actions\/checkout@[0-9a-f]{40} # v7/)
     expect(workflow).toMatch(
-      /duketopceo\/Argus\/action@[0-9a-f]{40} # v0\.4\.2/,
+      new RegExp(
+        `duketopceo\\/Argus\\/action@[0-9a-f]{40} # ${ACTION_PIN_TAG.replace(/\./g, '\\.')}`,
+      ),
     )
     // Second run without --force skips rather than overwriting
     const out2 = capture()
