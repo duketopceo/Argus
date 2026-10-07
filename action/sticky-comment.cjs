@@ -453,7 +453,6 @@ function findingsEntry(codeReview, inlinePlan) {
 
 // Consolidated nit listing — rendered only when `review.nitsInline` kept
 // nits out of inline comments (default). Capped; overflow stays counted.
-// Mirrors nitsFold in src/report/comment.ts.
 function nitsFold(codeReview) {
   if (!codeReview || codeReview.nitsInline === true) return []
   const nits = findingsOf(codeReview).filter((f) => f.severity === 'nit')

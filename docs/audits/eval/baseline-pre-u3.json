@@ -29,7 +29,8 @@
         "droppedReverted": 0,
         "nitShare": 0.2
       },
-      "reportPath": "/tmp/argus-eval-report-By8Vf0/code-review.json"
+      "reportPath": "/tmp/argus-eval-report-By8Vf0/code-review.json",
+      "stalled": false
     },
     {
       "name": "pr131-webhook-worker",
@@ -55,7 +56,8 @@
         "droppedReverted": 0,
         "nitShare": 0.6
       },
-      "reportPath": "/tmp/argus-eval-report-62wwu9/code-review.json"
+      "reportPath": "/tmp/argus-eval-report-62wwu9/code-review.json",
+      "stalled": false
     },
     {
       "name": "pr126-onboarding-docs",
@@ -80,7 +82,8 @@
         "droppedReverted": 0,
         "nitShare": 0.5
       },
-      "reportPath": "/tmp/argus-eval-report-QMfZsW/code-review.json"
+      "reportPath": "/tmp/argus-eval-report-QMfZsW/code-review.json",
+      "stalled": false
     },
     {
       "name": "pr59-probe-lane",
@@ -105,7 +108,8 @@
         "droppedReverted": 0,
         "nitShare": 0
       },
-      "reportPath": "/tmp/argus-eval-report-ABT3gD/code-review.json"
+      "reportPath": "/tmp/argus-eval-report-ABT3gD/code-review.json",
+      "stalled": false
     }
   ]
 }

@@ -131,7 +131,8 @@ async function run(corpusPath, tag, cacheDir) {
         ? JSON.parse(readFileSync(reportPath, 'utf8'))
         : { ok: false, skipped: true, summary: `exit ${code}` }
       const metrics = metricsFromReport(report, entry.labels)
-      results.push({ name: entry.name, ms, exitCode: code, metrics, reportPath })
+      const stalled = code !== 0 || !existsSync(reportPath)
+      results.push({ name: entry.name, ms, exitCode: code, stalled, metrics, reportPath })
       console.error(
         `${entry.name}: findings=${metrics.findings} comments=${metrics.comments}` +
           (metrics.precision !== undefined
@@ -164,13 +165,14 @@ async function run(corpusPath, tag, cacheDir) {
 }
 
 function printTable(results) {
-  console.log('\nentry | findings | comments | nit% | gen-path | precision | recall | drop(od/rev)')
+  console.log('\nentry | findings | comments | nit% | gen-path | precision | recall | drop(od/rev) | stalled')
   for (const r of results) {
     const m = r.metrics
+    const stalled = r.stalled === true || r.exitCode !== 0 ? 'yes' : 'no'
     console.log(
       `${r.name} | ${m.findings} | ${m.comments} | ${(m.nitShare * 100).toFixed(0)}% | ` +
         `${m.generatedPathComments} | ${m.precision?.toFixed(2) ?? '-'} | ` +
-        `${m.recall?.toFixed(2) ?? '-'} | ${m.droppedOutsideDiff}/${m.droppedReverted}`,
+        `${m.recall?.toFixed(2) ?? '-'} | ${m.droppedOutsideDiff}/${m.droppedReverted} | ${stalled}`,
     )
   }
 }
@@ -178,10 +180,11 @@ function printTable(results) {
 function compare(aPath, bPath) {
   const a = JSON.parse(readFileSync(aPath, 'utf8'))
   const b = JSON.parse(readFileSync(bPath, 'utf8'))
-  const byName = new Map(a.results.map((r) => [r.name, r.metrics]))
-  console.log('entry | Δfindings | Δcomments | Δnit% | Δgen-path | Δprecision | Δrecall')
+  const byName = new Map(a.results.map((r) => [r.name, r]))
+  console.log('entry | Δfindings | Δcomments | Δnit% | Δgen-path | Δprecision | Δrecall | stalled')
   for (const r of b.results) {
-    const m0 = byName.get(r.name)
+    const stalled = r.stalled === true || r.exitCode !== 0 ? 'yes' : 'no'
+    const m0 = byName.get(r.name)?.metrics
     const m1 = r.metrics
     if (!m0) {
       console.log(`${r.name} | new entry`)
@@ -192,7 +195,7 @@ function compare(aPath, bPath) {
       `${r.name} | ${m1.findings - m0.findings} | ${m1.comments - m0.comments} | ` +
         `${d('nitShare')} | ${m1.generatedPathComments - m0.generatedPathComments} | ` +
         `${m1.precision !== undefined && m0.precision !== undefined ? d('precision') : '-'} | ` +
-        `${m1.recall !== undefined && m0.recall !== undefined ? d('recall') : '-'}`,
+        `${m1.recall !== undefined && m0.recall !== undefined ? d('recall') : '-'} | ${stalled}`,
     )
   }
 }
