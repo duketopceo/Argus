@@ -24,6 +24,13 @@
 </details>
 
 <details>
+<summary>○ 1 nit - consolidated</summary>
+
+- `docs/setup.md`:L6 - The AWS documentation example access key gets copied verbatim; use `AWS_ACCESS_KEY_ID=<your-access-key-id>` to remove the key-shaped literal.
+
+</details>
+
+<details>
 <summary>Spend ledger</summary>
 
 **Code review:** deepseek/deepseek-v4.1-flash · 5072 tokens · $0.000739

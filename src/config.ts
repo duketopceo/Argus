@@ -286,6 +286,12 @@ export interface Config {
     lowRiskModel: string | undefined
     findingThreshold: number
     requestChanges: boolean
+    /**
+     * `nitsInline` posts nit-severity findings as individual inline review
+     * comments. Default false: nits consolidate into the sticky comment's
+     * fold instead — inline volume stays limited to actionable severities.
+     */
+    nitsInline: boolean
     profiles: ReviewProfile[]
     /**
      * Glob list of changed paths kept out of the review input. A configured
@@ -485,6 +491,7 @@ const defaults: Config = {
     lowRiskModel: undefined,
     findingThreshold: 1.0,
     requestChanges: true,
+    nitsInline: false,
     profiles: [],
     instructions: [],
     rules: [...REVIEW_RULE_IDS],
@@ -563,6 +570,22 @@ export function resolveMaxComments(
     return Number(raw)
   }
   return config.review.maxComments
+}
+
+/**
+ * Inline nits: `ARGUS_NITS_INLINE` (the action's `nits-inline` input)
+ * wins when it parses as '1'/'true'/'0'/'false' — it's set by the
+ * workflow author, so an untrusted PR config can't reach it (`review`
+ * isn't on the untrusted allowlist). Anything else → `review.nitsInline`.
+ */
+export function resolveNitsInline(
+  env: Record<string, string | undefined>,
+  config: Config,
+): boolean {
+  const raw = env.ARGUS_NITS_INLINE?.trim().toLowerCase()
+  if (raw === '1' || raw === 'true') return true
+  if (raw === '0' || raw === 'false') return false
+  return config.review.nitsInline
 }
 
 /**
@@ -677,6 +700,7 @@ export function resolveConfig(input: ConfigInput = {}): Config {
   // Advisory-only escape hatch — only literal `false` opts out; anything
   // else (mis-typed values included) keeps the default-true posture.
   review.requestChanges = review.requestChanges !== false
+  review.nitsInline = review.nitsInline === true
   // Unknown profile names are rejected at config load — a typo silently
   // disabling a lens is worse than dropping it. Non-array input means the
   // field was mis-typed entirely and also drops to the empty default.

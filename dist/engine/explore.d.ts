@@ -8,7 +8,7 @@ import { Ledger } from '../vision/ledger.js';
 import { ExploreAction } from './prompts.js';
 import type { VisionClient } from './loop.js';
 export type ExploreStopReason = 'done' | 'max-steps' | 'budget' | 'stalled' | 'error' | 'expectation' | 'timeout';
-export interface ExploreStep {
+interface ExploreStep {
     action: string;
     /** Page URL after the act. */
     url: string;
@@ -76,3 +76,4 @@ export declare function runExplore(opts: ExploreOptions): Promise<ExploreResult>
  * nothing usable can be recovered — the caller counts it as a step.
  */
 export declare function parseExploreAction(content: string): ExploreAction | undefined;
+export {};

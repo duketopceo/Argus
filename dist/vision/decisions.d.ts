@@ -1,5 +1,5 @@
 import { type ErrorCode } from '../ui/errors.js';
-import type { CallCost, ProviderValue } from './cost.js';
+import type { CallCost } from './cost.js';
 /**
  * Pinned confidence-model slug — the alias `~typesafe/jev-latest` drifts silently and
  * adjudication thresholds are calibrated to a version. The alias stays
@@ -17,20 +17,20 @@ export declare class DecisionError extends Error {
     /** CLI error class (src/ui/errors.ts) when the failure has one: key, credit, rate, provider. */
     code?: ErrorCode | undefined, retryAfterSeconds?: number | undefined);
 }
-export interface NoulQuestion {
+interface NoulQuestion {
     type: 'noul';
     instructions: string;
     /** Optional yes/no clarifications, sent verbatim. */
     true?: string;
     false?: string;
 }
-export interface ChoiceQuestion {
+interface ChoiceQuestion {
     type: 'choice';
     instructions: string;
     /** Option ID -> description. Up to 255 options. */
     criteria: Record<string, string>;
 }
-export interface ScoreQuestion {
+interface ScoreQuestion {
     type: 'score';
     instructions: string;
     /** 2-10 ordered rubric levels, low to high. */
@@ -98,4 +98,4 @@ export declare class DecisionClient {
         model: string;
     }>;
 }
-export type { ProviderValue };
+export {};

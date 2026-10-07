@@ -8,15 +8,15 @@ export interface CallCost {
   kind: CallKind
 }
 
-export interface ChoiceMessage {
+interface ChoiceMessage {
   content?: unknown
 }
 
-export interface Choice {
+interface Choice {
   message?: ChoiceMessage
 }
 
-export interface Usage {
+interface Usage {
   total_tokens: number
   cost: number
   cost_details: {
@@ -24,7 +24,7 @@ export interface Usage {
   }
 }
 
-export type ProviderValue = string | { name?: string } | undefined
+type ProviderValue = string | { name?: string } | undefined
 
 export interface OpenRouterResponse {
   id: string
@@ -71,15 +71,5 @@ export function makeDecisionsCallCost(response: DecisionsResponse, kind: CallKin
     tokens: (Number(usage.input_tokens) || 0) + (Number(usage.output_tokens) || 0),
     costUsd: Number(usage.cost) || 0,
     kind,
-  }
-}
-
-export function extractUsageCost(response: OpenRouterResponse): {
-  costUsd: number
-  upstreamCostUsd: number
-} {
-  return {
-    costUsd: response.usage.cost,
-    upstreamCostUsd: response.usage.cost_details.upstream_inference_cost,
   }
 }

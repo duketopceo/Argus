@@ -1,0 +1,71 @@
+name: dogfood corpus eval
+
+# Weekly replay of merged PRs from sibling repos through the eval harness.
+# Runs the harness from the checked-out default branch, so each run measures
+# the *current* review code — no action pin to drift stale. The run JSON +
+# per-entry code-review reports are uploaded as artifacts; per-repo tallies
+# land in the step summary. Feeds corpus curation: entries whose findings
+# look wrong graduate into eval-corpus.argus.json as regression fixtures.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # The shared repo cache can't take two runs racing on .git/shallow.
+  group: dogfood-corpus
+
+jobs:
+  dogfood:
+    runs-on: [self-hosted, linux, x64, argus-reviewer]
+    # Six full reviews; healthy per-entry runs are ~1-2 min, but the
+    # per-entry cap is 15min - worst case is ~90min of reviews alone.
+    timeout-minutes: 120
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Build the CLI under eval
+        run: |
+          npm ci
+          npm run build
+
+      - name: Replay the dogfood corpus
+        run: |
+          node scripts/review-eval.mjs run \
+            --corpus scripts/eval-corpus.dogfood.json \
+            --tag "dogfood-$(date +%Y%m%d-%H%M)" \
+            --cache "$RUNNER_TEMP/argus-eval-repos"
+
+      - name: Tally per-repo results
+        run: |
+          latest=$(ls -t docs/audits/eval/dogfood-*.json | head -1)
+          {
+            echo '## Dogfood corpus tally'
+            echo
+            node scripts/review-eval.mjs tally "$latest"
+            echo
+            echo "run file: \`$latest\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload eval artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dogfood-eval-${{ github.run_id }}
+          path: |
+            docs/audits/eval/dogfood-*.json
+            docs/audits/eval/reports/
+          retention-days: 90

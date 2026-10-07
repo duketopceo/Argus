@@ -56,7 +56,7 @@ export interface LinkedFinding {
   evidence: Evidence
 }
 
-export type ProbeReportOutcome = 'reproduced' | 'clean' | 'load-error' | 'not-collected' | 'error'
+type ProbeReportOutcome = 'reproduced' | 'clean' | 'load-error' | 'not-collected' | 'error'
 
 export interface ProbeRecord {
   /** Probe filename (basename — it is written beside the exemplar test). */

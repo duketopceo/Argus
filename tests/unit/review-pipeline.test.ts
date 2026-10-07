@@ -57,6 +57,7 @@ describe('finding validation', () => {
       base: { 'src/a.ts': lines(5) },
       head: { 'src/a.ts': lines(5).replace('line 2', 'LINE 2') },
       client,
+      config: { review: { rules: [] } },
     })
     expect(r.report.findings.map((x: { message: string }) => x.message)).toEqual(['L2: real'])
     expect(r.report.validation.dropped).toBe(2)
@@ -68,7 +69,11 @@ describe('finding validation', () => {
     const client = new ScriptedClient([
       reply([{ file: 'src/ghost.ts', line: 1, severity: 'bug', category: 'correctness', message: 'L1: ghost' }]),
     ])
-    const r = await runReview({ head: { 'src/a.ts': 'x\n' }, client })
+    const r = await runReview({
+      head: { 'src/a.ts': 'x\n' },
+      client,
+      config: { review: { rules: [] } },
+    })
     expect(r.report.findings).toHaveLength(0)
     expect(r.report.verdict).toBe('pass')
   })

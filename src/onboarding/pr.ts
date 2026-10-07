@@ -19,7 +19,7 @@ import { CliError } from '../ui/errors.js'
 import { renderPrBody, validateBranch } from './pr-content.js'
 import { renderScaffold, type ScaffoldFile } from './scaffold.js'
 
-export { DEFAULT_BRANCH, renderPrBody, validateBranch, validateRepo, type PrBodyInput } from './pr-content.js'
+export { DEFAULT_BRANCH, renderPrBody, validateBranch, validateRepo } from './pr-content.js'
 
 const CONFIG_NAMES = [
   'argus-reviewer.config.ts',
@@ -31,7 +31,7 @@ const SHORT_MS = 30_000
 const NET_MS = 120_000
 
 /** owner/name from a GitHub remote URL (ssh, https, with or without .git). */
-export function parseGithubRemote(url: string): string | undefined {
+function parseGithubRemote(url: string): string | undefined {
   const m = url.trim().match(/github\.com[:/]([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?\/?$/)
   return m?.[1]
 }

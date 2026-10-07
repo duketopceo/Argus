@@ -1,0 +1,122 @@
+{
+  "ok": true,
+  "skipped": false,
+  "summary": "1 low-severity finding(s)",
+  "verdict": "approve",
+  "findings": [
+    {
+      "file": "api/types.go",
+      "line": 614,
+      "severity": "q",
+      "category": "other",
+      "message": "L614: ❓ q: int conversion may truncate on 32-bit if env var exceeds 2^31-1. Confirm `envconfig.ContextLength()` returns a uint and the cast is always safe (max plausible value is well under int max).",
+      "p": 0.43,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [
+    {
+      "path": "api/types.go",
+      "line": 614,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n□ **question** · ▰▱▱▱ suspected\nint conversion may truncate on 32-bit if env var exceeds 2^31-1. Confirm `envconfig.ContextLength()` returns a uint and the cast is always safe (max plausible value is well under int max).",
+      "dedupKey": "api/types.go:614:q:int conversion may truncate on 32-bit if env var exceeds 2^31-1. Confirm `envconfig.ContextLength()` returns a uint and the cast is always safe (max plausible value is well under int max).:00001505"
+    }
+  ],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async"
+    ],
+    "records": [],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 2671,
+    "needsDeepReview": 0.65,
+    "risk": 1.95,
+    "topRiskArea": "ops",
+    "topRiskAreaConfidence": 0.86
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "api/types.go",
+        "line": 614,
+        "severity": "q",
+        "category": "other",
+        "message": "L614: ❓ q: int conversion may truncate on 32-bit if env var exceeds 2^31-1. Confirm `envconfig.ContextLength()` returns a uint and the cast is always safe (max plausible value is well under int max).",
+        "adjudicated": true,
+        "p": 0.43
+      }
+    ],
+    "overflow": 0
+  },
+  "scope": {
+    "totalFiles": 4,
+    "reviewedFiles": 4,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1677,
+      "costUsd": 0.00006678,
+      "kind": "decide"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 1728,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 692,
+      "costUsd": 0.00002814,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.00009491999999999999,
+  "tokens": 4097,
+  "model": "deepseek/deepseek-v4-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "09f15872d92531f5b41caa51e9b1547eeb7ab694",
+    "checkoutSha": "09f15872d92531f5b41caa51e9b1547eeb7ab694",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "09f15872d92531f5b41caa51e9b1547eeb7ab694",
+  "diffRange": {
+    "base": "f53f4198c36d0a943de598ad91a20baa9481c5c5",
+    "baseSha": "ed443a03930a10bec6182c55091f0880baa1e620",
+    "headSha": "09f15872d92531f5b41caa51e9b1547eeb7ab694"
+  }
+}

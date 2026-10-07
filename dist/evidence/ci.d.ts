@@ -92,8 +92,6 @@ export interface CompareFilesResult {
  * reachable from this repo) — callers fail closed to a full diff.
  */
 export declare function fetchCompare(repo: string, base: string, head: string, token: string, ctx: Ctx): Promise<CompareFilesResult | undefined>;
-/** The commit-status context the action posts on every reviewed head. */
-export declare const REVIEW_STATUS_CONTEXT = "argus-reviewer";
 /**
  * Whether an Argus commit status exists on `sha` — the API-verifiable half
  * of the U4 baseline check. A stored SHA in a sticky comment is attacker-

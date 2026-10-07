@@ -26,7 +26,7 @@ const CONFIG_NAMES = [
 const SHORT_MS = 30_000;
 const NET_MS = 120_000;
 /** owner/name from a GitHub remote URL (ssh, https, with or without .git). */
-export function parseGithubRemote(url) {
+function parseGithubRemote(url) {
     const m = url.trim().match(/github\.com[:/]([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?\/?$/);
     return m?.[1];
 }

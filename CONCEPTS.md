@@ -38,3 +38,12 @@ A defect deliberately introduced into a ground-truth fixture at a recorded locat
 
 ### Judge
 The per-finding LLM scorer used by the eval harness; it reads a finding against the item's actual diff and scores whether it is real, correctly located, correctly severitied, and actionable.
+
+### Replay corpus entry
+A `{name, repo, base, head, labels}` record replayed by `scripts/review-eval.mjs` — a different surface from the judge-scored corpus (`evals/`): replays run the production `code-review` path in a temp worktree and measure metrics (findings, nit share, labeled precision/recall) rather than per-finding judged quality. `repo` is a local path or https URL; `base`/`head` are exact SHAs (40-hex required for remote entries).
+
+### Stalled entry
+A corpus entry whose review never completed — fetch/worktree/exec failure, nonzero exit, or a missing report — recorded as a result with `stalled: true` rather than aborting the corpus. Distinct from a clean-exit skip (no diff, all files excluded), which renders as `skipped`; both mean the entry reviewed nothing, and a run where every entry is stall-or-skip class fails `tally` nonzero.
+
+### Drift commit
+A dataset commit field describing branch state at capture time rather than the reviewable object — e.g. AACR-Bench's `pr_target_commit`, the target-branch tip at capture, not the PR head. Using one as a diff anchor produces a plausibly-shaped but wrong diff (hundreds of unrelated commits); corpus builders must resolve reviewable heads against the live API.

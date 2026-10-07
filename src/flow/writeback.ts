@@ -27,7 +27,7 @@ interface Ctx {
  */
 
 /** Per-step healed record pair — `before` is what the session loaded. */
-export interface HealedStep {
+interface HealedStep {
   index: number
   before: FingerprintRecord
   after: FingerprintRecord

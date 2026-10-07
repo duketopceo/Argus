@@ -1,5 +1,4 @@
 import { LANE_IDS } from '../report/manifest.js';
-export { LANE_IDS };
 export function defaultLaneSelection() {
     return { review: true, flow: false, app: false, a0: false };
 }

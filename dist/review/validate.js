@@ -6,7 +6,7 @@
  * report so the drop is never silent.
  */
 /** Lines of slack around a hunk: models are often off by a line or two. */
-export const HUNK_TOLERANCE = 2;
+const HUNK_TOLERANCE = 2;
 const MAX_EXAMPLES = 10;
 const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 export function parseHunks(patch) {

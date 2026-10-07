@@ -35,7 +35,7 @@ export interface TestReport {
      */
     captures?: PageCapture[];
 }
-export interface RunTotals {
+interface RunTotals {
     tests: number;
     passed: number;
     failed: number;
@@ -111,3 +111,4 @@ exploreEvidence?: boolean,
  */
 runNonce?: string): RunReport;
 export declare function writeRunReport(path: string, report: RunReport): Promise<void>;
+export {};

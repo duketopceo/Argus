@@ -13,8 +13,6 @@ import { type ExecFn } from '../detect.js';
  */
 /** Output cap per stream — probe output is attacker-controlled. */
 export declare const SANDBOX_OUTPUT_CAP: number;
-/** Filesystem path inside the container where the workspace lands. */
-export declare const CONTAINER_WORKDIR = "/work";
 /** Name of the single writable mount — lives under reportDir/probes-out. */
 export declare const SCRATCH_DIR_NAME = "probes-out";
 export interface SandboxRunOptions {

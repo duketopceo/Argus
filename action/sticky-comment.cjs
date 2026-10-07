@@ -10,81 +10,42 @@ let github
 let context
 let core
 
-const SENTINEL = '<!-- argus-reviewer -->'
-
-function formatUsd(n) {
-  return `$${(n || 0).toFixed(6)}`
-}
-
-/** Escape a report string for one markdown table cell — and mask
- *  secret-shaped tokens so a leaked credential never reaches a PR comment. */
-const SECRET_PATTERNS = [
-  /sk-or-[A-Za-z0-9_-]{4,}/g,
-  /sk-[A-Za-z0-9_-]{8,}/g,
-  /gh[pousr]_[A-Za-z0-9_]{8,}/g,
-  /github_pat_[A-Za-z0-9_]{8,}/g,
-  /xox[baprs]-[A-Za-z0-9-]{8,}/g,
-  /AKIA[A-Z0-9]{16}/g,
-  /npm_[A-Za-z0-9]{8,}/g,
-  /Bearer\s+[A-Za-z0-9._~+/=-]{10,}/gi,
-  /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/g,
-  /:\/\/[^/\s:@]{1,64}:[^/\s:@]{6,}@/g,
-]
-
-function maskSecrets(s) {
-  let out = s
-  for (const re of SECRET_PATTERNS) out = out.replace(re, '•••')
-  return out
-}
-
-function cell(s, max = 200) {
-  return maskSecrets(
-    String(s ?? '')
-      .replace(/\|/g, '\\|')
-      .replace(/[\r\n]+/g, ' '),
-  ).slice(0, max)
-}
-
-/** Inline code span around a cell-safe string. The fence is one backtick
- *  longer than any run inside, so report text cannot close it early. */
-function code(s) {
-  const t = cell(s)
-  const longest = Math.max(0, ...(t.match(/`+/g) ?? []).map((r) => r.length))
-  const fence = '`'.repeat(longest + 1)
-  const pad = t.startsWith('`') || t.endsWith('`') ? ' ' : ''
-  return `${fence}${pad}${t}${pad}${fence}`
-}
-
-function plural(n, one, many = `${one}s`) {
-  return `${n} ${n === 1 ? one : many}`
-}
+// Shared render/parse helpers bundled from src/ by `npm run build:parity`
+// (action/parity-entry.mjs -> action/parity.cjs). Never edit the copies —
+// change src/ and rebuild; check:parity fails on a stale bundle.
+const {
+  SENTINEL,
+  formatUsd,
+  maskSecrets,
+  cell,
+  code,
+  plural,
+  STATUS_GLYPH,
+  PROOF_LEVELS,
+  SEVERITY_GLYPH,
+  SEVERITY_LABEL,
+  VERDICT_STATUS,
+  VERDICT_LABEL,
+  proofMeter,
+  findingsOf,
+  laneProof,
+  reproducedCount,
+  verdictLead,
+  manifestDuration,
+  LANE_IDS: MANIFEST_LANE_ORDER,
+  INLINE_SENTINEL,
+  normalizeFindingMessage,
+  parseInlineBody,
+  isArgusInlineBody,
+  shortHash,
+  extractSuggestion,
+  inlineDedupKey,
+  sanitizeCommentText,
+} = require('./parity.cjs')
 
 function formatDuration(ms) {
   if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return undefined
   return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`
-}
-
-// --- Ocellus vocabulary (DESIGN.md 6.7) --------------------------------------
-// This file's own copy of the src/report/viewmodel.ts vocabulary (plan KTD2):
-// the action loads it with require() and no build step. The comment-golden
-// parity test pins both copies equal.
-const STATUS_GLYPH = {
-  passed: '●',
-  failed: '⊘',
-  skipped: '–',
-  blocked: '⊖',
-  unavailable: '◌',
-  inconclusive: '◐',
-}
-const PROOF_LEVELS = ['suspected', 'corroborated', 'exercised', 'reproduced']
-const SEVERITY_GLYPH = { bug: '◆', risk: '◈', nit: '○', q: '□' }
-const SEVERITY_LABEL = { bug: 'bug', risk: 'risk', nit: 'nit', q: 'question' }
-const VERDICT_STATUS = { approve: 'passed', needs_changes: 'failed', pass: 'passed' }
-const VERDICT_LABEL = { approve: 'approve', needs_changes: 'needs changes', pass: 'clean' }
-
-function proofMeter(level) {
-  const filled = PROOF_LEVELS.indexOf(level ?? '') + 1
-  return '▰'.repeat(filled) + '▱'.repeat(PROOF_LEVELS.length - filled)
 }
 
 /** Status is always glyph plus lowercase word (R2). */
@@ -104,34 +65,10 @@ function ladderLevel(status) {
   return PROOF_LEVELS.includes(status) ? status : 'suspected'
 }
 
-function findingsOf(codeReview) {
-  return codeReview && Array.isArray(codeReview.findings) ? codeReview.findings : []
-}
-
 /** Strongest proof any finding reached; a review with no evidence is a suspicion. */
-function bestFindingProof(codeReview) {
-  let best = 0
-  for (const f of findingsOf(codeReview)) {
-    best = Math.max(best, PROOF_LEVELS.indexOf(f.evidence?.status))
-  }
-  return PROOF_LEVELS[best]
-}
 
 /** How far a lane's result is proven (A4). a0 is self-reported, the browser
  *  lanes exercise the app, the review is as strong as its best evidence. */
-function laneProof(lane, status, codeReview) {
-  if (status === 'skipped') return null
-  if (status === 'blocked' || status === 'unavailable') return 'none'
-  if (status === 'inconclusive' || lane === 'a0') return 'suspected'
-  if (lane === 'review') return bestFindingProof(codeReview)
-  return 'exercised'
-}
-
-// --- run-manifest lanes -------------------------------------------------------
-// The manifest is the shared evidence contract (R15): these labels/statuses/
-// costs/head fields must stay identical to the TUI and dashboard rendering —
-// the parity contract test enforces it.
-const MANIFEST_LANE_ORDER = ['review', 'flow', 'app', 'a0']
 
 // The commit-status surface validates at least as strictly as the display
 // surfaces (viewmodel.isRunManifest / collect.validManifest) — this file is
@@ -206,12 +143,6 @@ function manifestLaneRows(manifest, codeReview) {
   })
 }
 
-function reproducedCount(codeReview) {
-  return typeof codeReview.provenBlockers === 'number'
-    ? codeReview.provenBlockers
-    : findingsOf(codeReview).filter((f) => f.evidence?.status === 'reproduced').length
-}
-
 /** Review-lane row synthesized from code-review.json when no manifest exists.
  *  A missing report means the review step crashed: failed, never skipped. */
 function reviewLaneRow(codeReview) {
@@ -283,31 +214,6 @@ function headline(ok, aggregateStatus, codeReview) {
 }
 
 /** Bold lead of the verdict line: the one fact a reader needs first. */
-function verdictLead(rows, codeReview) {
-  const findings = findingsOf(codeReview)
-  const reviewed = codeReview && !codeReview.skipped
-  if (reviewed) {
-    const reproduced = reproducedCount(codeReview)
-    if (reproduced > 0) {
-      const files = new Set(
-        findings.filter((f) => f.evidence?.status === 'reproduced').map((f) => f.file),
-      )
-      const where = files.size === 1 ? ` in ${code([...files][0])}` : ''
-      return `**${plural(reproduced, 'finding')} reproduced**${where}`
-    }
-  }
-  const failing = rows.filter((r) => r.lane !== 'review' && !['passed', 'skipped'].includes(r.status))
-  if (failing.length > 0) {
-    return `**${failing.map((r) => `${cell(r.lane)} ${r.status}`).join(', ')}**`
-  }
-  if (reviewed && findings.length > 0) return `**${plural(findings.length, 'finding')}, none reproduced**`
-  const review = rows.find((r) => r.lane === 'review')
-  if (review !== undefined && !['passed', 'skipped'].includes(review.status)) {
-    return `**review ${review.status}**`
-  }
-  if (reviewed) return '**No findings**'
-  return rows.some((r) => r.status !== 'skipped') ? '**All selected lanes passed**' : '**No lane ran**'
-}
 
 function verdictLine({ rows, codeReview, headSha, binding, costUsd, durationMs }) {
   const bits = [verdictLead(rows, codeReview)]
@@ -355,6 +261,20 @@ function findingsLine(codeReview, missing = NO_REVIEW_REPORT) {
     ? codeReview.reviewComments.filter((c) => extractSuggestion(c.body ?? '') !== '').length
     : findings.filter((f) => typeof f.suggestion === 'string' && f.suggestion !== '').length
   if (suggestions > 0) parts.push(`${plural(suggestions, 'suggestion')} ready to commit`)
+  // Generated-specs summary (mirrors src/report/comment.ts findingsLine) —
+  // without this segment an Argus-generated-specs run reports different
+  // text on the action surface than the reference renderer.
+  const gen = codeReview.generated
+  if (gen && Array.isArray(gen.records) && gen.records.length > 0) {
+    const committed = gen.records.filter((r) => r.status === 'committed').length
+    const drafts = gen.records.length - committed
+    parts.push(
+      gen.prUrl !== undefined
+        ? `${plural(committed, 'generated spec')} -> [review PR](${cell(gen.prUrl, 400)})` +
+            (drafts > 0 ? `, ${drafts} draft${drafts === 1 ? '' : 's'}` : '')
+        : `${plural(gen.records.length, 'generated spec')} (no PR opened)`,
+    )
+  }
   return parts.join(' · ')
 }
 
@@ -390,7 +310,7 @@ const COMMENT_BUDGET_BYTES = 20 * 1024
 
 /** Fold keys in the order they collapse when a body is over budget (KTD12),
  *  then the remaining folds so the post never fails on length (R10). */
-const COLLAPSE_ORDER = ['diagnostics', 'spend', 'heals', 'findings', 'explore', 'tests']
+const COLLAPSE_ORDER = ['diagnostics', 'nits', 'spend', 'heals', 'findings', 'explore', 'tests']
 
 /** One-line pointer that replaces a collapsed fold. Lines in `keep` (the
  *  hidden `@argus persist` payload) survive the collapse. */
@@ -470,10 +390,12 @@ function findingsFold(codeReview, inlinePlan) {
       const where = typeof f.line === 'number' ? `${f.file}:${f.line}` : f.file
       // An inconclusive link says the same thing on every row; Diagnostics states it once.
       const evidence =
-        f.evidence?.detail && f.evidence.status !== 'inconclusive' ? `<br>evidence: ${cell(f.evidence.detail)}` : ''
+        f.evidence?.detail && f.evidence.status !== 'inconclusive'
+          ? `<br>evidence: ${cell(sanitizeCommentText(f.evidence.detail))}`
+          : ''
       body.push(
         `| ${severityText(f.severity)} | ${proofText(level)} | ${p} | ${cell(f.category ?? '')} | ` +
-          `${code(where)} | ${cell(f.message)}${evidence} |`,
+          `${code(where)} | ${cell(sanitizeCommentText(f.message))}${evidence} |`,
       )
     }
     if (findings.length > MAX_FINDING_ROWS) {
@@ -544,6 +466,34 @@ function findingsEntry(codeReview, inlinePlan) {
     findingsFold(codeReview, inlinePlan),
     { key: 'findings', keep: payload !== undefined ? [payload] : [] },
   ]
+}
+
+// Consolidated nit listing — rendered only when `review.nitsInline` kept
+// nits out of inline comments (default). Capped; overflow stays counted.
+// normalizeFindingMessage strips the embedded `L<n>: <sev>:` contract
+// prefix so the fold's own `:L<n>` label isn't duplicated.
+function nitsFold(codeReview) {
+  // !== false: only a serialized nitsInline:false opts into the fold —
+  // reports predating the field already posted their nits inline (the
+  // documented argus-version pin can pair an older CLI with this poster).
+  if (!codeReview || codeReview.nitsInline !== false) return []
+  const nits = findingsOf(codeReview).filter((f) => f.severity === 'nit')
+  if (nits.length === 0) return []
+  const shown = nits.slice(0, 15)
+  const body = shown.map(
+    (f) =>
+      `- ${code(f.file)}${typeof f.line === 'number' ? `:L${f.line}` : ''} - ${cell(sanitizeCommentText(normalizeFindingMessage(f.message ?? '')), 160)}`,
+  )
+  if (nits.length > shown.length)
+    body.push(`- +${nits.length - shown.length} more in code-review.json (argus-reviewer-report artifact)`)
+  return body
+}
+
+// Nit fold entry for layout() — the title count and the body share the
+// same nit set (see findingsEntry for the tuple pattern).
+function nitsEntry(codeReview) {
+  const nits = findingsOf(codeReview).filter((f) => f.severity === 'nit')
+  return [`${SEVERITY_GLYPH.nit} ${plural(nits.length, 'nit')} - consolidated`, nitsFold(codeReview), { key: 'nits' }]
 }
 
 function assertionStatus(verdict) {
@@ -836,11 +786,6 @@ function renderManifestLanes(manifest, codeReview) {
   return laneTable(manifestLaneRows(manifest, codeReview))
 }
 
-function manifestDuration(manifest) {
-  const ms = Date.parse(manifest.finishedAt) - Date.parse(manifest.startedAt)
-  return Number.isFinite(ms) ? ms : undefined
-}
-
 /**
  * Manifest-only body: a verify run whose lanes produced no run.json
  * (review-only, or a flow lane that never reached the browser). The
@@ -863,6 +808,7 @@ function renderManifestBody(manifest, codeReview, runUrl, meta = {}) {
     summary: findingsLine(codeReview, NO_REVIEW_ATTACHED),
     folds: [
       findingsEntry(codeReview, undefined),
+      nitsEntry(codeReview),
       ['Spend ledger', spendFold(manifest, undefined, codeReview), { key: 'spend' }],
       ['Diagnostics', diagnosticsFold(manifest, undefined, codeReview), { key: 'diagnostics' }],
     ],
@@ -894,6 +840,7 @@ function renderBody(report, codeReview, runUrl, ok, inlinePlan, manifest, meta =
     summary: findingsLine(codeReview),
     folds: [
       findingsEntry(codeReview, inlinePlan),
+      nitsEntry(codeReview),
       [`Tests (${report.tests?.length ?? 0})`, testsFold(report), { key: 'tests' }],
       [`Heals (${heals.length}): review before merging`, healsFold(heals), { key: 'heals' }],
       ['Exploratory', exploreFold(report), { key: 'explore' }],
@@ -926,6 +873,7 @@ function renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan, manifest, meta
     summary: findingsLine(codeReview),
     folds: [
       findingsEntry(codeReview, inlinePlan),
+      nitsEntry(codeReview),
       ['Spend ledger', spendFold(manifest, undefined, codeReview), { key: 'spend' }],
       ['Diagnostics', diagnosticsFold(manifest, undefined, codeReview), { key: 'diagnostics' }],
     ],
@@ -1140,79 +1088,22 @@ async function reportWriteFailure(what, e, scope) {
 
 /** djb2 → 8 hex chars. Must match shortHash() in src/review/inline.ts — the
  *  CLI's dedupKey suffix is this hash over the raw suggestion text. */
-function shortHash(s) {
-  let h = 5381
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
-  return (h >>> 0).toString(16).padStart(8, '0')
-}
 
 /** Pull the fenced ```` ```suggestion ```` block out of a posted comment body.
  *  The CLI's fence is longest-backtick-run+1 (min 4), so a run of exactly the
  *  fence's length can only appear as the closing fence — the backreference is
  *  safe against interior ``` runs. */
-function extractSuggestion(body) {
-  const m = /\r?\n(`{4,})suggestion\r?\n([\s\S]*?)\r?\n\1/.exec(body)
-  return m === null ? '' : m[2]
-}
-
-// --- inline comment identity (plan KTD4) --------------------------------------
-// This file's copy of src/review/inline.ts (KTD2); the action-contract parity
-// test pins both equal. A legacy body (`**argus-reviewer <sev>:** <msg>`) and
-// an Ocellus body (sentinel, `<glyph> **<sev>** · <proof>`, message) key to
-// the same value for the same finding, so an upgrade never re-posts.
-const INLINE_SENTINEL = '<!-- argus-reviewer:inline -->'
-const LEGACY_PREFIX = '**argus-reviewer'
-const LEGACY_LINE = /^\*\*argus-reviewer ([^:*]+):\*\* ?(.*)$/
-const SEVERITY_LINE = /^(?:\S+ )?\*\*([^*]+)\*\* · /
-const CATEGORY_SUFFIX = /\s*`(?:correctness|security|performance|usability|convention|other)`$/
-const MESSAGE_PREFIX = /^(?:L\d+(?:-\d+)?:|\p{Extended_Pictographic}\u{FE0F}?|(?:bug|risk|nit|q|question):)\s*/iu
-const LABEL_TO_SEVERITY = new Map(Object.entries(SEVERITY_LABEL).map(([s, label]) => [label, s]))
 
 /** Strip the model's `L<n>: <emoji> <sev>:` prefix so the sentence leads. */
-function normalizeFindingMessage(message) {
-  let out = message.trim()
-  for (let i = 0; i < 4; i++) {
-    const next = out.replace(MESSAGE_PREFIX, '')
-    if (next === out) break
-    out = next
-  }
-  return out
-}
-
-function keyMessage(message) {
-  return normalizeFindingMessage(message.replace(CATEGORY_SUFFIX, '')).replace(/\s+/g, ' ').trim()
-}
 
 /** Severity and message of an Argus inline comment in either format. */
-function parseInlineBody(body) {
-  const lines = body.split(/\r?\n/)
-  if (body.startsWith(LEGACY_PREFIX)) {
-    const m = LEGACY_LINE.exec(lines[0] ?? '')
-    if (m === null) return undefined
-    return { severity: m[1].trim(), message: keyMessage(m[2]) }
-  }
-  if (lines[0] === INLINE_SENTINEL) {
-    const m = SEVERITY_LINE.exec(lines[1] ?? '')
-    if (m === null) return undefined
-    const word = m[1].trim()
-    return { severity: LABEL_TO_SEVERITY.get(word) ?? word, message: keyMessage(lines[2] ?? '') }
-  }
-  return undefined
-}
 
 /** Argus's own inline comment: the legacy prefix or the sentinel, at the very start. */
-function isArgusInlineBody(body) {
-  return body.startsWith(LEGACY_PREFIX) || body.startsWith(INLINE_SENTINEL)
-}
 
 /** KTD4 key `path:line:severity:normalizedMessage:hash8(suggestion)`, rebuilt
  *  from a posted body; identical to the key the CLI serialized. */
 function postedDedupKey(c) {
-  const body = c.body ?? ''
-  const parsed = parseInlineBody(body)
-  const hash = shortHash(extractSuggestion(body))
-  if (parsed === undefined) return `${c.path}:${c.line}:${body.split('\n')[0]}:${hash}`
-  return `${c.path}:${c.line}:${parsed.severity}:${parsed.message}:${hash}`
+  return inlineDedupKey(c.path, c.line, c.body ?? '')
 }
 
 /** Fetch every page of a list endpoint (100/page, octokit shape). */
@@ -1306,7 +1197,12 @@ async function planInlineComments(pr, codeReview) {
     // normalized message, hash of the embedded suggestion), so a re-run with
     // a corrected suggestion posts the fix instead of colliding.
     const posted = new Set()
-    const existing = await listAll((p) => github.rest.pulls.listReviewComments(p), prRef)
+    // Dedup + live-diff validation read independent API surfaces — one
+    // round trip saved by fetching both up front.
+    const [existing, files] = await Promise.all([
+      listAll((p) => github.rest.pulls.listReviewComments(p), prRef),
+      listAll((p) => github.rest.pulls.listFiles(p), prRef),
+    ])
     for (const c of existing) {
       if (c.commit_id === pr.head.sha && typeof c.body === 'string' && isArgusInlineBody(c.body)) {
         posted.add(postedDedupKey(c))
@@ -1316,7 +1212,6 @@ async function planInlineComments(pr, codeReview) {
 
     // R8 live-diff validation — the diff is authoritative only at post time;
     // drop anchors that aren't RIGHT-side lines in the current PR diff.
-    const files = await listAll((p) => github.rest.pulls.listFiles(p), prRef)
     const diffLines = new Map()
     for (const f of files) {
       if (typeof f.patch === 'string') diffLines.set(f.filename, rightSideLines(f.patch))

@@ -42,13 +42,17 @@ export interface CodeReviewInput {
     highConfidenceBlockers?: number;
     findings?: {
         file?: string;
+        line?: number;
         severity?: string;
+        message?: string;
         p?: number;
         suggestion?: string;
         evidence?: {
             status?: string;
         };
     }[];
+    /** Echo of `review.nitsInline` — false renders the consolidated nit fold. */
+    nitsInline?: boolean;
     reviewComments?: {
         body?: string;
     }[];
@@ -75,7 +79,7 @@ export interface CodeReviewInput {
     };
 }
 /** The subset of run.json the comment head reads. */
-export type ReportInput = Pick<RunReport, 'ok' | 'durationMs'> & {
+type ReportInput = Pick<RunReport, 'ok' | 'durationMs'> & {
     totals: Pick<RunReport['totals'], 'tests' | 'passed' | 'visionCostUsd'>;
     tests: {
         healEvents?: unknown[];
@@ -98,8 +102,23 @@ export interface LaneRow {
     proof: Proof;
     spend: string;
 }
+/** Cell semantics mirror the action: flatten newlines, escape pipes, mask secrets, cap length. */
+export declare function cell(s: unknown, max?: number): string;
+export declare function code(s: unknown): string;
+export declare const MAX_COMMENT_MESSAGE = 500;
+/**
+ * R5 — model-or-runner-controlled text (message, evidence.detail) landing
+ * in a PR comment body. Collapse to a single line, zero-width-break
+ * backtick/tilde runs of >=3 so a fake ```suggestion block can't ride the
+ * message past the suggestion-side guards, defuse @mentions so findings
+ * can't ping arbitrary users, break `](` markdown links, and neutralize
+ * `</` tags — a `</details>` in fold-rendered text escapes the fold and
+ * injects top-level markdown into the bot's comment.
+ */
+export declare function sanitizeCommentText(s: string): string;
 export declare function plural(n: number, one: string, many?: string): string;
 export declare function findingsOf(cr: CodeReviewInput | undefined): NonNullable<CodeReviewInput['findings']>;
+export declare function bestFindingProof(cr: CodeReviewInput | undefined): ProofLevel;
 export declare function laneProof(lane: LaneId, status: LaneStatus, cr: CodeReviewInput | undefined): Proof;
 export declare function manifestRow(lane: LaneView, cr: CodeReviewInput | undefined): LaneRow;
 export declare function reproducedCount(cr: CodeReviewInput): number;
@@ -129,3 +148,4 @@ export declare function renderManifestComment(manifest: RunManifest, meta: Comme
 export type CheckConclusion = 'success' | 'failure' | 'neutral';
 /** Map a run report (and optional missing-key flag) to a check-run conclusion. */
 export declare function conclusionFromReport(report: RunReport | undefined, missingKey?: boolean): CheckConclusion;
+export {};

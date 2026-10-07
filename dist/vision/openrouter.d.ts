@@ -1,14 +1,14 @@
 import { ProviderRules } from '../config.js';
 import { CallCost, CallKind } from './cost.js';
-export interface TextContentPart {
+interface TextContentPart {
     type: 'text';
     text: string;
 }
-export interface ImageContentPart {
+interface ImageContentPart {
     type: 'image';
     source: string;
 }
-export type ContentPart = TextContentPart | ImageContentPart;
+type ContentPart = TextContentPart | ImageContentPart;
 export interface Message {
     role: 'user' | 'system' | 'assistant';
     content: ContentPart[];
@@ -108,3 +108,4 @@ export declare class OpenRouterClient {
     private _toApiMessages;
     private _extractContent;
 }
+export {};

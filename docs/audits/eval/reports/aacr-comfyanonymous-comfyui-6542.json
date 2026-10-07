@@ -1,0 +1,171 @@
+{
+  "ok": false,
+  "skipped": false,
+  "summary": "3 finding(s) include a blocking severity",
+  "verdict": "needs_changes",
+  "findings": [
+    {
+      "file": "comfy/clip_model.py",
+      "line": 108,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L108: 🔴 bug: `causal_mask` for DirectML uses `-torch.finfo(x.dtype).max` but the else branch uses `float(\"-inf\")`. Both paths must use the same sentinel for correctness. Use `-torch.finfo(x.dtype).max` everywhere.",
+      "p": 0.7,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "comfy/model_management.py",
+      "line": 994,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L994: 🔵 nit: redundant `if directml_enabled: return True / return False`; simplify to `return bool(getattr(g, 'directml_enabled', False))`.",
+      "p": 0.24,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "comfy/model_management.py",
+      "line": 993,
+      "severity": "q",
+      "category": "other",
+      "message": "L993: ❓ q: uses a global `directml_enabled` that is not declared inside the function; is it guaranteed to be in scope? Add `global directml_enabled` or pass it as a parameter.",
+      "p": 0.5,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "request_changes",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 1,
+  "reviewComments": [
+    {
+      "path": "comfy/clip_model.py",
+      "line": 108,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`causal_mask` for DirectML uses `-torch.finfo(x.dtype).max` but the else branch uses `float(\"-inf\")`. Both paths must use the same sentinel for correctness. Use `-torch.finfo(x.dtype).max` everywhere.",
+      "dedupKey": "comfy/clip_model.py:108:bug:`causal_mask` for DirectML uses `-torch.finfo(x.dtype).max` but the else branch uses `float(\"-inf\")`. Both paths must use the same sentinel for correctness. Use `-torch.finfo(x.dtype).max` everywhere.:00001505"
+    },
+    {
+      "path": "comfy/model_management.py",
+      "line": 993,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n□ **question** · ▰▱▱▱ suspected\nuses a global `directml_enabled` that is not declared inside the function; is it guaranteed to be in scope? Add `global directml_enabled` or pass it as a parameter.",
+      "dedupKey": "comfy/model_management.py:993:q:uses a global `directml_enabled` that is not declared inside the function; is it guaranteed to be in scope? Add `global directml_enabled` or pass it as a parameter.:00001505"
+    }
+  ],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async"
+    ],
+    "records": [],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 2233,
+    "needsDeepReview": 0.49,
+    "risk": 1.92,
+    "topRiskArea": "ops",
+    "topRiskAreaConfidence": 0.39
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "comfy/clip_model.py",
+        "line": 108,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L108: 🔴 bug: `causal_mask` for DirectML uses `-torch.finfo(x.dtype).max` but the else branch uses `float(\"-inf\")`. Both paths must use the same sentinel for correctness. Use `-torch.finfo(x.dtype).max` everywhere.",
+        "adjudicated": true,
+        "p": 0.7
+      },
+      {
+        "file": "comfy/model_management.py",
+        "line": 994,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L994: 🔵 nit: redundant `if directml_enabled: return True / return False`; simplify to `return bool(getattr(g, 'directml_enabled', False))`.",
+        "adjudicated": true,
+        "p": 0.24
+      },
+      {
+        "file": "comfy/model_management.py",
+        "line": 993,
+        "severity": "q",
+        "category": "other",
+        "message": "L993: ❓ q: uses a global `directml_enabled` that is not declared inside the function; is it guaranteed to be in scope? Add `global directml_enabled` or pass it as a parameter.",
+        "adjudicated": true,
+        "p": 0.5
+      }
+    ],
+    "overflow": 0
+  },
+  "scope": {
+    "totalFiles": 3,
+    "reviewedFiles": 3,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1393,
+      "costUsd": 0.000054852,
+      "kind": "decide"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 1705,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1300,
+      "costUsd": 0.000052164,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.000107016,
+  "tokens": 4398,
+  "model": "deepseek/deepseek-v4-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "f594ea41f5f42405a87601117c07c31e68ca9a1c",
+    "checkoutSha": "f594ea41f5f42405a87601117c07c31e68ca9a1c",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "f594ea41f5f42405a87601117c07c31e68ca9a1c",
+  "diffRange": {
+    "base": "832e3f5ca3c357e527fdf811502357bd2798425e",
+    "baseSha": "832e3f5ca3c357e527fdf811502357bd2798425e",
+    "headSha": "f594ea41f5f42405a87601117c07c31e68ca9a1c"
+  }
+}

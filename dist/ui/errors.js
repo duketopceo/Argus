@@ -22,7 +22,7 @@ export const ERROR_CODES = [
     'COMMAND_FAILED',
     'INTERNAL',
 ];
-export const ISSUE_URL = 'https://github.com/duketopceo/Argus/issues/new';
+const ISSUE_URL = 'https://github.com/duketopceo/Argus/issues/new';
 /** One-line summary per code. USAGE uses the error message itself. */
 const TITLE = {
     OPENROUTER_KEY_MISSING: 'OpenRouter key missing',
@@ -68,7 +68,7 @@ export class CliError extends Error {
     }
 }
 /** Seconds until the provider's rate limit resets, from the response headers. */
-export function retryAfterSeconds(headers, now = Date.now()) {
+function retryAfterSeconds(headers, now = Date.now()) {
     if (headers === undefined)
         return undefined;
     const ra = headers.get('retry-after');

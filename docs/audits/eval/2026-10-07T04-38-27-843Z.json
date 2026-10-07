@@ -1,0 +1,144 @@
+{
+  "tag": "2026-10-07T04-38-27-843Z",
+  "at": "2026-10-07T04:38:27.843Z",
+  "cli": "ce1d5b3",
+  "entries": 5,
+  "results": [
+    {
+      "name": "pr173-scan-mode",
+      "ms": 109622,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": false,
+        "skipped": false,
+        "verdict": "needs_changes",
+        "findings": 15,
+        "comments": 10,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "bug": 4,
+          "risk": 3,
+          "nit": 5,
+          "q": 3
+        },
+        "byPathType": {
+          "src": 14,
+          "test": 1
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 1,
+        "droppedReverted": 0,
+        "nitShare": 0.3333333333333333
+      },
+      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/pr173-scan-mode.json"
+    },
+    {
+      "name": "pr131-webhook-worker",
+      "ms": 94045,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": false,
+        "skipped": false,
+        "verdict": "needs_changes",
+        "findings": 11,
+        "comments": 6,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "bug": 3,
+          "risk": 3,
+          "nit": 5
+        },
+        "byPathType": {
+          "src": 8,
+          "test": 3
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0.45454545454545453
+      },
+      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/pr131-webhook-worker.json"
+    },
+    {
+      "name": "pr126-onboarding-docs",
+      "ms": 16534,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "approve",
+        "findings": 3,
+        "comments": 2,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "nit": 1,
+          "q": 2
+        },
+        "byPathType": {
+          "src": 1,
+          "docs": 2
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 1,
+        "droppedReverted": 0,
+        "nitShare": 0.3333333333333333
+      },
+      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/pr126-onboarding-docs.json"
+    },
+    {
+      "name": "pr59-probe-lane",
+      "ms": 217715,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": false,
+        "skipped": false,
+        "verdict": "needs_changes",
+        "findings": 14,
+        "comments": 14,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "bug": 6,
+          "risk": 8
+        },
+        "byPathType": {
+          "src": 14
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0
+      },
+      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/pr59-probe-lane.json"
+    },
+    {
+      "name": "u5-dep-bump",
+      "ms": 39686,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "approve",
+        "findings": 2,
+        "comments": 1,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "risk": 1,
+          "nit": 1
+        },
+        "byPathType": {
+          "src": 2
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0.5
+      },
+      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/u5-dep-bump.json"
+    }
+  ]
+}

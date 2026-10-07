@@ -36,8 +36,6 @@ export interface PageCapture {
     /** Collapsed repeat count for this signature. */
     count: number;
 }
-/** Distinct capture signatures kept per browser session. */
-export declare const MAX_CAPTURE_SIGNATURES = 50;
 export interface Observation {
     screenshotJpeg: Buffer;
     a11yYaml: string;

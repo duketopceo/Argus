@@ -32,9 +32,9 @@ interface Ctx {
 
 /** Largest suggestion span applied — a suggestion over this many lines is a
  *  rewrite, not a fix, and is skipped with a named reason. */
-export const MAX_FIX_SPAN = 50
+const MAX_FIX_SPAN = 50
 
-export interface AppliedFix {
+interface AppliedFix {
   path: string
   /** First line of the replaced span (== `line` for single-line suggestions). */
   startLine: number
@@ -49,7 +49,7 @@ export interface AppliedFix {
   url: string | undefined
 }
 
-export interface SkippedFix {
+interface SkippedFix {
   path: string | undefined
   line: number | undefined
   reason: string

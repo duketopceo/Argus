@@ -15,7 +15,7 @@ import { defaultExec } from '../detect.js';
 /** Output cap per stream — probe output is attacker-controlled. */
 export const SANDBOX_OUTPUT_CAP = 32 * 1024;
 /** Filesystem path inside the container where the workspace lands. */
-export const CONTAINER_WORKDIR = '/work';
+const CONTAINER_WORKDIR = '/work';
 /** Name of the single writable mount — lives under reportDir/probes-out. */
 export const SCRATCH_DIR_NAME = 'probes-out';
 /** Strict C0/control-byte strip — applied before output leaves the module. */

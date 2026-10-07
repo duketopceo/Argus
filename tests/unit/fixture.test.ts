@@ -149,8 +149,10 @@ describe('code-review --fixture', () => {
     expect(code).toBe(0)
     const report = JSON.parse(await readFile(join(reportDir, 'code-review.json'), 'utf8'))
     expect(report.verdict).toBe('needs_changes')
-    // Model finding + secrets-lane finding (masked) both present.
-    expect(report.findings.length).toBe(2)
+    // Model finding + secrets-lane finding (masked) + the missing-test
+    // rules-lane nit (fixture diff touches no test file).
+    expect(report.findings.length).toBe(3)
+    expect(report.findings.some((f: { category?: string }) => f.category === 'testing')).toBe(true)
     const secretFinding = report.findings.find((f: { category?: string }) => f.category === 'security')
     expect(secretFinding).toBeDefined()
     expect(JSON.stringify(report)).not.toContain(SECRET_LITERAL)
@@ -356,7 +358,8 @@ describe('code-review --fixture', () => {
     expect(code).toBe(0)
     expect(client.calls).toHaveLength(3) // 2 chunks + synthesis
     const report = JSON.parse(await readFile(join(reportDir, 'code-review.json'), 'utf8'))
-    expect(report.findings).toHaveLength(2)
+    // 2 model findings + the missing-test rules-lane nit on this test-free diff.
+    expect(report.findings).toHaveLength(3)
     const a = report.findings.find((f: { file: string }) => f.file === 'src/a.ts')
     expect(a.suggestion).toBe('export const a899 = 1')
     expect(a.startLine).toBe(890)

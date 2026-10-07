@@ -20,7 +20,7 @@ const RISK_AREA_CRITERIA = {
     ops: 'CI, deploy, infra, configuration, tooling, observability',
     none: 'no meaningful risk area in this diff',
 };
-export const TRIAGE_AREAS = Object.keys(RISK_AREA_CRITERIA);
+const TRIAGE_AREAS = Object.keys(RISK_AREA_CRITERIA);
 /** Diff excerpt bound — triage needs shape, not full fidelity. */
 const MAX_DIFF_STATE_CHARS = 12_000;
 /** Per-file bound — one huge patch must not starve every other file. */

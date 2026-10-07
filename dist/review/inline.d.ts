@@ -3,8 +3,8 @@
  *
  * The CLI renders each inline comment once and serializes its dedup key; the
  * action poster rebuilds the same key from comments already on the PR. Both
- * sides go through `inlineDedupKey`, and action/sticky-comment.cjs keeps a
- * copy of this file's functions (KTD2), pinned equal by a parity test.
+ * sides go through `inlineDedupKey`; the action imports these functions via
+ * the generated action/parity.cjs bundle (KTD2), so no copies can drift.
  *
  * Two body formats exist on real PRs:
  *   legacy (before U6): `**argus-reviewer <sev>:** <message> \`<category>\``

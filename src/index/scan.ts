@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { readdir, readFile } from 'node:fs/promises'
+import { readdir, readFile, stat } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 
 import ts from 'typescript'
@@ -158,10 +158,10 @@ export interface SynthesizedDiff {
 }
 
 /** Files above this size are skipped during diff synthesis. */
-export const SCAN_FILE_CAP_BYTES = 512 * 1024
+const SCAN_FILE_CAP_BYTES = 512 * 1024
 
 /** Total synthesized-diff cap — pathological trees degrade to filesSkipped. */
-export const SCAN_DIFF_CAP_BYTES = 64 * 1024 * 1024
+const SCAN_DIFF_CAP_BYTES = 64 * 1024 * 1024
 
 /**
  * POSIX filenames may contain line terminators — interpolating one into a
@@ -192,8 +192,11 @@ export async function synthesizeTreeDiff(
       entries.slice(i, i + CONCURRENCY).map(async (e) => {
         if (UNSAFE_PATH_RE.test(e.path)) return 'skipped' as const
         if (totalBytes > SCAN_DIFF_CAP_BYTES) return 'skipped' as const
+        // Stat before read — an oversized file is skipped for a syscall,
+        // not buffered whole only to be discarded.
+        const st = await stat(join(abs, e.path))
+        if (st.size > SCAN_FILE_CAP_BYTES) return 'skipped' as const
         const buf = await readFile(join(abs, e.path))
-        if (buf.length > SCAN_FILE_CAP_BYTES) return 'skipped' as const
         const text = buf.toString('utf8')
         const lines = text.split('\n')
         // A trailing newline yields a final empty element — not a line.

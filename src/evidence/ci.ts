@@ -276,7 +276,7 @@ export async function fetchCompare(
 }
 
 /** The commit-status context the action posts on every reviewed head. */
-export const REVIEW_STATUS_CONTEXT = 'argus-reviewer'
+const REVIEW_STATUS_CONTEXT = 'argus-reviewer'
 
 /**
  * Whether an Argus commit status exists on `sha` — the API-verifiable half

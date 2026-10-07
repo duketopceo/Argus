@@ -1,6 +1,4 @@
-import { LANE_IDS, type LaneId } from '../report/manifest.js';
-export { LANE_IDS };
-export type { LaneId };
+import { type LaneId } from '../report/manifest.js';
 export interface LaneSelection {
     review: boolean;
     flow: boolean;

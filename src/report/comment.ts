@@ -1,4 +1,5 @@
 import type { LaneId, LaneStatus, RunManifest } from './manifest.js'
+import { extractSuggestion } from '../review/inline.js'
 import { RunReport } from './run.js'
 import {
   formatUsd,
@@ -61,11 +62,15 @@ export interface CodeReviewInput {
   highConfidenceBlockers?: number
   findings?: {
     file?: string
+    line?: number
     severity?: string
+    message?: string
     p?: number
     suggestion?: string
     evidence?: { status?: string }
   }[]
+  /** Echo of `review.nitsInline` — false renders the consolidated nit fold. */
+  nitsInline?: boolean
   reviewComments?: { body?: string }[]
   headBinding?: { intendedSha?: string; status?: string; detail?: string }
   /** U4 — head SHA a completed review covered; the sticky baseline marker source. */
@@ -80,7 +85,7 @@ export interface CodeReviewInput {
 }
 
 /** The subset of run.json the comment head reads. */
-export type ReportInput = Pick<RunReport, 'ok' | 'durationMs'> & {
+type ReportInput = Pick<RunReport, 'ok' | 'durationMs'> & {
   totals: Pick<RunReport['totals'], 'tests' | 'passed' | 'visionCostUsd'>
   tests: { healEvents?: unknown[] }[]
 }
@@ -106,7 +111,7 @@ export interface LaneRow {
 }
 
 /** Cell semantics mirror the action: flatten newlines, escape pipes, mask secrets, cap length. */
-function cell(s: unknown, max = 200): string {
+export function cell(s: unknown, max = 200): string {
   return maskSecrets(
     String(s ?? '')
       .replace(/\|/g, '\\|')
@@ -114,12 +119,40 @@ function cell(s: unknown, max = 200): string {
   ).slice(0, max)
 }
 
-function code(s: unknown): string {
+export function code(s: unknown): string {
   const t = cell(s)
   const longest = Math.max(0, ...(t.match(/`+/g) ?? []).map((r) => r.length))
   const fence = '`'.repeat(longest + 1)
   const pad = t.startsWith('`') || t.endsWith('`') ? ' ' : ''
   return `${fence}${pad}${t}${pad}${fence}`
+}
+
+export const MAX_COMMENT_MESSAGE = 500
+
+/**
+ * R5 — model-or-runner-controlled text (message, evidence.detail) landing
+ * in a PR comment body. Collapse to a single line, zero-width-break
+ * backtick/tilde runs of >=3 so a fake ```suggestion block can't ride the
+ * message past the suggestion-side guards, defuse @mentions so findings
+ * can't ping arbitrary users, break `](` markdown links, and neutralize
+ * `</` tags — a `</details>` in fold-rendered text escapes the fold and
+ * injects top-level markdown into the bot's comment.
+ */
+export function sanitizeCommentText(s: string): string {
+  return (
+    s
+      .replace(/\s+/g, ' ')
+      .replace(/([`~])\1{2,}/g, (run) => `${run[0]}\u200B${run.slice(1)}`)
+      .replace(/@(?=[A-Za-z0-9])/g, '@\u200B')
+      // `](` → break markdown links — an attacker-controlled file path or
+      // finding text must not render a clickable URL.
+      .replace(/\]\(/g, ']\u200B(')
+      // `</` → break closing tags — fold bodies are HTML <details>; an
+      // injected close-tag is a markup escape hatch.
+      .replace(/<\//g, '<\u200B/')
+      .trim()
+      .slice(0, MAX_COMMENT_MESSAGE)
+  )
 }
 
 export function plural(n: number, one: string, many = `${one}s`): string {
@@ -145,7 +178,7 @@ export function findingsOf(cr: CodeReviewInput | undefined): NonNullable<CodeRev
   return cr !== undefined && Array.isArray(cr.findings) ? cr.findings : []
 }
 
-function bestFindingProof(cr: CodeReviewInput | undefined): ProofLevel {
+export function bestFindingProof(cr: CodeReviewInput | undefined): ProofLevel {
   let best = 0
   for (const f of findingsOf(cr)) {
     best = Math.max(best, (PROOF_LEVELS as readonly string[]).indexOf(f.evidence?.status ?? ''))
@@ -307,11 +340,8 @@ function verdictLine(p: {
 /** Must match P_FALLBACK_GATE in the action and P_TRUE_POSITIVE_THRESHOLD in src/cli.ts. */
 const P_FALLBACK_GATE = 0.7
 
-/** Same fence rule as the action's extractSuggestion: a committable block is non-empty. */
-function hasSuggestion(body: string): boolean {
-  const m = /\r?\n(`{4,})suggestion\r?\n([\s\S]*?)\r?\n\1/.exec(body)
-  return m !== null && m[2] !== ''
-}
+/** A committable suggestion block is a non-empty extractSuggestion. */
+const hasSuggestion = (body: string): boolean => extractSuggestion(body) !== ''
 
 const NO_REVIEW_REPORT = 'No code review report was found; check the action logs before merging.'
 const NO_REVIEW_ATTACHED = 'No code review report is attached to this run.'

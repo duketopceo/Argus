@@ -1,0 +1,58 @@
+{
+  "tag": "aacr-es-rerun",
+  "at": "2026-10-07T04:25:05.547Z",
+  "cli": "ce1d5b3",
+  "entries": 2,
+  "results": [
+    {
+      "name": "aacr-elastic-elasticsearch-133945",
+      "ms": 7087,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "pass",
+        "findings": 0,
+        "comments": 0,
+        "commentsOverflow": 0,
+        "bySeverity": {},
+        "byPathType": {},
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0,
+        "precision": 0,
+        "recall": 0,
+        "tp": 0,
+        "validLabels": 4
+      },
+      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/aacr-elastic-elasticsearch-133945.json"
+    },
+    {
+      "name": "aacr-elastic-elasticsearch-123744",
+      "ms": 4323,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "pass",
+        "findings": 0,
+        "comments": 0,
+        "commentsOverflow": 0,
+        "bySeverity": {},
+        "byPathType": {},
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0,
+        "precision": 0,
+        "recall": 0,
+        "tp": 0,
+        "validLabels": 4
+      },
+      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/aacr-elastic-elasticsearch-123744.json"
+    }
+  ]
+}

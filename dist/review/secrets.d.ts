@@ -53,7 +53,6 @@ export interface SecretsScanResult {
     skipped?: string;
 }
 export { MAX_CANDIDATES } from '../vision/decisions.js';
-export declare const DEFAULT_SECRETS_THRESHOLD = 0.3;
 /**
  * Parse `git diff` text into secret candidates from added (`+`) lines.
  * Removed/context lines are not scanned — a rotated-out-but-live secret

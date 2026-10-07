@@ -1,0 +1,32 @@
+{
+  "tag": "aacr-smoke2",
+  "at": "2026-10-07T04:19:01.609Z",
+  "cli": "ce1d5b3",
+  "entries": 1,
+  "results": [
+    {
+      "name": "aacr-cline-cline-1808",
+      "ms": 900020,
+      "exitCode": 1,
+      "stalled": true,
+      "metrics": {
+        "ok": false,
+        "skipped": true,
+        "findings": 0,
+        "comments": 0,
+        "commentsOverflow": 0,
+        "bySeverity": {},
+        "byPathType": {},
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0,
+        "precision": 0,
+        "recall": 0,
+        "tp": 0,
+        "validLabels": 3
+      },
+      "reportPath": "/tmp/argus-eval-report-ry3Qkf/code-review.json"
+    }
+  ]
+}

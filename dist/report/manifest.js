@@ -89,7 +89,7 @@ export function emptyUsage(provider = 'unknown') {
         metered: provider !== 'a0',
     };
 }
-export function emptyBudget() {
+function emptyBudget() {
     return {
         limitUsd: undefined,
         spentUsd: 0,
@@ -155,7 +155,7 @@ export function addProviderUsage(usage, calls) {
     };
 }
 /** Run manifests are archived under `<reportDir>/manifests/<runId>.json`. */
-export const MANIFEST_HISTORY_DIR = 'manifests';
+const MANIFEST_HISTORY_DIR = 'manifests';
 /**
  * Archive a completed verify manifest into local history and prune to the
  * retention bound — the dashboard/TUI run list reads this directory.

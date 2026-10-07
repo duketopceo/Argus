@@ -12,7 +12,7 @@ export interface ScanSkipped {
     lane: string;
     reason: string;
 }
-export interface ScanSpend {
+interface ScanSpend {
     calls: number;
     tokens: number;
     costUsd: number;
@@ -66,3 +66,4 @@ export interface ScanReport {
     /** Lanes/stages that failed open — partial report is still written. */
     skipped: ScanSkipped[];
 }
+export {};

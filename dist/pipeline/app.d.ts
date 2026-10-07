@@ -1,14 +1,12 @@
 import type { AppExpectation, Config, Target } from '../config.js';
 import type { BrowserDriver, PageCapture } from '../driver/browser.js';
 import { TargetProcess } from '../driver/target.js';
-import { Actions } from '../engine/actions.js';
-import { type ExpectationContext, type ExploreResult } from '../engine/explore.js';
+import { type ExpectationContext } from '../engine/explore.js';
 import type { VisionClient } from '../engine/loop.js';
 import type { ErrorRecord } from '../journal/schema.js';
 import type { Logger } from '../log.js';
 import type { LaneStatus } from '../report/manifest.js';
 import type { CallCost } from '../vision/cost.js';
-import { Ledger } from '../vision/ledger.js';
 /** Lane detail file the app runner writes and `runVerify` reads back. */
 export declare const APP_LANE_REPORT = "app-lane.json";
 /** Wall-clock bound when config.app.timeoutMs is unset. */
@@ -57,36 +55,7 @@ interface ExpectationCheck {
  * blocks the lane instead of failing mid-run.
  */
 export declare function buildExpectationCheck(expected: AppExpectation): ExpectationCheck;
-export interface AppTaskInput {
-    driver: BrowserDriver;
-    actions: Actions;
-    client: VisionClient;
-    ledger: Ledger;
-    config: Config;
-    targetUrl: string;
-    task: string;
-    expected: AppExpectation;
-    timeoutMs: number;
-    maxSteps?: number | undefined;
-    /**
-     * The lane's own spend bound, forwarded to the explore loop — without it
-     * `explore.budgetUsd` (a different lane's knob) throttles the app lane.
-     */
-    budgetLimitUsd?: number | undefined;
-    logger?: Logger | undefined;
-}
-/**
- * The bounded task loop: ExploreLoop substrate + task + expectation +
- * wall-clock deadline. The lane — not the model's `done` — decides pass:
- * the expected-state predicate is re-verified on a fresh observation after
- * the loop stops, so a page that merely loads can never pass.
- */
-export declare function runAppTask(input: AppTaskInput): Promise<{
-    result: ExploreResult;
-    expectedMet: boolean;
-    verifyError: string | undefined;
-}>;
-export interface AppLaneDeps {
+interface AppLaneDeps {
     /** Browser launch — default Chromium with error-capture taps on. */
     launchDriver?: (config: Config) => Promise<BrowserDriver>;
     /** Vision client factory — lazy key resolution stays with the caller. */

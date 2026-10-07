@@ -11,7 +11,6 @@ import type { Styler } from './style.js';
  */
 export declare const ERROR_CODES: readonly ["OPENROUTER_KEY_MISSING", "OPENROUTER_KEY_REJECTED", "OPENROUTER_OUT_OF_CREDIT", "OPENROUTER_RATE_LIMITED", "PROVIDER_UNAVAILABLE", "CONFIG_INVALID", "MANIFEST_UNREADABLE", "A0_UNREACHABLE", "USAGE", "COMMAND_FAILED", "INTERNAL"];
 export type ErrorCode = (typeof ERROR_CODES)[number];
-export declare const ISSUE_URL = "https://github.com/duketopceo/Argus/issues/new";
 export interface CliErrorOptions {
     fix?: string;
     retryAfterSeconds?: number;
@@ -26,8 +25,6 @@ export declare class CliError extends Error {
     readonly httpStatus: number | undefined;
     constructor(code: ErrorCode, message: string, opts?: CliErrorOptions);
 }
-/** Seconds until the provider's rate limit resets, from the response headers. */
-export declare function retryAfterSeconds(headers: Headers | undefined, now?: number): number | undefined;
 /**
  * Map a failed provider response to its class. Statuses that are not a
  * provider or account condition (400, 404, 422) stay unclassified: they

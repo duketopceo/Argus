@@ -281,6 +281,12 @@ export interface Config {
         lowRiskModel: string | undefined;
         findingThreshold: number;
         requestChanges: boolean;
+        /**
+         * `nitsInline` posts nit-severity findings as individual inline review
+         * comments. Default false: nits consolidate into the sticky comment's
+         * fold instead — inline volume stays limited to actionable severities.
+         */
+        nitsInline: boolean;
         profiles: ReviewProfile[];
         /**
          * Glob list of changed paths kept out of the review input. A configured
@@ -400,6 +406,13 @@ export declare function resolveBlockSeverities(config: Config): string[];
  * isn't on the untrusted allowlist). Anything else → `review.maxComments`.
  */
 export declare function resolveMaxComments(env: Record<string, string | undefined>, config: Config): number;
+/**
+ * Inline nits: `ARGUS_NITS_INLINE` (the action's `nits-inline` input)
+ * wins when it parses as '1'/'true'/'0'/'false' — it's set by the
+ * workflow author, so an untrusted PR config can't reach it (`review`
+ * isn't on the untrusted allowlist). Anything else → `review.nitsInline`.
+ */
+export declare function resolveNitsInline(env: Record<string, string | undefined>, config: Config): boolean;
 /**
  * U6 — validate `review.instructions` entries. Throws naming the entry:
  * a mistyped glob that silently deadens a rule is worse than failing the

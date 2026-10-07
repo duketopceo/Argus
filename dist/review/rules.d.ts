@@ -42,7 +42,7 @@ export interface RuleFailure {
     rule: string;
     error: string;
 }
-export interface RuleOutput {
+interface RuleOutput {
     findings: RuleFinding[];
     records: Omit<RuleRecord, 'rule'>[];
     /** The secrets rule's native result — feeds report.secretsScan. */
@@ -70,6 +70,21 @@ export interface RulesRunResult {
     /** SecretsScanResult when the secrets rule ran — report.secretsScan. */
     secretsScan?: SecretsScanResult;
 }
+/**
+ * Post-runRules report assembly — shared by `code-review` and `scan` so
+ * the secretsScan skipped-reason chain can't diverge between lanes:
+ * a secrets-rule failure is distinct from "secrets rule not enabled".
+ */
+export declare function rulesLaneScans(result: RulesRunResult): {
+    rulesScan: {
+        ran: string[];
+        records: RuleRecord[];
+        failures: RuleFailure[];
+    };
+    secretsScan: SecretsScanResult | {
+        skipped: string;
+    };
+};
 /** Per-rule hit cap — a formatter churning TODOs must not flood the report. */
 export declare const RULE_HITS_CAP = 200;
 /**
@@ -94,3 +109,4 @@ export declare function runRules(diff: string, opts?: {
     /** Test seam — swap the registry. */
     rules?: ReviewRule[];
 } & RuleRunContext): Promise<RulesRunResult>;
+export {};

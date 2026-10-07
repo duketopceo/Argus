@@ -1,0 +1,80 @@
+{
+  "ok": true,
+  "skipped": false,
+  "summary": "No issues found",
+  "verdict": "pass",
+  "findings": [],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async"
+    ],
+    "records": [],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 4600,
+    "needsDeepReview": 0.74,
+    "risk": 2.05,
+    "topRiskArea": "data",
+    "topRiskAreaConfidence": 0.89
+  },
+  "scope": {
+    "totalFiles": 2,
+    "reviewedFiles": 2,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 2086,
+      "costUsd": 0.000083958,
+      "kind": "decide"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 1883,
+      "costUsd": 0,
+      "kind": "code"
+    }
+  ],
+  "visionCostUsd": 0.000083958,
+  "tokens": 3969,
+  "model": "deepseek/deepseek-v4-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "0e24fc739f9daa5b003d20fb0fffaf197449db67",
+    "checkoutSha": "0e24fc739f9daa5b003d20fb0fffaf197449db67",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "0e24fc739f9daa5b003d20fb0fffaf197449db67",
+  "diffRange": {
+    "base": "3c264cff967750ff7cb581defa42b0d69bb31fc6",
+    "baseSha": "3c264cff967750ff7cb581defa42b0d69bb31fc6",
+    "headSha": "0e24fc739f9daa5b003d20fb0fffaf197449db67"
+  }
+}

@@ -22,11 +22,6 @@ export interface ScaffoldOptions {
     /** False when a config file already exists (init without --force). */
     includeConfig: boolean;
 }
-export declare function initConfig(a0Host: string | undefined): string;
-export declare const INIT_TEST = "test('home renders', async (td) => {\n  const ok = await td.assert('the page rendered without obvious errors')\n  if (!ok) throw new Error('home did not render')\n})\n";
-export declare const INIT_WORKFLOW: string;
-export declare const INIT_MENTION_WORKFLOW: string;
-export declare const CONFIG_PATH = "argus-reviewer.config.ts";
 /** The files `init` writes, in write order. */
 export declare function renderScaffold(opts: ScaffoldOptions): ScaffoldFile[];
 /**

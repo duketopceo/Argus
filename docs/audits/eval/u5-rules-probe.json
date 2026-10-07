@@ -1,0 +1,33 @@
+{
+  "tag": "u5-rules-probe",
+  "at": "2026-10-07T04:38:57.690Z",
+  "cli": "ce1d5b3",
+  "entries": 1,
+  "results": [
+    {
+      "name": "u5-dep-bump",
+      "ms": 21716,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "approve",
+        "findings": 3,
+        "comments": 0,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "nit": 3
+        },
+        "byPathType": {
+          "src": 3
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 2,
+        "droppedReverted": 0,
+        "nitShare": 1
+      },
+      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/u5-dep-bump.json"
+    }
+  ]
+}

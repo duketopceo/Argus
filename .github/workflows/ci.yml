@@ -38,6 +38,8 @@ jobs:
       # drift (stale output) or ignored-untracked files (a new src module
       # whose dist output was never `git add -f`'d — .gitignore hides it).
       - run: npm run check:dist
+      # action/parity.cjs is generated from src/ — fail on a stale bundle.
+      - run: npm run check:parity
       - run: npm test
       # The dashboard is a release surface — render it headless against a
       # seeded manifest so a renderer break can't ship green unit tests.

@@ -110,7 +110,7 @@
         "model": "redacted/triage-model",
         "provider": "redacted",
         "tokens": 1161,
-        "costUsd": 0.000045108,
+        "costUsd": 4.5108e-05,
         "kind": "decide"
       },
       {
@@ -124,20 +124,21 @@
         "model": "redacted/triage-model",
         "provider": "redacted",
         "tokens": 1230,
-        "costUsd": 0.000049224,
+        "costUsd": 4.9224e-05,
         "kind": "decide"
       },
       {
         "model": "redacted/triage-model",
         "provider": "redacted",
         "tokens": 527,
-        "costUsd": 0.000020454,
+        "costUsd": 2.0454e-05,
         "kind": "decide"
       }
     ],
     "visionCostUsd": 0.0007393176,
     "tokens": 5072,
     "model": "deepseek/deepseek-v4.1-flash",
-    "budgetExceeded": false
+    "budgetExceeded": false,
+    "nitsInline": false
   }
 }

@@ -6,7 +6,6 @@ declare const RISK_AREA_CRITERIA: {
     readonly ops: "CI, deploy, infra, configuration, tooling, observability";
     readonly none: "no meaningful risk area in this diff";
 };
-export declare const TRIAGE_AREAS: TriageArea[];
 export type TriageArea = keyof typeof RISK_AREA_CRITERIA;
 export interface TriageRecord {
     mode: 'annotate' | 'route';

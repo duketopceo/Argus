@@ -54,6 +54,10 @@ inputs:
     description: Cap on inline review comments posted per run; overflow is summarized in the sticky. Overrides review.maxComments when set.
     default: ''
     required: false
+  nits-inline:
+    description: "Post nit-severity findings as individual inline review comments ('true') or consolidate them into the sticky's fold ('false'). Overrides review.nitsInline when set; works on untrusted pull_request lanes where PR config never executes."
+    default: ''
+    required: false
   code-model:
     description: Optional OpenRouter model slug for code review (e.g. openai/gpt-5-mini). Wins over the checkout's config code_model, including on pull_request events, where PR config never executes.
     default: ''
@@ -200,6 +204,7 @@ runs:
         ARGUS_BROWSER: ${{ inputs.browser }}
         ARGUS_BUDGET_USD: ${{ inputs.budget-usd }}
         ARGUS_MAX_COMMENTS: ${{ inputs.max-comments }}
+        ARGUS_NITS_INLINE: ${{ inputs.nits-inline }}
         ARGUS_CODE_MODEL: ${{ inputs.code-model }}
         ARGUS_REVIEW_PROFILES: ${{ inputs.review-profiles }}
         ARGUS_REVIEW_INSTRUCTIONS: ${{ inputs.review-instructions }}
@@ -301,6 +306,7 @@ runs:
         ARGUS_REPORT_DIR: ${{ inputs.report-dir }}
         ARGUS_BUDGET_USD: ${{ inputs.budget-usd }}
         ARGUS_MAX_COMMENTS: ${{ inputs.max-comments }}
+        ARGUS_NITS_INLINE: ${{ inputs.nits-inline }}
         ARGUS_CODE_MODEL: ${{ inputs.code-model }}
         ARGUS_REVIEW_PROFILES: ${{ inputs.review-profiles }}
         ARGUS_REVIEW_INSTRUCTIONS: ${{ inputs.review-instructions }}
@@ -337,6 +343,7 @@ runs:
         ARGUS_VERIFY_EXPECT_SELECTOR: ${{ inputs.app-expect-selector }}
         ARGUS_SANDBOX: ${{ inputs.sandbox == 'true' && '1' || '' }}
         ARGUS_MAX_COMMENTS: ${{ inputs.max-comments }}
+        ARGUS_NITS_INLINE: ${{ inputs.nits-inline }}
         ARGUS_DEBUG: '1'
         ARGUS_DIFF_BASE: ${{ inputs.diff-base }}
         ARGUS_BUDGET_USD: ${{ inputs.budget-usd }}

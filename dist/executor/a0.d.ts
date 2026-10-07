@@ -86,7 +86,7 @@ export interface A0LaneReport {
     /** a0 supplies no usage telemetry today — always false (R13). */
     metered: false;
 }
-export interface A0LaneDeps {
+interface A0LaneDeps {
     exec?: ExecFn;
     /** Host reachability probe — requires an Agent Zero marker in the HTML. */
     probe?: ProbeFn;

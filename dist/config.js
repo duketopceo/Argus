@@ -118,6 +118,7 @@ const defaults = {
         lowRiskModel: undefined,
         findingThreshold: 1.0,
         requestChanges: true,
+        nitsInline: false,
         profiles: [],
         instructions: [],
         rules: [...REVIEW_RULE_IDS],
@@ -191,6 +192,20 @@ export function resolveMaxComments(env, config) {
         return Number(raw);
     }
     return config.review.maxComments;
+}
+/**
+ * Inline nits: `ARGUS_NITS_INLINE` (the action's `nits-inline` input)
+ * wins when it parses as '1'/'true'/'0'/'false' — it's set by the
+ * workflow author, so an untrusted PR config can't reach it (`review`
+ * isn't on the untrusted allowlist). Anything else → `review.nitsInline`.
+ */
+export function resolveNitsInline(env, config) {
+    const raw = env.ARGUS_NITS_INLINE?.trim().toLowerCase();
+    if (raw === '1' || raw === 'true')
+        return true;
+    if (raw === '0' || raw === 'false')
+        return false;
+    return config.review.nitsInline;
 }
 /**
  * U6 — validate `review.instructions` entries. Throws naming the entry:
@@ -297,6 +312,7 @@ export function resolveConfig(input = {}) {
     // Advisory-only escape hatch — only literal `false` opts out; anything
     // else (mis-typed values included) keeps the default-true posture.
     review.requestChanges = review.requestChanges !== false;
+    review.nitsInline = review.nitsInline === true;
     // Unknown profile names are rejected at config load — a typo silently
     // disabling a lens is worse than dropping it. Non-array input means the
     // field was mis-typed entirely and also drops to the empty default.

@@ -45,9 +45,13 @@ describe('runRules', () => {
         `const host = "0.0.0.0"`,
       ]),
     )
-    expect(r.findings).toHaveLength(0)
+    expect(r.findings.filter((f) => f.category === 'security')).toHaveLength(0)
     expect(r.records.filter((x) => x.rule === 'hardcoded-endpoint')).toHaveLength(2)
-    expect(r.records.every((x) => x.suppressed === 'loopback/unspecified host')).toBe(true)
+    expect(
+      r.records
+        .filter((x) => x.rule === 'hardcoded-endpoint')
+        .every((x) => x.suppressed === 'loopback/unspecified host'),
+    ).toBe(true)
   })
 
   it('edge: a match inside a sample manifest is suppressed as data-not-code', async () => {
@@ -374,4 +378,167 @@ describe('parseRuleIds + config wiring', () => {
     expect(resolveConfig({}).review.rules).toEqual(REVIEW_RULE_IDS)
     expect(() => resolveConfig({ review: { rules: ['nope'] } })).toThrow(/nope/)
   })
+})
+
+// U5 coverage rules — dep-diff and missing-test. The fixture diffs carry
+// context and removed lines because dep-diff tracks deps-block membership.
+const PKG_DIFF =
+  'diff --git a/package.json b/package.json\n' +
+  '--- a/package.json\n+++ b/package.json\n' +
+  '@@ -1,8 +1,10 @@\n' +
+  ' {\n' +
+  '   "name": "app",\n' +
+  '   "dependencies": {\n' +
+  '-    "left-pad": "^1.0.0",\n' +
+  '+    "left-pad": "^2.0.0",\n' +
+  '+    "new-lib": "^0.4.1",\n' +
+  '+    "right-pad": "^1.1.0"\n' +
+  '-    "right-pad": "^1.0.0",\n' +
+  '   },\n' +
+  '   "devDependencies": {\n' +
+  '+    "vitest": "^4.0.0"\n' +
+  '   }\n' +
+  ' }\n'
+
+describe('dep-diff', () => {
+  it('new dependency and major bump are nit findings; minor bump is record-only', async () => {
+    const r = await runRules(PKG_DIFF)
+    const msgs = r.findings.map((f) => f.message).join('\n')
+    expect(msgs).toContain('new dependency `new-lib@^0.4.1`')
+    expect(msgs).toContain('new dependency `vitest@^4.0.0`')
+    expect(msgs).toContain('major version jump `left-pad ^1.0.0 -> ^2.0.0`')
+    expect(msgs).not.toContain('right-pad')
+    expect(r.records).toContainEqual(
+      expect.objectContaining({ rule: 'dep-diff', detail: 'version-jump right-pad ^1.0.0->^1.1.0', suppressed: 'minor/patch bump' }),
+    )
+  })
+
+  it('mid-block adds without a visible opener still flag version-spec values', async () => {
+    // Real failure mode: esbuild landed deep inside devDependencies, so the
+    // block opener was outside the hunk's context window.
+    const diff =
+      'diff --git a/package.json b/package.json\n' +
+      '--- a/package.json\n+++ b/package.json\n' +
+      '@@ -58,6 +60,7 @@\n' +
+      '     "@resvg/resvg-js": "^2.6.2",\n' +
+      '     "@types/node": "^26.6.2",\n' +
+      '     "electron": "^44.2.0",\n' +
+      '+    "esbuild": "^0.28.2",\n' +
+      '     "eslint": "^10.11.0",\n' +
+      '     "globals": "^17.12.0"\n' +
+      '@@ -30,4 +31,5 @@\n' +
+      '     "build": "tsc -p tsconfig.build.json",\n' +
+      '+    "build:parity": "esbuild action/parity-entry.mjs --bundle",\n' +
+      '     "test": "vitest run"\n'
+    const r = await runRules(diff)
+    const msgs = r.findings.map((f) => f.message).join('\n')
+    expect(msgs).toContain('new dependency `esbuild@^0.28.2`')
+    expect(msgs).not.toContain('build:parity')
+  })
+
+  it('second-hunk dep entries carry their own line numbers', async () => {
+    // diffLines must reset newLine on every @@ header — a second-hunk add
+    // used to inherit the first hunk's offset and point at a wrong line.
+    const diff =
+      'diff --git a/package.json b/package.json\n' +
+      '--- a/package.json\n+++ b/package.json\n' +
+      '@@ -10,4 +10,5 @@\n' +
+      '     "a": "^1.0.0",\n' +
+      '+    "dep-one": "^1.0.0",\n' +
+      '     "b": "^1.0.0"\n' +
+      '@@ -200,4 +201,5 @@\n' +
+      '     "c": "^1.0.0",\n' +
+      '+    "dep-two": "^2.0.0",\n' +
+      '     "d": "^1.0.0"\n'
+    const r = await runRules(diff)
+    const two = r.findings.find((f) => f.message.includes('dep-two'))
+    expect(two?.line).toBe(202)
+  })
+
+  it('deps-block state does not leak across hunks', async () => {
+    // An unclosed deps opener in hunk 1 used to keep blockIsDeps=true into
+    // hunk 2, letting a mid-scripts command bypass the version-spec gate
+    // and fabricate a "new dependency" finding.
+    const diff =
+      'diff --git a/package.json b/package.json\n' +
+      '--- a/package.json\n+++ b/package.json\n' +
+      '@@ -10,5 +10,6 @@\n' +
+      '   "dependencies": {\n' +
+      '     "a": "^1.0.0",\n' +
+      '+    "dep-one": "^1.0.0",\n' +
+      '     "b": "^1.0.0",\n' +
+      '@@ -60,4 +61,5 @@\n' +
+      '     "build": "tsc",\n' +
+      '+    "fmt": "prettier --write .",\n' +
+      '     "test": "vitest run"\n'
+    const r = await runRules(diff)
+    const msgs = r.findings.map((f) => f.message).join('\n')
+    expect(msgs).toContain('dep-one')
+    expect(msgs).not.toContain('fmt')
+    expect(r.findings.filter((f) => f.category === 'dependencies')).toHaveLength(1)
+  })
+
+  it('non-version-spec entries and metadata keys are ignored', async () => {
+    const diff =
+      'diff --git a/package.json b/package.json\n' +
+      '--- a/package.json\n+++ b/package.json\n' +
+      '@@ -1,3 +1,4 @@\n' +
+      ' {\n' +
+      '+  "version": "2.0.0",\n' +
+      '+  "new-lib": "not-a-dep",\n' +
+      '   "name": "app"\n' +
+      ' }\n'
+    const r = await runRules(diff)
+    expect(r.findings.filter((f) => f.category === 'dependencies')).toHaveLength(0)
+  })
+
+  it('fixture manifests are suppressed with a record', async () => {
+    const diff =
+      'diff --git a/fixtures/pkg/package.json b/fixtures/pkg/package.json\n' +
+      '--- a/fixtures/pkg/package.json\n+++ b/fixtures/pkg/package.json\n' +
+      '@@ -1,4 +1,5 @@\n' +
+      ' {\n' +
+      '   "dependencies": {\n' +
+      '+    "new-lib": "^1.0.0"\n' +
+      '   }\n' +
+      ' }\n'
+    const r = await runRules(diff)
+    expect(r.findings.filter((f) => f.category === 'dependencies')).toHaveLength(0)
+    expect(r.records).toContainEqual(
+      expect.objectContaining({ rule: 'dep-diff', suppressed: 'data/prose path' }),
+    )
+  })
+})
+
+describe('missing-test', () => {
+  it('source-only diff gets one nit on the highest-churn file', async () => {
+    const diff = diffOf('src/a.ts', ['const a = 1', 'const b = 2', 'const c = 3']) +
+      diffOf('src/b.ts', ['const x = 1'])
+    const r = await runRules(diff)
+    const hit = r.findings.find((f) => f.category === 'testing')
+    expect(hit?.file).toBe('src/a.ts')
+    expect(hit?.message).toContain('2 source file(s)')
+  })
+
+  it('any test-file change silences the rule', async () => {
+    const diff = diffOf('src/a.ts', ['const a = 1']) +
+      diffOf('tests/a.test.ts', ['test(1)'])
+    const r = await runRules(diff)
+    expect(r.findings.filter((f) => f.category === 'testing')).toHaveLength(0)
+  })
+
+  it('docs-only and generated-only diffs do not fire', async () => {
+    const r = await runRules(
+      diffOf('docs/guide.md', ['# hi']) + diffOf('dist/index.js', ['x()']),
+    )
+    expect(r.findings.filter((f) => f.category === 'testing')).toHaveLength(0)
+  })
+
+  it.each(['scripts/gen.ts', 'fixtures/f.ts', 'dist/gen.ts'])(
+    'excluded path %s does not fire (isolates each predicate)',
+    async (path) => {
+      const r = await runRules(diffOf(path, ['const x = 1']))
+      expect(r.findings.filter((f) => f.category === 'testing')).toHaveLength(0)
+    },
+  )
 })

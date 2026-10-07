@@ -13,7 +13,7 @@ export interface ErrorRecord {
   context?: string
 }
 
-export interface JournalStep {
+interface JournalStep {
   instruction: string
   action: string
   ok: boolean
@@ -22,14 +22,14 @@ export interface JournalStep {
   model?: string
 }
 
-export interface JournalAssert {
+interface JournalAssert {
   question: string
   verdict: 'pass' | 'fail'
   reasoning: string
   cached?: boolean
 }
 
-export interface JournalTest {
+interface JournalTest {
   name: string
   file: string
   ok: boolean

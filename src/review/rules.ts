@@ -1,5 +1,5 @@
 import type { DecisionClient } from '../vision/decisions.js'
-import { addedLines } from './difftext.js'
+import { addedLines, diffLines } from './difftext.js'
 import {
   scanSecrets,
   type SecretsScanResult,
@@ -53,7 +53,7 @@ export interface RuleFailure {
   error: string
 }
 
-export interface RuleOutput {
+interface RuleOutput {
   findings: RuleFinding[]
   records: Omit<RuleRecord, 'rule'>[]
   /** The secrets rule's native result — feeds report.secretsScan. */
@@ -83,6 +83,27 @@ export interface RulesRunResult {
   ran: string[]
   /** SecretsScanResult when the secrets rule ran — report.secretsScan. */
   secretsScan?: SecretsScanResult
+}
+
+/**
+ * Post-runRules report assembly — shared by `code-review` and `scan` so
+ * the secretsScan skipped-reason chain can't diverge between lanes:
+ * a secrets-rule failure is distinct from "secrets rule not enabled".
+ */
+export function rulesLaneScans(result: RulesRunResult): {
+  rulesScan: { ran: string[]; records: RuleRecord[]; failures: RuleFailure[] }
+  secretsScan: SecretsScanResult | { skipped: string }
+} {
+  return {
+    rulesScan: { ran: result.ran, records: result.records, failures: result.failures },
+    secretsScan:
+      result.secretsScan ??
+      (result.ran.includes('secrets')
+        ? { skipped: 'the secrets rule failed; see rulesScan.failures' }
+        : result.ran.length === 0
+          ? { skipped: 'the rules lane is disabled (review.rules)' }
+          : { skipped: 'the secrets rule is not enabled (review.rules)' }),
+  }
 }
 
 /** Per-rule hit cap — a formatter churning TODOs must not flood the report. */
@@ -264,12 +285,235 @@ const syncInAsyncRule: ReviewRule = {
   },
 }
 
+// --- U5 coverage rules -----------------------------------------------------
+
+const MANIFEST_RE = /(^|\/)package\.json$/
+// package.json fails DATA_PATH_RE on its .json extension — dep-diff's
+// suppression is dir-level only (fixture/example manifests are data).
+const MANIFEST_DATA_RE = /(^|\/)(docs?|examples?|samples?|fixtures?|testdata)\//i
+const DEP_BLOCK_RE = /^(?:dev|peer|optional)?[Dd]ependencies$/
+const NAMED_BLOCK_RE = /^(\s*)"([^"]+)"\s*:\s*\{/
+const DEP_ENTRY_RE = /^\s*"([^"]+)"\s*:\s*"([^"]+)"/
+const CLOSE_RE = /^(\s*)\}/
+// Hunk context is ±3 lines — a dep added mid-block never shows the
+// "dependencies": { opener. Outside a tracked block, entries count only
+// when the value is a version spec (rejects script commands like
+// "build": "esbuild ..." and metadata like "name": "app"). A wholesale-
+// added overrides/engines block IS visible, so its entries are skipped
+// by block tracking rather than reaching this fallback.
+const VER_SPEC_RE =
+  /^(?:\^|~|>=?|<=?|=)?v?\d+\.\d+\.\d+|^(?:workspace|npm|file|link|git\+|https?):/
+// URL/metadata fields whose values can look like specs in bare mode,
+// plus runtime/tooling names an engines/volta block would pin.
+const NON_DEP_KEYS = new Set([
+  'version',
+  'packageManager',
+  'name',
+  'repository',
+  'homepage',
+  'bugs',
+  'funding',
+  'url',
+  'node',
+  'npm',
+  'pnpm',
+  'yarn',
+  'bun',
+  'deno',
+])
+
+// dep-diff needs kind-tagged hunk lines (block membership + removed
+// entries) — the shared diffLines walker owns `@@` resets and header
+// quirks so this rule never re-implements them.
+
+/**
+ * dep-diff (U5): new dependencies and major version jumps in package.json.
+ * Supply-chain surface is reviewable signal — a new production dep or a
+ * major bump is a real event, not an opinion. Minor/patch bumps are
+ * audit-records only.
+ */
+const depDiffRule: ReviewRule = {
+  id: 'dep-diff',
+  description: 'new dependencies and major version jumps in package.json diffs',
+  run(diff) {
+    const findings: RuleFinding[] = []
+    const records: Omit<RuleRecord, 'rule'>[] = []
+    // Track the innermost named object block, not just dep blocks — a
+    // wholesale-added overrides/engines/scripts block IS visible in the
+    // hunk and must keep its entries out of the bare-version-spec path.
+    let blockIndent: number | null = null
+    let blockIsDeps = false
+    const added = new Map<string, { ver: string; line: number }>()
+    const removed = new Map<string, string>()
+    let file = ''
+    const flush = () => {
+      if (file === '' || (added.size === 0 && removed.size === 0)) {
+        added.clear()
+        removed.clear()
+        return
+      }
+      const suppressed = MANIFEST_DATA_RE.test(file)
+        ? 'data/prose path'
+        : isNonProdPath(file)
+          ? 'non-production path'
+          : undefined
+      for (const [name, { ver, line }] of added) {
+        const oldVer = removed.get(name)
+        const detail =
+          oldVer === undefined ? `dependency-added ${name}@${ver}` : `version-jump ${name} ${oldVer}->${ver}`
+        if (suppressed !== undefined) {
+          records.push({ file, line, detail, suppressed })
+          continue
+        }
+        const major =
+          oldVer !== undefined &&
+          (oldVer.match(/\d+/)?.[0] ?? '') !== (ver.match(/\d+/)?.[0] ?? '')
+        if (oldVer === undefined) {
+          findings.push({
+            file,
+            line,
+            severity: 'nit',
+            category: 'dependencies',
+            message:
+              `L${line}: nit: new dependency \`${name}@${ver}\` added at \`${file}\` - ` +
+              'confirm source, license, and whether a lighter in-repo option exists.',
+          })
+          records.push({ file, line, detail })
+        } else if (major) {
+          findings.push({
+            file,
+            line,
+            severity: 'nit',
+            category: 'dependencies',
+            message:
+              `L${line}: nit: major version jump \`${name} ${oldVer} -> ${ver}\` at \`${file}\` - ` +
+              'check the migration notes before merge.',
+          })
+          records.push({ file, line, detail })
+        } else {
+          records.push({ file, line, detail, suppressed: 'minor/patch bump' })
+        }
+      }
+      added.clear()
+      removed.clear()
+    }
+    let isManifest = false
+    let hunk = -1
+    for (const l of diffLines(diff)) {
+      if (l.file !== file) {
+        flush()
+        file = l.file
+        blockIndent = null
+        blockIsDeps = false
+        isManifest = MANIFEST_RE.test(l.file)
+      }
+      if (!isManifest) continue
+      if (l.hunk !== hunk) {
+        // Block state only tracks within a hunk's window — a `@@` jump
+        // hides whether the opener it depended on still scopes here, so
+        // entries fall back to the bare version-spec gate.
+        hunk = l.hunk
+        blockIndent = null
+        blockIsDeps = false
+      }
+      const close = CLOSE_RE.exec(l.text)
+      if (close !== null && blockIndent !== null && (close[1] as string).length <= blockIndent) {
+        blockIndent = null
+      }
+      const open = NAMED_BLOCK_RE.exec(l.text)
+      if (
+        open !== null &&
+        (blockIndent === null || (open[1] as string).length <= blockIndent)
+      ) {
+        // Opener lines are never dep entries themselves.
+        blockIndent = (open[1] as string).length
+        blockIsDeps = DEP_BLOCK_RE.test(open[2] as string)
+        continue
+      }
+      if (l.kind === 'ctx') continue
+      const entry = DEP_ENTRY_RE.exec(l.text)
+      if (entry === null) continue
+      const name = entry[1] as string
+      const ver = entry[2] as string
+      if (blockIndent !== null && !blockIsDeps) continue
+      if (blockIndent === null && (NON_DEP_KEYS.has(name) || !VER_SPEC_RE.test(ver))) continue
+      if (l.kind === 'add') added.set(name, { ver, line: l.line })
+      else removed.set(name, ver)
+    }
+    flush()
+    return { findings, records }
+  },
+}
+
+const CODE_FILE_RE =
+  /\.(?:c|cc|cpp|cs|cts|go|h|hpp|java|jsx|kt|mjs|mts|php|py|rb|rs|scala|swift|ts|tsx)$/
+const GENERATED_FILE_RE = /(^|\/)dist\/|\.min\.|\.map$|\.generated\./i
+
+/**
+ * missing-test (U5): a diff that changes source files but touches no test
+ * file gets one file-level nit on its highest-churn source file. Precision
+ * stays high because the event is factual (zero test paths in the diff);
+ * the finding asks for evidence, not a mandate. One finding max — this is
+ * a signal, not a per-file nag.
+ */
+const missingTestRule: ReviewRule = {
+  id: 'missing-test',
+  description: 'source-only diffs that touch no test file get one file-level nit',
+  run(diff) {
+    let topFile = ''
+    let topAdds = 0
+    const addsPerFile = new Map<string, number>()
+    let lastFile = ''
+    let eligible = false
+    for (const { file } of addedLines(diff)) {
+      if (file !== lastFile) {
+        lastFile = file
+        // A test file anywhere in the diff kills the rule — exit before
+        // spending per-line regex work on the rest.
+        if (isTestPath(file)) return { findings: [], records: [] }
+        eligible =
+          CODE_FILE_RE.test(file) &&
+          !DATA_PATH_RE.test(file) &&
+          !GENERATED_FILE_RE.test(file) &&
+          !SCRIPT_PATH_RE.test(file)
+      }
+      if (eligible) addsPerFile.set(file, (addsPerFile.get(file) ?? 0) + 1)
+    }
+    const srcFiles = addsPerFile.size
+    for (const [f, n] of addsPerFile) {
+      if (n > topAdds) {
+        topAdds = n
+        topFile = f
+      }
+    }
+    if (srcFiles === 0 || topFile === '') {
+      return { findings: [], records: [] }
+    }
+    const detail = `source-only diff: ${srcFiles} source file(s), no test file`
+    return {
+      findings: [
+        {
+          file: topFile,
+          severity: 'nit',
+          category: 'testing',
+          message:
+            `nit: this diff modifies ${srcFiles} source file(s) and no test file - ` +
+            'if the change is behavior-bearing, point at the coverage that exercises it.',
+        },
+      ],
+      records: [{ file: topFile, detail }],
+    }
+  },
+}
+
 /** The rule registry — curated, not a plugin surface. */
 export const REVIEW_RULES: readonly ReviewRule[] = [
   secretsRule,
   hardcodedEndpointRule,
   leftoverTodoRule,
   syncInAsyncRule,
+  depDiffRule,
+  missingTestRule,
 ]
 
 /** All registered rule ids — the default `review.rules` enabled set. */
@@ -298,12 +542,24 @@ export async function runRules(
   const failures: RuleFailure[] = []
   let secretsScan: SecretsScanResult | undefined
   const ran: string[] = []
-  for (const rule of registry) {
-    if (!enabled.includes(rule.id)) continue
+  const enabledRules = registry.filter((r) => enabled.includes(r.id))
+  // Rules are independent — run them together so a secrets adjudication
+  // network call overlaps the CPU-bound rules. Results merge in registry
+  // order regardless of settle order.
+  const settled = await Promise.allSettled(
+    // Defer invocation into the promise so a synchronous `run` that throws
+    // lands as a rejection instead of escaping the runner.
+    enabledRules.map((r) => Promise.resolve().then(() => r.run(diff, ctx))),
+  )
+  for (let i = 0; i < enabledRules.length; i++) {
+    const rule = enabledRules[i] as ReviewRule
     ran.push(rule.id)
     let out: RuleOutput
+    const s = settled[i]
     try {
-      out = await rule.run(diff, ctx)
+      if (s === undefined) throw new Error('rule settle slot missing')
+      if (s.status === 'rejected') throw s.reason
+      out = s.value
       // A malformed resolve escapes the contract — count it as a rule
       // failure inside the same boundary so the lane still completes.
       if (

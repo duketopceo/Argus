@@ -29,7 +29,7 @@ export interface AdjudicableFinding {
   message: string
 }
 
-export interface FindingAdjudicationRecord {
+interface FindingAdjudicationRecord {
   file: string
   line?: number
   severity: string

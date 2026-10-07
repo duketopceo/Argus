@@ -1,0 +1,262 @@
+{
+  "tag": "aacr-baseline",
+  "at": "2026-10-07T04:24:28.388Z",
+  "cli": "ce1d5b3",
+  "entries": 10,
+  "results": [
+    {
+      "name": "aacr-cline-cline-1808",
+      "ms": 12156,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "approve",
+        "findings": 1,
+        "comments": 1,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "risk": 1
+        },
+        "byPathType": {
+          "src": 1
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0,
+        "precision": 0,
+        "recall": 0,
+        "tp": 0,
+        "validLabels": 3
+      },
+      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/aacr-cline-cline-1808.json"
+    },
+    {
+      "name": "aacr-infiniflow-ragflow-6691",
+      "ms": 23159,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": false,
+        "skipped": false,
+        "verdict": "needs_changes",
+        "findings": 4,
+        "comments": 4,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "bug": 4
+        },
+        "byPathType": {
+          "src": 4
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0,
+        "precision": 1,
+        "recall": 0.5,
+        "tp": 4,
+        "validLabels": 6
+      },
+      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/aacr-infiniflow-ragflow-6691.json"
+    },
+    {
+      "name": "aacr-vllm-project-vllm-24425",
+      "ms": 2669,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "pass",
+        "findings": 0,
+        "comments": 0,
+        "commentsOverflow": 0,
+        "bySeverity": {},
+        "byPathType": {},
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0,
+        "precision": 0,
+        "recall": 0,
+        "tp": 0,
+        "validLabels": 1
+      },
+      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/aacr-vllm-project-vllm-24425.json"
+    },
+    {
+      "name": "aacr-comfyanonymous-comfyui-6542",
+      "ms": 11327,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": false,
+        "skipped": false,
+        "verdict": "needs_changes",
+        "findings": 3,
+        "comments": 2,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "bug": 1,
+          "nit": 1,
+          "q": 1
+        },
+        "byPathType": {
+          "src": 3
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0.3333333333333333,
+        "precision": 1,
+        "recall": 1,
+        "tp": 3,
+        "validLabels": 2
+      },
+      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/aacr-comfyanonymous-comfyui-6542.json"
+    },
+    {
+      "name": "aacr-keycloak-keycloak-41672",
+      "ms": 24929,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "approve",
+        "findings": 6,
+        "comments": 0,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "nit": 6
+        },
+        "byPathType": {
+          "src": 6
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 1,
+        "precision": 0.16666666666666666,
+        "recall": 1,
+        "tp": 1,
+        "validLabels": 1
+      },
+      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/aacr-keycloak-keycloak-41672.json"
+    },
+    {
+      "name": "aacr-dbeaver-dbeaver-37564",
+      "ms": 11628,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": false,
+        "skipped": false,
+        "verdict": "needs_changes",
+        "findings": 1,
+        "comments": 1,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "bug": 1
+        },
+        "byPathType": {
+          "src": 1
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0,
+        "precision": 1,
+        "recall": 0.25,
+        "tp": 1,
+        "validLabels": 4
+      },
+      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/aacr-dbeaver-dbeaver-37564.json"
+    },
+    {
+      "name": "aacr-langflow-ai-langflow-5388",
+      "ms": 8674,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "approve",
+        "findings": 2,
+        "comments": 0,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "nit": 2
+        },
+        "byPathType": {
+          "src": 2
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 1,
+        "precision": 1,
+        "recall": 0.6666666666666666,
+        "tp": 2,
+        "validLabels": 3
+      },
+      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/aacr-langflow-ai-langflow-5388.json"
+    },
+    {
+      "name": "aacr-elastic-elasticsearch-133945",
+      "ms": 0,
+      "exitCode": 2,
+      "stalled": true,
+      "metrics": {
+        "findings": 0,
+        "comments": 0,
+        "nitShare": 0,
+        "summary": "Command failed: git -C /tmp/argus-eval-repos/https___github_com_elastic_elasticsearch fetch --quiet --deepen=32 origin 3c264cff967750ff7cb581defa42b0d69bb31fc6 0e24fc739f9daa5b003d20fb0fffaf197449db67"
+      }
+    },
+    {
+      "name": "aacr-ollama-ollama-8938",
+      "ms": 5653,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "approve",
+        "findings": 1,
+        "comments": 1,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "q": 1
+        },
+        "byPathType": {
+          "src": 1
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0,
+        "precision": 1,
+        "recall": 0.5,
+        "tp": 1,
+        "validLabels": 2
+      },
+      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/aacr-ollama-ollama-8938.json"
+    },
+    {
+      "name": "aacr-elastic-elasticsearch-123744",
+      "ms": 0,
+      "exitCode": 2,
+      "stalled": true,
+      "metrics": {
+        "findings": 0,
+        "comments": 0,
+        "nitShare": 0,
+        "summary": "Command failed: git -C /tmp/argus-eval-repos/https___github_com_elastic_elasticsearch fetch --quiet --deepen=32 origin ba5a9c83310ce6fbe27ff251aba00e37fad1d205 e4e5576b3455478071e0fd26a80ec9fd8eb35437"
+      }
+    }
+  ]
+}

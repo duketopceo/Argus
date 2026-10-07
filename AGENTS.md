@@ -34,7 +34,13 @@ runs on Node 22 and 24. `consumer-smoke.yml` additionally runs on PRs touching
 
 - **`dist/` is committed on purpose.** Consumers installing from git get
   built output. Run `npm run build` and commit `dist/` alongside `src/`. The
-  npm package builds itself through `prepare`.
+  npm package builds itself through `prepare`. The same contract applies
+  to `action/parity.cjs` — after touching `src/report/` or
+  `src/review/inline.ts`, run `npm run build:parity` and commit it.
+- **Two "eval" surfaces exist.** `evals/` (`npm run eval`) is the
+  judge-scored quality suite; `scripts/review-eval.mjs run|compare|tally`
+  is the offline corpus-replay harness (`eval-corpus.*.json` →
+  `docs/audits/eval/`). They are not interchangeable.
 - **Tests are `tests/**/*.test.ts` only** (`vitest.config.ts`), with
   `tests/setup-env.ts` as the setup file and a 60s timeout. Unit tests need
   no browser; driver/e2e tests need Playwright chromium. A test placed

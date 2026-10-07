@@ -67,7 +67,7 @@ export interface SecretsScanResult {
 // Owned by vision/decisions.ts — re-exported here so existing import
 // paths (tests, lanes) keep resolving.
 export { MAX_CANDIDATES } from '../vision/decisions.js'
-export const DEFAULT_SECRETS_THRESHOLD = 0.3
+const DEFAULT_SECRETS_THRESHOLD = 0.3
 
 const PATTERNS: { cls: string; re: RegExp; group?: number }[] = [
   {

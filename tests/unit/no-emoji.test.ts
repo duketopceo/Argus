@@ -58,9 +58,10 @@ const USER_DOCS = [
 const JS_EXT = new Set(['.ts', '.mts', '.cts', '.js', '.mjs', '.cjs'])
 const TEXT_EXT = new Set([...JS_EXT, '.html', '.yml', '.yaml', '.json', '.css', '.svg', '.md'])
 
-/** Functions in src/cli.ts whose literals may carry emoji: model input, not output. */
+/** Functions whose literals may carry emoji: model input, not output. */
 const PERMANENT: Record<string, ReadonlySet<string>> = {
-  'src/cli.ts': new Set(['deriveSeverity', 'buildCodeReviewMessages', 'buildScanMessages']),
+  'src/cli/review-shared.ts': new Set(['deriveSeverity', 'buildCodeReviewMessages']),
+  'src/cli/scan.ts': new Set(['buildScanMessages']),
 }
 
 interface Allowance {
@@ -78,8 +79,11 @@ const TEMPORARY: Record<string, Allowance> = {
   // No unit owns these; the count is a ratchet, not a removal plan.
   // U6 cleaned the review comment, persist reply and code-review report text in src/cli.ts.
   // What remains is terminal stage lines, mention replies, run-report skip text, the
-  // generated workflow text and the verbatim init cost block (DESIGN 7.8).
-  'src/cli.ts': { emdash: 20, unit: null, why: NO_OWNER },
+  // generated workflow text and the verbatim init cost block (DESIGN 7.8) — split across
+  // the src/cli/ command modules when cli.ts was decomposed.
+  'src/cli/code-review.ts': { emdash: 13, unit: null, why: NO_OWNER },
+  'src/cli/mention.ts': { emdash: 4, unit: null, why: NO_OWNER },
+  'src/cli/run.ts': { emdash: 3, unit: null, why: NO_OWNER },
   // Moved verbatim from src/cli.ts (init must stay byte-identical).
   'src/onboarding/scaffold.ts': { emdash: 5, unit: null, why: NO_OWNER },
   'src/api.ts': { emdash: 1, unit: null, why: NO_OWNER },
@@ -228,13 +232,13 @@ describe('no emoji or em-dash in output-producing code (KTD11)', () => {
     expect(scanSource(file, `const s = \`a — \${1} b\`\n`).map((s) => s.kind)).toEqual(['emdash'])
   })
 
-  it('ignores only the deriveSeverity regex and the review prompt text in src/cli.ts', () => {
+  it('ignores only the deriveSeverity regex and the review prompt text in src/cli/review-shared.ts', () => {
     const parser = `function deriveSeverity(m: string) { return m.includes('\u{1F534}') || /\u{1F7E1}/.test(m) }\n`
     const prompt = `export function buildCodeReviewMessages() { return \`Severity emojis: bug = \u{1F534}\` }\n`
     const other = `function renderReviewComments() { return '\u{1F9EA} reproduced' }\n`
-    expect(scanSource('src/cli.ts', parser + prompt)).toEqual([])
-    expect(scanSource('src/cli.ts', other).map((s) => s.kind)).toEqual(['emoji'])
-    // The exemption is tied to src/cli.ts; the same parser elsewhere is flagged.
+    expect(scanSource('src/cli/review-shared.ts', parser + prompt)).toEqual([])
+    expect(scanSource('src/cli/review-shared.ts', other).map((s) => s.kind)).toEqual(['emoji'])
+    // The exemption is tied to the file; the same parser elsewhere is flagged.
     expect(scanSource('src/review/triage.ts', parser).map((s) => s.kind)).toEqual(['emoji', 'emoji'])
   })
 })

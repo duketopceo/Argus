@@ -34,6 +34,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "build:parity": "esbuild action/parity-entry.mjs --bundle --format=cjs --platform=node --target=node20 --banner:js=\"/* eslint-disable */ /* GENERATED - do not edit; npm run build:parity */\" --outfile=action/parity.cjs",
+    "check:parity": "node scripts/check-parity.mjs",
     "check:dist": "test -z \"$(git status --porcelain -- dist/)\" && test -z \"$(git ls-files --others --ignored --exclude-standard -- dist/)\"",
     "test": "vitest run",
     "test:tmp-leaks": "node scripts/check-tmp-leaks.mjs",
@@ -58,6 +60,7 @@
     "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^26.6.2",
     "electron": "^44.2.0",
+    "esbuild": "^0.28.2",
     "eslint": "^10.11.0",
     "globals": "^17.12.0",
     "prettier": "^3.0.0",

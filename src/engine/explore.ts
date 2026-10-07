@@ -51,7 +51,7 @@ export type ExploreStopReason =
   | 'expectation'
   | 'timeout'
 
-export interface ExploreStep {
+interface ExploreStep {
   action: string
   /** Page URL after the act. */
   url: string
