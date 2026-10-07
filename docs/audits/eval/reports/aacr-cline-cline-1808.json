@@ -1,0 +1,122 @@
+{
+  "ok": true,
+  "skipped": false,
+  "summary": "1 low-severity finding(s)",
+  "verdict": "approve",
+  "findings": [
+    {
+      "file": "src/api/providers/openai.ts",
+      "line": 22,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "L22: 🟡 risk: Typo in condition — `toLowerCase()` should be `toLowerCase()` (correct method exists). Typo causes the condition to always be `false`, so DeepSeek model always takes the standard `OpenAI` path instead of `AzureOpenAI`, which may break Azure-hosted DeepSeek endpoints. Fix: change `toLowerCase()` to `toLowerCase()`.",
+      "p": 0.32,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [
+    {
+      "path": "src/api/providers/openai.ts",
+      "line": 22,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\nTypo in condition — `toLowerCase()` should be `toLowerCase()` (correct method exists). Typo causes the condition to always be `false`, so DeepSeek model always takes the standard `OpenAI` path instead of `AzureOpenAI`, which may break Azure-hosted DeepSeek endpoints. Fix: change `toLowerCase()` to `toLowerCase()`.",
+      "dedupKey": "src/api/providers/openai.ts:22:risk:Typo in condition — `toLowerCase()` should be `toLowerCase()` (correct method exists). Typo causes the condition to always be `false`, so DeepSeek model always takes the standard `OpenAI` path instead of `AzureOpenAI`, which may break Azure-hosted DeepSeek endpoints. Fix: change `toLowerCase()` to `toLowerCase()`.:00001505"
+    }
+  ],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async"
+    ],
+    "records": [],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 1196,
+    "needsDeepReview": 0.56,
+    "risk": 2.07,
+    "topRiskArea": "ops",
+    "topRiskAreaConfidence": 0.54
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "src/api/providers/openai.ts",
+        "line": 22,
+        "severity": "risk",
+        "category": "correctness",
+        "message": "L22: 🟡 risk: Typo in condition — `toLowerCase()` should be `toLowerCase()` (correct method exists). Typo causes the condition to always be `false`, so DeepSeek model always takes the standard `OpenAI` path instead of `AzureOpenAI`, which may break Azure-hosted DeepSeek endpoints. Fix: change `toLow",
+        "adjudicated": true,
+        "p": 0.32
+      }
+    ],
+    "overflow": 0
+  },
+  "scope": {
+    "totalFiles": 2,
+    "reviewedFiles": 2,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1106,
+      "costUsd": 0.000042798,
+      "kind": "decide"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 1203,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 807,
+      "costUsd": 0.00003297,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.000075768,
+  "tokens": 3116,
+  "model": "deepseek/deepseek-v4-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "59c19fd996443a14b19aff8a63426e8006bdacac",
+    "checkoutSha": "59c19fd996443a14b19aff8a63426e8006bdacac",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "59c19fd996443a14b19aff8a63426e8006bdacac",
+  "diffRange": {
+    "base": "4d8bdf29458db722a2bce1dfacc50771959b32fa",
+    "baseSha": "9cb6cf52fc13a2339d97b9a90afecad7c1820da7",
+    "headSha": "59c19fd996443a14b19aff8a63426e8006bdacac"
+  }
+}

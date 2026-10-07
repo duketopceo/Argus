@@ -1,0 +1,219 @@
+{
+  "ok": true,
+  "skipped": false,
+  "summary": "6 low-severity finding(s)",
+  "verdict": "approve",
+  "findings": [
+    {
+      "file": "adapters/saml/wildfly/wildfly-subsystem/src/main/java/org/keycloak/subsystem/adapter/saml/extension/KeycloakDependencyProcessor.java",
+      "line": 38,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L38: 🔵 nit: field `KEYCLOAK_JBOSS_CORE_ADAPTER` changed value from a `ModuleIdentifier` name to a plain string, but the name is identical; no behavior change.",
+      "p": 0.08,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "adapters/saml/wildfly/wildfly-subsystem/src/main/java/org/keycloak/subsystem/adapter/saml/extension/KeycloakDependencyProcessor.java",
+      "line": 39,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L39: 🔵 nit: field `KEYCLOAK_CORE_ADAPTER` changed from `ModuleIdentifier` to `String`; consistent with other fields in class.",
+      "p": 0.08,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "adapters/saml/wildfly/wildfly-subsystem/src/main/java/org/keycloak/subsystem/adapter/saml/extension/KeycloakDependencyProcessor.java",
+      "line": 40,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L40: 🔵 nit: field `KEYCLOAK_API_ADAPTER` changed from `ModuleIdentifier` to `String`; consistent with other fields in class.",
+      "p": 0.08,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "adapters/saml/wildfly/wildfly-subsystem/src/main/java/org/keycloak/subsystem/adapter/saml/extension/KeycloakDependencyProcessor.java",
+      "line": 41,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L41: 🔵 nit: field `KEYCLOAK_COMMON` changed from `ModuleIdentifier` to `String`; consistent with other fields in class.",
+      "p": 0.08,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "adapters/saml/wildfly/wildfly-subsystem/src/main/java/org/keycloak/subsystem/adapter/saml/extension/KeycloakDependencyProcessorWildFly.java",
+      "line": 35,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L35: 🔵 nit: field `KEYCLOAK_ELYTRON_ADAPTER` changed from `ModuleIdentifier` to `String`; consistent with parent class refactor.",
+      "p": 0.09,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "adapters/saml/wildfly/wildfly-subsystem/src/main/java/org/keycloak/subsystem/adapter/saml/extension/KeycloakSubsystemDefinition.java",
+      "line": 54,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L54: 🔵 nit: removed `ModuleIdentifier` import; no longer needed after the refactor.",
+      "p": 0.09,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async"
+    ],
+    "records": [],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 5796,
+    "needsDeepReview": 0.43,
+    "risk": 2.24,
+    "topRiskArea": "ops",
+    "topRiskAreaConfidence": 0.45
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "adapters/saml/wildfly/wildfly-subsystem/src/main/java/org/keycloak/subsystem/adapter/saml/extension/KeycloakDependencyProcessor.java",
+        "line": 38,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L38: 🔵 nit: field `KEYCLOAK_JBOSS_CORE_ADAPTER` changed value from a `ModuleIdentifier` name to a plain string, but the name is identical; no behavior change.",
+        "adjudicated": true,
+        "p": 0.08
+      },
+      {
+        "file": "adapters/saml/wildfly/wildfly-subsystem/src/main/java/org/keycloak/subsystem/adapter/saml/extension/KeycloakDependencyProcessor.java",
+        "line": 39,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L39: 🔵 nit: field `KEYCLOAK_CORE_ADAPTER` changed from `ModuleIdentifier` to `String`; consistent with other fields in class.",
+        "adjudicated": true,
+        "p": 0.08
+      },
+      {
+        "file": "adapters/saml/wildfly/wildfly-subsystem/src/main/java/org/keycloak/subsystem/adapter/saml/extension/KeycloakDependencyProcessor.java",
+        "line": 40,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L40: 🔵 nit: field `KEYCLOAK_API_ADAPTER` changed from `ModuleIdentifier` to `String`; consistent with other fields in class.",
+        "adjudicated": true,
+        "p": 0.08
+      },
+      {
+        "file": "adapters/saml/wildfly/wildfly-subsystem/src/main/java/org/keycloak/subsystem/adapter/saml/extension/KeycloakDependencyProcessor.java",
+        "line": 41,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L41: 🔵 nit: field `KEYCLOAK_COMMON` changed from `ModuleIdentifier` to `String`; consistent with other fields in class.",
+        "adjudicated": true,
+        "p": 0.08
+      },
+      {
+        "file": "adapters/saml/wildfly/wildfly-subsystem/src/main/java/org/keycloak/subsystem/adapter/saml/extension/KeycloakDependencyProcessorWildFly.java",
+        "line": 35,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L35: 🔵 nit: field `KEYCLOAK_ELYTRON_ADAPTER` changed from `ModuleIdentifier` to `String`; consistent with parent class refactor.",
+        "adjudicated": true,
+        "p": 0.09
+      },
+      {
+        "file": "adapters/saml/wildfly/wildfly-subsystem/src/main/java/org/keycloak/subsystem/adapter/saml/extension/KeycloakSubsystemDefinition.java",
+        "line": 54,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L54: 🔵 nit: removed `ModuleIdentifier` import; no longer needed after the refactor.",
+        "adjudicated": true,
+        "p": 0.09
+      }
+    ],
+    "overflow": 0
+  },
+  "scope": {
+    "totalFiles": 3,
+    "reviewedFiles": 3,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 2589,
+      "costUsd": 0.000105084,
+      "kind": "decide"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 3034,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 3382,
+      "costUsd": 0.00013734,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.000242424,
+  "tokens": 9005,
+  "model": "deepseek/deepseek-v4-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "abffd8017718fe28e5a63e7f74ff5e4efe5cdbab",
+    "checkoutSha": "abffd8017718fe28e5a63e7f74ff5e4efe5cdbab",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "abffd8017718fe28e5a63e7f74ff5e4efe5cdbab",
+  "diffRange": {
+    "base": "949ef35a3bda916b24763c435033258a84ba8596",
+    "baseSha": "725f1e40f0f8195833a4c1ecade693aa3a0d6ed0",
+    "headSha": "abffd8017718fe28e5a63e7f74ff5e4efe5cdbab"
+  }
+}

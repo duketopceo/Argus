@@ -1,0 +1,122 @@
+{
+  "ok": false,
+  "skipped": false,
+  "summary": "1 finding(s) include a blocking severity",
+  "verdict": "needs_changes",
+  "findings": [
+    {
+      "file": "plugins/org.jkiss.dbeaver.model/src/org/jkiss/dbeaver/model/navigator/fs/DBNPathBase.java",
+      "line": 301,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L301: 🔴 bug: `Files.notExists(resource)` is the opposite of `!Files.exists(resource)`. Use `Files.notExists(resource)` which returns true if the file does not exist (including when it cannot be determined), but the original condition was `!Files.exists(resource)`. This could mis-handle cases where existence is unknown (e.g., permission issues). Keep the original `if (resource == null || !Files.exists(resource))` logic.",
+      "p": 0.31,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [
+    {
+      "path": "plugins/org.jkiss.dbeaver.model/src/org/jkiss/dbeaver/model/navigator/fs/DBNPathBase.java",
+      "line": 301,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`Files.notExists(resource)` is the opposite of `!Files.exists(resource)`. Use `Files.notExists(resource)` which returns true if the file does not exist (including when it cannot be determined), but the original condition was `!Files.exists(resource)`. This could mis-handle cases where existence is unknown (e.g., permission issues). Keep the original `if (resource == null || !Files.exists(resource))` logic.",
+      "dedupKey": "plugins/org.jkiss.dbeaver.model/src/org/jkiss/dbeaver/model/navigator/fs/DBNPathBase.java:301:bug:`Files.notExists(resource)` is the opposite of `!Files.exists(resource)`. Use `Files.notExists(resource)` which returns true if the file does not exist (including when it cannot be determined), but the original condition was `!Files.exists(resource)`. This could mis-handle cases where existence is unknown (e.g., permission issues). Keep the original `if (resource == null || !Files.exists(resource))` logic.:00001505"
+    }
+  ],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async"
+    ],
+    "records": [],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 3020,
+    "needsDeepReview": 0.83,
+    "risk": 2.39,
+    "topRiskArea": "data",
+    "topRiskAreaConfidence": 0.59
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "plugins/org.jkiss.dbeaver.model/src/org/jkiss/dbeaver/model/navigator/fs/DBNPathBase.java",
+        "line": 301,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L301: 🔴 bug: `Files.notExists(resource)` is the opposite of `!Files.exists(resource)`. Use `Files.notExists(resource)` which returns true if the file does not exist (including when it cannot be determined), but the original condition was `!Files.exists(resource)`. This could mis-handle cases where ",
+        "adjudicated": true,
+        "p": 0.31
+      }
+    ],
+    "overflow": 0
+  },
+  "scope": {
+    "totalFiles": 2,
+    "reviewedFiles": 2,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1544,
+      "costUsd": 0.000061194,
+      "kind": "decide"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 1720,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 960,
+      "costUsd": 0.000039396,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.00010059,
+  "tokens": 4224,
+  "model": "deepseek/deepseek-v4-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "6f52de00e923dbc377880d9fd130275c7020c328",
+    "checkoutSha": "6f52de00e923dbc377880d9fd130275c7020c328",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "6f52de00e923dbc377880d9fd130275c7020c328",
+  "diffRange": {
+    "base": "24ad3c4030412df3d9c843c405e90a0b1e2ad5dd",
+    "baseSha": "24ad3c4030412df3d9c843c405e90a0b1e2ad5dd",
+    "headSha": "6f52de00e923dbc377880d9fd130275c7020c328"
+  }
+}

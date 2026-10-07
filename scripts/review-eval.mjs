@@ -2,7 +2,8 @@
 // review-eval - offline review-corpus runner and metrics diff.
 //
 // Corpus JSON: [{ name, repo, base, head, labels? }]
-//   repo    absolute path or https URL (cloned into --cache dir)
+//   repo    absolute path or https URL (init'd into --cache dir, only the
+//           entry's two SHAs fetched - no full clone)
 //   base    ref/sha the PR diverged from (merge-base source)
 //   head    sha to check out and review
 //   labels  optional [{ path, fromLine, toLine, valid, note? }] ground truth
@@ -37,9 +38,10 @@ const matchLabel = (finding, labels) =>
   labels.find(
     (l) =>
       l.path === finding.file &&
-      typeof finding.line === 'number' &&
-      finding.line >= l.fromLine &&
-      finding.line <= l.toLine,
+      (l.fileLevel === true ||
+        (typeof finding.line === 'number' &&
+          finding.line >= l.fromLine &&
+          finding.line <= l.toLine)),
   )
 
 // metricsFromReport: pure - unit-testable without a repo.
@@ -89,15 +91,71 @@ export function metricsFromReport(report, labels) {
 const git = (cwd, args) =>
   execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8' }).trim()
 
-function resolveRepo(repo, cacheDir) {
+// ensureSha: fetch a single commit at depth 1. GitHub serves
+// reachable-sha-in-want, so `git fetch origin <sha>` lands any PR commit —
+// no clone of the repo's full history needed.
+function ensureSha(repo, sha) {
+  try {
+    execFileSync('git', ['-C', repo, 'cat-file', '-e', `${sha}^{commit}`])
+    return
+  } catch {
+    /* not fetched yet */
+  }
+  console.error(`  fetch ${sha.slice(0, 12)}`)
+  execFileSync('git', ['-C', repo, 'fetch', '--quiet', '--depth', '1', 'origin', sha], {
+    stdio: 'inherit',
+  })
+}
+
+// mergeBase: '' when the shallow boundary hides the shared ancestor.
+function mergeBase(repo, a, b) {
+  try {
+    return git(repo, ['merge-base', a, b])
+  } catch {
+    return ''
+  }
+}
+
+// The base and head SHAs share real ancestry (the PR source forked from
+// base history), so merge-base exists — depth-1 fetches just hide it. A
+// wrong merge-base would make `git diff <base>` report months of branch
+// drift instead of the PR diff, so deepen both tips until it surfaces.
+function ensureSharedHistory(repo, base, head) {
+  let depth = 32
+  for (let i = 0; i < 6 && mergeBase(repo, base, head) === ''; i++) {
+    // One SHA per fetch: a single multi-ref deepen rewrites .git/shallow
+    // twice under one transaction and can lose the race with itself
+    // ("shallow file has changed since we read it").
+    for (const sha of [base, head]) {
+      try {
+        execFileSync('git', ['-C', repo, 'fetch', '--quiet', `--deepen=${depth}`, 'origin', sha], {
+          stdio: 'inherit',
+        })
+      } catch {
+        // deepen failures are tolerated once per round - a shallow root
+        // that already reaches the merge-base needs no more history
+      }
+    }
+    depth *= 2
+  }
+  if (mergeBase(repo, base, head) === '') {
+    throw new Error(`no merge-base between ${base.slice(0, 12)} and ${head.slice(0, 12)} after deepening`)
+  }
+}
+
+function resolveRepo(entry, cacheDir) {
+  const repo = entry.repo
   if (existsSync(repo)) return resolve(repo)
   const dest = join(cacheDir, repo.replace(/[^a-zA-Z0-9]/g, '_'))
   if (!existsSync(dest)) {
-    console.error(`clone ${repo} -> ${dest}`)
-    execFileSync('git', ['clone', '--quiet', repo, dest], { stdio: 'inherit' })
-  } else {
-    git(dest, ['fetch', '--quiet', 'origin'])
+    console.error(`init ${repo} -> ${dest}`)
+    mkdirSync(dest, { recursive: true })
+    execFileSync('git', ['-C', dest, 'init', '--quiet'])
+    execFileSync('git', ['-C', dest, 'remote', 'add', 'origin', repo])
   }
+  ensureSha(dest, entry.base)
+  ensureSha(dest, entry.head)
+  ensureSharedHistory(dest, entry.base, entry.head)
   return dest
 }
 
@@ -107,9 +165,25 @@ async function run(corpusPath, tag, cacheDir) {
     process.exit(2)
   }
   const corpus = JSON.parse(readFileSync(corpusPath, 'utf8'))
+  const outDir = join(REPO_ROOT, 'docs', 'audits', 'eval')
+  const keptDir = join(outDir, 'reports')
+  mkdirSync(keptDir, { recursive: true })
   const results = []
   for (const entry of corpus) {
-    const repo = resolveRepo(entry.repo, cacheDir)
+    let repo
+    try {
+      repo = resolveRepo(entry, cacheDir)
+    } catch (e) {
+      results.push({
+        name: entry.name,
+        ms: 0,
+        exitCode: 2,
+        stalled: true,
+        metrics: { findings: 0, comments: 0, nitShare: 0, summary: String(e.message ?? e).slice(0, 200) },
+      })
+      console.error(`${entry.name}: repo setup failed - ${String(e.message ?? e).slice(0, 120)}`)
+      continue
+    }
     const wt = mkdtempSync(join(tmpdir(), 'argus-eval-wt-'))
     const reportDir = mkdtempSync(join(tmpdir(), 'argus-eval-report-'))
     try {
@@ -132,7 +206,11 @@ async function run(corpusPath, tag, cacheDir) {
         : { ok: false, skipped: true, summary: `exit ${code}` }
       const metrics = metricsFromReport(report, entry.labels)
       const stalled = code !== 0 || !existsSync(reportPath)
-      results.push({ name: entry.name, ms, exitCode: code, stalled, metrics, reportPath })
+      const keptReport = existsSync(reportPath)
+        ? join(keptDir, `${entry.name.replace(/[^a-zA-Z0-9-]/g, '_')}.json`)
+        : undefined
+      if (keptReport) writeFileSync(keptReport, JSON.stringify(report, null, 2))
+      results.push({ name: entry.name, ms, exitCode: code, stalled, metrics, reportPath: keptReport })
       console.error(
         `${entry.name}: findings=${metrics.findings} comments=${metrics.comments}` +
           (metrics.precision !== undefined
@@ -156,8 +234,6 @@ async function run(corpusPath, tag, cacheDir) {
     entries: results.length,
     results,
   }
-  const outDir = join(REPO_ROOT, 'docs', 'audits', 'eval')
-  mkdirSync(outDir, { recursive: true })
   const out = join(outDir, `${summary.tag}.json`)
   writeFileSync(out, JSON.stringify(summary, null, 2))
   console.log(`\nwrote ${out}`)

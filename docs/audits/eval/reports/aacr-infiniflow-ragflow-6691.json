@@ -1,0 +1,206 @@
+{
+  "ok": false,
+  "skipped": false,
+  "summary": "4 finding(s) include a blocking severity",
+  "verdict": "needs_changes",
+  "findings": [
+    {
+      "file": "graphrag/utils.py",
+      "line": 442,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L442: 🔴 bug: sync `settings.docStoreConn.delete()` is called directly inside `nursery.start_soon` without wrapping in `trio.to_thread.run_sync`, so it blocks the entire event loop instead of running in a worker thread. Wrap the lambda body with `trio.to_thread.run_sync(...)`.",
+      "p": 0.81,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "graphrag/general/extractor.py",
+      "line": 204,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L204: 🔴 bug: `list.extend()` returns `None`, so `sorted(set(node0_attrs[\"source_id\"].extend(...)))` always becomes `sorted(set(None))` → `[]`, silently erasing all prior `source_id` values. Replace `.extend(...)` with `+` or use a temporary list, e.g. `sorted(set(node0_attrs[\"source_id\"] + node1_attrs.get(\"source_id\", [])))`.",
+      "p": 0.88,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "graphrag/general/extractor.py",
+      "line": 215,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L215: 🔴 bug: Same `list.extend()`‑returns‑`None` pattern for both `keywords` and `source_id` on edge attrs, causing silent data loss. Use `list1 + list2` instead of `list1.extend(list2)`.",
+      "p": 0.85,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "graphrag/entity_resolution.py",
+      "line": 114,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L114: 🔴 bug: `nx.connected_components()` returns sets of nodes, not a graph object – `sub_connect_graph.nodes()` does not exist and will raise `AttributeError`. Replace `sub_connect_graph.nodes()` with `sub_connect_graph` (already a set of node names).",
+      "p": 0.76,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "request_changes",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 4,
+  "reviewComments": [
+    {
+      "path": "graphrag/utils.py",
+      "line": 442,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\nsync `settings.docStoreConn.delete()` is called directly inside `nursery.start_soon` without wrapping in `trio.to_thread.run_sync`, so it blocks the entire event loop instead of running in a worker thread. Wrap the lambda body with `trio.to_thread.run_sync(...)`.",
+      "dedupKey": "graphrag/utils.py:442:bug:sync `settings.docStoreConn.delete()` is called directly inside `nursery.start_soon` without wrapping in `trio.to_thread.run_sync`, so it blocks the entire event loop instead of running in a worker thread. Wrap the lambda body with `trio.to_thread.run_sync(...)`.:00001505"
+    },
+    {
+      "path": "graphrag/general/extractor.py",
+      "line": 204,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`list.extend()` returns `None`, so `sorted(set(node0_attrs[\"source_id\"].extend(...)))` always becomes `sorted(set(None))` → `[]`, silently erasing all prior `source_id` values. Replace `.extend(...)` with `+` or use a temporary list, e.g. `sorted(set(node0_attrs[\"source_id\"] + node1_attrs.get(\"source_id\", [])))`.",
+      "dedupKey": "graphrag/general/extractor.py:204:bug:`list.extend()` returns `None`, so `sorted(set(node0_attrs[\"source_id\"].extend(...)))` always becomes `sorted(set(None))` → `[]`, silently erasing all prior `source_id` values. Replace `.extend(...)` with `+` or use a temporary list, e.g. `sorted(set(node0_attrs[\"source_id\"] + node1_attrs.get(\"source_id\", [])))`.:00001505"
+    },
+    {
+      "path": "graphrag/general/extractor.py",
+      "line": 215,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\nSame `list.extend()`‑returns‑`None` pattern for both `keywords` and `source_id` on edge attrs, causing silent data loss. Use `list1 + list2` instead of `list1.extend(list2)`.",
+      "dedupKey": "graphrag/general/extractor.py:215:bug:Same `list.extend()`‑returns‑`None` pattern for both `keywords` and `source_id` on edge attrs, causing silent data loss. Use `list1 + list2` instead of `list1.extend(list2)`.:00001505"
+    },
+    {
+      "path": "graphrag/entity_resolution.py",
+      "line": 114,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`nx.connected_components()` returns sets of nodes, not a graph object – `sub_connect_graph.nodes()` does not exist and will raise `AttributeError`. Replace `sub_connect_graph.nodes()` with `sub_connect_graph` (already a set of node names).",
+      "dedupKey": "graphrag/entity_resolution.py:114:bug:`nx.connected_components()` returns sets of nodes, not a graph object – `sub_connect_graph.nodes()` does not exist and will raise `AttributeError`. Replace `sub_connect_graph.nodes()` with `sub_connect_graph` (already a set of node names).:00001505"
+    }
+  ],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async"
+    ],
+    "records": [],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 3541,
+    "needsDeepReview": 0.92,
+    "risk": 2.68,
+    "topRiskArea": "data",
+    "topRiskAreaConfidence": 0.99
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "graphrag/utils.py",
+        "line": 442,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L442: 🔴 bug: sync `settings.docStoreConn.delete()` is called directly inside `nursery.start_soon` without wrapping in `trio.to_thread.run_sync`, so it blocks the entire event loop instead of running in a worker thread. Wrap the lambda body with `trio.to_thread.run_sync(...)`.",
+        "adjudicated": true,
+        "p": 0.81
+      },
+      {
+        "file": "graphrag/general/extractor.py",
+        "line": 204,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L204: 🔴 bug: `list.extend()` returns `None`, so `sorted(set(node0_attrs[\"source_id\"].extend(...)))` always becomes `sorted(set(None))` → `[]`, silently erasing all prior `source_id` values. Replace `.extend(...)` with `+` or use a temporary list, e.g. `sorted(set(node0_attrs[\"source_id\"] + node1_at",
+        "adjudicated": true,
+        "p": 0.88
+      },
+      {
+        "file": "graphrag/general/extractor.py",
+        "line": 215,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L215: 🔴 bug: Same `list.extend()`‑returns‑`None` pattern for both `keywords` and `source_id` on edge attrs, causing silent data loss. Use `list1 + list2` instead of `list1.extend(list2)`.",
+        "adjudicated": true,
+        "p": 0.85
+      },
+      {
+        "file": "graphrag/entity_resolution.py",
+        "line": 114,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L114: 🔴 bug: `nx.connected_components()` returns sets of nodes, not a graph object – `sub_connect_graph.nodes()` does not exist and will raise `AttributeError`. Replace `sub_connect_graph.nodes()` with `sub_connect_graph` (already a set of node names).",
+        "adjudicated": true,
+        "p": 0.76
+      }
+    ],
+    "overflow": 0
+  },
+  "scope": {
+    "totalFiles": 3,
+    "reviewedFiles": 3,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1620,
+      "costUsd": 0.000064386,
+      "kind": "decide"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 2162,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 2017,
+      "costUsd": 0.000081522,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.00014590799999999999,
+  "tokens": 5799,
+  "model": "deepseek/deepseek-v4-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "36881278bf059ad4f79eea31edb34fa2afec6a23",
+    "checkoutSha": "36881278bf059ad4f79eea31edb34fa2afec6a23",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "36881278bf059ad4f79eea31edb34fa2afec6a23",
+  "diffRange": {
+    "base": "0a42e5777eb966b26aaf8f2a7d593ae99a4aa87a",
+    "baseSha": "0a42e5777eb966b26aaf8f2a7d593ae99a4aa87a",
+    "headSha": "36881278bf059ad4f79eea31edb34fa2afec6a23"
+  }
+}

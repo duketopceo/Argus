@@ -62,3 +62,83 @@ describe('metricsFromReport', () => {
     expect(m.recall).toBe(0)
   })
 })
+
+import { selectPrs, toCorpus } from '../../scripts/aacr-corpus.mjs'
+
+const row = (over) => ({
+  project_main_language: 'TypeScript',
+  pr_url: 'https://github.com/o/r/pull/1',
+  pr_source_commit: 'aaa',
+  pr_target_commit: 'bbb',
+  pr_change_line_count: '50',
+  pr_category: 'x',
+  is_ai_comment: 'True',
+  note: '',
+  path: 'src/a.ts',
+  side: 'right',
+  source_model: 'm',
+  from_line: '10',
+  to_line: '12',
+  category: 'Logic',
+  context: 'line',
+  label: 1,
+  ...over,
+})
+
+describe('selectPrs', () => {
+  it('keeps only label=1 right-side rows as labels', () => {
+    const rows = [
+      row({}),
+      row({ label: 0, path: 'src/bad.ts' }),
+      row({ side: 'left', path: 'src/old.ts' }),
+    ]
+    const [pr] = selectPrs(rows)
+    expect(pr.labels).toHaveLength(1)
+    expect(pr.labels[0].path).toBe('src/a.ts')
+    expect(pr.labels[0].valid).toBe(true)
+  })
+
+  it('accepts numeric or string labels and drops PRs with no valid labels', () => {
+    const rows = [row({ label: 0, pr_url: 'https://github.com/o/r/pull/2' })]
+    expect(selectPrs(rows)).toHaveLength(0)
+    expect(selectPrs([row({ label: '1' })])).toHaveLength(1)
+  })
+
+  it('filters by language and diff size, sorts by diff size, caps count', () => {
+    const rows = [
+      row({ pr_url: 'https://github.com/o/r/pull/1', pr_change_line_count: '300' }),
+      row({ pr_url: 'https://github.com/o/r/pull/2', pr_change_line_count: '10' }),
+      row({ pr_url: 'https://github.com/o/r/pull/3', project_main_language: 'C++' }),
+    ]
+    const prs = selectPrs(rows, { langs: ['TypeScript'], maxLines: 2000, maxPrs: 1 })
+    expect(prs).toHaveLength(1)
+    expect(prs[0].url).toBe('https://github.com/o/r/pull/2')
+    expect(selectPrs(rows, { maxLines: 5 })).toHaveLength(0)
+  })
+
+  it('marks file-level labels for path-only matching', () => {
+    const [pr] = selectPrs([row({ context: 'File Level' })])
+    expect(pr.labels[0].fileLevel).toBe(true)
+  })
+})
+
+describe('toCorpus', () => {
+  it('emits corpus entries with repo URL, commits, labels', () => {
+    const [entry] = toCorpus(selectPrs([row({})]))
+    expect(entry.name).toBe('aacr-o-r-1')
+    expect(entry.repo).toBe('https://github.com/o/r')
+    expect(entry.base).toBe('aaa')
+    expect(entry.head).toBe('bbb')
+    expect(entry.labels[0].fromLine).toBe(10)
+  })
+})
+
+describe('metricsFromReport labels', () => {
+  it('matches fileLevel labels on path alone', () => {
+    const m = metricsFromReport(report, [
+      { path: 'docs/x.md', fromLine: 0, toLine: 0, valid: true, fileLevel: true },
+    ])
+    expect(m.tp).toBe(1)
+    expect(m.recall).toBe(1)
+  })
+})

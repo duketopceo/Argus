@@ -1,0 +1,332 @@
+[
+  {
+    "name": "aacr-cline-cline-1808",
+    "repo": "https://github.com/cline/cline",
+    "base": "4d8bdf29458db722a2bce1dfacc50771959b32fa",
+    "head": "59c19fd996443a14b19aff8a63426e8006bdacac",
+    "labels": [
+      {
+        "path": "src/api/providers/openai.ts",
+        "fromLine": 17,
+        "toLine": 17,
+        "valid": true,
+        "fileLevel": false,
+        "category": "Code Defect"
+      },
+      {
+        "path": "src/api/providers/openai.ts",
+        "fromLine": 39,
+        "toLine": 39,
+        "valid": true,
+        "fileLevel": false,
+        "category": "Maintainability and Readability"
+      },
+      {
+        "path": "src/api/providers/openai.ts",
+        "fromLine": 39,
+        "toLine": 39,
+        "valid": true,
+        "fileLevel": false,
+        "category": "Code Defect"
+      }
+    ],
+    "note": "AACR-Bench TypeScript PR, 11 changed lines, 3 verified issues"
+  },
+  {
+    "name": "aacr-infiniflow-ragflow-6691",
+    "repo": "https://github.com/infiniflow/ragflow",
+    "base": "0a42e5777eb966b26aaf8f2a7d593ae99a4aa87a",
+    "head": "36881278bf059ad4f79eea31edb34fa2afec6a23",
+    "labels": [
+      {
+        "path": "graphrag/entity_resolution.py",
+        "fromLine": 114,
+        "toLine": 114,
+        "valid": true,
+        "fileLevel": true,
+        "category": "Code Defect"
+      },
+      {
+        "path": "graphrag/entity_resolution.py",
+        "fromLine": 115,
+        "toLine": 115,
+        "valid": true,
+        "fileLevel": true,
+        "category": "Code Defect"
+      },
+      {
+        "path": "graphrag/general/extractor.py",
+        "fromLine": 205,
+        "toLine": 205,
+        "valid": true,
+        "fileLevel": false,
+        "category": "Code Defect"
+      },
+      {
+        "path": "graphrag/general/extractor.py",
+        "fromLine": 216,
+        "toLine": 217,
+        "valid": true,
+        "fileLevel": false,
+        "category": "Maintainability and Readability"
+      },
+      {
+        "path": "graphrag/general/extractor.py",
+        "fromLine": 216,
+        "toLine": 219,
+        "valid": true,
+        "fileLevel": true,
+        "category": "Code Defect"
+      },
+      {
+        "path": "graphrag/utils.py",
+        "fromLine": 442,
+        "toLine": 442,
+        "valid": true,
+        "fileLevel": false,
+        "category": "Performance"
+      }
+    ],
+    "note": "AACR-Bench Python PR, 11 changed lines, 6 verified issues"
+  },
+  {
+    "name": "aacr-vllm-project-vllm-24425",
+    "repo": "https://github.com/vllm-project/vllm",
+    "base": "f4962a6d55a340ebb569d377c842deff7611d8f7",
+    "head": "d67e5ba822935a1fd2dd01a11ca01c01b3b9b4c6",
+    "labels": [
+      {
+        "path": "vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py",
+        "fromLine": 96,
+        "toLine": 97,
+        "valid": true,
+        "fileLevel": false,
+        "category": "Code Defect"
+      }
+    ],
+    "note": "AACR-Bench Python PR, 12 changed lines, 1 verified issues"
+  },
+  {
+    "name": "aacr-comfyanonymous-comfyui-6542",
+    "repo": "https://github.com/comfyanonymous/ComfyUI",
+    "base": "832e3f5ca3c357e527fdf811502357bd2798425e",
+    "head": "f594ea41f5f42405a87601117c07c31e68ca9a1c",
+    "labels": [
+      {
+        "path": "comfy/clip_model.py",
+        "fromLine": 109,
+        "toLine": 109,
+        "valid": true,
+        "fileLevel": true,
+        "category": "Code Defect"
+      },
+      {
+        "path": "comfy/model_management.py",
+        "fromLine": 993,
+        "toLine": 998,
+        "valid": true,
+        "fileLevel": false,
+        "category": "Maintainability and Readability"
+      }
+    ],
+    "note": "AACR-Bench Python PR, 15 changed lines, 2 verified issues"
+  },
+  {
+    "name": "aacr-keycloak-keycloak-41672",
+    "repo": "https://github.com/keycloak/keycloak",
+    "base": "949ef35a3bda916b24763c435033258a84ba8596",
+    "head": "abffd8017718fe28e5a63e7f74ff5e4efe5cdbab",
+    "labels": [
+      {
+        "path": "adapters/saml/wildfly/wildfly-subsystem/src/main/java/org/keycloak/subsystem/adapter/saml/extension/KeycloakDependencyProcessor.java",
+        "fromLine": 38,
+        "toLine": 38,
+        "valid": true,
+        "fileLevel": false,
+        "category": "Maintainability and Readability"
+      }
+    ],
+    "note": "AACR-Bench Java PR, 19 changed lines, 1 verified issues"
+  },
+  {
+    "name": "aacr-dbeaver-dbeaver-37564",
+    "repo": "https://github.com/dbeaver/dbeaver",
+    "base": "24ad3c4030412df3d9c843c405e90a0b1e2ad5dd",
+    "head": "6f52de00e923dbc377880d9fd130275c7020c328",
+    "labels": [
+      {
+        "path": "plugins/org.jkiss.dbeaver.model/src/org/jkiss/dbeaver/model/navigator/fs/DBNPathBase.java",
+        "fromLine": 293,
+        "toLine": 294,
+        "valid": true,
+        "fileLevel": true,
+        "category": "Performance"
+      },
+      {
+        "path": "plugins/org.jkiss.dbeaver.model/src/org/jkiss/dbeaver/model/navigator/fs/DBNPathBase.java",
+        "fromLine": 304,
+        "toLine": 304,
+        "valid": true,
+        "fileLevel": true,
+        "category": "Maintainability and Readability"
+      },
+      {
+        "path": "plugins/org.jkiss.dbeaver.model/src/org/jkiss/dbeaver/model/navigator/fs/DBNPathBase.java",
+        "fromLine": 363,
+        "toLine": 364,
+        "valid": true,
+        "fileLevel": false,
+        "category": "Maintainability and Readability"
+      },
+      {
+        "path": "plugins/org.jkiss.dbeaver.model/src/org/jkiss/dbeaver/model/navigator/fs/DBNPathBase.java",
+        "fromLine": 365,
+        "toLine": 369,
+        "valid": true,
+        "fileLevel": true,
+        "category": "Maintainability and Readability"
+      }
+    ],
+    "note": "AACR-Bench Java PR, 22 changed lines, 4 verified issues"
+  },
+  {
+    "name": "aacr-langflow-ai-langflow-5388",
+    "repo": "https://github.com/langflow-ai/langflow",
+    "base": "f9b2ce18a4945c04ab786e66e6fc10e4b49e2677",
+    "head": "f7db861b87dd6827ad55de67f473dc372e5877d8",
+    "labels": [
+      {
+        "path": "src/backend/base/langflow/graph/graph/utils.py",
+        "fromLine": 149,
+        "toLine": 150,
+        "valid": true,
+        "fileLevel": false,
+        "category": "Maintainability and Readability"
+      },
+      {
+        "path": "src/backend/base/langflow/graph/graph/utils.py",
+        "fromLine": 185,
+        "toLine": 191,
+        "valid": true,
+        "fileLevel": false,
+        "category": "Code Defect"
+      },
+      {
+        "path": "src/backend/base/langflow/graph/graph/utils.py",
+        "fromLine": 193,
+        "toLine": 194,
+        "valid": true,
+        "fileLevel": true,
+        "category": "Maintainability and Readability"
+      }
+    ],
+    "note": "AACR-Bench Python PR, 22 changed lines, 3 verified issues"
+  },
+  {
+    "name": "aacr-elastic-elasticsearch-133945",
+    "repo": "https://github.com/elastic/elasticsearch",
+    "base": "3c264cff967750ff7cb581defa42b0d69bb31fc6",
+    "head": "0e24fc739f9daa5b003d20fb0fffaf197449db67",
+    "labels": [
+      {
+        "path": "server/src/main/java/org/elasticsearch/index/codec/vectors/DefaultIVFVectorsReader.java",
+        "fromLine": 44,
+        "toLine": 44,
+        "valid": true,
+        "fileLevel": true,
+        "category": "Performance"
+      },
+      {
+        "path": "server/src/main/java/org/elasticsearch/index/codec/vectors/DefaultIVFVectorsReader.java",
+        "fromLine": 197,
+        "toLine": 197,
+        "valid": true,
+        "fileLevel": false,
+        "category": "Code Defect"
+      },
+      {
+        "path": "server/src/main/java/org/elasticsearch/index/codec/vectors/DefaultIVFVectorsReader.java",
+        "fromLine": 197,
+        "toLine": 197,
+        "valid": true,
+        "fileLevel": true,
+        "category": "Code Defect"
+      },
+      {
+        "path": "server/src/main/java/org/elasticsearch/index/codec/vectors/IVFVectorsReader.java",
+        "fromLine": 256,
+        "toLine": 257,
+        "valid": true,
+        "fileLevel": true,
+        "category": "Code Defect"
+      }
+    ],
+    "note": "AACR-Bench Java PR, 23 changed lines, 4 verified issues"
+  },
+  {
+    "name": "aacr-ollama-ollama-8938",
+    "repo": "https://github.com/ollama/ollama",
+    "base": "f53f4198c36d0a943de598ad91a20baa9481c5c5",
+    "head": "09f15872d92531f5b41caa51e9b1547eeb7ab694",
+    "labels": [
+      {
+        "path": "api/types.go",
+        "fromLine": 614,
+        "toLine": 614,
+        "valid": true,
+        "fileLevel": false,
+        "category": "Code Defect"
+      },
+      {
+        "path": "envconfig/config.go",
+        "fromLine": 171,
+        "toLine": 171,
+        "valid": true,
+        "fileLevel": false,
+        "category": "Maintainability and Readability"
+      }
+    ],
+    "note": "AACR-Bench Go PR, 24 changed lines, 2 verified issues"
+  },
+  {
+    "name": "aacr-elastic-elasticsearch-123744",
+    "repo": "https://github.com/elastic/elasticsearch",
+    "base": "ba5a9c83310ce6fbe27ff251aba00e37fad1d205",
+    "head": "e4e5576b3455478071e0fd26a80ec9fd8eb35437",
+    "labels": [
+      {
+        "path": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/FileAccessTree.java",
+        "fromLine": 206,
+        "toLine": 206,
+        "valid": true,
+        "fileLevel": true,
+        "category": "Performance"
+      },
+      {
+        "path": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/FileAccessTree.java",
+        "fromLine": 206,
+        "toLine": 209,
+        "valid": true,
+        "fileLevel": true,
+        "category": "Code Defect"
+      },
+      {
+        "path": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/FileAccessTree.java",
+        "fromLine": 224,
+        "toLine": 224,
+        "valid": true,
+        "fileLevel": true,
+        "category": "Performance"
+      },
+      {
+        "path": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyManager.java",
+        "fromLine": 311,
+        "toLine": 313,
+        "valid": true,
+        "fileLevel": false,
+        "category": "Performance"
+      }
+    ],
+    "note": "AACR-Bench Java PR, 29 changed lines, 4 verified issues"
+  }
+]

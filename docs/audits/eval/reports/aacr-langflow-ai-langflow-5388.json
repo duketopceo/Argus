@@ -1,0 +1,135 @@
+{
+  "ok": true,
+  "skipped": false,
+  "summary": "2 low-severity finding(s)",
+  "verdict": "approve",
+  "findings": [
+    {
+      "file": "src/backend/base/langflow/graph/graph/utils.py",
+      "line": 149,
+      "severity": "nit",
+      "category": "performance",
+      "message": "L149: 🔵 nit: `for` loop with `break` replaces `next()` + stop iteration. Cleaner but early exit is same; fine as-is.",
+      "p": 0.09,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/backend/base/langflow/graph/graph/utils.py",
+      "line": 185,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L185: 🔵 nit: Unnecessary variable `field_template_proxy` used only once. Inline the dict access for brevity.",
+      "p": 0.21,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async"
+    ],
+    "records": [],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 1746,
+    "needsDeepReview": 0.41,
+    "risk": 1.83,
+    "topRiskArea": "data",
+    "topRiskAreaConfidence": 0.4
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "src/backend/base/langflow/graph/graph/utils.py",
+        "line": 149,
+        "severity": "nit",
+        "category": "performance",
+        "message": "L149: 🔵 nit: `for` loop with `break` replaces `next()` + stop iteration. Cleaner but early exit is same; fine as-is.",
+        "adjudicated": true,
+        "p": 0.09
+      },
+      {
+        "file": "src/backend/base/langflow/graph/graph/utils.py",
+        "line": 185,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L185: 🔵 nit: Unnecessary variable `field_template_proxy` used only once. Inline the dict access for brevity.",
+        "adjudicated": true,
+        "p": 0.21
+      }
+    ],
+    "overflow": 0
+  },
+  "scope": {
+    "totalFiles": 1,
+    "reviewedFiles": 1,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1169,
+      "costUsd": 0.000045444,
+      "kind": "decide"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 1328,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1099,
+      "costUsd": 0.000044478,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.000089922,
+  "tokens": 3596,
+  "model": "deepseek/deepseek-v4-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "f7db861b87dd6827ad55de67f473dc372e5877d8",
+    "checkoutSha": "f7db861b87dd6827ad55de67f473dc372e5877d8",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "f7db861b87dd6827ad55de67f473dc372e5877d8",
+  "diffRange": {
+    "base": "f9b2ce18a4945c04ab786e66e6fc10e4b49e2677",
+    "baseSha": "4b0c42e52076fb7cdca084a1ab06d46f87fecff1",
+    "headSha": "f7db861b87dd6827ad55de67f473dc372e5877d8"
+  }
+}
