@@ -4,7 +4,7 @@ import { type Evidence } from '../evidence/link.js'
 import { CONTEXT_PREFIX } from '../index/context.js'
 import { type GenerateLaneResult } from '../probe/generate.js'
 import { type ProbeRecord } from '../probe/queue.js'
-import { SENTINEL, LAST_REVIEWED_RE } from '../report/comment.js'
+import { SENTINEL, LAST_REVIEWED_RE, sanitizeCommentText } from '../report/comment.js'
 import { type HeadBinding } from '../report/manifest.js'
 import { SEVERITY_GLYPH, SEVERITY_LABEL, PROOF_LEVELS, proofMeter } from '../report/viewmodel.js'
 import { type FindingAdjudicationAudit } from '../review/adjudicate.js'
@@ -72,6 +72,8 @@ export interface ReviewFinding {
   file: string
   line?: number
   severity: string
+  /** Model findings use the six schema values; rules-lane findings may
+   *  carry extended categories (e.g. 'dependencies', 'testing'). */
   category?: string
   message: string
   /** U8: confidence-model true-positive probability (absent = unadjudicated). */
@@ -923,34 +925,10 @@ export function computeReviewEvent(
 }
 
 
-/** Message text bound after sanitization — bodies stay one-paragraph. */
-const MAX_COMMENT_MESSAGE = 500
-
 
 /** R2 — stable severity order applied before the maxComments cap. */
 const SEVERITY_RANK: Record<string, number> = { bug: 0, risk: 1, nit: 2, q: 3 }
 
-
-/**
- * R5 — `message`/`evidence.detail` are model-or-runner-controlled text
- * landing in a PR comment body. Collapse to a single line (a fenced block
- * needs a line start), zero-width-break backtick/tilde runs of ≥3 so a
- * fake ```suggestion block can't ride the message past the suggestion-side
- * guards, and defuse @mentions so findings can't ping arbitrary users.
- */
-function sanitizeCommentText(s: string): string {
-  return (
-    s
-      .replace(/\s+/g, ' ')
-      .replace(/([`~])\1{2,}/g, (run) => `${run[0]}\u200B${run.slice(1)}`)
-      .replace(/@(?=[A-Za-z0-9])/g, '@\u200B')
-      // `](` → break markdown links — an attacker-controlled file path or
-      // finding text must not render a clickable URL.
-      .replace(/\]\(/g, ']\u200B(')
-      .trim()
-      .slice(0, MAX_COMMENT_MESSAGE)
-  )
-}
 
 
 /**

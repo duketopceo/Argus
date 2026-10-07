@@ -557,6 +557,42 @@ describe('sticky review top block (U4)', () => {
     expect(body).not.toContain('2 suggestions')
   })
 
+  it('renders no nit fold when nitsInline is true', () => {
+    const cr = review({
+      nitsInline: true,
+      findings: [{ file: 'a.ts', line: 3, severity: 'nit', message: 'meh' }],
+    })
+    const body = renderStickyBody(runReport, cr, 'https://github.com/run/1', false, undefined)
+    expect(body).not.toContain('nit - consolidated')
+    expect(body).toContain('○ 1 nit\n')
+  })
+
+  it('caps the nit fold at 15 and points overflow at the report', () => {
+    const cr = review({
+      nitsInline: false,
+      findings: Array.from({ length: 18 }, (_, i) => ({
+        file: `f${i}.ts`,
+        line: i + 1,
+        severity: 'nit',
+        message: `nit ${i}`,
+      })),
+    })
+    const body = renderStickyBody(runReport, cr, 'https://github.com/run/1', false, undefined)
+    expect(body).toContain('18 nits - consolidated')
+    expect(body).toContain('+3 more in code-review.json')
+  })
+
+  it('renders lineless nits without a :L suffix', () => {
+    // missing-test emits file-level findings with no line key.
+    const cr = review({
+      nitsInline: false,
+      findings: [{ file: 'src/a.ts', severity: 'nit', message: 'source-only diff' }],
+    })
+    const body = renderStickyBody(runReport, cr, 'https://github.com/run/1', false, undefined)
+    expect(body).toContain('- `src/a.ts` - ')
+    expect(body).not.toMatch(/`src\/a\.ts`:L/)
+  })
+
   it('renders the same top block in the review-only body', () => {
     const cr = review({
       findings: [

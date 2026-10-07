@@ -40,6 +40,7 @@ const {
   shortHash,
   extractSuggestion,
   inlineDedupKey,
+  sanitizeCommentText,
 } = require('./parity.cjs')
 
 function formatDuration(ms) {
@@ -260,6 +261,20 @@ function findingsLine(codeReview, missing = NO_REVIEW_REPORT) {
     ? codeReview.reviewComments.filter((c) => extractSuggestion(c.body ?? '') !== '').length
     : findings.filter((f) => typeof f.suggestion === 'string' && f.suggestion !== '').length
   if (suggestions > 0) parts.push(`${plural(suggestions, 'suggestion')} ready to commit`)
+  // Generated-specs summary (mirrors src/report/comment.ts findingsLine) —
+  // without this segment an Argus-generated-specs run reports different
+  // text on the action surface than the reference renderer.
+  const gen = codeReview.generated
+  if (gen && Array.isArray(gen.records) && gen.records.length > 0) {
+    const committed = gen.records.filter((r) => r.status === 'committed').length
+    const drafts = gen.records.length - committed
+    parts.push(
+      gen.prUrl !== undefined
+        ? `${plural(committed, 'generated spec')} -> [review PR](${cell(gen.prUrl, 400)})` +
+            (drafts > 0 ? `, ${drafts} draft${drafts === 1 ? '' : 's'}` : '')
+        : `${plural(gen.records.length, 'generated spec')} (no PR opened)`,
+    )
+  }
   return parts.join(' · ')
 }
 
@@ -295,7 +310,7 @@ const COMMENT_BUDGET_BYTES = 20 * 1024
 
 /** Fold keys in the order they collapse when a body is over budget (KTD12),
  *  then the remaining folds so the post never fails on length (R10). */
-const COLLAPSE_ORDER = ['diagnostics', 'spend', 'heals', 'findings', 'explore', 'tests']
+const COLLAPSE_ORDER = ['diagnostics', 'nits', 'spend', 'heals', 'findings', 'explore', 'tests']
 
 /** One-line pointer that replaces a collapsed fold. Lines in `keep` (the
  *  hidden `@argus persist` payload) survive the collapse. */
@@ -375,10 +390,12 @@ function findingsFold(codeReview, inlinePlan) {
       const where = typeof f.line === 'number' ? `${f.file}:${f.line}` : f.file
       // An inconclusive link says the same thing on every row; Diagnostics states it once.
       const evidence =
-        f.evidence?.detail && f.evidence.status !== 'inconclusive' ? `<br>evidence: ${cell(f.evidence.detail)}` : ''
+        f.evidence?.detail && f.evidence.status !== 'inconclusive'
+          ? `<br>evidence: ${cell(sanitizeCommentText(f.evidence.detail))}`
+          : ''
       body.push(
         `| ${severityText(f.severity)} | ${proofText(level)} | ${p} | ${cell(f.category ?? '')} | ` +
-          `${code(where)} | ${cell(f.message)}${evidence} |`,
+          `${code(where)} | ${cell(sanitizeCommentText(f.message))}${evidence} |`,
       )
     }
     if (findings.length > MAX_FINDING_ROWS) {
@@ -453,17 +470,30 @@ function findingsEntry(codeReview, inlinePlan) {
 
 // Consolidated nit listing — rendered only when `review.nitsInline` kept
 // nits out of inline comments (default). Capped; overflow stays counted.
+// normalizeFindingMessage strips the embedded `L<n>: <sev>:` contract
+// prefix so the fold's own `:L<n>` label isn't duplicated.
 function nitsFold(codeReview) {
-  if (!codeReview || codeReview.nitsInline === true) return []
+  // !== false: only a serialized nitsInline:false opts into the fold —
+  // reports predating the field already posted their nits inline (the
+  // documented argus-version pin can pair an older CLI with this poster).
+  if (!codeReview || codeReview.nitsInline !== false) return []
   const nits = findingsOf(codeReview).filter((f) => f.severity === 'nit')
   if (nits.length === 0) return []
   const shown = nits.slice(0, 15)
   const body = shown.map(
     (f) =>
-      `- ${code(f.file)}${typeof f.line === 'number' ? `:L${f.line}` : ''} - ${cell(f.message ?? '', 160)}`,
+      `- ${code(f.file)}${typeof f.line === 'number' ? `:L${f.line}` : ''} - ${cell(sanitizeCommentText(normalizeFindingMessage(f.message ?? '')), 160)}`,
   )
-  if (nits.length > shown.length) body.push(`- +${nits.length - shown.length} more in the report`)
+  if (nits.length > shown.length)
+    body.push(`- +${nits.length - shown.length} more in code-review.json (argus-reviewer-report artifact)`)
   return body
+}
+
+// Nit fold entry for layout() — the title count and the body share the
+// same nit set (see findingsEntry for the tuple pattern).
+function nitsEntry(codeReview) {
+  const nits = findingsOf(codeReview).filter((f) => f.severity === 'nit')
+  return [`${SEVERITY_GLYPH.nit} ${plural(nits.length, 'nit')} - consolidated`, nitsFold(codeReview), { key: 'nits' }]
 }
 
 function assertionStatus(verdict) {
@@ -778,7 +808,7 @@ function renderManifestBody(manifest, codeReview, runUrl, meta = {}) {
     summary: findingsLine(codeReview, NO_REVIEW_ATTACHED),
     folds: [
       findingsEntry(codeReview, undefined),
-      [`${SEVERITY_GLYPH.nit} ${plural(findingsOf(codeReview).filter((f) => f.severity === 'nit').length, 'nit')} - consolidated`, nitsFold(codeReview), { key: 'nits' }],
+      nitsEntry(codeReview),
       ['Spend ledger', spendFold(manifest, undefined, codeReview), { key: 'spend' }],
       ['Diagnostics', diagnosticsFold(manifest, undefined, codeReview), { key: 'diagnostics' }],
     ],
@@ -810,7 +840,7 @@ function renderBody(report, codeReview, runUrl, ok, inlinePlan, manifest, meta =
     summary: findingsLine(codeReview),
     folds: [
       findingsEntry(codeReview, inlinePlan),
-      [`${SEVERITY_GLYPH.nit} ${plural(findingsOf(codeReview).filter((f) => f.severity === 'nit').length, 'nit')} - consolidated`, nitsFold(codeReview), { key: 'nits' }],
+      nitsEntry(codeReview),
       [`Tests (${report.tests?.length ?? 0})`, testsFold(report), { key: 'tests' }],
       [`Heals (${heals.length}): review before merging`, healsFold(heals), { key: 'heals' }],
       ['Exploratory', exploreFold(report), { key: 'explore' }],
@@ -843,7 +873,7 @@ function renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan, manifest, meta
     summary: findingsLine(codeReview),
     folds: [
       findingsEntry(codeReview, inlinePlan),
-      [`${SEVERITY_GLYPH.nit} ${plural(findingsOf(codeReview).filter((f) => f.severity === 'nit').length, 'nit')} - consolidated`, nitsFold(codeReview), { key: 'nits' }],
+      nitsEntry(codeReview),
       ['Spend ledger', spendFold(manifest, undefined, codeReview), { key: 'spend' }],
       ['Diagnostics', diagnosticsFold(manifest, undefined, codeReview), { key: 'diagnostics' }],
     ],
@@ -1167,7 +1197,12 @@ async function planInlineComments(pr, codeReview) {
     // normalized message, hash of the embedded suggestion), so a re-run with
     // a corrected suggestion posts the fix instead of colliding.
     const posted = new Set()
-    const existing = await listAll((p) => github.rest.pulls.listReviewComments(p), prRef)
+    // Dedup + live-diff validation read independent API surfaces — one
+    // round trip saved by fetching both up front.
+    const [existing, files] = await Promise.all([
+      listAll((p) => github.rest.pulls.listReviewComments(p), prRef),
+      listAll((p) => github.rest.pulls.listFiles(p), prRef),
+    ])
     for (const c of existing) {
       if (c.commit_id === pr.head.sha && typeof c.body === 'string' && isArgusInlineBody(c.body)) {
         posted.add(postedDedupKey(c))
@@ -1177,7 +1212,6 @@ async function planInlineComments(pr, codeReview) {
 
     // R8 live-diff validation — the diff is authoritative only at post time;
     // drop anchors that aren't RIGHT-side lines in the current PR diff.
-    const files = await listAll((p) => github.rest.pulls.listFiles(p), prRef)
     const diffLines = new Map()
     for (const f of files) {
       if (typeof f.patch === 'string') diffLines.set(f.filename, rightSideLines(f.patch))

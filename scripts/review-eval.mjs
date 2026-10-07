@@ -6,7 +6,8 @@
 //           entry's two SHAs fetched - no full clone)
 //   base    ref/sha the PR diverged from (merge-base source)
 //   head    sha to check out and review
-//   labels  optional [{ path, fromLine, toLine, valid, note? }] ground truth
+//   labels  optional [{ path, fromLine, toLine, valid, fileLevel?, category?, note? }]
+//           ground truth; fileLevel:true matches any finding line on path
 //
 // run:     node scripts/review-eval.mjs run --corpus c.json [--tag t]
 //            replays each entry in a temp worktree via
@@ -16,10 +17,12 @@
 //            prints per-metric deltas (adopt/reject evidence for U3+).
 //
 // Env: model/provider config comes from the reviewed repo's own
-// argus-reviewer config or ambient env, exactly as a normal run does.
+// argus-reviewer config (trusted lanes only — scheduled/CI runs classify
+// untrusted and evaluate with defaults plus ambient env).
 // Label match: same path, finding line within label's from..to window.
 
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -28,21 +31,41 @@ import { fileURLToPath } from 'node:url'
 const REPO_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
 const CLI = join(REPO_ROOT, 'dist', 'cli.js')
 
+// Test detection shares the rules lane's vocabulary — the harness must
+// bucket foo.test.ts/__tests__/test_x.py the same way missing-test does
+// (collect.mjs already imports from dist/ for shared definitions). The
+// import is best-effort: tally/compare read only run JSONs and must work
+// without a build. FALLBACK mirrors src/review/testfiles.ts TEST_PATH.
+const TEST_PATH_FALLBACK =
+  /(^|\/)(tests?|__tests__|__mocks__|spec|e2e)\/|\.(test|spec)\.[^/]+$|_test\.(go|py|rb)$|(^|\/)test_[^/]+\.py$/
+let isTestPath = (p) => TEST_PATH_FALLBACK.test(p.replace(/^\.\//, ''))
+try {
+  ;({ isTestPath } = await import(new URL('../dist/review/testfiles.js', import.meta.url).href))
+} catch {
+  /* dist missing - metrics-only subcommands still work */
+}
+
+// Slugs carry a hash suffix — github.com/a/b vs github.com/a-b must not
+// share a cache dir or a kept-report name.
+const slug = (s) =>
+  `${s.replace(/[^a-zA-Z0-9-]/g, '_').slice(0, 60)}-${createHash('sha1').update(s).digest('hex').slice(0, 8)}`
+
 const pathType = (p) =>
-  /(^|\/)dist\//.test(p) || /\.min\.|\.map$|(^|\/)generated|lock$/i.test(p) ? 'generated'
+  /(^|\/)dist\//.test(p) || /\.min\.|\.map$|\.generated\.|(^|\/)generated|\.lock$|[-_]lock\.(json|ya?ml|toml)$|(^|\/)(go\.sum|npm-shrinkwrap\.json)$/.test(p)
+    ? 'generated'
     : /(^|\/)docs?\//.test(p) ? 'docs'
-    : /(^|\/)tests?\//.test(p) ? 'test'
+    : isTestPath(p) ? 'test'
     : 'src'
 
-const matchLabel = (finding, labels) =>
-  labels.find(
-    (l) =>
-      l.path === finding.file &&
-      (l.fileLevel === true ||
-        (typeof finding.line === 'number' &&
-          finding.line >= l.fromLine &&
-          finding.line <= l.toLine)),
-  )
+const matchLabel = (finding, labels) => {
+  const inWindow = (l) =>
+    l.path === finding.file &&
+    (l.fileLevel === true ||
+      (typeof finding.line === 'number' && finding.line >= l.fromLine && finding.line <= l.toLine))
+  // Prefer a valid label when several share the window — first-match
+  // ordering would let an invalid label shadow the truth at the same line.
+  return labels.find((l) => l.valid && inWindow(l)) ?? labels.find(inWindow)
+}
 
 // metricsFromReport: pure - unit-testable without a repo.
 export function metricsFromReport(report, labels) {
@@ -54,16 +77,21 @@ export function metricsFromReport(report, labels) {
     bySeverity[f.severity] = (bySeverity[f.severity] ?? 0) + 1
     byPathType[pathType(f.file)] = (byPathType[pathType(f.file)] ?? 0) + 1
   }
+  const modelFindings = findings.filter((f) => !f.rule)
   const m = {
     ok: report.ok,
     skipped: report.skipped,
     verdict: report.verdict,
     findings: findings.length,
+    ruleFindings: findings.length - modelFindings.length,
     comments: posted.length,
     commentsOverflow: report.commentsOverflow ?? 0,
     bySeverity,
     byPathType,
-    generatedPathComments: byPathType.generated ?? 0,
+    // What reviewers actually see on generated paths — under nit
+    // consolidation, generated-path nits never post, so findings-based
+    // bucketing would overstate the noise this metric exists to measure.
+    generatedPathComments: posted.filter((c) => pathType(c.path ?? '') === 'generated').length,
     droppedOutsideDiff: report.droppedUnanchored ?? 0,
     droppedReverted: report.droppedReverted ?? 0,
     nitShare: findings.length ? (bySeverity.nit ?? 0) / findings.length : 0,
@@ -71,18 +99,25 @@ export function metricsFromReport(report, labels) {
   if (labels?.length) {
     const hitLabels = new Set()
     let tp = 0
+    let tpRules = 0
     for (const f of findings) {
       const l = matchLabel(f, labels)
       if (!l) continue
       if (l.valid) {
-        tp++
         hitLabels.add(l)
+        if (f.rule) tpRules++
+        else tp++
       }
     }
     const validLabels = labels.filter((l) => l.valid)
-    m.precision = findings.length ? tp / findings.length : 0
+    // Precision measures the model lane: rules-lane findings are
+    // deterministic nits that can never match a semantic label and would
+    // otherwise read as systematic false positives. Recall still credits
+    // any lane that catches a labeled issue.
+    m.precision = modelFindings.length ? tp / modelFindings.length : 0
     m.recall = validLabels.length ? hitLabels.size / validLabels.length : 0
     m.tp = tp
+    m.tpRules = tpRules
     m.validLabels = validLabels.length
   }
   return m
@@ -104,6 +139,7 @@ function ensureSha(repo, sha) {
   console.error(`  fetch ${sha.slice(0, 12)}`)
   execFileSync('git', ['-C', repo, 'fetch', '--quiet', '--depth', '1', 'origin', sha], {
     stdio: 'inherit',
+    timeout: 120_000,
   })
 }
 
@@ -130,6 +166,7 @@ function ensureSharedHistory(repo, base, head) {
       try {
         execFileSync('git', ['-C', repo, 'fetch', '--quiet', `--deepen=${depth}`, 'origin', sha], {
           stdio: 'inherit',
+          timeout: 120_000,
         })
       } catch {
         // deepen failures are tolerated once per round - a shallow root
@@ -145,13 +182,34 @@ function ensureSharedHistory(repo, base, head) {
 
 function resolveRepo(entry, cacheDir) {
   const repo = entry.repo
-  if (existsSync(repo)) return resolve(repo)
-  const dest = join(cacheDir, repo.replace(/[^a-zA-Z0-9]/g, '_'))
+  // A leading '-' injects options into git argv (fetch/worktree add),
+  // remote or local (CWE-88).
+  for (const sha of [entry.base, entry.head]) {
+    if (typeof sha !== 'string' || sha.startsWith('-')) {
+      throw new Error(`${entry.name}: invalid SHA ${JSON.stringify(sha)}`)
+    }
+  }
+  // Local paths anchor to REPO_ROOT, not cwd — `repo: "."` in a corpus
+  // file means "the repo this harness lives in", wherever it is run from.
+  if (!/^https?:\/\//.test(repo)) {
+    const local = resolve(REPO_ROOT, repo)
+    if (!existsSync(local)) throw new Error(`local repo not found: ${repo}`)
+    return local
+  }
+  const dest = join(cacheDir, slug(repo))
   if (!existsSync(dest)) {
     console.error(`init ${repo} -> ${dest}`)
     mkdirSync(dest, { recursive: true })
     execFileSync('git', ['-C', dest, 'init', '--quiet'])
     execFileSync('git', ['-C', dest, 'remote', 'add', 'origin', repo])
+  }
+  // Remote entries take exactly a 40-hex SHA — refs could resolve to
+  // anything the remote serves and abbreviated hex can't fetch
+  // (sha-in-want needs the full OID).
+  for (const sha of [entry.base, entry.head]) {
+    if (!/^[0-9a-f]{40}$/i.test(sha)) {
+      throw new Error(`${entry.name}: ${sha} is not a full 40-hex SHA - remote entries require pinned SHAs`)
+    }
   }
   ensureSha(dest, entry.base)
   ensureSha(dest, entry.head)
@@ -169,24 +227,56 @@ async function run(corpusPath, tag, cacheDir) {
   const keptDir = join(outDir, 'reports')
   mkdirSync(keptDir, { recursive: true })
   const results = []
+  // The run file is rewritten after every entry so a kill mid-run still
+  // leaves a valid partial summary for tally and artifact upload.
+  const summary = {
+    schemaVersion: 1,
+    // Sanitized for filename use — a `--tag` with / or .. must not write
+    // outside docs/audits/eval.
+    tag: (tag ?? new Date().toISOString().replace(/[:.]/g, '-')).replace(/[^\w.-]/g, '-'),
+    // Iterating on rules/prompts runs dirty — a bare short SHA would
+    // attribute metrics to a commit that doesn't describe the measured
+    // code. '-dirty' makes the provenance honest.
+    cli:
+      git(REPO_ROOT, ['rev-parse', '--short', 'HEAD']) +
+      (git(REPO_ROOT, ['status', '--porcelain']) === '' ? '' : '-dirty'),
+    entries: 0,
+    results,
+  }
+  const out = join(outDir, `${summary.tag}.json`)
+  const flush = () =>
+    writeFileSync(
+      out,
+      JSON.stringify({ ...summary, at: new Date().toISOString(), entries: results.length }, null, 2),
+    )
+  const stalledEntry = (entry, e, ms = 0) => {
+    results.push({
+      name: entry.name,
+      note: entry.note,
+      ms,
+      exitCode: 2,
+      stalled: true,
+      metrics: metricsFromReport({ ok: false, skipped: true }, entry.labels),
+      error: String(e?.message ?? e).slice(0, 200),
+    })
+    flush()
+    console.error(`${entry.name}: stalled - ${String(e?.message ?? e).slice(0, 120)}`)
+  }
   for (const entry of corpus) {
     let repo
     try {
       repo = resolveRepo(entry, cacheDir)
     } catch (e) {
-      results.push({
-        name: entry.name,
-        ms: 0,
-        exitCode: 2,
-        stalled: true,
-        metrics: { findings: 0, comments: 0, nitShare: 0, summary: String(e.message ?? e).slice(0, 200) },
-      })
-      console.error(`${entry.name}: repo setup failed - ${String(e.message ?? e).slice(0, 120)}`)
+      stalledEntry(entry, e)
       continue
     }
-    const wt = mkdtempSync(join(tmpdir(), 'argus-eval-wt-'))
-    const reportDir = mkdtempSync(join(tmpdir(), 'argus-eval-report-'))
+    let wt, reportDir
+    // Any per-entry failure (bad head SHA, worktree error) degrades to a
+    // stalled result instead of aborting the whole corpus.
     try {
+      wt = mkdtempSync(join(tmpdir(), 'argus-eval-wt-'))
+      reportDir = mkdtempSync(join(tmpdir(), 'argus-eval-report-'))
+      git(repo, ['worktree', 'prune'])
       git(repo, ['worktree', 'add', '--detach', '--force', wt, entry.head])
       const t0 = Date.now()
       let code = 0
@@ -194,7 +284,15 @@ async function run(corpusPath, tag, cacheDir) {
         execFileSync(
           process.execPath,
           [CLI, 'code-review', '--base', entry.base, '--report-dir', reportDir],
-          { cwd: wt, stdio: 'inherit', env: process.env, timeout: 900_000 },
+          // Corpus trees are third-party code — locally there is no CI
+          // event so the child would resolve trusted and import() a
+          // fetched argus-reviewer.config.ts beside ambient secrets.
+          {
+            cwd: wt,
+            stdio: 'inherit',
+            env: { ...process.env, ARGUS_UNTRUSTED: '1' },
+            timeout: 900_000,
+          },
         )
       } catch (e) {
         code = e.status ?? 1
@@ -206,11 +304,25 @@ async function run(corpusPath, tag, cacheDir) {
         : { ok: false, skipped: true, summary: `exit ${code}` }
       const metrics = metricsFromReport(report, entry.labels)
       const stalled = code !== 0 || !existsSync(reportPath)
+      // Tag-scoped: an entry-keyed name overwrites the previous run's
+      // report while older run files keep dangling reportPath links.
       const keptReport = existsSync(reportPath)
-        ? join(keptDir, `${entry.name.replace(/[^a-zA-Z0-9-]/g, '_')}.json`)
+        ? join(keptDir, `${slug(entry.name)}-${summary.tag}.json`)
         : undefined
       if (keptReport) writeFileSync(keptReport, JSON.stringify(report, null, 2))
-      results.push({ name: entry.name, ms, exitCode: code, stalled, metrics, reportPath: keptReport })
+      results.push({
+        name: entry.name,
+        note: entry.note,
+        ms,
+        exitCode: code,
+        stalled,
+        metrics,
+        // The model that produced the findings — ambient ARGUS_CODE_MODEL
+        // drift between runs otherwise masquerades as a code regression.
+        model: report.spend?.model,
+        reportPath: keptReport,
+      })
+      flush()
       console.error(
         `${entry.name}: findings=${metrics.findings} comments=${metrics.comments}` +
           (metrics.precision !== undefined
@@ -218,33 +330,36 @@ async function run(corpusPath, tag, cacheDir) {
             : '') +
           ` (${(ms / 1000).toFixed(0)}s)`,
       )
+    } catch (e) {
+      stalledEntry(entry, e)
     } finally {
-      try {
-        git(repo, ['worktree', 'remove', '--force', wt])
-      } catch {
-        rmSync(wt, { recursive: true, force: true })
+      if (wt) {
+        try {
+          git(repo, ['worktree', 'remove', '--force', wt])
+        } catch {
+          rmSync(wt, { recursive: true, force: true })
+        }
       }
-      rmSync(reportDir, { recursive: true, force: true })
+      if (reportDir) rmSync(reportDir, { recursive: true, force: true })
     }
   }
-  const summary = {
-    tag: tag ?? new Date().toISOString().replace(/[:.]/g, '-'),
-    at: new Date().toISOString(),
-    cli: git(REPO_ROOT, ['rev-parse', '--short', 'HEAD']),
-    entries: results.length,
-    results,
-  }
-  const out = join(outDir, `${summary.tag}.json`)
-  writeFileSync(out, JSON.stringify(summary, null, 2))
+  flush()
   console.log(`\nwrote ${out}`)
   printTable(results)
 }
+
+// One health classifier for every table: a hard stall (nonzero exit,
+// missing report) or a clean-exit skip (code-review's skip paths — no
+// diff, all files excluded) both mean the entry reviewed nothing; 'yes'
+// vs 'skipped' distinguishes the two.
+const health = (r) =>
+  r.stalled === true || r.exitCode !== 0 ? 'yes' : r.metrics?.skipped ? 'skipped' : 'no'
 
 function printTable(results) {
   console.log('\nentry | findings | comments | nit% | gen-path | precision | recall | drop(od/rev) | stalled')
   for (const r of results) {
     const m = r.metrics
-    const stalled = r.stalled === true || r.exitCode !== 0 ? 'yes' : 'no'
+    const stalled = health(r)
     console.log(
       `${r.name} | ${m.findings} | ${m.comments} | ${(m.nitShare * 100).toFixed(0)}% | ` +
         `${m.generatedPathComments} | ${m.precision?.toFixed(2) ?? '-'} | ` +
@@ -259,7 +374,7 @@ function compare(aPath, bPath) {
   const byName = new Map(a.results.map((r) => [r.name, r]))
   console.log('entry | Δfindings | Δcomments | Δnit% | Δgen-path | Δprecision | Δrecall | stalled')
   for (const r of b.results) {
-    const stalled = r.stalled === true || r.exitCode !== 0 ? 'yes' : 'no'
+    const stalled = health(r)
     const m0 = byName.get(r.name)?.metrics
     const m1 = r.metrics
     if (!m0) {
@@ -282,7 +397,8 @@ if (invokedAsScript) {
   const [cmd, ...rest] = process.argv.slice(2)
   const arg = (name, dflt) => {
     const i = rest.indexOf(`--${name}`)
-    return i >= 0 ? rest[i + 1] : dflt
+    const v = i >= 0 ? rest[i + 1] : undefined
+    return v !== undefined && !v.startsWith('--') ? v : dflt
   }
   if (cmd === 'run') {
     const corpus = arg('corpus')
@@ -298,8 +414,32 @@ if (invokedAsScript) {
       process.exit(2)
     }
     compare(resolve(a), resolve(b))
+  } else if (cmd === 'tally') {
+    const [f] = rest.filter((x) => !x.startsWith('--'))
+    if (!f) {
+      console.error('usage: tally <run.json>  - markdown per-entry table')
+      process.exit(2)
+    }
+    const runFile = JSON.parse(readFileSync(resolve(f), 'utf8'))
+    const rows = runFile.results ?? []
+    console.log('| entry | findings | comments | nit% | gen-path | stalled |')
+    console.log('|---|---|---|---|---|---|')
+    for (const r of rows) {
+      const m = r.metrics ?? {}
+      const stalled = health(r)
+      console.log(
+        `| ${r.name} | ${m.findings} | ${m.comments} | ` +
+          `${Math.round((m.nitShare ?? 0) * 100)}% | ${m.generatedPathComments} | ${stalled} |`,
+      )
+    }
+    // A run where every entry stalled or skipped reviewed nothing - that
+    // is a dead lane, not a green week. Partial stays green on purpose.
+    if (rows.length > 0 && rows.every((r) => health(r) !== 'no')) {
+      console.error(`::error::all ${rows.length} corpus entries stalled or skipped`)
+      process.exit(1)
+    }
   } else {
-    console.error('usage: review-eval.mjs run|compare (see header)')
+    console.error('usage: review-eval.mjs run|compare|tally (see header)')
     process.exit(2)
   }
 }

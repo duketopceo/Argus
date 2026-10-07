@@ -66,6 +66,9 @@ and is shared with `npm run smoke:dashboard`.
 - **`dist/` is committed.** Consumers installing from git get the built
   output, so run `npm run build` and commit `dist/` changes alongside
   `src/` changes. The npm package builds itself via `prepare`.
+- **`action/parity.cjs` is generated.** After editing `src/report/` or
+  `src/review/inline.ts`, run `npm run build:parity` and commit the
+  bundle — CI enforces it via `npm run check:parity`.
 - **Config shape changes** belong in `src/config.ts` with validation +
   a unit test; user-facing surfaces also need `docs/quickstart.md`,
   `action/action.yml`, or `SECURITY.md` updates as applicable.

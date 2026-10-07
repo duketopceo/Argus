@@ -32,6 +32,7 @@ export {
   manifestRow,
   plural,
   reproducedCount,
+  sanitizeCommentText,
   SENTINEL,
   verdictLead,
 } from '../src/report/comment.js'

@@ -2,43 +2,43 @@
   {
     "name": "dogfood-orchestral-171",
     "repo": "https://github.com/duketopceo/orchestral",
-    "base": "1938374092",
-    "head": "a3d1221203",
+    "base": "193837409244156d88801c3b30d044fd56a877a0",
+    "head": "a3d1221203f6c3b25993181f16efe2e6d4321659",
     "note": "fix(planners): fault on trailing JSON - real merged PR"
   },
   {
     "name": "dogfood-wisp-106",
     "repo": "https://github.com/duketopceo/wisp",
-    "base": "67b520c409",
-    "head": "3663e43339",
+    "base": "67b520c409633bd17a900bb5bc801aecc45f7e21",
+    "head": "3663e4333969c489e5b3c88d1b3a871472ea73fd",
     "note": "feat: act-efficiency wave - larger feature diff"
   },
   {
     "name": "dogfood-kurultai-421",
     "repo": "https://github.com/duketopceo/kurultai",
-    "base": "27bac7afca",
-    "head": "eb20d28bce",
+    "base": "27bac7afca0ef2f1f8406aaed8fbf19586a5d012",
+    "head": "eb20d28bce4c98c73b5b9b39e64e345474dd7ace",
     "note": "feat(deploy): shared_write containment - deploy code path"
   },
   {
     "name": "dogfood-omaseal-43",
     "repo": "https://github.com/duketopceo/OmaSeal",
-    "base": "fc9a7e9f9a",
-    "head": "a27f65a3b2",
+    "base": "fc9a7e9f9a5bf0608745fb404f6c7fd078b64714",
+    "head": "a27f65a3b27ee33f7f35c9ce7ead962e86e86531",
     "note": "fix(engine): lazy-load wrapped identity - secrets-adjacent code"
   },
   {
     "name": "dogfood-dayflow-63",
     "repo": "https://github.com/duketopceo/dayflow-linux",
-    "base": "c1cf3d5393",
-    "head": "bb08b35346",
+    "base": "c1cf3d5393b8ca120a6548d128e0adb323289e4b",
+    "head": "bb08b353461a7582b779e8b9d02c7f956e5423e1",
     "note": "chore(ui): restore classic QML - non-TS language coverage"
   },
   {
     "name": "dogfood-omarchyplugins-27",
     "repo": "https://github.com/duketopceo/omarchy-plugins",
-    "base": "4e56a35ba9",
-    "head": "959f41bd73",
+    "base": "4e56a35ba99b9d37902f40f524955125d544737d",
+    "head": "959f41bd73cc0f9bf4d8a9d69866dd1d661c068a",
     "note": "feat: retire connections/ticker/agents - plugin-estate refactor"
   }
 ]

@@ -105,6 +105,17 @@ export interface LaneRow {
 /** Cell semantics mirror the action: flatten newlines, escape pipes, mask secrets, cap length. */
 export declare function cell(s: unknown, max?: number): string;
 export declare function code(s: unknown): string;
+export declare const MAX_COMMENT_MESSAGE = 500;
+/**
+ * R5 — model-or-runner-controlled text (message, evidence.detail) landing
+ * in a PR comment body. Collapse to a single line, zero-width-break
+ * backtick/tilde runs of >=3 so a fake ```suggestion block can't ride the
+ * message past the suggestion-side guards, defuse @mentions so findings
+ * can't ping arbitrary users, break `](` markdown links, and neutralize
+ * `</` tags — a `</details>` in fold-rendered text escapes the fold and
+ * injects top-level markdown into the bot's comment.
+ */
+export declare function sanitizeCommentText(s: string): string;
 export declare function plural(n: number, one: string, many?: string): string;
 export declare function findingsOf(cr: CodeReviewInput | undefined): NonNullable<CodeReviewInput['findings']>;
 export declare function bestFindingProof(cr: CodeReviewInput | undefined): ProofLevel;

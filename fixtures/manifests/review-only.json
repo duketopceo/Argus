@@ -52,6 +52,7 @@
       "status": "match",
       "source": "github",
       "detail": "checkout matches the intended PR head"
-    }
+    },
+    "nitsInline": false
   }
 }

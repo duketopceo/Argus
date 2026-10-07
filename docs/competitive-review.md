@@ -6,6 +6,12 @@ adopt / adapt / skip verdict with the reason. Adoption is gated on the
 eval harness (`scripts/review-eval.mjs`) — a candidate ships only when it
 moves a measured number on the corpus, not because a competitor has it.
 
+Emission variance is the confound: the live model emits different finding
+counts on identical code (measured 3 vs 57 on one corpus item). A
+single-run delta under ~0.5 precision is noise — adopt/reject needs ≥2
+runs agreeing, or a provably-safe predicate where measurement isn't
+required.
+
 Cadence: monthly, or on a relevant release note. Sources: public docs,
 release notes, the competitor's own repos. We adopt mechanisms, never copy
 comment formats, branding, or code.
@@ -34,6 +40,9 @@ comment formats, branding, or code.
 | Cursor Bugbot | Auto-review in Cursor PRs | — | intake only; watch signal-to-noise reports |
 
 ## Pending evaluations
+
+Every gate below inherits the variance rider above: a single run's delta
+is a hypothesis, not evidence.
 
 - [ ] U4(a) positioning check — verify against `droppedUnanchored` counts in eval runs (already partially present; extend to downgrade+count)
 - [ ] U4(b) reflection pass — measure precision delta on `eval-corpus.aacr.json` before adopting

@@ -407,6 +407,13 @@ export declare function resolveBlockSeverities(config: Config): string[];
  */
 export declare function resolveMaxComments(env: Record<string, string | undefined>, config: Config): number;
 /**
+ * Inline nits: `ARGUS_NITS_INLINE` (the action's `nits-inline` input)
+ * wins when it parses as '1'/'true'/'0'/'false' — it's set by the
+ * workflow author, so an untrusted PR config can't reach it (`review`
+ * isn't on the untrusted allowlist). Anything else → `review.nitsInline`.
+ */
+export declare function resolveNitsInline(env: Record<string, string | undefined>, config: Config): boolean;
+/**
  * U6 — validate `review.instructions` entries. Throws naming the entry:
  * a mistyped glob that silently deadens a rule is worse than failing the
  * config load (same contract as `review.requestTimeoutMs`). Shared by the

@@ -24,6 +24,8 @@ export interface ReviewFinding {
     file: string;
     line?: number;
     severity: string;
+    /** Model findings use the six schema values; rules-lane findings may
+     *  carry extended categories (e.g. 'dependencies', 'testing'). */
     category?: string;
     message: string;
     /** U8: confidence-model true-positive probability (absent = unadjudicated). */

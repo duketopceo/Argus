@@ -1,4 +1,4 @@
-import { parseInstructions, checkRequestTimeoutMs, parseBudgetSetting, applyBudgetSetting, UNCAPPED_WARNING, resolveBlockSeverities, resolveBatchModel, resolveMaxComments } from '../config.js'
+import { parseInstructions, checkRequestTimeoutMs, parseBudgetSetting, applyBudgetSetting, UNCAPPED_WARNING, resolveBlockSeverities, resolveBatchModel, resolveMaxComments, resolveNitsInline } from '../config.js'
 import { setLiveDir, debug } from '../debug.js'
 import { defaultExec } from '../detect.js'
 import { type PrMeta, fetchPrMeta, fetchCheckRuns } from '../evidence/ci.js'
@@ -15,7 +15,7 @@ import { classifyHeadBinding, readCheckoutSha, isHeadBindingConclusive } from '.
 import { type FindingAdjudicationAudit, adjudicateFindings } from '../review/adjudicate.js'
 import { planChunks } from '../review/chunks.js'
 import { isReviewProfile } from '../review/packs.js'
-import { type RuleFinding, runRules } from '../review/rules.js'
+import { type RuleFinding, rulesLaneScans, runRules } from '../review/rules.js'
 import { partitionByExclude, rulesForFiles } from '../review/scope.js'
 import { type SecretsScanResult, materializeMergeBaseDiff } from '../review/secrets.js'
 import { capTestFindings } from '../review/testfiles.js'
@@ -844,18 +844,7 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
           ...(decisionClient !== undefined ? { decisionClient } : {}),
           ...(config.decisionModel !== undefined ? { decisionModel: config.decisionModel } : {}),
         })
-        secretsScan =
-          result.secretsScan ??
-          (result.ran.includes('secrets')
-            ? { skipped: 'the secrets rule failed; see rulesScan.failures' }
-            : result.ran.length === 0
-              ? { skipped: 'the rules lane is disabled (review.rules)' }
-              : { skipped: 'the secrets rule is not enabled (review.rules)' })
-        rulesScan = {
-          ran: result.ran,
-          records: result.records,
-          failures: result.failures,
-        }
+        ;({ rulesScan, secretsScan } = rulesLaneScans(result))
         if (result.findings.length > 0) {
           ctx.err(`rules scan: ${result.findings.length} finding(s)`)
         }
@@ -958,6 +947,7 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
     // workflow author controls it; an untrusted PR config can't reach it
     // anyway since `review` isn't on the untrusted allowlist.
     const maxComments = resolveMaxComments(ctx.env, config)
+    const nitsInline = resolveNitsInline(ctx.env, config)
 
     // B.2 probe lane: authored tests executed in the Docker sandbox can
     // upgrade a not_exercised finding to `reproduced`. Strictly additive —
@@ -1097,7 +1087,7 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
     // verbatim rather than re-deriving render or gate policy.
     const gate = computeReviewEvent(linkedFindings, blockSeverities, config.review.requestChanges)
     const rendered = renderReviewComments(linkedFindings, maxComments, {
-      nitsInline: config.review.nitsInline,
+      nitsInline,
     })
 
     const hasBlocker = finalFindings.some((f) => blockSeverities.includes(f.severity))
@@ -1116,7 +1106,7 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
       highConfidenceBlockers: gate.highConfidenceBlockers,
       reviewComments: rendered.comments,
       commentsOverflow: rendered.overflow,
-      nitsInline: config.review.nitsInline,
+      nitsInline,
       ...(probes !== undefined ? { probes } : {}),
       ...(probeLaneSkipped !== undefined ? { probeLaneSkipped } : {}),
       ...(generated !== undefined ? { generated } : {}),

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import ts from 'typescript';
 import { writeAtomicJson } from '../fsutil.js';
@@ -152,9 +152,12 @@ export async function synthesizeTreeDiff(root, entries) {
                 return 'skipped';
             if (totalBytes > SCAN_DIFF_CAP_BYTES)
                 return 'skipped';
-            const buf = await readFile(join(abs, e.path));
-            if (buf.length > SCAN_FILE_CAP_BYTES)
+            // Stat before read — an oversized file is skipped for a syscall,
+            // not buffered whole only to be discarded.
+            const st = await stat(join(abs, e.path));
+            if (st.size > SCAN_FILE_CAP_BYTES)
                 return 'skipped';
+            const buf = await readFile(join(abs, e.path));
             const text = buf.toString('utf8');
             const lines = text.split('\n');
             // A trailing newline yields a final empty element — not a line.

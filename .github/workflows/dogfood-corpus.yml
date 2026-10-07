@@ -15,12 +15,16 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  # The shared repo cache can't take two runs racing on .git/shallow.
+  group: dogfood-corpus
+
 jobs:
   dogfood:
-    runs-on: self-hosted
-    # Six full reviews; healthy per-entry runs are ~1-2 min, but a large
-    # diff can legitimately run long.
-    timeout-minutes: 45
+    runs-on: [self-hosted, linux, x64, argus-reviewer]
+    # Six full reviews; healthy per-entry runs are ~1-2 min, but the
+    # per-entry cap is 15min - worst case is ~90min of reviews alone.
+    timeout-minutes: 120
     env:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
     steps:
@@ -51,17 +55,7 @@ jobs:
           {
             echo '## Dogfood corpus tally'
             echo
-            echo "| entry | findings | comments | nit% | stalled |"
-            echo "|---|---|---|---|---|"
-            node -e '
-              const r = require(process.argv[1])
-              for (const e of r.results ?? r) {
-                console.log(
-                  `| ${e.name} | ${e.metrics.findings} | ${e.metrics.comments} | ` +
-                  `${Math.round((e.metrics.nitShare ?? 0) * 100)}% | ${e.stalled ? "yes" : "no"} |`,
-                )
-              }
-            ' "$latest"
+            node scripts/review-eval.mjs tally "$latest"
             echo
             echo "run file: \`$latest\`"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -50,6 +50,7 @@ __export(parity_entry_exports, {
   plural: () => plural,
   proofMeter: () => proofMeter,
   reproducedCount: () => reproducedCount,
+  sanitizeCommentText: () => sanitizeCommentText,
   shortHash: () => shortHash,
   verdictGlyph: () => verdictGlyph,
   verdictLead: () => verdictLead
@@ -178,6 +179,60 @@ function formatUsd(n) {
   return `$${(n ?? 0).toFixed(6)}`;
 }
 
+// src/review/inline.ts
+var INLINE_SENTINEL = "<!-- argus-reviewer:inline -->";
+var LEGACY_PREFIX = "**argus-reviewer";
+var LEGACY_LINE = /^\*\*argus-reviewer ([^:*]+):\*\* ?(.*)$/;
+var SEVERITY_LINE = /^(?:\S+ )?\*\*([^*]+)\*\* · /;
+var CATEGORY_SUFFIX = /\s*`(?:correctness|security|performance|usability|convention|other)`$/;
+var MESSAGE_PREFIX = new RegExp("^(?:L\\d+(?:-\\d+)?:|\\p{Extended_Pictographic}\\u{FE0F}?|(?:bug|risk|nit|q|question):)\\s*", "iu");
+function normalizeFindingMessage(message) {
+  let out = message.trim();
+  for (let i = 0; i < 4; i++) {
+    const next = out.replace(MESSAGE_PREFIX, "");
+    if (next === out) break;
+    out = next;
+  }
+  return out;
+}
+function keyMessage(message) {
+  return normalizeFindingMessage(message.replace(CATEGORY_SUFFIX, "")).replace(/\s+/g, " ").trim();
+}
+var LABEL_TO_SEVERITY = new Map(SEVERITIES.map((s) => [SEVERITY_LABEL[s], s]));
+function parseInlineBody(body) {
+  const lines = body.split(/\r?\n/);
+  if (body.startsWith(LEGACY_PREFIX)) {
+    const m = LEGACY_LINE.exec(lines[0] ?? "");
+    if (m === null) return void 0;
+    return { severity: (m[1] ?? "").trim(), message: keyMessage(m[2] ?? "") };
+  }
+  if (lines[0] === INLINE_SENTINEL) {
+    const m = SEVERITY_LINE.exec(lines[1] ?? "");
+    if (m === null) return void 0;
+    const word = (m[1] ?? "").trim();
+    return { severity: LABEL_TO_SEVERITY.get(word) ?? word, message: keyMessage(lines[2] ?? "") };
+  }
+  return void 0;
+}
+function isArgusInlineBody(body) {
+  return body.startsWith(LEGACY_PREFIX) || body.startsWith(INLINE_SENTINEL);
+}
+function shortHash(s) {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = (h << 5) + h + s.charCodeAt(i) | 0;
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+function extractSuggestion(body) {
+  const m = /\r?\n(`{4,})suggestion\r?\n([\s\S]*?)\r?\n\1/.exec(body);
+  return m?.[2] ?? "";
+}
+function inlineDedupKey(path, line, body) {
+  const parsed = parseInlineBody(body);
+  const hash = shortHash(extractSuggestion(body));
+  if (parsed === void 0) return `${path}:${line}:${body.split("\n")[0]}:${hash}`;
+  return `${path}:${line}:${parsed.severity}:${parsed.message}:${hash}`;
+}
+
 // src/report/comment.ts
 var SENTINEL = "<!-- argus-reviewer -->";
 function cell(s, max = 200) {
@@ -191,6 +246,10 @@ function code(s) {
   const fence = "`".repeat(longest + 1);
   const pad = t.startsWith("`") || t.endsWith("`") ? " " : "";
   return `${fence}${pad}${t}${pad}${fence}`;
+}
+var MAX_COMMENT_MESSAGE = 500;
+function sanitizeCommentText(s) {
+  return s.replace(/\s+/g, " ").replace(/([`~])\1{2,}/g, (run) => `${run[0]}\u200B${run.slice(1)}`).replace(/@(?=[A-Za-z0-9])/g, "@\u200B").replace(/\]\(/g, "]\u200B(").replace(/<\//g, "<\u200B/").trim().slice(0, MAX_COMMENT_MESSAGE);
 }
 function plural(n, one, many = `${one}s`) {
   return `${n} ${n === 1 ? one : many}`;
@@ -257,60 +316,6 @@ function conclusionFromReport(report, missingKey = false) {
   if (!report) return "failure";
   return report.ok ? "success" : "failure";
 }
-
-// src/review/inline.ts
-var INLINE_SENTINEL = "<!-- argus-reviewer:inline -->";
-var LEGACY_PREFIX = "**argus-reviewer";
-var LEGACY_LINE = /^\*\*argus-reviewer ([^:*]+):\*\* ?(.*)$/;
-var SEVERITY_LINE = /^(?:\S+ )?\*\*([^*]+)\*\* · /;
-var CATEGORY_SUFFIX = /\s*`(?:correctness|security|performance|usability|convention|other)`$/;
-var MESSAGE_PREFIX = new RegExp("^(?:L\\d+(?:-\\d+)?:|\\p{Extended_Pictographic}\\u{FE0F}?|(?:bug|risk|nit|q|question):)\\s*", "iu");
-function normalizeFindingMessage(message) {
-  let out = message.trim();
-  for (let i = 0; i < 4; i++) {
-    const next = out.replace(MESSAGE_PREFIX, "");
-    if (next === out) break;
-    out = next;
-  }
-  return out;
-}
-function keyMessage(message) {
-  return normalizeFindingMessage(message.replace(CATEGORY_SUFFIX, "")).replace(/\s+/g, " ").trim();
-}
-var LABEL_TO_SEVERITY = new Map(SEVERITIES.map((s) => [SEVERITY_LABEL[s], s]));
-function parseInlineBody(body) {
-  const lines = body.split(/\r?\n/);
-  if (body.startsWith(LEGACY_PREFIX)) {
-    const m = LEGACY_LINE.exec(lines[0] ?? "");
-    if (m === null) return void 0;
-    return { severity: (m[1] ?? "").trim(), message: keyMessage(m[2] ?? "") };
-  }
-  if (lines[0] === INLINE_SENTINEL) {
-    const m = SEVERITY_LINE.exec(lines[1] ?? "");
-    if (m === null) return void 0;
-    const word = (m[1] ?? "").trim();
-    return { severity: LABEL_TO_SEVERITY.get(word) ?? word, message: keyMessage(lines[2] ?? "") };
-  }
-  return void 0;
-}
-function isArgusInlineBody(body) {
-  return body.startsWith(LEGACY_PREFIX) || body.startsWith(INLINE_SENTINEL);
-}
-function shortHash(s) {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = (h << 5) + h + s.charCodeAt(i) | 0;
-  return (h >>> 0).toString(16).padStart(8, "0");
-}
-function extractSuggestion(body) {
-  const m = /\r?\n(`{4,})suggestion\r?\n([\s\S]*?)\r?\n\1/.exec(body);
-  return m?.[2] ?? "";
-}
-function inlineDedupKey(path, line, body) {
-  const parsed = parseInlineBody(body);
-  const hash = shortHash(extractSuggestion(body));
-  if (parsed === void 0) return `${path}:${line}:${body.split("\n")[0]}:${hash}`;
-  return `${path}:${line}:${parsed.severity}:${parsed.message}:${hash}`;
-}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   INLINE_SENTINEL,
@@ -342,6 +347,7 @@ function inlineDedupKey(path, line, body) {
   plural,
   proofMeter,
   reproducedCount,
+  sanitizeCommentText,
   shortHash,
   verdictGlyph,
   verdictLead

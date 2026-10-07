@@ -5,7 +5,7 @@ import { CONTEXT_PREFIX, buildReviewContext } from '../index/context.js'
 import { scanRepo, synthesizeTreeDiff } from '../index/scan.js'
 import { type ScanSkipped, type ScanReport, SCAN_REPORT_SCHEMA_VERSION } from '../report/scan.js'
 import { planChunks } from '../review/chunks.js'
-import { type RuleFinding, runRules } from '../review/rules.js'
+import { type RuleFinding, rulesLaneScans, runRules } from '../review/rules.js'
 import { partitionByExclude } from '../review/scope.js'
 import { validateFindings } from '../review/validate.js'
 import { DecisionClient } from '../vision/decisions.js'
@@ -203,8 +203,7 @@ export async function cmdScan(args: string[], ctx: Ctx, deps: CliDeps): Promise<
         ...(decisionClient !== undefined ? { decisionClient } : {}),
         ...(config.decisionModel !== undefined ? { decisionModel: config.decisionModel } : {}),
       })
-      rulesScan = { ran: result.ran, records: result.records, failures: result.failures }
-      secretsScan = result.secretsScan
+      ;({ rulesScan, secretsScan } = rulesLaneScans(result))
       findings.push(...result.findings)
       for (const f of result.failures) {
         ctx.err(`scan: rule ${f.rule} threw: ${f.error}`)

@@ -120,16 +120,37 @@ describe('selectPrs', () => {
     const [pr] = selectPrs([row({ context: 'File Level' })])
     expect(pr.labels[0].fileLevel).toBe(true)
   })
+
+  it('drops non-canonical pr_urls - look-alike hosts and http never reach the corpus', () => {
+    const evil = [
+      row({ pr_url: 'https://evilgithub.com/o/r/pull/1' }),
+      row({ pr_url: 'http://github.com/o/r/pull/2' }),
+      row({ pr_url: 'https://github.com/o/r/pulls/3' }),
+      row({ pr_url: 'notaurl' }),
+    ]
+    expect(selectPrs(evil)).toHaveLength(0)
+    const [pr] = selectPrs([row({ pr_url: 'https://github.com/o/r/pull/9/' })])
+    expect(pr.repo).toBe('https://github.com/o/r')
+    expect(pr.prNum).toBe('9')
+  })
 })
 
 describe('toCorpus', () => {
   it('emits corpus entries with repo URL, commits, labels', () => {
-    const [entry] = toCorpus(selectPrs([row({})]))
+    // pr_target_commit ('bbb') is target-tip drift - the head comes from
+    // the injected resolver (live gh api .head.sha in the CLI path).
+    const [entry] = toCorpus(selectPrs([row({})]), () => 'resolved-head')
     expect(entry.name).toBe('aacr-o-r-1')
     expect(entry.repo).toBe('https://github.com/o/r')
     expect(entry.base).toBe('aaa')
-    expect(entry.head).toBe('bbb')
+    expect(entry.head).toBe('resolved-head')
     expect(entry.labels[0].fromLine).toBe(10)
+  })
+
+  it('rejects a missing resolver - drift commits must never be the default', () => {
+    expect(() => toCorpus(selectPrs([row({})]))).toThrow(TypeError)
+    const [entry] = toCorpus(selectPrs([row({})]), () => null)
+    expect(entry.head).toBeNull()
   })
 })
 

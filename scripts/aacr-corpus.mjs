@@ -12,14 +12,20 @@
 //                        [--max-lines N] [--max-prs N]
 // dataset default: ~/.cache/argus-eval/aacr-dataset.json
 // (fetch: huggingface.co/datasets/Alibaba-Aone/aacr-bench/resolve/main/dataset.json)
+// Requires an authenticated `gh` — every PR head resolves via the API.
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const DEFAULT_LANGS = ['TypeScript', 'JavaScript', 'Python', 'Go', 'Java']
+
+// Strict canonical form — an infix "github.com/" match would admit
+// look-alike hosts (evilgithub.com) and http:// downgrades into emitted
+// corpora (CWE-20); non-canonical rows are dropped, never normalized.
+const PR_URL_RE = /^https:\/\/github\.com\/(?<repoPath>[\w.-]+\/[\w.-]+)\/pull\/(?<num>\d+)\/?$/
 
 // selectPrs: pure — unit-testable without the dataset.
 export function selectPrs(rows, { langs = DEFAULT_LANGS, maxLines = 2000, maxPrs = 10 } = {}) {
@@ -30,6 +36,8 @@ export function selectPrs(rows, { langs = DEFAULT_LANGS, maxLines = 2000, maxPrs
   }
   const prs = []
   for (const [url, group] of byPr) {
+    const m = url.match(PR_URL_RE)
+    if (!m) continue
     const first = group[0]
     const labels = group
       .filter((r) => String(r.label) === '1' && r.side !== 'left')
@@ -44,12 +52,16 @@ export function selectPrs(rows, { langs = DEFAULT_LANGS, maxLines = 2000, maxPrs
       .filter((l) => l.path && Number.isFinite(l.fromLine) && Number.isFinite(l.toLine))
     prs.push({
       url,
-      repo: url.replace(/\/pull\/\d+$/, ''),
+      repo: `https://github.com/${m.groups.repoPath}`,
+      prNum: m.groups.num,
       // pr_source_commit is the base tip at PR time (merge-base anchor);
       // pr_target_commit is the target-branch tip at capture — usable
       // neither as diff base nor as head; head comes from the GitHub API.
       base: first.pr_source_commit,
-      head: first.pr_target_commit,
+      // pr_target_commit is deliberately NOT kept — it is the
+      // target-branch tip at capture, not the PR head; the real head is
+      // resolved live via resolveHead in toCorpus. Not carrying the field
+      // prevents a later reader wiring the drift value through.
       lang: first.project_main_language,
       diffLines: Number(first.pr_change_line_count),
       labels,
@@ -61,8 +73,7 @@ export function selectPrs(rows, { langs = DEFAULT_LANGS, maxLines = 2000, maxPrs
         langs.includes(p.lang) &&
         p.diffLines <= maxLines &&
         p.labels.length > 0 &&
-        p.base &&
-        p.head,
+        p.base,
     )
     .sort((a, b) => a.diffLines - b.diffLines || a.url.localeCompare(b.url))
     .slice(0, maxPrs)
@@ -71,13 +82,18 @@ export function selectPrs(rows, { langs = DEFAULT_LANGS, maxLines = 2000, maxPrs
 // pr_target_commit is the target-branch tip at capture, not the PR head —
 // using it would diff months of branch drift. The replay needs GitHub's
 // head.sha resolved live (merge-base(source_commit, head) is the PR diff).
-export function toCorpus(prs, resolveHead = (p) => p.head) {
+// resolveHead is REQUIRED on purpose: defaulting to p.head would emit the
+// drift-laden field the comment above warns against.
+export function toCorpus(prs, resolveHead) {
+  if (typeof resolveHead !== 'function') {
+    throw new TypeError('toCorpus requires a resolveHead(p) => sha|null function')
+  }
   return prs.map((p) => ({
     name:
       'aacr-' +
-      p.repo.replace(/^https?:\/\/github\.com\//, '').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase() +
+      p.repo.replace(/^https:\/\/github\.com\//, '').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase() +
       '-' +
-      p.url.match(/pull\/(\d+)/)[1],
+      p.prNum,
     repo: p.repo,
     base: p.base,
     head: resolveHead(p),
@@ -91,7 +107,8 @@ const invokedAsScript =
 if (invokedAsScript) {
   const arg = (name, dflt) => {
     const i = process.argv.indexOf(`--${name}`)
-    return i >= 0 ? process.argv[i + 1] : dflt
+    const v = i >= 0 ? process.argv[i + 1] : undefined
+    return v !== undefined && !v.startsWith('--') ? v : dflt
   }
   const datasetPath = resolve(
     arg('dataset', join(homedir(), '.cache', 'argus-eval', 'aacr-dataset.json')),
@@ -109,23 +126,34 @@ if (invokedAsScript) {
     maxPrs: Number(arg('max-prs', '10')),
   })
   const resolveHead = (p) => {
-    const m = p.repo.match(/github\.com\/([^/]+\/[^/]+)/)
-    const num = p.url.match(/pull\/(\d+)/)[1]
-    try {
-      return execFileSync(
-        'gh',
-        ['api', `repos/${m[1]}/pulls/${num}`, '--jq', '.head.sha'],
-        { encoding: 'utf8' },
-      ).trim()
-    } catch {
-      return null // pr_target_commit is target-tip drift, never a usable head
+    // repo/prNum were strict-parsed in selectPrs — canonical by construction.
+    const repoPath = p.repo.replace(/^https:\/\/github\.com\//, '')
+    const num = p.prNum
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return execFileSync(
+          'gh',
+          ['api', `repos/${repoPath}/pulls/${num}`, '--jq', '.head.sha'],
+          { encoding: 'utf8', timeout: 30_000 },
+        ).trim()
+      } catch {
+        // retry once on transient 5xx/rate-limit before dropping
+      }
     }
+    // pr_target_commit is target-tip drift, never a usable head —
+    // drop with a visible reason rather than replaying the wrong diff.
+    console.error(`drop ${p.url}: head.sha unresolvable via gh api`)
+    return null
   }
   const corpus = toCorpus(prs, resolveHead).filter((e) => e.head)
+  if (corpus.length === 0) {
+    console.error(`no corpus entries survived (${prs.length} PRs selected; check gh auth)`)
+    process.exit(1)
+  }
   const out = arg('out')
   if (out) {
     const outPath = resolve(out)
-    mkdirSync(join(outPath, '..'), { recursive: true })
+    mkdirSync(dirname(outPath), { recursive: true })
     writeFileSync(outPath, JSON.stringify(corpus, null, 2) + '\n')
     console.log(`wrote ${outPath}`)
   } else {

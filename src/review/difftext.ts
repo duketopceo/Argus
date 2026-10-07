@@ -77,7 +77,7 @@ function unquoteGitPath(s: string): string {
 }
 
 /** `+++ <path>` header — plain `b/<path>` or git C-quoted `"b/<path>"`. */
-function parsePlusPlus(raw: string): string | undefined {
+export function parsePlusPlus(raw: string): string | undefined {
   const plain = /^\+\+\+ b\/(.+)$/.exec(raw)
   if (plain !== null) return plain[1]
   const quoted = /^\+\+\+ "b\/((?:[^"\\]|\\.)*)"$/.exec(raw)
@@ -85,11 +85,30 @@ function parsePlusPlus(raw: string): string | undefined {
   return undefined
 }
 
-export function addedLines(diff: string): AddedLine[] {
-  const out: AddedLine[] = []
+export interface DiffHunkLine {
+  kind: 'add' | 'del' | 'ctx'
+  file: string
+  /** Monotonic hunk index — increments on every `@@`, so consumers that
+   * track state from context lines can detect when the visible window
+   * jumped (the opener their state depends on may be out of view). */
+  hunk: number
+  /** Post-change line number (for `del`, the next-to-be-assigned number). */
+  line: number
+  text: string
+}
+
+/**
+ * Kind-tagged walker over unified-diff hunk lines — the one walker all
+ * diff consumers share so `@@` ordering, `+++` header quirks (C-quoted
+ * paths, `/dev/null`), and line numbering can't drift between parsers.
+ * Lines in sections without a parseable `+++` header (deleted files)
+ * are skipped; `del` lines do not consume a new-side line number.
+ */
+export function* diffLines(diff: string): Generator<DiffHunkLine> {
   let file = ''
   let newLine = 0
   let inHunk = false
+  let hunk = 0
   for (const raw of diff.split('\n')) {
     if (raw.startsWith('diff --git')) {
       // Reset both — a section without a parseable `+++` header must not
@@ -98,8 +117,11 @@ export function addedLines(diff: string): AddedLine[] {
       file = ''
       continue
     }
+    // `@@` must reset before the `!inHunk` gate — second and later hunks
+    // of a file still carry their own line offsets.
     if (raw.startsWith('@@')) {
       inHunk = true
+      hunk++
       const m = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw)
       newLine = m !== null ? parseInt(m[1] as string, 10) : 0
       continue
@@ -110,13 +132,36 @@ export function addedLines(diff: string): AddedLine[] {
       }
       continue
     }
-    if (raw.startsWith(' ')) {
+    if (file === '') continue
+    if (raw.startsWith('+')) {
+      yield { kind: 'add', file, hunk, line: newLine, text: raw.slice(1) }
       newLine++
       continue
     }
-    if (!raw.startsWith('+') || file === '') continue
-    out.push({ file, line: newLine, text: raw.slice(1) })
-    newLine++
+    if (raw.startsWith('-')) {
+      yield { kind: 'del', file, hunk, line: newLine, text: raw.slice(1) }
+      continue
+    }
+    if (raw.startsWith(' ')) {
+      yield { kind: 'ctx', file, hunk, line: newLine, text: raw.slice(1) }
+      newLine++
+    }
   }
+}
+
+// The rules lane runs N rules over the same diff text; every rule used to
+// re-parse it. Single-entry memo — callers treat the result as read-only
+// (every consumer iterates; none mutates).
+let lastDiff: string | undefined
+let lastLines: AddedLine[] | undefined
+
+export function addedLines(diff: string): AddedLine[] {
+  if (diff === lastDiff && lastLines !== undefined) return lastLines
+  const out: AddedLine[] = []
+  for (const l of diffLines(diff)) {
+    if (l.kind === 'add') out.push({ file: l.file, line: l.line, text: l.text })
+  }
+  lastDiff = diff
+  lastLines = out
   return out
 }

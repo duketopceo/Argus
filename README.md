@@ -143,6 +143,8 @@ export default defineConfig({
 
 Code review skips generated, fixture and vendored paths by default (`dist/**`, `fixtures/**`, `tests/goldens/**`, lockfiles, `*.generated.*`, `assets/brand/export/**`). Set `review: { exclude: [...] }` to replace that list (`[]` excludes nothing). The sticky comment's Diagnostics fold says how many files were left out.
 
+Nit-severity findings consolidate into a fold on the sticky comment rather than posting inline (`review: { nitsInline: true }` restores one comment each). They stay counted in `code-review.json`'s `findings` either way.
+
 Large PRs are reviewed in chunks (about 6k tokens of diff each, grouped by directory; a single oversized file is split at hunk boundaries) and the findings are merged. The review summary says how many chunks and files were reviewed. When `codeReviewBudgetUsd` cannot cover the next chunk, the run stops before spending it and the summary lists how many files went unreviewed.
 
 Batch mode: `review: { mode: 'batch' }` (or `--mode batch`, or `ARGUS_REVIEW_MODE=batch`; default `realtime`) sends all chunks through OpenRouter's async Batch API instead of one call each. It is slower (minutes; a probe took about six) and is polled until `review.batchTimeoutMs` (default 480000, kept inside the 15-minute job timeout). On failure, timeout, or a single errored request, Argus falls back to realtime for the affected chunks. Cost is metered from the batch usage, and `code-review.json` records `batch.used` / `batch.fellBack`.

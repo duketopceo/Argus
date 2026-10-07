@@ -203,7 +203,9 @@ fail config load naming the entry.
 Alongside the model, a registry of deterministic rules scans the same
 materialized diff for secret-shaped literals (the secrets lane, now one rule
 in the set), hardcoded endpoint URLs/IP literals, leftover `TODO`-style
-markers, and synchronous fs/process calls added in code paths. Every hit —
+markers, synchronous fs/process calls added in code paths, new
+dependencies and major version jumps in `package.json` (`dep-diff`), and
+source-only diffs that touch no test file (`missing-test`). Every hit —
 surfaced or suppressed — is an audit entry in `code-review.json`'s
 `rulesScan`; the sticky comment summarizes it. Rules union after synthesis
 so nothing the model writes can erase a hit, and no rule may claim `bug`
@@ -510,6 +512,11 @@ export default defineConfig({
     // secrets-lane finding confirmed live. Set false for a permanently advisory (COMMENT-only)
     // posture — e.g. while evaluating the tool.
     requestChanges: true,
+    // Post each nit as its own inline comment instead of consolidating
+    // them into the sticky's nit fold. Default false — nits stay counted
+    // in `findings` and render in the fold, capped at 15 with overflow
+    // pointed at the report.
+    nitsInline: false,
     // Changed paths kept out of the review input (glob list). Default
     // shown; a configured list REPLACES it, [] excludes nothing. Excluded
     // counts are reported in the sticky Diagnostics fold. Not read from
@@ -545,7 +552,9 @@ post-filter set; when the model's own synthesis verdict disagrees it is
 preserved separately as `modelVerdict`.
 
 What posts to the PR: one batched review containing inline comments on
-all severities (severity-sorted, capped by `maxComments`), each carrying
+non-nit severities (severity-sorted, capped by `maxComments`) — nit
+findings consolidate into a `&lt;details&gt;` fold on the sticky unless
+`nitsInline` opts back into one comment each — each carrying
 a committable ```` ```suggestion ```` block when the model proposed a clean
 patch — sanitized, span-bounded, and fenced safely before rendering. The
 review event is `REQUEST_CHANGES` only when a blocker-severity finding is

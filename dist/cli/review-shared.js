@@ -1,7 +1,7 @@
 import { defaultExec } from '../detect.js';
 import { ghGet, fetchReviewedStatus, fetchCompare } from '../evidence/ci.js';
 import { CONTEXT_PREFIX } from '../index/context.js';
-import { SENTINEL, LAST_REVIEWED_RE } from '../report/comment.js';
+import { SENTINEL, LAST_REVIEWED_RE, sanitizeCommentText } from '../report/comment.js';
 import { SEVERITY_GLYPH, SEVERITY_LABEL, PROOF_LEVELS, proofMeter } from '../report/viewmodel.js';
 import { planChunks } from '../review/chunks.js';
 import { GIT_DIFF_PATH_FLAGS } from '../review/difftext.js';
@@ -579,28 +579,8 @@ export function computeReviewEvent(findings, blockSeverities, allowRequestChange
         : 'comment';
     return { reviewEvent, provenBlockers, highConfidenceBlockers };
 }
-/** Message text bound after sanitization — bodies stay one-paragraph. */
-const MAX_COMMENT_MESSAGE = 500;
 /** R2 — stable severity order applied before the maxComments cap. */
 const SEVERITY_RANK = { bug: 0, risk: 1, nit: 2, q: 3 };
-/**
- * R5 — `message`/`evidence.detail` are model-or-runner-controlled text
- * landing in a PR comment body. Collapse to a single line (a fenced block
- * needs a line start), zero-width-break backtick/tilde runs of ≥3 so a
- * fake ```suggestion block can't ride the message past the suggestion-side
- * guards, and defuse @mentions so findings can't ping arbitrary users.
- */
-function sanitizeCommentText(s) {
-    return (s
-        .replace(/\s+/g, ' ')
-        .replace(/([`~])\1{2,}/g, (run) => `${run[0]}\u200B${run.slice(1)}`)
-        .replace(/@(?=[A-Za-z0-9])/g, '@\u200B')
-        // `](` → break markdown links — an attacker-controlled file path or
-        // finding text must not render a clickable URL.
-        .replace(/\]\(/g, ']\u200B(')
-        .trim()
-        .slice(0, MAX_COMMENT_MESSAGE));
-}
 /**
  * Suggestion fence must exceed every backtick run inside the suggestion —
  * tilde runs can't close a backtick fence, so only backticks count. Min 4

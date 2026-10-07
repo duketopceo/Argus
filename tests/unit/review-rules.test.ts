@@ -436,6 +436,48 @@ describe('dep-diff', () => {
     expect(msgs).not.toContain('build:parity')
   })
 
+  it('second-hunk dep entries carry their own line numbers', async () => {
+    // diffLines must reset newLine on every @@ header — a second-hunk add
+    // used to inherit the first hunk's offset and point at a wrong line.
+    const diff =
+      'diff --git a/package.json b/package.json\n' +
+      '--- a/package.json\n+++ b/package.json\n' +
+      '@@ -10,4 +10,5 @@\n' +
+      '     "a": "^1.0.0",\n' +
+      '+    "dep-one": "^1.0.0",\n' +
+      '     "b": "^1.0.0"\n' +
+      '@@ -200,4 +201,5 @@\n' +
+      '     "c": "^1.0.0",\n' +
+      '+    "dep-two": "^2.0.0",\n' +
+      '     "d": "^1.0.0"\n'
+    const r = await runRules(diff)
+    const two = r.findings.find((f) => f.message.includes('dep-two'))
+    expect(two?.line).toBe(202)
+  })
+
+  it('deps-block state does not leak across hunks', async () => {
+    // An unclosed deps opener in hunk 1 used to keep blockIsDeps=true into
+    // hunk 2, letting a mid-scripts command bypass the version-spec gate
+    // and fabricate a "new dependency" finding.
+    const diff =
+      'diff --git a/package.json b/package.json\n' +
+      '--- a/package.json\n+++ b/package.json\n' +
+      '@@ -10,5 +10,6 @@\n' +
+      '   "dependencies": {\n' +
+      '     "a": "^1.0.0",\n' +
+      '+    "dep-one": "^1.0.0",\n' +
+      '     "b": "^1.0.0",\n' +
+      '@@ -60,4 +61,5 @@\n' +
+      '     "build": "tsc",\n' +
+      '+    "fmt": "prettier --write .",\n' +
+      '     "test": "vitest run"\n'
+    const r = await runRules(diff)
+    const msgs = r.findings.map((f) => f.message).join('\n')
+    expect(msgs).toContain('dep-one')
+    expect(msgs).not.toContain('fmt')
+    expect(r.findings.filter((f) => f.category === 'dependencies')).toHaveLength(1)
+  })
+
   it('non-version-spec entries and metadata keys are ignored', async () => {
     const diff =
       'diff --git a/package.json b/package.json\n' +
@@ -491,4 +533,12 @@ describe('missing-test', () => {
     )
     expect(r.findings.filter((f) => f.category === 'testing')).toHaveLength(0)
   })
+
+  it.each(['scripts/gen.ts', 'fixtures/f.ts', 'dist/gen.ts'])(
+    'excluded path %s does not fire (isolates each predicate)',
+    async (path) => {
+      const r = await runRules(diffOf(path, ['const x = 1']))
+      expect(r.findings.filter((f) => f.category === 'testing')).toHaveLength(0)
+    },
+  )
 })

@@ -7,23 +7,15 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const out = join(mkdtempSync(join(tmpdir(), 'argus-parity-')), 'parity.cjs')
-execFileSync(
-  'npx',
-  [
-    'esbuild',
-    'action/parity-entry.mjs',
-    '--bundle',
-    '--format=cjs',
-    '--platform=node',
-    '--target=node20',
-    '--banner:js=/* eslint-disable */ /* GENERATED - do not edit; npm run build:parity */',
-    `--outfile=${out}`,
-  ],
-  { stdio: ['ignore', 'pipe', 'inherit'] },
-)
+const dir = mkdtempSync(join(tmpdir(), 'argus-parity-'))
+const out = join(dir, 'parity.cjs')
+// One flag source: the package.json build:parity script owns the bundle
+// flags; the appended --outfile wins as esbuild's last scalar option.
+execFileSync('npm', ['run', 'build:parity', '--', `--outfile=${out}`], {
+  stdio: ['ignore', 'pipe', 'inherit'],
+})
 const fresh = readFileSync(out, 'utf8')
-rmSync(out, { force: true, recursive: true })
+rmSync(dir, { force: true, recursive: true })
 const committed = readFileSync('action/parity.cjs', 'utf8')
 if (fresh !== committed) {
   console.error('action/parity.cjs is stale - run `npm run build:parity` and commit the result.')
