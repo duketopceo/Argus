@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// review-eval — offline review-corpus runner and metrics diff.
+// review-eval - offline review-corpus runner and metrics diff.
 //
 // Corpus JSON: [{ name, repo, base, head, labels? }]
 //   repo    absolute path or https URL (cloned into --cache dir)
@@ -42,7 +42,7 @@ const matchLabel = (finding, labels) =>
       finding.line <= l.toLine,
   )
 
-// metricsFromReport: pure — unit-testable without a repo.
+// metricsFromReport: pure - unit-testable without a repo.
 export function metricsFromReport(report, labels) {
   const findings = report.findings ?? []
   const posted = report.reviewComments ?? []
@@ -103,7 +103,7 @@ function resolveRepo(repo, cacheDir) {
 
 async function run(corpusPath, tag, cacheDir) {
   if (!existsSync(CLI)) {
-    console.error('dist/cli.js missing — run npm run build first')
+    console.error('dist/cli.js missing - run npm run build first')
     process.exit(2)
   }
   const corpus = JSON.parse(readFileSync(corpusPath, 'utf8'))

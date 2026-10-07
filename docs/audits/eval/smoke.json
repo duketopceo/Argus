@@ -1,0 +1,33 @@
+{
+  "tag": "smoke",
+  "at": "2026-10-07T01:42:03.098Z",
+  "cli": "f071e94",
+  "entries": 1,
+  "results": [
+    {
+      "name": "pr126-onboarding-docs",
+      "ms": 7328,
+      "exitCode": 0,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "approve",
+        "findings": 3,
+        "comments": 3,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "nit": 3
+        },
+        "byPathType": {
+          "src": 1,
+          "docs": 2
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 1
+      },
+      "reportPath": "/tmp/argus-eval-report-VmCJFQ/code-review.json"
+    }
+  ]
+}

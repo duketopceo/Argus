@@ -4,14 +4,14 @@
     "repo": ".",
     "base": "0caf9fe0fc",
     "head": "1dd51774b5",
-    "note": "U7 scan — 14 argus comments, 11 nit, 4 on dist/; the noisy outlier"
+    "note": "U7 scan - 14 argus comments, 11 nit, 4 on dist/; the noisy outlier"
   },
   {
     "name": "pr131-webhook-worker",
     "repo": ".",
     "base": "b9c19a4587",
     "head": "a585cfac23",
-    "note": "18 comments, all nit — big diff (3.4k adds)"
+    "note": "18 comments, all nit - big diff (3.4k adds)"
   },
   {
     "name": "pr126-onboarding-docs",

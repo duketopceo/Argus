@@ -281,6 +281,12 @@ export interface Config {
         lowRiskModel: string | undefined;
         findingThreshold: number;
         requestChanges: boolean;
+        /**
+         * `nitsInline` posts nit-severity findings as individual inline review
+         * comments. Default false: nits consolidate into the sticky comment's
+         * fold instead — inline volume stays limited to actionable severities.
+         */
+        nitsInline: boolean;
         profiles: ReviewProfile[];
         /**
          * Glob list of changed paths kept out of the review input. A configured

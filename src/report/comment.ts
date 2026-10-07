@@ -61,11 +61,15 @@ export interface CodeReviewInput {
   highConfidenceBlockers?: number
   findings?: {
     file?: string
+    line?: number
     severity?: string
+    message?: string
     p?: number
     suggestion?: string
     evidence?: { status?: string }
   }[]
+  /** Echo of `review.nitsInline` — false renders the consolidated nit fold. */
+  nitsInline?: boolean
   reviewComments?: { body?: string }[]
   headBinding?: { intendedSha?: string; status?: string; detail?: string }
   /** U4 — head SHA a completed review covered; the sticky baseline marker source. */
@@ -353,6 +357,28 @@ function findingsLine(cr: CodeReviewInput | undefined, missing = NO_REVIEW_REPOR
   return parts.join(' · ')
 }
 
+/**
+ * Consolidated nit listing — rendered only when `review.nitsInline` kept
+ * nits out of inline comments (default). Capped; overflow stays counted.
+ */
+function nitsFold(cr: CodeReviewInput | undefined): string[] {
+  if (cr === undefined || cr.nitsInline === true) return []
+  const nits = findingsOf(cr).filter((f) => f.severity === 'nit')
+  if (nits.length === 0) return []
+  const shown = nits.slice(0, 15)
+  const items = shown.map(
+    (f) =>
+      `- ${code(f.file)}${typeof f.line === 'number' ? `:L${f.line}` : ''} - ${cell(f.message ?? '', 160)}`,
+  )
+  if (nits.length > shown.length) items.push(`- +${nits.length - shown.length} more in the report`)
+  return [
+    `<details><summary>${SEVERITY_GLYPH.nit} ${plural(nits.length, 'nit')} - consolidated, not posted inline</summary>`,
+    '',
+    ...items,
+    '</details>',
+  ]
+}
+
 function footer(meta: CommentMeta): string {
   const bits = [`Argus ${meta.version}`]
   if (meta.runUrl !== undefined) bits.push(`[workflow run and evidence](${meta.runUrl})`)
@@ -414,6 +440,7 @@ function headLines(input: CommentInput): string[] {
         }),
         rows,
         findingsLine(cr, NO_REVIEW_ATTACHED),
+        ...nitsFold(cr),
       )
     }
     case 'full':
@@ -444,6 +471,7 @@ function headLines(input: CommentInput): string[] {
         }),
         rows,
         findingsLine(cr),
+        ...nitsFold(cr),
       )
     }
   }

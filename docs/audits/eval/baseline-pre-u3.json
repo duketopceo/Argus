@@ -1,0 +1,111 @@
+{
+  "tag": "baseline-pre-u3",
+  "at": "2026-10-07T01:45:58.123Z",
+  "cli": "12b03a4",
+  "entries": 4,
+  "results": [
+    {
+      "name": "pr173-scan-mode",
+      "ms": 52191,
+      "exitCode": 0,
+      "metrics": {
+        "ok": false,
+        "skipped": false,
+        "verdict": "needs_changes",
+        "findings": 5,
+        "comments": 5,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "bug": 3,
+          "risk": 1,
+          "nit": 1
+        },
+        "byPathType": {
+          "src": 4,
+          "test": 1
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 2,
+        "droppedReverted": 0,
+        "nitShare": 0.2
+      },
+      "reportPath": "/tmp/argus-eval-report-By8Vf0/code-review.json"
+    },
+    {
+      "name": "pr131-webhook-worker",
+      "ms": 47626,
+      "exitCode": 0,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "approve",
+        "findings": 5,
+        "comments": 5,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "nit": 3,
+          "q": 2
+        },
+        "byPathType": {
+          "src": 3,
+          "test": 2
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0.6
+      },
+      "reportPath": "/tmp/argus-eval-report-62wwu9/code-review.json"
+    },
+    {
+      "name": "pr126-onboarding-docs",
+      "ms": 6617,
+      "exitCode": 0,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "approve",
+        "findings": 2,
+        "comments": 2,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "nit": 1,
+          "q": 1
+        },
+        "byPathType": {
+          "docs": 2
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0.5
+      },
+      "reportPath": "/tmp/argus-eval-report-QMfZsW/code-review.json"
+    },
+    {
+      "name": "pr59-probe-lane",
+      "ms": 117464,
+      "exitCode": 0,
+      "metrics": {
+        "ok": false,
+        "skipped": false,
+        "verdict": "needs_changes",
+        "findings": 14,
+        "comments": 14,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "bug": 5,
+          "risk": 9
+        },
+        "byPathType": {
+          "src": 14
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 1,
+        "droppedReverted": 0,
+        "nitShare": 0
+      },
+      "reportPath": "/tmp/argus-eval-report-ABT3gD/code-review.json"
+    }
+  ]
+}

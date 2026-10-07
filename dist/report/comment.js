@@ -227,6 +227,27 @@ function findingsLine(cr, missing = NO_REVIEW_REPORT) {
     }
     return parts.join(' · ');
 }
+/**
+ * Consolidated nit listing — rendered only when `review.nitsInline` kept
+ * nits out of inline comments (default). Capped; overflow stays counted.
+ */
+function nitsFold(cr) {
+    if (cr === undefined || cr.nitsInline === true)
+        return [];
+    const nits = findingsOf(cr).filter((f) => f.severity === 'nit');
+    if (nits.length === 0)
+        return [];
+    const shown = nits.slice(0, 15);
+    const items = shown.map((f) => `- ${code(f.file)}${typeof f.line === 'number' ? `:L${f.line}` : ''} - ${cell(f.message ?? '', 160)}`);
+    if (nits.length > shown.length)
+        items.push(`- +${nits.length - shown.length} more in the report`);
+    return [
+        `<details><summary>${SEVERITY_GLYPH.nit} ${plural(nits.length, 'nit')} - consolidated, not posted inline</summary>`,
+        '',
+        ...items,
+        '</details>',
+    ];
+}
 function footer(meta) {
     const bits = [`Argus ${meta.version}`];
     if (meta.runUrl !== undefined)
@@ -273,7 +294,7 @@ function headLines(input) {
                 binding: m.lanes.review.headBinding,
                 costUsd: m.aggregate.costUsd,
                 durationMs: manifestDuration(m),
-            }), rows, findingsLine(cr, NO_REVIEW_ATTACHED));
+            }), rows, findingsLine(cr, NO_REVIEW_ATTACHED), ...nitsFold(cr));
         }
         case 'full':
         case 'review-only': {
@@ -295,7 +316,7 @@ function headLines(input) {
                 binding: manifest?.lanes.review.headBinding ?? (reviewed ? cr.headBinding : undefined),
                 costUsd,
                 durationMs,
-            }), rows, findingsLine(cr));
+            }), rows, findingsLine(cr), ...nitsFold(cr));
         }
     }
 }

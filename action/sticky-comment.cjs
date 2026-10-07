@@ -451,6 +451,22 @@ function findingsEntry(codeReview, inlinePlan) {
   ]
 }
 
+// Consolidated nit listing — rendered only when `review.nitsInline` kept
+// nits out of inline comments (default). Capped; overflow stays counted.
+// Mirrors nitsFold in src/report/comment.ts.
+function nitsFold(codeReview) {
+  if (!codeReview || codeReview.nitsInline === true) return []
+  const nits = findingsOf(codeReview).filter((f) => f.severity === 'nit')
+  if (nits.length === 0) return []
+  const shown = nits.slice(0, 15)
+  const body = shown.map(
+    (f) =>
+      `- ${code(f.file)}${typeof f.line === 'number' ? `:L${f.line}` : ''} - ${cell(f.message ?? '', 160)}`,
+  )
+  if (nits.length > shown.length) body.push(`- +${nits.length - shown.length} more in the report`)
+  return body
+}
+
 function assertionStatus(verdict) {
   return verdict === 'pass' ? 'passed' : verdict === 'fail' ? 'failed' : 'skipped'
 }
@@ -763,6 +779,7 @@ function renderManifestBody(manifest, codeReview, runUrl, meta = {}) {
     summary: findingsLine(codeReview, NO_REVIEW_ATTACHED),
     folds: [
       findingsEntry(codeReview, undefined),
+      [`${SEVERITY_GLYPH.nit} ${plural(findingsOf(codeReview).filter((f) => f.severity === 'nit').length, 'nit')} - consolidated`, nitsFold(codeReview), { key: 'nits' }],
       ['Spend ledger', spendFold(manifest, undefined, codeReview), { key: 'spend' }],
       ['Diagnostics', diagnosticsFold(manifest, undefined, codeReview), { key: 'diagnostics' }],
     ],
@@ -794,6 +811,7 @@ function renderBody(report, codeReview, runUrl, ok, inlinePlan, manifest, meta =
     summary: findingsLine(codeReview),
     folds: [
       findingsEntry(codeReview, inlinePlan),
+      [`${SEVERITY_GLYPH.nit} ${plural(findingsOf(codeReview).filter((f) => f.severity === 'nit').length, 'nit')} - consolidated`, nitsFold(codeReview), { key: 'nits' }],
       [`Tests (${report.tests?.length ?? 0})`, testsFold(report), { key: 'tests' }],
       [`Heals (${heals.length}): review before merging`, healsFold(heals), { key: 'heals' }],
       ['Exploratory', exploreFold(report), { key: 'explore' }],
@@ -826,6 +844,7 @@ function renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan, manifest, meta
     summary: findingsLine(codeReview),
     folds: [
       findingsEntry(codeReview, inlinePlan),
+      [`${SEVERITY_GLYPH.nit} ${plural(findingsOf(codeReview).filter((f) => f.severity === 'nit').length, 'nit')} - consolidated`, nitsFold(codeReview), { key: 'nits' }],
       ['Spend ledger', spendFold(manifest, undefined, codeReview), { key: 'spend' }],
       ['Diagnostics', diagnosticsFold(manifest, undefined, codeReview), { key: 'diagnostics' }],
     ],

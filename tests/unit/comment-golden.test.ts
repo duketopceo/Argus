@@ -448,7 +448,7 @@ describe('inline review goldens (U6)', () => {
       evidence: { status: 'inconclusive', detail: 'no repo index; run `argus-reviewer index` first' },
     },
   ]
-  const comments = renderReviewComments(findings, 20).comments
+  const comments = renderReviewComments(findings, 20, { nitsInline: true }).comments
   const review = sticky.reviewBody({ verdict: 'needs_changes', provenBlockers: 1, highConfidenceBlockers: 1 }) as string
   const downgraded = sticky.reviewBody(
     { verdict: 'needs_changes', provenBlockers: 1, highConfidenceBlockers: 0 },

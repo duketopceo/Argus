@@ -42,13 +42,17 @@ export interface CodeReviewInput {
     highConfidenceBlockers?: number;
     findings?: {
         file?: string;
+        line?: number;
         severity?: string;
+        message?: string;
         p?: number;
         suggestion?: string;
         evidence?: {
             status?: string;
         };
     }[];
+    /** Echo of `review.nitsInline` — false renders the consolidated nit fold. */
+    nitsInline?: boolean;
     reviewComments?: {
         body?: string;
     }[];

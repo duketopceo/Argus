@@ -23,6 +23,13 @@ One reproduced off-by-one in the pager.
 </details>
 
 <details>
+<summary>○ 1 nit - consolidated</summary>
+
+- `src/pager.ts`:L30 - Prefer `const` here.
+
+</details>
+
+<details>
 <summary>Spend ledger</summary>
 
 **Code review:** deepseek/deepseek-v4.1-flash · 1900 tokens · $0.001400

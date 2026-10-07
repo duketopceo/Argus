@@ -156,6 +156,8 @@ export interface CodeReviewReport {
   reviewComments: ReviewComment[]
   /** Eligible findings dropped by the maxComments cap. */
   commentsOverflow: number
+  /** Echo of `review.nitsInline` — the sticky renders the nit fold when false. */
+  nitsInline?: boolean
   /** B.2 probe audit records — present only when the sandbox lane ran. */
   probes?: ProbeRecord[]
   /** Why an enabled lane bowed out (fork gate, no docker, no harness…). */
@@ -974,8 +976,12 @@ function suggestionFence(suggestion: string): string {
 export function renderReviewComments(
   findings: ReviewFinding[],
   maxComments = 20,
+  opts: { nitsInline?: boolean } = {},
 ): { comments: ReviewComment[]; overflow: number } {
-  const eligible = findings.filter(
+  // Nits consolidate into the sticky fold unless `review.nitsInline` opts
+  // back into one inline comment each — they stay counted in `findings`.
+  const pool = opts.nitsInline === true ? findings : findings.filter((f) => f.severity !== 'nit')
+  const eligible = pool.filter(
     (f): f is ReviewFinding & { line: number } =>
       typeof f.file === 'string' &&
       f.file !== '' &&

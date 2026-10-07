@@ -22,6 +22,13 @@ The change is small and reads correctly; one naming nit.
 </details>
 
 <details>
+<summary>○ 1 nit - consolidated</summary>
+
+- `src/login.ts`:L14 - Rename `x` to `attempts` for clarity.
+
+</details>
+
+<details>
 <summary>Tests (2)</summary>
 
 | Test | Result | Calls | Spend | Heals | Asserts |

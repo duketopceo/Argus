@@ -1096,7 +1096,9 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
     // serialized: posters read `reviewEvent` and POST `reviewComments`
     // verbatim rather than re-deriving render or gate policy.
     const gate = computeReviewEvent(linkedFindings, blockSeverities, config.review.requestChanges)
-    const rendered = renderReviewComments(linkedFindings, maxComments)
+    const rendered = renderReviewComments(linkedFindings, maxComments, {
+      nitsInline: config.review.nitsInline,
+    })
 
     const hasBlocker = finalFindings.some((f) => blockSeverities.includes(f.severity))
     // E1.U3 — reproduced probes carry serialized source; embed the
@@ -1114,6 +1116,7 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
       highConfidenceBlockers: gate.highConfidenceBlockers,
       reviewComments: rendered.comments,
       commentsOverflow: rendered.overflow,
+      nitsInline: config.review.nitsInline,
       ...(probes !== undefined ? { probes } : {}),
       ...(probeLaneSkipped !== undefined ? { probeLaneSkipped } : {}),
       ...(generated !== undefined ? { generated } : {}),

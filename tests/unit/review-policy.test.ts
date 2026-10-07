@@ -504,9 +504,23 @@ describe('renderReviewComments', () => {
         finding({ severity: 'bug', line: 4, message: 'b2' }),
       ],
       3,
+      { nitsInline: true },
     )
     expect(comments.map((c) => c.line)).toEqual([1, 4, 2])
     expect(overflow).toBe(2)
+  })
+
+  it('consolidates nits by default: excluded from inline, not from overflow math', () => {
+    const { comments, overflow } = renderReviewComments(
+      [
+        finding({ severity: 'nit', line: 3, message: 'n' }),
+        finding({ severity: 'bug', line: 1, message: 'b1' }),
+        finding({ severity: 'risk', line: 2, message: 'r' }),
+      ],
+      5,
+    )
+    expect(comments.map((c) => c.line)).toEqual([1, 2])
+    expect(overflow).toBe(0)
   })
 
   it('excludes file:"-", empty file, and non-positive/non-integer lines', () => {

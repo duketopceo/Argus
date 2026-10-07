@@ -118,6 +118,7 @@ const defaults = {
         lowRiskModel: undefined,
         findingThreshold: 1.0,
         requestChanges: true,
+        nitsInline: false,
         profiles: [],
         instructions: [],
         rules: [...REVIEW_RULE_IDS],
@@ -297,6 +298,7 @@ export function resolveConfig(input = {}) {
     // Advisory-only escape hatch — only literal `false` opts out; anything
     // else (mis-typed values included) keeps the default-true posture.
     review.requestChanges = review.requestChanges !== false;
+    review.nitsInline = review.nitsInline === true;
     // Unknown profile names are rejected at config load — a typo silently
     // disabling a lens is worse than dropping it. Non-array input means the
     // field was mis-typed entirely and also drops to the empty default.

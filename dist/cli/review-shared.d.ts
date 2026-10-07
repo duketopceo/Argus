@@ -98,6 +98,8 @@ export interface CodeReviewReport {
     reviewComments: ReviewComment[];
     /** Eligible findings dropped by the maxComments cap. */
     commentsOverflow: number;
+    /** Echo of `review.nitsInline` — the sticky renders the nit fold when false. */
+    nitsInline?: boolean;
     /** B.2 probe audit records — present only when the sandbox lane ran. */
     probes?: ProbeRecord[];
     /** Why an enabled lane bowed out (fork gate, no docker, no harness…). */
@@ -328,7 +330,9 @@ export declare function computeReviewEvent(findings: ReviewFinding[], blockSever
  * `comments` verbatim — dedup + live-diff validation + POST, no render
  * policy. `overflow` is the count of eligible findings past the cap.
  */
-export declare function renderReviewComments(findings: ReviewFinding[], maxComments?: number): {
+export declare function renderReviewComments(findings: ReviewFinding[], maxComments?: number, opts?: {
+    nitsInline?: boolean;
+}): {
     comments: ReviewComment[];
     overflow: number;
 };

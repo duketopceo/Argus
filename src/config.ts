@@ -286,6 +286,12 @@ export interface Config {
     lowRiskModel: string | undefined
     findingThreshold: number
     requestChanges: boolean
+    /**
+     * `nitsInline` posts nit-severity findings as individual inline review
+     * comments. Default false: nits consolidate into the sticky comment's
+     * fold instead — inline volume stays limited to actionable severities.
+     */
+    nitsInline: boolean
     profiles: ReviewProfile[]
     /**
      * Glob list of changed paths kept out of the review input. A configured
@@ -485,6 +491,7 @@ const defaults: Config = {
     lowRiskModel: undefined,
     findingThreshold: 1.0,
     requestChanges: true,
+    nitsInline: false,
     profiles: [],
     instructions: [],
     rules: [...REVIEW_RULE_IDS],
@@ -677,6 +684,7 @@ export function resolveConfig(input: ConfigInput = {}): Config {
   // Advisory-only escape hatch — only literal `false` opts out; anything
   // else (mis-typed values included) keeps the default-true posture.
   review.requestChanges = review.requestChanges !== false
+  review.nitsInline = review.nitsInline === true
   // Unknown profile names are rejected at config load — a typo silently
   // disabling a lens is worse than dropping it. Non-array input means the
   // field was mis-typed entirely and also drops to the empty default.

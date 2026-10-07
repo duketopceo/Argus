@@ -620,8 +620,11 @@ function suggestionFence(suggestion) {
  * `comments` verbatim — dedup + live-diff validation + POST, no render
  * policy. `overflow` is the count of eligible findings past the cap.
  */
-export function renderReviewComments(findings, maxComments = 20) {
-    const eligible = findings.filter((f) => typeof f.file === 'string' &&
+export function renderReviewComments(findings, maxComments = 20, opts = {}) {
+    // Nits consolidate into the sticky fold unless `review.nitsInline` opts
+    // back into one inline comment each — they stay counted in `findings`.
+    const pool = opts.nitsInline === true ? findings : findings.filter((f) => f.severity !== 'nit');
+    const eligible = pool.filter((f) => typeof f.file === 'string' &&
         f.file !== '' &&
         f.file !== '-' &&
         Number.isInteger(f.line) &&
