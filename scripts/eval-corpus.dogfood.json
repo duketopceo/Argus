@@ -1,0 +1,44 @@
+[
+  {
+    "name": "dogfood-orchestral-171",
+    "repo": "https://github.com/duketopceo/orchestral",
+    "base": "1938374092",
+    "head": "a3d1221203",
+    "note": "fix(planners): fault on trailing JSON - real merged PR"
+  },
+  {
+    "name": "dogfood-wisp-106",
+    "repo": "https://github.com/duketopceo/wisp",
+    "base": "67b520c409",
+    "head": "3663e43339",
+    "note": "feat: act-efficiency wave - larger feature diff"
+  },
+  {
+    "name": "dogfood-kurultai-421",
+    "repo": "https://github.com/duketopceo/kurultai",
+    "base": "27bac7afca",
+    "head": "eb20d28bce",
+    "note": "feat(deploy): shared_write containment - deploy code path"
+  },
+  {
+    "name": "dogfood-omaseal-43",
+    "repo": "https://github.com/duketopceo/OmaSeal",
+    "base": "fc9a7e9f9a",
+    "head": "a27f65a3b2",
+    "note": "fix(engine): lazy-load wrapped identity - secrets-adjacent code"
+  },
+  {
+    "name": "dogfood-dayflow-63",
+    "repo": "https://github.com/duketopceo/dayflow-linux",
+    "base": "c1cf3d5393",
+    "head": "bb08b35346",
+    "note": "chore(ui): restore classic QML - non-TS language coverage"
+  },
+  {
+    "name": "dogfood-omarchyplugins-27",
+    "repo": "https://github.com/duketopceo/omarchy-plugins",
+    "base": "4e56a35ba9",
+    "head": "959f41bd73",
+    "note": "feat: retire connections/ticker/agents - plugin-estate refactor"
+  }
+]
