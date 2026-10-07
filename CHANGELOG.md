@@ -3,6 +3,64 @@
 All notable changes to argus-reviewer are documented here. The project is
 pre-1.0; breaking changes may ship without a major bump until `1.0.0`.
 
+## [0.5.0] — 2026-10-07
+
+Review polish at scale plus the execution-moat lanes. Nits fold into the
+sticky comment instead of spamming threads, deterministic rules catch
+dependency and test-coverage events without spending model tokens, and a
+replayable eval corpus (AACR-Bench + dogfood) measures precision before
+prompt or pipeline changes land.
+
+### Added
+- **Nit consolidation** — `review.nitsInline` (default `false`) keeps nit
+  findings out of inline threads and renders them as one capped fold in
+  the sticky comment. `nits-inline` action input / `ARGUS_NITS_INLINE`
+  overrides it on untrusted lanes (#174).
+- **Deterministic rules lane** — `runRules` registry + `review.rules`
+  with `dep-diff` (new dependency/version changes) and `missing-test`
+  (source-only diffs) rules; secrets and rules findings share one
+  auditable assembly (#152, #174).
+- **`argus-reviewer scan <path>`** — audit mode over a repo or subtree
+  (#150, #173).
+- **Eval harness** — `scripts/review-eval.mjs` replays a corpus of
+  base/head pairs through the real code-review path and reports findings,
+  nit share, labeled precision/recall, and stalled/skipped entries;
+  `scripts/aacr-corpus.mjs` builds the corpus from AACR-Bench and resolves
+  live PR heads via the GitHub API (#174).
+- **Generated spec lane** — `--generate-tests` / `@argus generate` turn a
+  PR diff into authored probes (#161).
+- **Incremental review** — verified `lastReviewedSha` baseline so
+  follow-up pushes review only the delta (#165).
+- **`@argus fix`** — applies posted suggestions as a commit PR (#148, #166).
+- **`review.instructions[]`** — per-glob reviewer rules resolved per chunk
+  (#164).
+- **`code-review --base <ref>`** — local merge-base..worktree review
+  (#151, #163).
+- **`--keep-alive`** — holds a failed run's target up for local
+  inspection (#162).
+- **Heal write-back** — sanitized relocation PRs for committed flow
+  recordings (#160).
+- Weekly dogfood corpus workflow replays six public repos through the
+  eval harness (#174).
+
+### Changed
+- The action bundle now delegates to `src/` renderers through
+  `action/parity.cjs` — comment rendering has one implementation and a
+  contract test keeps it honest (#174).
+
+### Fixed
+- Model-controlled sticky-comment text is sanitized — markdown links,
+  `@mentions`, fence runs, and closing tags can't escape the fold (#174).
+- Eval children run with `ARGUS_UNTRUSTED=1` so a fetched checkout's
+  config never executes beside ambient credentials; corpus refs require
+  exact 40-hex SHAs and reject leading `-` (CWE-88) (#174).
+- `dep-diff` no longer leaks dependency-block state across hunks and
+  ignores runtime/engine keys (`node`, `npm`, `pnpm`, `yarn`, `bun`,
+  `deno`) (#174).
+- Probe `SECRET_ENV_RE` covers `AUTH*`/`PASSWD` env reads (#174).
+- Dogfood review scope excludes captured eval artifacts — snapshot JSON
+  embedding third-party diffs was being flagged as our code (#174).
+
 ## [0.4.2] — 2026-10-04
 
 Onboarding and reviewer throughput. `init --pr` opens a ready-to-merge
