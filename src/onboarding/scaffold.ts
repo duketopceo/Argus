@@ -11,8 +11,8 @@
  * fixtures) on release; see RELEASING.md. v0.4.0 and v0.4.1 ship an action.yml
  * GitHub cannot parse, so never pin to them.
  */
-export const ACTION_PIN_SHA = 'bc462fa66018e149eac1b32e36ac34b4f2eb2d56'
-export const ACTION_PIN_TAG = 'v0.4.2'
+export const ACTION_PIN_SHA = '27887be6438ad284566073835939210edc4cdeb8'
+export const ACTION_PIN_TAG = 'v0.5.0'
 const ACTION_PIN = `${ACTION_PIN_SHA} # ${ACTION_PIN_TAG}`
 
 export interface ScaffoldFile {

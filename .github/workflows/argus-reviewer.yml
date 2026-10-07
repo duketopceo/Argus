@@ -51,7 +51,7 @@ jobs:
           # v0.4.2 — carries review.exclude defaults, per-comment evidence
           # footer fix, and the ruleset lane. Re-anchor to the next tag when
           # one is cut; must match the action pin below.
-          ref: bc462fa66018e149eac1b32e36ac34b4f2eb2d56
+          ref: 27887be6438ad284566073835939210edc4cdeb8
           path: trusted-argus
           persist-credentials: false
       - name: Install trusted CLI dependencies
@@ -65,7 +65,7 @@ jobs:
 
       - name: Run published Argus action
         id: review
-        uses: duketopceo/Argus/action@bc462fa66018e149eac1b32e36ac34b4f2eb2d56
+        uses: duketopceo/Argus/action@27887be6438ad284566073835939210edc4cdeb8
         with:
           openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           # deepseek v4 AND v4.1 both stall on large prompts: v4.1 hung
