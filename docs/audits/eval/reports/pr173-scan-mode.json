@@ -1,0 +1,784 @@
+{
+  "ok": false,
+  "skipped": false,
+  "summary": "Reviewed 6 of 12 changed files (6 excluded by review.exclude). Reviewed all 5 chunks (6 of 6 files). Several correctness bugs and concurrency issues need fixing before merge: a flipped boolean assignment, a missing semicolon that voids a variable, an unguarded undefined index, a race condition on totalBytes, and a risky early-exit omission. Minor formatting/consistency nits and doc gaps are also present but secondary.",
+  "verdict": "needs_changes",
+  "findings": [
+    {
+      "file": "src/cli.ts",
+      "line": 3014,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L3014: 🔴 bug: `batchRecord.used` flipped from `true` to `false` on budget-exceeded path (`fit === 0`). Revert `used` to `true` or confirm intentional with a test.",
+      "p": 0.68,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/cli.ts",
+      "line": 4194,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L4194: 🔴 bug: Missing semicolon after `await readFile(...).then(...).catch(...)` — `report` is always `undefined`. Add semicolon before `.catch` or use separate `const report = await ...` block.",
+      "p": 0.59,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/cli.ts",
+      "line": 4625,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L4625: 🔴 bug: `index` may be undefined when `values.base` is set. Guard or assert `index` defined before `buildReviewContext(index, eligible)`.",
+      "p": 0.56,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/index/scan.ts",
+      "line": 207,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L207: 🔴 bug: `totalBytes` read across concurrent batches without a lock; race allows files past cap to be included. Track atomically or use a shared counter.",
+      "p": 0.67,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/index/scan.ts",
+      "line": 191,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "L191: 🟡 risk: `totalBytes > SCAN_DIFF_CAP_BYTES` check in `map` reads shared variable without synchronization; forward-check before actual write.",
+      "p": 0.64,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/cli.ts",
+      "line": 4682,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "L4682: 🟡 risk: `buildReviewContext` called even when `eligible` is empty; add early return.",
+      "p": 0.45,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/cli.ts",
+      "line": 4708,
+      "severity": "risk",
+      "category": "performance",
+      "message": "L4708: 🟡 risk: `projected` projection uses 1-chunk mean calculation; use running total and clamp divisor to at least 1.",
+      "p": 0.55,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/cli.ts",
+      "line": 3023,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L3023: 🔵 nit: `else try` without brace on same line — wrap in braces for consistency.",
+      "p": 0.15,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/cli.ts",
+      "line": 3681,
+      "severity": "q",
+      "category": "usability",
+      "message": "L3681: ❓ q: help string changed from backtick to double quotes; verify escaped single-quote renders correctly.",
+      "p": 0.31,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/cli.ts",
+      "line": 4582,
+      "severity": "nit",
+      "category": "usability",
+      "message": "L4582-4584: 🔵 nit: `SCAN_USAGE` docstring omits deterministic lane costs under `--model`; add note.",
+      "p": 0.25,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/cli.ts",
+      "line": 4597,
+      "severity": "q",
+      "category": "other",
+      "message": "L4597: ❓ q: `CREDENTIAL_PATH_RE` includes `.pem` globally; confirm no false positive on Playwright report `.pem` files.",
+      "p": 0.35,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/cli.ts",
+      "line": 1984,
+      "severity": "nit",
+      "category": "other",
+      "message": "L1984: 🔵 nit: Good security addition of `--no-ext-diff`.",
+      "p": 0.14,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/cli.ts",
+      "line": 1995,
+      "severity": "nit",
+      "category": "other",
+      "message": "L1995: 🔵 nit: Consistent `--no-ext-diff` flag for `--no-index` diff.",
+      "p": 0.14,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/cli.ts",
+      "line": 4194,
+      "severity": "q",
+      "category": "convention",
+      "message": "L4194: ❓ q: `.then(...).catch(...)` line breaking inconsistent with codebase; prefer try/catch.",
+      "p": 0.19,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "tests/unit/scan.test.ts",
+      "line": 63,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L63: nit: leftover TODO/FIXME-style marker added at `tests/unit/scan.test.ts` - resolve it or link a tracking issue.",
+      "rule": "leftover-todo",
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [
+    {
+      "path": "src/cli.ts",
+      "line": 3014,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`batchRecord.used` flipped from `true` to `false` on budget-exceeded path (`fit === 0`). Revert `used` to `true` or confirm intentional with a test.",
+      "dedupKey": "src/cli.ts:3014:bug:`batchRecord.used` flipped from `true` to `false` on budget-exceeded path (`fit === 0`). Revert `used` to `true` or confirm intentional with a test.:00001505"
+    },
+    {
+      "path": "src/cli.ts",
+      "line": 4194,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\nMissing semicolon after `await readFile(...).then(...).catch(...)` — `report` is always `undefined`. Add semicolon before `.catch` or use separate `const report = await ...` block.",
+      "dedupKey": "src/cli.ts:4194:bug:Missing semicolon after `await readFile(...).then(...).catch(...)` — `report` is always `undefined`. Add semicolon before `.catch` or use separate `const report = await ...` block.:00001505"
+    },
+    {
+      "path": "src/cli.ts",
+      "line": 4625,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`index` may be undefined when `values.base` is set. Guard or assert `index` defined before `buildReviewContext(index, eligible)`.",
+      "dedupKey": "src/cli.ts:4625:bug:`index` may be undefined when `values.base` is set. Guard or assert `index` defined before `buildReviewContext(index, eligible)`.:00001505"
+    },
+    {
+      "path": "src/index/scan.ts",
+      "line": 207,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`totalBytes` read across concurrent batches without a lock; race allows files past cap to be included. Track atomically or use a shared counter.",
+      "dedupKey": "src/index/scan.ts:207:bug:`totalBytes` read across concurrent batches without a lock; race allows files past cap to be included. Track atomically or use a shared counter.:00001505"
+    },
+    {
+      "path": "src/index/scan.ts",
+      "line": 191,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\n`totalBytes > SCAN_DIFF_CAP_BYTES` check in `map` reads shared variable without synchronization; forward-check before actual write.",
+      "dedupKey": "src/index/scan.ts:191:risk:`totalBytes > SCAN_DIFF_CAP_BYTES` check in `map` reads shared variable without synchronization; forward-check before actual write.:00001505"
+    },
+    {
+      "path": "src/cli.ts",
+      "line": 4682,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\n`buildReviewContext` called even when `eligible` is empty; add early return.",
+      "dedupKey": "src/cli.ts:4682:risk:`buildReviewContext` called even when `eligible` is empty; add early return.:00001505"
+    },
+    {
+      "path": "src/cli.ts",
+      "line": 4708,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\n`projected` projection uses 1-chunk mean calculation; use running total and clamp divisor to at least 1.",
+      "dedupKey": "src/cli.ts:4708:risk:`projected` projection uses 1-chunk mean calculation; use running total and clamp divisor to at least 1.:00001505"
+    },
+    {
+      "path": "src/cli.ts",
+      "line": 3681,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n□ **question** · ▰▱▱▱ suspected\nhelp string changed from backtick to double quotes; verify escaped single-quote renders correctly.",
+      "dedupKey": "src/cli.ts:3681:q:help string changed from backtick to double quotes; verify escaped single-quote renders correctly.:00001505"
+    },
+    {
+      "path": "src/cli.ts",
+      "line": 4597,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n□ **question** · ▰▱▱▱ suspected\n`CREDENTIAL_PATH_RE` includes `.pem` globally; confirm no false positive on Playwright report `.pem` files.",
+      "dedupKey": "src/cli.ts:4597:q:`CREDENTIAL_PATH_RE` includes `.pem` globally; confirm no false positive on Playwright report `.pem` files.:00001505"
+    },
+    {
+      "path": "src/cli.ts",
+      "line": 4194,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n□ **question** · ▰▱▱▱ suspected\n`.then(...).catch(...)` line breaking inconsistent with codebase; prefer try/catch.",
+      "dedupKey": "src/cli.ts:4194:q:`.then(...).catch(...)` line breaking inconsistent with codebase; prefer try/catch.:00001505"
+    }
+  ],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "probes": [],
+  "secretsScan": {
+    "findings": [],
+    "records": [
+      {
+        "file": "dist/cli.js",
+        "line": 3904,
+        "patternClass": "generic-assignment",
+        "adjudicated": true,
+        "pLive": 0.16,
+        "suppressed": true
+      },
+      {
+        "file": "src/cli.ts",
+        "line": 4749,
+        "patternClass": "generic-assignment",
+        "adjudicated": true,
+        "pLive": 0.19,
+        "suppressed": true
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 64,
+        "patternClass": "aws-access-key",
+        "adjudicated": true,
+        "pLive": 0.15,
+        "suppressed": true
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 65,
+        "patternClass": "github-pat",
+        "adjudicated": true,
+        "pLive": 0.14,
+        "suppressed": true
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 100,
+        "patternClass": "aws-access-key",
+        "adjudicated": true,
+        "pLive": 0.16,
+        "suppressed": true
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 179,
+        "patternClass": "github-pat",
+        "adjudicated": true,
+        "pLive": 0.16,
+        "suppressed": true
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 220,
+        "patternClass": "aws-access-key",
+        "adjudicated": true,
+        "pLive": 0.16,
+        "suppressed": true
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 223,
+        "patternClass": "aws-access-key",
+        "adjudicated": true,
+        "pLive": 0.17,
+        "suppressed": true
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 233,
+        "patternClass": "aws-access-key",
+        "adjudicated": true,
+        "pLive": 0.16,
+        "suppressed": true
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 277,
+        "patternClass": "aws-access-key",
+        "adjudicated": true,
+        "pLive": 0.14,
+        "suppressed": true
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 286,
+        "patternClass": "aws-access-key",
+        "adjudicated": true,
+        "pLive": 0.16,
+        "suppressed": true
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 312,
+        "patternClass": "generic-assignment",
+        "adjudicated": true,
+        "pLive": 0.16,
+        "suppressed": true
+      }
+    ],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async"
+    ],
+    "records": [
+      {
+        "file": "dist/cli.js",
+        "line": 3904,
+        "detail": "generic-assignment",
+        "adjudicated": true,
+        "pLive": 0.16,
+        "suppressed": "below adjudication threshold",
+        "rule": "secrets"
+      },
+      {
+        "file": "src/cli.ts",
+        "line": 4749,
+        "detail": "generic-assignment",
+        "adjudicated": true,
+        "pLive": 0.19,
+        "suppressed": "below adjudication threshold",
+        "rule": "secrets"
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 64,
+        "detail": "aws-access-key",
+        "adjudicated": true,
+        "pLive": 0.15,
+        "suppressed": "below adjudication threshold",
+        "rule": "secrets"
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 65,
+        "detail": "github-pat",
+        "adjudicated": true,
+        "pLive": 0.14,
+        "suppressed": "below adjudication threshold",
+        "rule": "secrets"
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 100,
+        "detail": "aws-access-key",
+        "adjudicated": true,
+        "pLive": 0.16,
+        "suppressed": "below adjudication threshold",
+        "rule": "secrets"
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 179,
+        "detail": "github-pat",
+        "adjudicated": true,
+        "pLive": 0.16,
+        "suppressed": "below adjudication threshold",
+        "rule": "secrets"
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 220,
+        "detail": "aws-access-key",
+        "adjudicated": true,
+        "pLive": 0.16,
+        "suppressed": "below adjudication threshold",
+        "rule": "secrets"
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 223,
+        "detail": "aws-access-key",
+        "adjudicated": true,
+        "pLive": 0.17,
+        "suppressed": "below adjudication threshold",
+        "rule": "secrets"
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 233,
+        "detail": "aws-access-key",
+        "adjudicated": true,
+        "pLive": 0.16,
+        "suppressed": "below adjudication threshold",
+        "rule": "secrets"
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 277,
+        "detail": "aws-access-key",
+        "adjudicated": true,
+        "pLive": 0.14,
+        "suppressed": "below adjudication threshold",
+        "rule": "secrets"
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 286,
+        "detail": "aws-access-key",
+        "adjudicated": true,
+        "pLive": 0.16,
+        "suppressed": "below adjudication threshold",
+        "rule": "secrets"
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 312,
+        "detail": "generic-assignment",
+        "adjudicated": true,
+        "pLive": 0.16,
+        "suppressed": "below adjudication threshold",
+        "rule": "secrets"
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 62,
+        "detail": "url-with-ip-host",
+        "suppressed": "non-production path",
+        "rule": "hardcoded-endpoint"
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 135,
+        "detail": "url-with-ip-host",
+        "suppressed": "non-production path",
+        "rule": "hardcoded-endpoint"
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 242,
+        "detail": "url-with-ip-host",
+        "suppressed": "non-production path",
+        "rule": "hardcoded-endpoint"
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 63,
+        "detail": "todo-marker",
+        "rule": "leftover-todo"
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 129,
+        "detail": "execFileSync",
+        "suppressed": "non-production path",
+        "rule": "sync-in-async"
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 268,
+        "detail": "execFileSync",
+        "suppressed": "non-production path",
+        "rule": "sync-in-async"
+      },
+      {
+        "file": "tests/unit/scan.test.ts",
+        "line": 292,
+        "detail": "execFileSync",
+        "suppressed": "non-production path",
+        "rule": "sync-in-async"
+      }
+    ],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 12006,
+    "needsDeepReview": 0.94,
+    "risk": 2.98,
+    "topRiskArea": "ops",
+    "topRiskAreaConfidence": 0.36
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "src/cli.ts",
+        "line": 3014,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L3014: 🔴 bug: `batchRecord.used` flipped from `true` to `false` on budget-exceeded path (`fit === 0`). Revert `used` to `true` or confirm intentional with a test.",
+        "adjudicated": true,
+        "p": 0.68
+      },
+      {
+        "file": "src/cli.ts",
+        "line": 4194,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L4194: 🔴 bug: Missing semicolon after `await readFile(...).then(...).catch(...)` — `report` is always `undefined`. Add semicolon before `.catch` or use separate `const report = await ...` block.",
+        "adjudicated": true,
+        "p": 0.59
+      },
+      {
+        "file": "src/cli.ts",
+        "line": 4625,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L4625: 🔴 bug: `index` may be undefined when `values.base` is set. Guard or assert `index` defined before `buildReviewContext(index, eligible)`.",
+        "adjudicated": true,
+        "p": 0.56
+      },
+      {
+        "file": "src/index/scan.ts",
+        "line": 207,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L207: 🔴 bug: `totalBytes` read across concurrent batches without a lock; race allows files past cap to be included. Track atomically or use a shared counter.",
+        "adjudicated": true,
+        "p": 0.67
+      },
+      {
+        "file": "src/index/scan.ts",
+        "line": 191,
+        "severity": "risk",
+        "category": "correctness",
+        "message": "L191: 🟡 risk: `totalBytes > SCAN_DIFF_CAP_BYTES` check in `map` reads shared variable without synchronization; forward-check before actual write.",
+        "adjudicated": true,
+        "p": 0.64
+      },
+      {
+        "file": "src/cli.ts",
+        "line": 4682,
+        "severity": "risk",
+        "category": "correctness",
+        "message": "L4682: 🟡 risk: `buildReviewContext` called even when `eligible` is empty; add early return.",
+        "adjudicated": true,
+        "p": 0.45
+      },
+      {
+        "file": "src/cli.ts",
+        "line": 4708,
+        "severity": "risk",
+        "category": "performance",
+        "message": "L4708: 🟡 risk: `projected` projection uses 1-chunk mean calculation; use running total and clamp divisor to at least 1.",
+        "adjudicated": true,
+        "p": 0.55
+      },
+      {
+        "file": "src/cli.ts",
+        "line": 3023,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L3023: 🔵 nit: `else try` without brace on same line — wrap in braces for consistency.",
+        "adjudicated": true,
+        "p": 0.15
+      },
+      {
+        "file": "src/cli.ts",
+        "line": 3681,
+        "severity": "q",
+        "category": "usability",
+        "message": "L3681: ❓ q: help string changed from backtick to double quotes; verify escaped single-quote renders correctly.",
+        "adjudicated": true,
+        "p": 0.31
+      },
+      {
+        "file": "src/cli.ts",
+        "line": 4582,
+        "severity": "nit",
+        "category": "usability",
+        "message": "L4582-4584: 🔵 nit: `SCAN_USAGE` docstring omits deterministic lane costs under `--model`; add note.",
+        "adjudicated": true,
+        "p": 0.25
+      },
+      {
+        "file": "src/cli.ts",
+        "line": 4597,
+        "severity": "q",
+        "category": "other",
+        "message": "L4597: ❓ q: `CREDENTIAL_PATH_RE` includes `.pem` globally; confirm no false positive on Playwright report `.pem` files.",
+        "adjudicated": true,
+        "p": 0.35
+      },
+      {
+        "file": "src/cli.ts",
+        "line": 1984,
+        "severity": "nit",
+        "category": "other",
+        "message": "L1984: 🔵 nit: Good security addition of `--no-ext-diff`.",
+        "adjudicated": true,
+        "p": 0.14
+      },
+      {
+        "file": "src/cli.ts",
+        "line": 1995,
+        "severity": "nit",
+        "category": "other",
+        "message": "L1995: 🔵 nit: Consistent `--no-ext-diff` flag for `--no-index` diff.",
+        "adjudicated": true,
+        "p": 0.14
+      },
+      {
+        "file": "src/cli.ts",
+        "line": 4194,
+        "severity": "q",
+        "category": "convention",
+        "message": "L4194: ❓ q: `.then(...).catch(...)` line breaking inconsistent with codebase; prefer try/catch.",
+        "adjudicated": true,
+        "p": 0.19
+      }
+    ],
+    "overflow": 0
+  },
+  "droppedUnanchored": 1,
+  "droppedFindings": [
+    {
+      "file": "src/cli.ts",
+      "severity": "nit",
+      "message": "L1976: 🔵 nit: git diff without --no-ext-diff can execute external diff tool. Already fixed at L1984, but L1976 in the previous version had the same risk. No action needed.",
+      "reason": "outside-diff",
+      "line": 1976,
+      "category": "correctness"
+    }
+  ],
+  "scope": {
+    "totalFiles": 12,
+    "reviewedFiles": 6,
+    "excludedFiles": 6,
+    "excludedSample": [
+      "dist/cli.d.ts",
+      "dist/cli.js",
+      "dist/index/scan.d.ts",
+      "dist/index/scan.js",
+      "dist/report/scan.d.ts"
+    ],
+    "chunksTotal": 5,
+    "chunksReviewed": 5,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 4600,
+      "costUsd": 0.000189546,
+      "kind": "decide"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 1520,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 7687,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 6776,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 7552,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 6365,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 2627,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1833,
+      "costUsd": 0.000067662,
+      "kind": "decide"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 5235,
+      "costUsd": 0.00020895,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.000466158,
+  "tokens": 44195,
+  "model": "deepseek/deepseek-v4-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "1dd51774b59145c55ed431834df12e5e974919c6",
+    "checkoutSha": "1dd51774b59145c55ed431834df12e5e974919c6",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "1dd51774b59145c55ed431834df12e5e974919c6",
+  "diffRange": {
+    "base": "0caf9fe0fc",
+    "baseSha": "0caf9fe0fca3eb2ff53f982807c0ce72d494cb5a",
+    "headSha": "1dd51774b59145c55ed431834df12e5e974919c6"
+  }
+}

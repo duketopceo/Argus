@@ -26,5 +26,12 @@
     "base": "ac875d1b68",
     "head": "a6320ad3dc",
     "note": "worst offender: 52 comments"
+  },
+  {
+    "name": "u5-dep-bump",
+    "repo": ".",
+    "base": "eeabd417b0f2685e081f548475a7322f064c00de",
+    "head": "87c8a39ad6953ffb8857a21376997450828ef48e",
+    "note": "U5 probe - esbuild dep add in package.json + src/ changes, no test file"
   }
 ]

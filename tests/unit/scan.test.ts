@@ -360,7 +360,11 @@ describe('argus scan (U7)', () => {
     const report = await readReport(dir)
     // The unanchored finding was dropped and the drop is auditable.
     expect(report.model?.dropped).toBe(1)
-    expect(report.findings).toEqual([])
+    // Only the missing-test rules-lane nit survives - the scanned tree
+    // holds a lone source file with no test coverage.
+    expect(report.findings).toEqual([
+      expect.objectContaining({ category: 'testing', rule: 'missing-test', severity: 'nit' }),
+    ])
     // Index purpose reached the prompt via the sanitized `> context:` channel
     // (buildReviewContext), not the raw-purpose bypass.
     const sent = JSON.stringify(client.calls.map((c) => c.messages))

@@ -1,0 +1,576 @@
+{
+  "ok": false,
+  "skipped": false,
+  "summary": "Reviewed 24 of 43 changed files (19 excluded by review.exclude). Reviewed all 10 chunks (24 of 24 files). This PR introduces sandboxed probe execution, gate logic, and evidence collection. While the structural changes are well-conceived, several critical correctness bugs and security risks remain unaddressed—most notably a race condition in budget checking, missing type coercion in sandbox config, a broken fork detection guard, and incomplete container isolation due to bind-mounted node_modules. These issues must be fixed before merging. 1 finding(s) dropped: anchored outside the reviewed diff.",
+  "verdict": "needs_changes",
+  "findings": [
+    {
+      "file": ".github/workflows/argus-reviewer.yml",
+      "line": 5,
+      "severity": "bug",
+      "category": "security",
+      "message": "🔴 bug: `workflow_dispatch` bypasses the fork-gate label check entirely — any repo admin can trigger probes without `argus-probe` label. Add `if: github.event_name != 'workflow_dispatch' || github.event.label.name == 'argus-probe'` or gate with required inputs.",
+      "p": 0.53,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/cli.ts",
+      "line": 1144,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "🔴 bug: `ledger.budgetExceeded` checked before `prMetaPromise` resolves — `runProbeLane` may consume budget that was assumed available. Await `prMetaPromise` before the budget check or re-evaluate `budgetExceeded` after the lane.",
+      "p": 0.54,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/config.ts",
+      "line": 203,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "🔴 bug: `sandbox` spreading `raw` over `defaults.sandbox` does not coerce booleans/strings for `enabled`/`allowForks`/`image`/`memory`/`cpus` — `raw.enabled = false` spreads then overwritten by `sandbox.enabled = raw.enabled === true` returning `false`, but other fields like `allowForks` follow same pattern and work; however `image` can remain `''` after check on line 205. Coerce before spread or use a helper function that validates each field before assignment.",
+      "p": 0.45,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "SECURITY.md",
+      "line": 51,
+      "severity": "risk",
+      "category": "security",
+      "message": "🟡 risk: \"head's `node_modules` bind-mounted read-only\" is documented but `npm ci` already ran on the host — the container gets a stale, host-owned `node_modules`. Probes that `require()` from that tree execute host-compiled binaries, breaking the container isolation claim. Use `COPY --from=0` pattern or multi-stage build to produce a container-native `node_modules`.",
+      "p": 0.55,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/evidence/ci.ts",
+      "line": 72,
+      "severity": "bug",
+      "category": "security",
+      "message": "🔴 bug: `data.head?.repo?.fork !== false` treats a deleted fork repo as always a fork. If PR is a branch within same repo, missing head.repo object (e.g., API race) incorrectly forces fork gate. Change to `data.head?.repo?.fork === true` when repo object exists, else default to false for same-repo PRs.",
+      "p": 0.46,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/evidence/gate.ts",
+      "line": 17,
+      "severity": "bug",
+      "category": "security",
+      "message": "🔴 bug: `labelCoversHead` returns true when `labelApprovedAt > pushedAt`. If both timestamps are identical (same millisecond), the label covers the push but gate fails closed. Change `>` to `>=`.",
+      "p": 0.35,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/probe/queue.ts",
+      "line": 501,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "🔴 bug: `baseDir` may be undefined when read in line 501 because `basePromise` may not have resolved. Assign `baseDir` before `wtMask` calculation using `basePromise` directly instead of the possibly-unassigned variable.",
+      "p": 0.48,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/config.ts",
+      "line": 203,
+      "severity": "risk",
+      "category": "security",
+      "message": "🟡 risk: `raw` is `Partial<Sandbox>` but spread over `defaults.sandbox` then coerced — `raw.image` could be `false` or `0` leading to `typeof raw.image === 'string'` false and `image` becomes undefined, safe, but `raw.memory` as number passed to Docker `--memory` would produce invalid arg. Validate each string field with `typeof x === 'string' && x !== ''` before assignment.",
+      "p": 0.4,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "action/action.yml",
+      "line": 106,
+      "severity": "risk",
+      "category": "security",
+      "message": "🟡 risk: `sandbox` input default is `'false'` but comment says \"does not override a config-enabled lane\" — config file ships `sandbox: { enabled: true }` in this diff, making dogfood always-on. Fork PRs ignore config sandbox per SECURITY.md, but self-hosted runner with default config now executes probes on every PR. Document this dogfooding in the PR description.",
+      "p": 0.44,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/evidence/gate.ts",
+      "line": 24,
+      "severity": "risk",
+      "category": "security",
+      "message": "🟡 risk: `isTrustedAssociation` returns true for `COLLABORATOR`, but a collaborator can be added without review scope. A tag team being a collaborator is a different permission level than write access. Consider adding a config knob or using a more restrictive set.",
+      "p": 0.52,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/executor/sandbox.ts",
+      "line": 223,
+      "severity": "risk",
+      "category": "security",
+      "message": "🟡 risk: `.git-credentials` is listed as a secret file, but `.git/config` is the file that contains the credentials (masked via tmpfs or devnull). Remove `.git-credentials` from list unless you expect it in workspace root (uncommon).",
+      "p": 0.45,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/executor/sandbox.ts",
+      "line": 227,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "🟡 risk: `stat` for `.git` is done outside workdir (resolved `checked.realWork`), but previous `checkSandboxPaths` didn't guarantee `workdir` was a directory. If workdir is a file, `join` will produce invalid path. Add isDirectory() check before proceeding.",
+      "p": 0.5,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/probe/harness.ts",
+      "line": 57,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "🟡 risk: `vitestHarness.runCmd` uses `node_modules/vitest/vitest.mjs` which may not exist — vitest CLI entry is `node_modules/vitest/vitest.mjs` in some versions, but older versions use `node_modules/.bin/vitest` or the entry point `node_modules/vitest/esm/cli.mjs`. Resolve via `require.resolve('vitest')` or use the binary in `node_modules/.bin/vitest`.",
+      "p": 0.48,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/probe/author.ts",
+      "line": 54,
+      "severity": "risk",
+      "category": "security",
+      "message": "🟡 risk: `SECRET_ENV_RE` only matches `KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL` but not many other common patterns (e.g., `API_KEY`, `AUTH`, `PRIVATE_KEY`, `PASS`, `SECRET_KEY`). Expand the regex to a broader set of secret-related patterns or use a deny-list of known secret env var names.",
+      "p": 0.58,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [
+    {
+      "path": ".github/workflows/argus-reviewer.yml",
+      "line": 5,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`workflow_dispatch` bypasses the fork-gate label check entirely — any repo admin can trigger probes without `argus-probe` label. Add `if: github.event_name != 'workflow_dispatch' || github.event.label.name == 'argus-probe'` or gate with required inputs.",
+      "dedupKey": ".github/workflows/argus-reviewer.yml:5:bug:`workflow_dispatch` bypasses the fork-gate label check entirely — any repo admin can trigger probes without `argus-probe` label. Add `if: github.event_name != 'workflow_dispatch' || github.event.label.name == 'argus-probe'` or gate with required inputs.:00001505"
+    },
+    {
+      "path": "src/cli.ts",
+      "line": 1144,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`ledger.budgetExceeded` checked before `prMetaPromise` resolves — `runProbeLane` may consume budget that was assumed available. Await `prMetaPromise` before the budget check or re-evaluate `budgetExceeded` after the lane.",
+      "dedupKey": "src/cli.ts:1144:bug:`ledger.budgetExceeded` checked before `prMetaPromise` resolves — `runProbeLane` may consume budget that was assumed available. Await `prMetaPromise` before the budget check or re-evaluate `budgetExceeded` after the lane.:00001505"
+    },
+    {
+      "path": "src/config.ts",
+      "line": 203,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`sandbox` spreading `raw` over `defaults.sandbox` does not coerce booleans/strings for `enabled`/`allowForks`/`image`/`memory`/`cpus` — `raw.enabled = false` spreads then overwritten by `sandbox.enabled = raw.enabled === true` returning `false`, but other fields like `allowForks` follow same pattern and work; however `image` can remain `''` after check on line 205. Coerce before spread or use a helper function that validates each field before assignment.",
+      "dedupKey": "src/config.ts:203:bug:`sandbox` spreading `raw` over `defaults.sandbox` does not coerce booleans/strings for `enabled`/`allowForks`/`image`/`memory`/`cpus` — `raw.enabled = false` spreads then overwritten by `sandbox.enabled = raw.enabled === true` returning `false`, but other fields like `allowForks` follow same pattern and work; however `image` can remain `''` after check on line 205. Coerce before spread or use a helper function that validates each field before assignment.:00001505"
+    },
+    {
+      "path": "src/evidence/ci.ts",
+      "line": 72,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`data.head?.repo?.fork !== false` treats a deleted fork repo as always a fork. If PR is a branch within same repo, missing head.repo object (e.g., API race) incorrectly forces fork gate. Change to `data.head?.repo?.fork === true` when repo object exists, else default to false for same-repo PRs.",
+      "dedupKey": "src/evidence/ci.ts:72:bug:`data.head?.repo?.fork !== false` treats a deleted fork repo as always a fork. If PR is a branch within same repo, missing head.repo object (e.g., API race) incorrectly forces fork gate. Change to `data.head?.repo?.fork === true` when repo object exists, else default to false for same-repo PRs.:00001505"
+    },
+    {
+      "path": "src/evidence/gate.ts",
+      "line": 17,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`labelCoversHead` returns true when `labelApprovedAt > pushedAt`. If both timestamps are identical (same millisecond), the label covers the push but gate fails closed. Change `>` to `>=`.",
+      "dedupKey": "src/evidence/gate.ts:17:bug:`labelCoversHead` returns true when `labelApprovedAt > pushedAt`. If both timestamps are identical (same millisecond), the label covers the push but gate fails closed. Change `>` to `>=`.:00001505"
+    },
+    {
+      "path": "src/probe/queue.ts",
+      "line": 501,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`baseDir` may be undefined when read in line 501 because `basePromise` may not have resolved. Assign `baseDir` before `wtMask` calculation using `basePromise` directly instead of the possibly-unassigned variable.",
+      "dedupKey": "src/probe/queue.ts:501:bug:`baseDir` may be undefined when read in line 501 because `basePromise` may not have resolved. Assign `baseDir` before `wtMask` calculation using `basePromise` directly instead of the possibly-unassigned variable.:00001505"
+    },
+    {
+      "path": "SECURITY.md",
+      "line": 51,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\n\"head's `node_modules` bind-mounted read-only\" is documented but `npm ci` already ran on the host — the container gets a stale, host-owned `node_modules`. Probes that `require()` from that tree execute host-compiled binaries, breaking the container isolation claim. Use `COPY --from=0` pattern or multi-stage build to produce a container-native `node_modules`.",
+      "dedupKey": "SECURITY.md:51:risk:\"head's `node_modules` bind-mounted read-only\" is documented but `npm ci` already ran on the host — the container gets a stale, host-owned `node_modules`. Probes that `require()` from that tree execute host-compiled binaries, breaking the container isolation claim. Use `COPY --from=0` pattern or multi-stage build to produce a container-native `node_modules`.:00001505"
+    },
+    {
+      "path": "src/config.ts",
+      "line": 203,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\n`raw` is `Partial<Sandbox>` but spread over `defaults.sandbox` then coerced — `raw.image` could be `false` or `0` leading to `typeof raw.image === 'string'` false and `image` becomes undefined, safe, but `raw.memory` as number passed to Docker `--memory` would produce invalid arg. Validate each string field with `typeof x === 'string' && x !== ''` before assignment.",
+      "dedupKey": "src/config.ts:203:risk:`raw` is `Partial<Sandbox>` but spread over `defaults.sandbox` then coerced — `raw.image` could be `false` or `0` leading to `typeof raw.image === 'string'` false and `image` becomes undefined, safe, but `raw.memory` as number passed to Docker `--memory` would produce invalid arg. Validate each string field with `typeof x === 'string' && x !== ''` before assignment.:00001505"
+    },
+    {
+      "path": "action/action.yml",
+      "line": 106,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\n`sandbox` input default is `'false'` but comment says \"does not override a config-enabled lane\" — config file ships `sandbox: { enabled: true }` in this diff, making dogfood always-on. Fork PRs ignore config sandbox per SECURITY.md, but self-hosted runner with default config now executes probes on every PR. Document this dogfooding in the PR description.",
+      "dedupKey": "action/action.yml:106:risk:`sandbox` input default is `'false'` but comment says \"does not override a config-enabled lane\" — config file ships `sandbox: { enabled: true }` in this diff, making dogfood always-on. Fork PRs ignore config sandbox per SECURITY.md, but self-hosted runner with default config now executes probes on every PR. Document this dogfooding in the PR description.:00001505"
+    },
+    {
+      "path": "src/evidence/gate.ts",
+      "line": 24,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\n`isTrustedAssociation` returns true for `COLLABORATOR`, but a collaborator can be added without review scope. A tag team being a collaborator is a different permission level than write access. Consider adding a config knob or using a more restrictive set.",
+      "dedupKey": "src/evidence/gate.ts:24:risk:`isTrustedAssociation` returns true for `COLLABORATOR`, but a collaborator can be added without review scope. A tag team being a collaborator is a different permission level than write access. Consider adding a config knob or using a more restrictive set.:00001505"
+    },
+    {
+      "path": "src/executor/sandbox.ts",
+      "line": 223,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\n`.git-credentials` is listed as a secret file, but `.git/config` is the file that contains the credentials (masked via tmpfs or devnull). Remove `.git-credentials` from list unless you expect it in workspace root (uncommon).",
+      "dedupKey": "src/executor/sandbox.ts:223:risk:`.git-credentials` is listed as a secret file, but `.git/config` is the file that contains the credentials (masked via tmpfs or devnull). Remove `.git-credentials` from list unless you expect it in workspace root (uncommon).:00001505"
+    },
+    {
+      "path": "src/executor/sandbox.ts",
+      "line": 227,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\n`stat` for `.git` is done outside workdir (resolved `checked.realWork`), but previous `checkSandboxPaths` didn't guarantee `workdir` was a directory. If workdir is a file, `join` will produce invalid path. Add isDirectory() check before proceeding.",
+      "dedupKey": "src/executor/sandbox.ts:227:risk:`stat` for `.git` is done outside workdir (resolved `checked.realWork`), but previous `checkSandboxPaths` didn't guarantee `workdir` was a directory. If workdir is a file, `join` will produce invalid path. Add isDirectory() check before proceeding.:00001505"
+    },
+    {
+      "path": "src/probe/harness.ts",
+      "line": 57,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\n`vitestHarness.runCmd` uses `node_modules/vitest/vitest.mjs` which may not exist — vitest CLI entry is `node_modules/vitest/vitest.mjs` in some versions, but older versions use `node_modules/.bin/vitest` or the entry point `node_modules/vitest/esm/cli.mjs`. Resolve via `require.resolve('vitest')` or use the binary in `node_modules/.bin/vitest`.",
+      "dedupKey": "src/probe/harness.ts:57:risk:`vitestHarness.runCmd` uses `node_modules/vitest/vitest.mjs` which may not exist — vitest CLI entry is `node_modules/vitest/vitest.mjs` in some versions, but older versions use `node_modules/.bin/vitest` or the entry point `node_modules/vitest/esm/cli.mjs`. Resolve via `require.resolve('vitest')` or use the binary in `node_modules/.bin/vitest`.:00001505"
+    },
+    {
+      "path": "src/probe/author.ts",
+      "line": 54,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\n`SECRET_ENV_RE` only matches `KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL` but not many other common patterns (e.g., `API_KEY`, `AUTH`, `PRIVATE_KEY`, `PASS`, `SECRET_KEY`). Expand the regex to a broader set of secret-related patterns or use a deny-list of known secret env var names.",
+      "dedupKey": "src/probe/author.ts:54:risk:`SECRET_ENV_RE` only matches `KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL` but not many other common patterns (e.g., `API_KEY`, `AUTH`, `PRIVATE_KEY`, `PASS`, `SECRET_KEY`). Expand the regex to a broader set of secret-related patterns or use a deny-list of known secret env var names.:00001505"
+    }
+  ],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "probes": [],
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async"
+    ],
+    "records": [],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 12012,
+    "needsDeepReview": 0.96,
+    "risk": 3.03,
+    "topRiskArea": "ops",
+    "topRiskAreaConfidence": 0.7
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": ".github/workflows/argus-reviewer.yml",
+        "line": 5,
+        "severity": "bug",
+        "category": "security",
+        "message": "🔴 bug: `workflow_dispatch` bypasses the fork-gate label check entirely — any repo admin can trigger probes without `argus-probe` label. Add `if: github.event_name != 'workflow_dispatch' || github.event.label.name == 'argus-probe'` or gate with required inputs.",
+        "adjudicated": true,
+        "p": 0.53
+      },
+      {
+        "file": "src/cli.ts",
+        "line": 1144,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "🔴 bug: `ledger.budgetExceeded` checked before `prMetaPromise` resolves — `runProbeLane` may consume budget that was assumed available. Await `prMetaPromise` before the budget check or re-evaluate `budgetExceeded` after the lane.",
+        "adjudicated": true,
+        "p": 0.54
+      },
+      {
+        "file": "src/config.ts",
+        "line": 203,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "🔴 bug: `sandbox` spreading `raw` over `defaults.sandbox` does not coerce booleans/strings for `enabled`/`allowForks`/`image`/`memory`/`cpus` — `raw.enabled = false` spreads then overwritten by `sandbox.enabled = raw.enabled === true` returning `false`, but other fields like `allowForks` follow same",
+        "adjudicated": true,
+        "p": 0.45
+      },
+      {
+        "file": "SECURITY.md",
+        "line": 51,
+        "severity": "risk",
+        "category": "security",
+        "message": "🟡 risk: \"head's `node_modules` bind-mounted read-only\" is documented but `npm ci` already ran on the host — the container gets a stale, host-owned `node_modules`. Probes that `require()` from that tree execute host-compiled binaries, breaking the container isolation claim. Use `COPY --from=0` patte",
+        "adjudicated": true,
+        "p": 0.55
+      },
+      {
+        "file": "src/evidence/ci.ts",
+        "line": 72,
+        "severity": "bug",
+        "category": "security",
+        "message": "🔴 bug: `data.head?.repo?.fork !== false` treats a deleted fork repo as always a fork. If PR is a branch within same repo, missing head.repo object (e.g., API race) incorrectly forces fork gate. Change to `data.head?.repo?.fork === true` when repo object exists, else default to false for same-repo P",
+        "adjudicated": true,
+        "p": 0.46
+      },
+      {
+        "file": "src/evidence/gate.ts",
+        "line": 17,
+        "severity": "bug",
+        "category": "security",
+        "message": "🔴 bug: `labelCoversHead` returns true when `labelApprovedAt > pushedAt`. If both timestamps are identical (same millisecond), the label covers the push but gate fails closed. Change `>` to `>=`.",
+        "adjudicated": true,
+        "p": 0.35
+      },
+      {
+        "file": "src/probe/queue.ts",
+        "line": 501,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "🔴 bug: `baseDir` may be undefined when read in line 501 because `basePromise` may not have resolved. Assign `baseDir` before `wtMask` calculation using `basePromise` directly instead of the possibly-unassigned variable.",
+        "adjudicated": true,
+        "p": 0.48
+      },
+      {
+        "file": "src/config.ts",
+        "line": 203,
+        "severity": "risk",
+        "category": "security",
+        "message": "🟡 risk: `raw` is `Partial<Sandbox>` but spread over `defaults.sandbox` then coerced — `raw.image` could be `false` or `0` leading to `typeof raw.image === 'string'` false and `image` becomes undefined, safe, but `raw.memory` as number passed to Docker `--memory` would produce invalid arg. Validate ",
+        "adjudicated": true,
+        "p": 0.4
+      },
+      {
+        "file": "action/action.yml",
+        "line": 106,
+        "severity": "risk",
+        "category": "security",
+        "message": "🟡 risk: `sandbox` input default is `'false'` but comment says \"does not override a config-enabled lane\" — config file ships `sandbox: { enabled: true }` in this diff, making dogfood always-on. Fork PRs ignore config sandbox per SECURITY.md, but self-hosted runner with default config now executes pr",
+        "adjudicated": true,
+        "p": 0.44
+      },
+      {
+        "file": "src/evidence/gate.ts",
+        "line": 24,
+        "severity": "risk",
+        "category": "security",
+        "message": "🟡 risk: `isTrustedAssociation` returns true for `COLLABORATOR`, but a collaborator can be added without review scope. A tag team being a collaborator is a different permission level than write access. Consider adding a config knob or using a more restrictive set.",
+        "adjudicated": true,
+        "p": 0.52
+      },
+      {
+        "file": "src/executor/sandbox.ts",
+        "line": 223,
+        "severity": "risk",
+        "category": "security",
+        "message": "🟡 risk: `.git-credentials` is listed as a secret file, but `.git/config` is the file that contains the credentials (masked via tmpfs or devnull). Remove `.git-credentials` from list unless you expect it in workspace root (uncommon).",
+        "adjudicated": true,
+        "p": 0.45
+      },
+      {
+        "file": "src/executor/sandbox.ts",
+        "line": 227,
+        "severity": "risk",
+        "category": "correctness",
+        "message": "🟡 risk: `stat` for `.git` is done outside workdir (resolved `checked.realWork`), but previous `checkSandboxPaths` didn't guarantee `workdir` was a directory. If workdir is a file, `join` will produce invalid path. Add isDirectory() check before proceeding.",
+        "adjudicated": true,
+        "p": 0.5
+      },
+      {
+        "file": "src/probe/harness.ts",
+        "line": 57,
+        "severity": "risk",
+        "category": "correctness",
+        "message": "🟡 risk: `vitestHarness.runCmd` uses `node_modules/vitest/vitest.mjs` which may not exist — vitest CLI entry is `node_modules/vitest/vitest.mjs` in some versions, but older versions use `node_modules/.bin/vitest` or the entry point `node_modules/vitest/esm/cli.mjs`. Resolve via `require.resolve('vit",
+        "adjudicated": true,
+        "p": 0.48
+      },
+      {
+        "file": "src/probe/author.ts",
+        "line": 54,
+        "severity": "risk",
+        "category": "security",
+        "message": "🟡 risk: `SECRET_ENV_RE` only matches `KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL` but not many other common patterns (e.g., `API_KEY`, `AUTH`, `PRIVATE_KEY`, `PASS`, `SECRET_KEY`). Expand the regex to a broader set of secret-related patterns or use a deny-list of known secret env var names.",
+        "adjudicated": true,
+        "p": 0.58
+      }
+    ],
+    "overflow": 0
+  },
+  "scope": {
+    "totalFiles": 43,
+    "reviewedFiles": 24,
+    "excludedFiles": 19,
+    "excludedSample": [
+      "dist/cli.js",
+      "dist/config.d.ts",
+      "dist/config.js",
+      "dist/detect.d.ts",
+      "dist/detect.js"
+    ],
+    "chunksTotal": 10,
+    "chunksReviewed": 10,
+    "unreviewedFiles": 0
+  },
+  "validation": {
+    "dropped": 1,
+    "byReason": {
+      "line_outside_diff": 1
+    },
+    "examples": [
+      {
+        "file": "src/cli.ts",
+        "line": 1115,
+        "reason": "line_outside_diff"
+      }
+    ]
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 4632,
+      "costUsd": 0.00019089,
+      "kind": "decide"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 4556,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 9166,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 5994,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 6705,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 7869,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 4710,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 7467,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 7647,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 6340,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 4344,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 5872,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 10441,
+      "costUsd": 0.000427602,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.000618492,
+  "tokens": 85743,
+  "model": "deepseek/deepseek-v4-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "a6320ad3dce28954407a27a991b9139c542a6849",
+    "checkoutSha": "a6320ad3dce28954407a27a991b9139c542a6849",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "a6320ad3dce28954407a27a991b9139c542a6849",
+  "diffRange": {
+    "base": "ac875d1b68",
+    "baseSha": "ac875d1b681fef0baf9a8c76a5d8a6218bf1050e",
+    "headSha": "a6320ad3dce28954407a27a991b9139c542a6849"
+  }
+}

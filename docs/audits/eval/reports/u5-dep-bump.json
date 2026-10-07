@@ -1,0 +1,208 @@
+{
+  "ok": false,
+  "skipped": false,
+  "summary": "Reviewed 8 of 13 changed files (5 excluded by review.exclude). Reviewed all 2 chunks (8 of 8 files). One dangling reference bug in `action/sticky-comment.cjs` where removed functions are still called, causing runtime errors.",
+  "verdict": "needs_changes",
+  "findings": [
+    {
+      "file": "action/sticky-comment.cjs",
+      "line": 67,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L67: 🔴 bug: `bestFindingProof` and `shortHash` are functions removed from exports but their call-sites remain inline, leaving dangling references. Add them to the parity bundle import or remove the orphaned expressions.",
+      "p": 0.53,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "package.json",
+      "line": 45,
+      "severity": "nit",
+      "category": "dependencies",
+      "message": "L45: nit: new dependency `esbuild@^0.28.2` added at `package.json` - confirm source, license, and whether a lighter in-repo option exists.",
+      "rule": "dep-diff",
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "action/parity-entry.mjs",
+      "severity": "nit",
+      "category": "testing",
+      "message": "nit: this diff modifies 3 source file(s) and no test file - if the change is behavior-bearing, point at the coverage that exercises it.",
+      "rule": "missing-test",
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [
+    {
+      "path": "action/sticky-comment.cjs",
+      "line": 67,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`bestFindingProof` and `shortHash` are functions removed from exports but their call-sites remain inline, leaving dangling references. Add them to the parity bundle import or remove the orphaned expressions.",
+      "dedupKey": "action/sticky-comment.cjs:67:bug:`bestFindingProof` and `shortHash` are functions removed from exports but their call-sites remain inline, leaving dangling references. Add them to the parity bundle import or remove the orphaned expressions.:00001505"
+    }
+  ],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "probes": [],
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async",
+      "dep-diff",
+      "missing-test"
+    ],
+    "records": [
+      {
+        "file": "scripts/check-parity.mjs",
+        "line": 11,
+        "detail": "execFileSync",
+        "suppressed": "non-production path",
+        "rule": "sync-in-async"
+      },
+      {
+        "file": "scripts/check-parity.mjs",
+        "line": 25,
+        "detail": "readFileSync",
+        "suppressed": "non-production path",
+        "rule": "sync-in-async"
+      },
+      {
+        "file": "scripts/check-parity.mjs",
+        "line": 26,
+        "detail": "rmSync",
+        "suppressed": "non-production path",
+        "rule": "sync-in-async"
+      },
+      {
+        "file": "scripts/check-parity.mjs",
+        "line": 27,
+        "detail": "readFileSync",
+        "suppressed": "non-production path",
+        "rule": "sync-in-async"
+      },
+      {
+        "file": "package.json",
+        "line": 45,
+        "detail": "dependency-added esbuild@^0.28.2",
+        "rule": "dep-diff"
+      },
+      {
+        "file": "action/parity-entry.mjs",
+        "detail": "source-only diff: 3 source file(s), no test file",
+        "rule": "missing-test"
+      }
+    ],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 12010,
+    "needsDeepReview": 0.83,
+    "risk": 2.29,
+    "topRiskArea": "ops",
+    "topRiskAreaConfidence": 0.98
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "action/sticky-comment.cjs",
+        "line": 67,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L67: 🔴 bug: `bestFindingProof` and `shortHash` are functions removed from exports but their call-sites remain inline, leaving dangling references. Add them to the parity bundle import or remove the orphaned expressions.",
+        "adjudicated": true,
+        "p": 0.53
+      }
+    ],
+    "overflow": 0
+  },
+  "scope": {
+    "totalFiles": 13,
+    "reviewedFiles": 8,
+    "excludedFiles": 5,
+    "excludedSample": [
+      "dist/report/comment.d.ts",
+      "dist/report/comment.js",
+      "dist/review/inline.d.ts",
+      "dist/review/inline.js",
+      "package-lock.json"
+    ],
+    "chunksTotal": 2,
+    "chunksReviewed": 2,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 5064,
+      "costUsd": 0.000209034,
+      "kind": "decide"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 5603,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 5905,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 431,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1930,
+      "costUsd": 0.000080136,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.00028917,
+  "tokens": 18933,
+  "model": "deepseek/deepseek-v4-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "87c8a39ad6953ffb8857a21376997450828ef48e",
+    "checkoutSha": "87c8a39ad6953ffb8857a21376997450828ef48e",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "87c8a39ad6953ffb8857a21376997450828ef48e",
+  "diffRange": {
+    "base": "eeabd417b0f2685e081f548475a7322f064c00de",
+    "baseSha": "eeabd417b0f2685e081f548475a7322f064c00de",
+    "headSha": "87c8a39ad6953ffb8857a21376997450828ef48e"
+  }
+}

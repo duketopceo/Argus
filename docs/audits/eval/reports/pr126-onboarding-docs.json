@@ -1,0 +1,182 @@
+{
+  "ok": true,
+  "skipped": false,
+  "summary": "3 low-severity finding(s)",
+  "verdict": "approve",
+  "findings": [
+    {
+      "file": "SECURITY.md",
+      "line": 30,
+      "severity": "nit",
+      "category": "usability",
+      "message": "L30-31: 🔵 nit: 'The App and its Worker never hold, see, proxy or log a customer OPENROUTER_API_KEY'. Missing serial comma before 'or'. Add comma: 'hold, see, proxy, or log'.",
+      "p": 0.14,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/onboarding.md",
+      "line": 23,
+      "severity": "q",
+      "category": "other",
+      "message": "L23: ❓ q: '--repo <owner/name>: confirms the target. It must match the checkout's origin; it cannot redirect the push.' The phrase 'it cannot redirect the push' is ambiguous. Clarify: if --repo does not match, the command fails; push goes to origin not to --repo.",
+      "p": 0.52,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/onboarding.md",
+      "line": 36,
+      "severity": "q",
+      "category": "other",
+      "message": "L36: ❓ q: 'The command never reads, prints or transmits OPENROUTER_API_KEY.' Missing serial comma: 'reads, prints, or transmits'. See also SECURITY.md finding.",
+      "p": 0.31,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [
+    {
+      "path": "docs/onboarding.md",
+      "line": 23,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n□ **question** · ▰▱▱▱ suspected\n'--repo <owner/name>: confirms the target. It must match the checkout's origin; it cannot redirect the push.' The phrase 'it cannot redirect the push' is ambiguous. Clarify: if --repo does not match, the command fails; push goes to origin not to --repo.",
+      "dedupKey": "docs/onboarding.md:23:q:'--repo <owner/name>: confirms the target. It must match the checkout's origin; it cannot redirect the push.' The phrase 'it cannot redirect the push' is ambiguous. Clarify: if --repo does not match, the command fails; push goes to origin not to --repo.:00001505"
+    },
+    {
+      "path": "docs/onboarding.md",
+      "line": 36,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n□ **question** · ▰▱▱▱ suspected\n'The command never reads, prints or transmits OPENROUTER_API_KEY.' Missing serial comma: 'reads, prints, or transmits'. See also SECURITY.md finding.",
+      "dedupKey": "docs/onboarding.md:36:q:'The command never reads, prints or transmits OPENROUTER_API_KEY.' Missing serial comma: 'reads, prints, or transmits'. See also SECURITY.md finding.:00001505"
+    }
+  ],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "probes": [],
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async"
+    ],
+    "records": [],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 8101,
+    "needsDeepReview": 0.3,
+    "topRiskArea": "ops",
+    "topRiskAreaConfidence": 0.48
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "SECURITY.md",
+        "line": 30,
+        "severity": "nit",
+        "category": "usability",
+        "message": "L30-31: 🔵 nit: 'The App and its Worker never hold, see, proxy or log a customer OPENROUTER_API_KEY'. Missing serial comma before 'or'. Add comma: 'hold, see, proxy, or log'.",
+        "adjudicated": true,
+        "p": 0.14
+      },
+      {
+        "file": "docs/onboarding.md",
+        "line": 23,
+        "severity": "q",
+        "category": "other",
+        "message": "L23: ❓ q: '--repo <owner/name>: confirms the target. It must match the checkout's origin; it cannot redirect the push.' The phrase 'it cannot redirect the push' is ambiguous. Clarify: if --repo does not match, the command fails; push goes to origin not to --repo.",
+        "adjudicated": true,
+        "p": 0.52
+      },
+      {
+        "file": "docs/onboarding.md",
+        "line": 36,
+        "severity": "q",
+        "category": "other",
+        "message": "L36: ❓ q: 'The command never reads, prints or transmits OPENROUTER_API_KEY.' Missing serial comma: 'reads, prints, or transmits'. See also SECURITY.md finding.",
+        "adjudicated": true,
+        "p": 0.31
+      }
+    ],
+    "overflow": 0
+  },
+  "droppedUnanchored": 1,
+  "droppedFindings": [
+    {
+      "file": "README.md",
+      "severity": "q",
+      "message": "L51: ❓ q: 'A GitHub App that opens the onboarding PR for you on install is planned and not available yet; see docs/onboarding.md.' This sentence, added after the manual setup section, is now redundant with the newly added 'Get started' section. Consider moving it or removing it to avoid duplication.",
+      "reason": "outside-diff",
+      "line": 51,
+      "category": "other"
+    }
+  ],
+  "scope": {
+    "totalFiles": 3,
+    "reviewedFiles": 3,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 2926,
+      "costUsd": 0.000119238,
+      "kind": "decide"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 4097,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 2272,
+      "costUsd": 0.000092988,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.00021222599999999998,
+  "tokens": 9295,
+  "model": "deepseek/deepseek-v4-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "f62c15fc75c76d05fdb5226522372c6d2954f775",
+    "checkoutSha": "f62c15fc75c76d05fdb5226522372c6d2954f775",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "f62c15fc75c76d05fdb5226522372c6d2954f775",
+  "diffRange": {
+    "base": "e5076ecde4",
+    "baseSha": "e5076ecde4e7c1f411df990525448914b1008eb9",
+    "headSha": "f62c15fc75c76d05fdb5226522372c6d2954f775"
+  }
+}

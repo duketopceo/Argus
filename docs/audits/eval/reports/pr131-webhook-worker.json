@@ -1,0 +1,475 @@
+{
+  "ok": false,
+  "skipped": false,
+  "summary": "Reviewed 14 of 15 changed files (1 excluded by review.exclude). Reviewed all 2 chunks (14 of 14 files). The PR introduces a JWT-based auth flow for GitHub App installations and a webhook handler. While the architecture is sound, several critical issues need addressing: a PKCS#1 key import that silently fails on Edge Workers, an unclamped JWT expiration that risks rejection with clock skew, and a missing try/catch for a locked reader body. Additional risks include an in-memory-only replay guard that provides no cross-isolate protection, secret redaction that misses tokens in some code paths, and uncached CryptoKey imports. Test cleanup and console hijacking reduce reliability. All bugs must be fixed; risks should be addressed before merging. 1 finding(s) dropped: anchored outside the reviewed diff.",
+  "verdict": "needs_changes",
+  "findings": [
+    {
+      "file": "app/worker/src/auth.ts",
+      "line": 91,
+      "severity": "bug",
+      "category": "security",
+      "message": "L91: 🔴 bug: `crypto.subtle.importKey(...)` rejects PKCS#1 keys unless the Web Crypto runtime has implicit RSA key wrapping support (Edge Workers do not). Add explicit `{ name: 'RSA-OAEP', hash: 'SHA-256' }` for the wrapping step or fail early with a clear message.",
+      "p": 0.48,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "app/worker/src/auth.ts",
+      "line": 101,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L101: 🔴 bug: `exp` is set to `nowSec + 9 * 60`, but GitHub enforces a max JWT lifetime of 10 minutes. If the clock is skewed by more than 60 seconds the token will be invalid. Clamp `exp` to `iat + 600` to ensure compliance.",
+      "p": 0.68,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "app/worker/src/webhook.ts",
+      "line": 48,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L48: 🔴 bug: `reader.read()` may throw if the body is already cancelled or locked. Wrap in try/catch to return null and treat as a denied request.",
+      "p": 0.6,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "app/worker/src/auth.ts",
+      "line": 78,
+      "severity": "risk",
+      "category": "security",
+      "message": "L78: 🟡 risk: `out as Uint8Array<ArrayBuffer>` is a type-level assertion with no runtime check. Use `new Uint8Array(out.buffer, out.byteOffset, out.byteLength)` to carry the correct branded type.",
+      "p": 0.47,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "app/worker/src/auth.ts",
+      "line": 107,
+      "severity": "risk",
+      "category": "performance",
+      "message": "L107: 🟡 risk: `importPrivateKey` is called on every request with no caching. The key is non-extractable and cannot be cached by the caller. Cache the `CryptoKey` in a module-level variable keyed on APP_ID to avoid repeated PKCS#8 import overhead.",
+      "p": 0.7,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "app/worker/src/webhook.ts",
+      "line": 75,
+      "severity": "risk",
+      "category": "security",
+      "message": "L75: 🟡 risk: replay guard is in-memory only; multiple isolates share no state, so the guard is useless across concurrent requests. Document that this is best-effort and not a security boundary; consider a KV-backed guard if idempotency is required.",
+      "p": 0.78,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "app/worker/test/auth.test.ts",
+      "line": 140,
+      "severity": "nit",
+      "category": "correctness",
+      "message": "L140: 🟡 risk: `mockFetch(201, ok, [])` uses fresh empty array per test but line 140 reuses the same `calls` array as previous test, potentially leaking state. Instantiate `calls` inside the test or use isolated closures.",
+      "p": 0.51,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "app/worker/test/auth.test.ts",
+      "line": 144,
+      "severity": "nit",
+      "category": "correctness",
+      "message": "L144: 🟡 risk: Console hijacking at lines 144-146 and 157-159 silently swallows all test output. Use typed `vi.spyOn(console, 'log').mockImplementation(...)` from Vitest instead of imperative assignment; current approach leaves test output muted on failure.",
+      "p": 0.58,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "app/worker/src/auth.ts",
+      "line": 27,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L27: 🔵 nit: `NAME_RE` allows `.` in the owner name, but GitHub login names cannot start or end with `.`. Tighten regex to `[A-Za-z0-9][A-Za-z0-9_.-]*[A-Za-z0-9]`.",
+      "p": 0.38,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "app/worker/test/auth.test.ts",
+      "line": 14,
+      "severity": "nit",
+      "category": "performance",
+      "message": "L14: 🔵 nit: Crypto key generation at module level runs on import. Move `generateKeyPairSync` inside `beforeAll` to avoid key generation during test discovery.",
+      "p": 0.62,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "eslint.config.js",
+      "line": 6,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L6: 🔵 nit: `'app'` in ignores list is overly broad — excludes all linting for the entire `app/` directory. Scope to specific test/fixture directories if possible, e.g. `'app/worker/test'` or `'app/**/*.test.ts'`.",
+      "p": 0.5,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [
+    {
+      "path": "app/worker/src/auth.ts",
+      "line": 91,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`crypto.subtle.importKey(...)` rejects PKCS#1 keys unless the Web Crypto runtime has implicit RSA key wrapping support (Edge Workers do not). Add explicit `{ name: 'RSA-OAEP', hash: 'SHA-256' }` for the wrapping step or fail early with a clear message.",
+      "dedupKey": "app/worker/src/auth.ts:91:bug:`crypto.subtle.importKey(...)` rejects PKCS#1 keys unless the Web Crypto runtime has implicit RSA key wrapping support (Edge Workers do not). Add explicit `{ name: 'RSA-OAEP', hash: 'SHA-256' }` for the wrapping step or fail early with a clear message.:00001505"
+    },
+    {
+      "path": "app/worker/src/auth.ts",
+      "line": 101,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`exp` is set to `nowSec + 9 * 60`, but GitHub enforces a max JWT lifetime of 10 minutes. If the clock is skewed by more than 60 seconds the token will be invalid. Clamp `exp` to `iat + 600` to ensure compliance.",
+      "dedupKey": "app/worker/src/auth.ts:101:bug:`exp` is set to `nowSec + 9 * 60`, but GitHub enforces a max JWT lifetime of 10 minutes. If the clock is skewed by more than 60 seconds the token will be invalid. Clamp `exp` to `iat + 600` to ensure compliance.:00001505"
+    },
+    {
+      "path": "app/worker/src/webhook.ts",
+      "line": 48,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`reader.read()` may throw if the body is already cancelled or locked. Wrap in try/catch to return null and treat as a denied request.",
+      "dedupKey": "app/worker/src/webhook.ts:48:bug:`reader.read()` may throw if the body is already cancelled or locked. Wrap in try/catch to return null and treat as a denied request.:00001505"
+    },
+    {
+      "path": "app/worker/src/auth.ts",
+      "line": 78,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\n`out as Uint8Array<ArrayBuffer>` is a type-level assertion with no runtime check. Use `new Uint8Array(out.buffer, out.byteOffset, out.byteLength)` to carry the correct branded type.",
+      "dedupKey": "app/worker/src/auth.ts:78:risk:`out as Uint8Array<ArrayBuffer>` is a type-level assertion with no runtime check. Use `new Uint8Array(out.buffer, out.byteOffset, out.byteLength)` to carry the correct branded type.:00001505"
+    },
+    {
+      "path": "app/worker/src/auth.ts",
+      "line": 107,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\n`importPrivateKey` is called on every request with no caching. The key is non-extractable and cannot be cached by the caller. Cache the `CryptoKey` in a module-level variable keyed on APP_ID to avoid repeated PKCS#8 import overhead.",
+      "dedupKey": "app/worker/src/auth.ts:107:risk:`importPrivateKey` is called on every request with no caching. The key is non-extractable and cannot be cached by the caller. Cache the `CryptoKey` in a module-level variable keyed on APP_ID to avoid repeated PKCS#8 import overhead.:00001505"
+    },
+    {
+      "path": "app/worker/src/webhook.ts",
+      "line": 75,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\nreplay guard is in-memory only; multiple isolates share no state, so the guard is useless across concurrent requests. Document that this is best-effort and not a security boundary; consider a KV-backed guard if idempotency is required.",
+      "dedupKey": "app/worker/src/webhook.ts:75:risk:replay guard is in-memory only; multiple isolates share no state, so the guard is useless across concurrent requests. Document that this is best-effort and not a security boundary; consider a KV-backed guard if idempotency is required.:00001505"
+    }
+  ],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "probes": [],
+  "secretsScan": {
+    "findings": [],
+    "records": [
+      {
+        "file": "app/worker/test/auth.test.ts",
+        "line": 34,
+        "patternClass": "private-key",
+        "adjudicated": true,
+        "pLive": 0.09,
+        "suppressed": true
+      },
+      {
+        "file": "app/worker/test/auth.test.ts",
+        "line": 126,
+        "patternClass": "private-key",
+        "adjudicated": true,
+        "pLive": 0.11,
+        "suppressed": true
+      },
+      {
+        "file": "app/worker/test/auth.test.ts",
+        "line": 159,
+        "patternClass": "github-pat",
+        "adjudicated": true,
+        "pLive": 0.12,
+        "suppressed": true
+      },
+      {
+        "file": "app/worker/test/webhook.test.ts",
+        "line": 9,
+        "patternClass": "generic-assignment",
+        "adjudicated": true,
+        "pLive": 0.11,
+        "suppressed": true
+      }
+    ],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async"
+    ],
+    "records": [
+      {
+        "file": "app/worker/test/auth.test.ts",
+        "line": 34,
+        "detail": "private-key",
+        "adjudicated": true,
+        "pLive": 0.09,
+        "suppressed": "below adjudication threshold",
+        "rule": "secrets"
+      },
+      {
+        "file": "app/worker/test/auth.test.ts",
+        "line": 126,
+        "detail": "private-key",
+        "adjudicated": true,
+        "pLive": 0.11,
+        "suppressed": "below adjudication threshold",
+        "rule": "secrets"
+      },
+      {
+        "file": "app/worker/test/auth.test.ts",
+        "line": 159,
+        "detail": "github-pat",
+        "adjudicated": true,
+        "pLive": 0.12,
+        "suppressed": "below adjudication threshold",
+        "rule": "secrets"
+      },
+      {
+        "file": "app/worker/test/webhook.test.ts",
+        "line": 9,
+        "detail": "generic-assignment",
+        "adjudicated": true,
+        "pLive": 0.11,
+        "suppressed": "below adjudication threshold",
+        "rule": "secrets"
+      }
+    ],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 12014,
+    "needsDeepReview": 0.98,
+    "risk": 3.89,
+    "topRiskArea": "auth",
+    "topRiskAreaConfidence": 0.99
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "app/worker/src/auth.ts",
+        "line": 91,
+        "severity": "bug",
+        "category": "security",
+        "message": "L91: 🔴 bug: `crypto.subtle.importKey(...)` rejects PKCS#1 keys unless the Web Crypto runtime has implicit RSA key wrapping support (Edge Workers do not). Add explicit `{ name: 'RSA-OAEP', hash: 'SHA-256' }` for the wrapping step or fail early with a clear message.",
+        "adjudicated": true,
+        "p": 0.48
+      },
+      {
+        "file": "app/worker/src/auth.ts",
+        "line": 101,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L101: 🔴 bug: `exp` is set to `nowSec + 9 * 60`, but GitHub enforces a max JWT lifetime of 10 minutes. If the clock is skewed by more than 60 seconds the token will be invalid. Clamp `exp` to `iat + 600` to ensure compliance.",
+        "adjudicated": true,
+        "p": 0.68
+      },
+      {
+        "file": "app/worker/src/webhook.ts",
+        "line": 48,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L48: 🔴 bug: `reader.read()` may throw if the body is already cancelled or locked. Wrap in try/catch to return null and treat as a denied request.",
+        "adjudicated": true,
+        "p": 0.6
+      },
+      {
+        "file": "app/worker/src/auth.ts",
+        "line": 78,
+        "severity": "risk",
+        "category": "security",
+        "message": "L78: 🟡 risk: `out as Uint8Array<ArrayBuffer>` is a type-level assertion with no runtime check. Use `new Uint8Array(out.buffer, out.byteOffset, out.byteLength)` to carry the correct branded type.",
+        "adjudicated": true,
+        "p": 0.47
+      },
+      {
+        "file": "app/worker/src/auth.ts",
+        "line": 107,
+        "severity": "risk",
+        "category": "performance",
+        "message": "L107: 🟡 risk: `importPrivateKey` is called on every request with no caching. The key is non-extractable and cannot be cached by the caller. Cache the `CryptoKey` in a module-level variable keyed on APP_ID to avoid repeated PKCS#8 import overhead.",
+        "adjudicated": true,
+        "p": 0.7
+      },
+      {
+        "file": "app/worker/src/webhook.ts",
+        "line": 75,
+        "severity": "risk",
+        "category": "security",
+        "message": "L75: 🟡 risk: replay guard is in-memory only; multiple isolates share no state, so the guard is useless across concurrent requests. Document that this is best-effort and not a security boundary; consider a KV-backed guard if idempotency is required.",
+        "adjudicated": true,
+        "p": 0.78
+      },
+      {
+        "file": "app/worker/test/auth.test.ts",
+        "line": 140,
+        "severity": "nit",
+        "category": "correctness",
+        "message": "L140: 🟡 risk: `mockFetch(201, ok, [])` uses fresh empty array per test but line 140 reuses the same `calls` array as previous test, potentially leaking state. Instantiate `calls` inside the test or use isolated closures.",
+        "adjudicated": true,
+        "p": 0.51
+      },
+      {
+        "file": "app/worker/test/auth.test.ts",
+        "line": 144,
+        "severity": "nit",
+        "category": "correctness",
+        "message": "L144: 🟡 risk: Console hijacking at lines 144-146 and 157-159 silently swallows all test output. Use typed `vi.spyOn(console, 'log').mockImplementation(...)` from Vitest instead of imperative assignment; current approach leaves test output muted on failure.",
+        "adjudicated": true,
+        "p": 0.58
+      },
+      {
+        "file": "app/worker/src/auth.ts",
+        "line": 27,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L27: 🔵 nit: `NAME_RE` allows `.` in the owner name, but GitHub login names cannot start or end with `.`. Tighten regex to `[A-Za-z0-9][A-Za-z0-9_.-]*[A-Za-z0-9]`.",
+        "adjudicated": true,
+        "p": 0.38
+      },
+      {
+        "file": "app/worker/test/auth.test.ts",
+        "line": 14,
+        "severity": "nit",
+        "category": "performance",
+        "message": "L14: 🔵 nit: Crypto key generation at module level runs on import. Move `generateKeyPairSync` inside `beforeAll` to avoid key generation during test discovery.",
+        "adjudicated": true,
+        "p": 0.62
+      },
+      {
+        "file": "eslint.config.js",
+        "line": 6,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L6: 🔵 nit: `'app'` in ignores list is overly broad — excludes all linting for the entire `app/` directory. Scope to specific test/fixture directories if possible, e.g. `'app/worker/test'` or `'app/**/*.test.ts'`.",
+        "adjudicated": true,
+        "p": 0.5
+      }
+    ],
+    "overflow": 0
+  },
+  "scope": {
+    "totalFiles": 15,
+    "reviewedFiles": 14,
+    "excludedFiles": 1,
+    "excludedSample": [
+      "app/worker/package-lock.json"
+    ],
+    "chunksTotal": 2,
+    "chunksReviewed": 2,
+    "unreviewedFiles": 0
+  },
+  "validation": {
+    "dropped": 1,
+    "byReason": {
+      "line_beyond_file": 1
+    },
+    "examples": [
+      {
+        "file": "app/worker/src/auth.ts",
+        "line": 160,
+        "reason": "line_beyond_file"
+      }
+    ]
+  },
+  "testFileCapped": 2,
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 5079,
+      "costUsd": 0.000209664,
+      "kind": "decide"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 7635,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 6329,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 3080,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 899,
+      "costUsd": 0.000034566,
+      "kind": "decide"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 6494,
+      "costUsd": 0.000264222,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.000508452,
+  "tokens": 29516,
+  "model": "deepseek/deepseek-v4-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "a585cfac23064b4ba7547755072f7c32aadfd432",
+    "checkoutSha": "a585cfac23064b4ba7547755072f7c32aadfd432",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "a585cfac23064b4ba7547755072f7c32aadfd432",
+  "diffRange": {
+    "base": "b9c19a4587",
+    "baseSha": "b9c19a458760872d1f9421f8ed1164b65c917212",
+    "headSha": "a585cfac23064b4ba7547755072f7c32aadfd432"
+  }
+}

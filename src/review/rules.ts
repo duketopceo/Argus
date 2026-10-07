@@ -264,12 +264,234 @@ const syncInAsyncRule: ReviewRule = {
   },
 }
 
+// --- U5 coverage rules -----------------------------------------------------
+
+const MANIFEST_RE = /(^|\/)package\.json$/
+// package.json fails DATA_PATH_RE on its .json extension — dep-diff's
+// suppression is dir-level only (fixture/example manifests are data).
+const MANIFEST_DATA_RE = /(^|\/)(docs?|examples?|samples?|fixtures?|testdata)\//i
+const DEP_BLOCK_RE = /^(\s*)"(?:dev|peer|optional)?[Dd]ependencies"\s*:\s*\{/
+const DEP_ENTRY_RE = /^\s*"([^"]+)"\s*:\s*"([^"]+)"/
+const CLOSE_RE = /^(\s*)\}/
+// Hunk context is ±3 lines — a dep added mid-block never shows the
+// "dependencies": { opener. Outside a tracked block, entries count only
+// when the value is a version spec (rejects script commands like
+// "build": "esbuild ..." and metadata like "name": "app").
+const VER_SPEC_RE =
+  /^(?:\^|~|>=?|<=?|=)?v?\d+\.\d+\.\d+|^(?:workspace|npm|file|link|git\+|https?):/
+const NON_DEP_KEYS = new Set(['version', 'packageManager', 'name'])
+
+interface DiffLine {
+  kind: 'add' | 'del' | 'ctx'
+  file: string
+  newLine: number
+  text: string
+}
+
+// Per-file hunk walker with context and removed lines — dep-diff needs
+// block membership (is this "name": "ver" inside "dependencies"?), which
+// flat addedLines() cannot answer.
+function* hunkLines(diff: string): Generator<DiffLine> {
+  let file = ''
+  let inHunk = false
+  let newLine = 0
+  for (const raw of diff.split('\n')) {
+    if (raw.startsWith('diff --git')) {
+      inHunk = false
+      file = ''
+      continue
+    }
+    if (!inHunk) {
+      const m = /^\+\+\+ b\/(.+)$/.exec(raw)
+      if (m !== null) file = m[1] as string
+      if (raw.startsWith('@@')) {
+        inHunk = true
+        const h = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw)
+        newLine = h !== null ? parseInt(h[1] as string, 10) : 0
+      }
+      continue
+    }
+    if (raw.startsWith('+')) {
+      yield { kind: 'add', file, newLine, text: raw.slice(1) }
+      newLine++
+      continue
+    }
+    if (raw.startsWith('-')) {
+      yield { kind: 'del', file, newLine, text: raw.slice(1) }
+      continue
+    }
+    if (raw.startsWith(' ')) {
+      yield { kind: 'ctx', file, newLine, text: raw.slice(1) }
+      newLine++
+    }
+  }
+}
+
+/**
+ * dep-diff (U5): new dependencies and major version jumps in package.json.
+ * Supply-chain surface is reviewable signal — a new production dep or a
+ * major bump is a real event, not an opinion. Minor/patch bumps are
+ * audit-records only.
+ */
+const depDiffRule: ReviewRule = {
+  id: 'dep-diff',
+  description: 'new dependencies and major version jumps in package.json diffs',
+  run(diff) {
+    const findings: RuleFinding[] = []
+    const records: Omit<RuleRecord, 'rule'>[] = []
+    let depsIndent: number | null = null
+    const added = new Map<string, { ver: string; line: number }>()
+    const removed = new Map<string, string>()
+    let file = ''
+    const flush = () => {
+      if (file === '' || (added.size === 0 && removed.size === 0)) {
+        added.clear()
+        removed.clear()
+        return
+      }
+      const suppressed = MANIFEST_DATA_RE.test(file)
+        ? 'data/prose path'
+        : isNonProdPath(file)
+          ? 'non-production path'
+          : undefined
+      for (const [name, { ver, line }] of added) {
+        const oldVer = removed.get(name)
+        const detail =
+          oldVer === undefined ? `dependency-added ${name}@${ver}` : `version-jump ${name} ${oldVer}->${ver}`
+        if (suppressed !== undefined) {
+          records.push({ file, line, detail, suppressed })
+          continue
+        }
+        const major =
+          oldVer !== undefined &&
+          (oldVer.match(/\d+/)?.[0] ?? '') !== (ver.match(/\d+/)?.[0] ?? '')
+        if (oldVer === undefined) {
+          findings.push({
+            file,
+            line,
+            severity: 'nit',
+            category: 'dependencies',
+            message:
+              `L${line}: nit: new dependency \`${name}@${ver}\` added at \`${file}\` - ` +
+              'confirm source, license, and whether a lighter in-repo option exists.',
+          })
+          records.push({ file, line, detail })
+        } else if (major) {
+          findings.push({
+            file,
+            line,
+            severity: 'nit',
+            category: 'dependencies',
+            message:
+              `L${line}: nit: major version jump \`${name} ${oldVer} -> ${ver}\` at \`${file}\` - ` +
+              'check the migration notes before merge.',
+          })
+          records.push({ file, line, detail })
+        } else {
+          records.push({ file, line, detail, suppressed: 'minor/patch bump' })
+        }
+      }
+      added.clear()
+      removed.clear()
+    }
+    for (const l of hunkLines(diff)) {
+      if (l.file !== file) {
+        flush()
+        file = l.file
+        depsIndent = null
+      }
+      if (!MANIFEST_RE.test(l.file)) continue
+      if (depsIndent !== null) {
+        const close = CLOSE_RE.exec(l.text)
+        if (close !== null && (close[1] as string).length <= depsIndent) {
+          depsIndent = null
+          continue
+        }
+      } else {
+        const open = DEP_BLOCK_RE.exec(l.text)
+        if (open !== null) depsIndent = (open[1] as string).length
+      }
+      if (l.kind === 'ctx') continue
+      const entry = DEP_ENTRY_RE.exec(l.text)
+      if (entry === null) continue
+      const name = entry[1] as string
+      const ver = entry[2] as string
+      if (depsIndent === null) {
+        if (NON_DEP_KEYS.has(name) || !VER_SPEC_RE.test(ver)) continue
+      }
+      if (l.kind === 'add') added.set(name, { ver, line: l.newLine })
+      else removed.set(name, ver)
+    }
+    flush()
+    return { findings, records }
+  },
+}
+
+const CODE_FILE_RE =
+  /\.(?:c|cc|cpp|cs|cts|go|h|hpp|java|jsx|kt|mjs|mts|php|py|rb|rs|scala|swift|ts|tsx)$/
+const GENERATED_FILE_RE = /(^|\/)dist\/|\.min\.|\.map$/i
+
+/**
+ * missing-test (U5): a diff that changes source files but touches no test
+ * file gets one file-level nit on its highest-churn source file. Precision
+ * stays high because the event is factual (zero test paths in the diff);
+ * the finding asks for evidence, not a mandate. One finding max — this is
+ * a signal, not a per-file nag.
+ */
+const missingTestRule: ReviewRule = {
+  id: 'missing-test',
+  description: 'source-only diffs that touch no test file get one file-level nit',
+  run(diff) {
+    let testTouched = false
+    let topFile = ''
+    let topAdds = 0
+    const addsPerFile = new Map<string, number>()
+    for (const { file } of addedLines(diff)) {
+      if (isTestPath(file)) {
+        testTouched = true
+        continue
+      }
+      if (!CODE_FILE_RE.test(file)) continue
+      if (DATA_PATH_RE.test(file) || GENERATED_FILE_RE.test(file) || SCRIPT_PATH_RE.test(file)) {
+        continue
+      }
+      addsPerFile.set(file, (addsPerFile.get(file) ?? 0) + 1)
+    }
+    const srcFiles = addsPerFile.size
+    for (const [f, n] of addsPerFile) {
+      if (n > topAdds) {
+        topAdds = n
+        topFile = f
+      }
+    }
+    if (srcFiles === 0 || testTouched || topFile === '') {
+      return { findings: [], records: [] }
+    }
+    const detail = `source-only diff: ${srcFiles} source file(s), no test file`
+    return {
+      findings: [
+        {
+          file: topFile,
+          severity: 'nit',
+          category: 'testing',
+          message:
+            `nit: this diff modifies ${srcFiles} source file(s) and no test file - ` +
+            'if the change is behavior-bearing, point at the coverage that exercises it.',
+        },
+      ],
+      records: [{ file: topFile, detail }],
+    }
+  },
+}
+
 /** The rule registry — curated, not a plugin surface. */
 export const REVIEW_RULES: readonly ReviewRule[] = [
   secretsRule,
   hardcodedEndpointRule,
   leftoverTodoRule,
   syncInAsyncRule,
+  depDiffRule,
+  missingTestRule,
 ]
 
 /** All registered rule ids — the default `review.rules` enabled set. */
