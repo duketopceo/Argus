@@ -106,7 +106,7 @@ export interface LaneRow {
 }
 
 /** Cell semantics mirror the action: flatten newlines, escape pipes, mask secrets, cap length. */
-function cell(s: unknown, max = 200): string {
+export function cell(s: unknown, max = 200): string {
   return maskSecrets(
     String(s ?? '')
       .replace(/\|/g, '\\|')
@@ -114,7 +114,7 @@ function cell(s: unknown, max = 200): string {
   ).slice(0, max)
 }
 
-function code(s: unknown): string {
+export function code(s: unknown): string {
   const t = cell(s)
   const longest = Math.max(0, ...(t.match(/`+/g) ?? []).map((r) => r.length))
   const fence = '`'.repeat(longest + 1)
@@ -145,7 +145,7 @@ export function findingsOf(cr: CodeReviewInput | undefined): NonNullable<CodeRev
   return cr !== undefined && Array.isArray(cr.findings) ? cr.findings : []
 }
 
-function bestFindingProof(cr: CodeReviewInput | undefined): ProofLevel {
+export function bestFindingProof(cr: CodeReviewInput | undefined): ProofLevel {
   let best = 0
   for (const f of findingsOf(cr)) {
     best = Math.max(best, (PROOF_LEVELS as readonly string[]).indexOf(f.evidence?.status ?? ''))

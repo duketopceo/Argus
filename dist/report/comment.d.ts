@@ -98,8 +98,12 @@ export interface LaneRow {
     proof: Proof;
     spend: string;
 }
+/** Cell semantics mirror the action: flatten newlines, escape pipes, mask secrets, cap length. */
+export declare function cell(s: unknown, max?: number): string;
+export declare function code(s: unknown): string;
 export declare function plural(n: number, one: string, many?: string): string;
 export declare function findingsOf(cr: CodeReviewInput | undefined): NonNullable<CodeReviewInput['findings']>;
+export declare function bestFindingProof(cr: CodeReviewInput | undefined): ProofLevel;
 export declare function laneProof(lane: LaneId, status: LaneStatus, cr: CodeReviewInput | undefined): Proof;
 export declare function manifestRow(lane: LaneView, cr: CodeReviewInput | undefined): LaneRow;
 export declare function reproducedCount(cr: CodeReviewInput): number;

@@ -10,12 +10,12 @@ export const SENTINEL = '<!-- argus-reviewer -->';
  */
 export const LAST_REVIEWED_RE = /<!--\s*argus:last-reviewed-sha:([0-9a-f]{40})\s*-->/i;
 /** Cell semantics mirror the action: flatten newlines, escape pipes, mask secrets, cap length. */
-function cell(s, max = 200) {
+export function cell(s, max = 200) {
     return maskSecrets(String(s ?? '')
         .replace(/\|/g, '\\|')
         .replace(/[\r\n]+/g, ' ')).slice(0, max);
 }
-function code(s) {
+export function code(s) {
     const t = cell(s);
     const longest = Math.max(0, ...(t.match(/`+/g) ?? []).map((r) => r.length));
     const fence = '`'.repeat(longest + 1);
@@ -43,7 +43,7 @@ function proofText(level) {
 export function findingsOf(cr) {
     return cr !== undefined && Array.isArray(cr.findings) ? cr.findings : [];
 }
-function bestFindingProof(cr) {
+export function bestFindingProof(cr) {
     let best = 0;
     for (const f of findingsOf(cr)) {
         best = Math.max(best, PROOF_LEVELS.indexOf(f.evidence?.status ?? ''));
