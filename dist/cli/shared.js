@@ -43,7 +43,7 @@ export async function loadCliConfig(ctx, trust) {
  * Each entry is a signature line and an indented description; every line
  * fits 80 columns.
  */
-export const HELP_GROUPS = [
+const HELP_GROUPS = [
     {
         title: 'Review',
         commands: [
@@ -183,7 +183,7 @@ export const A0_HEAL_BUDGET_MS = 15 * 60_000;
 export const A0_HEAL_MAX_DELEGATIONS = 5;
 /** Default --keep-alive window: long enough to attach, short enough to never strand a target. */
 export const KEEP_ALIVE_DEFAULT_TTL_MS = 5 * 60_000;
-export const KEEP_ALIVE_MAX_TTL_MS = 60 * 60_000;
+const KEEP_ALIVE_MAX_TTL_MS = 60 * 60_000;
 export function parseKeepAliveTtl(raw) {
     if (raw === undefined)
         return undefined;

@@ -10,7 +10,7 @@ import type { Styler } from './style.js';
  *     ● flow     4/4 journeys, 1 healed        $0.000000
  *     total $0.004210 of $1.00 budget · report argus-reviewer-report/run-manifest.json
  */
-export interface SummaryLane {
+interface SummaryLane {
     lane: string;
     status: LaneStatus;
     detail: string;
@@ -31,8 +31,7 @@ export interface SummaryInput {
     budgetUsd?: number | undefined;
     reportPath?: string | undefined;
 }
-/** The config key that raises each lane's dollar cap (ARGUS_BUDGET_USD overrides all). */
-export declare const BUDGET_KEY: Record<string, string>;
 export declare function renderSummary(input: SummaryInput, style: Styler, width?: number): string[];
 /** Project a verify manifest onto the summary block. */
 export declare function verifySummary(manifest: RunManifest, reportPath: string): SummaryInput;
+export {};

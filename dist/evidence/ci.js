@@ -171,7 +171,7 @@ export async function fetchCompare(repo, base, head, token, ctx) {
     return { status, totalCommits, files };
 }
 /** The commit-status context the action posts on every reviewed head. */
-export const REVIEW_STATUS_CONTEXT = 'argus-reviewer';
+const REVIEW_STATUS_CONTEXT = 'argus-reviewer';
 /**
  * Whether an Argus commit status exists on `sha` — the API-verifiable half
  * of the U4 baseline check. A stored SHA in a sticky comment is attacker-

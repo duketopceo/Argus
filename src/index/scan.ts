@@ -158,10 +158,10 @@ export interface SynthesizedDiff {
 }
 
 /** Files above this size are skipped during diff synthesis. */
-export const SCAN_FILE_CAP_BYTES = 512 * 1024
+const SCAN_FILE_CAP_BYTES = 512 * 1024
 
 /** Total synthesized-diff cap — pathological trees degrade to filesSkipped. */
-export const SCAN_DIFF_CAP_BYTES = 64 * 1024 * 1024
+const SCAN_DIFF_CAP_BYTES = 64 * 1024 * 1024
 
 /**
  * POSIX filenames may contain line terminators — interpolating one into a

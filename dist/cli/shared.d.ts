@@ -64,15 +64,6 @@ export declare function reportError(ctx: Ctx, e: unknown, context: string | unde
 export declare function usageError(ctx: Ctx, context: string | undefined, message: string, fix?: string): void;
 /** loadConfig, with any failure classified as CONFIG_INVALID (R14). */
 export declare function loadCliConfig(ctx: Ctx, trust: Parameters<typeof loadConfig>[1]['trust']): Promise<Config>;
-/**
- * Top-level help, grouped by job (R16) with the default command first.
- * Each entry is a signature line and an indented description; every line
- * fits 80 columns.
- */
-export declare const HELP_GROUPS: {
-    title: string;
-    commands: [signature: string[], description: string][];
-}[];
 export declare function renderUsage(style: Styler): string;
 export declare const RECORD_USAGE = "Usage: argus-reviewer record \"<flow description>\" --url <target> [options]\n\nOptions:\n  --url <url>        Target URL (falls back to config.target.url)\n  --name <name>      Flow name for the cache + generated test file\n  --tests-dir <dir>  Where to write the generated test file (default: config testsDir or ./tests)\n  --max-steps <n>    Step cap before giving up on 'done' (default: config recordStepCap or 40)\n\n  -h, --help         Show this help";
 export declare const RUN_USAGE = "Usage: argus-reviewer run [pattern] [options]\n\n\nDiscovers *.test.{ts,mts,mjs,js} under the tests dir, executes each against the\ntarget, and writes JUnit XML + a JSON run report.\n\nOptions:\n  [pattern]          Only run test files whose path contains this substring\n  --url <url>        Target URL (falls back to config.target.url)\n  --dir <dir>        Tests directory (default: config testsDir or ./tests)\n  --report-dir <dir> Report output dir (default: config reportDir or ./argus-reviewer-report)\n  --cache-dir <dir>  Fingerprint cache dir (default: config cacheDir)\n  --keep-alive       On failure, hold an argus-booted target up for inspection\n                     (interactive sessions only; skipped on CI/non-TTY)\n  --keep-alive-ttl <sec>  Keep-alive window in seconds (default 300, max 3600)\n  -h, --help         Show this help";
@@ -85,7 +76,6 @@ export declare const A0_HEAL_BUDGET_MS: number;
 export declare const A0_HEAL_MAX_DELEGATIONS = 5;
 /** Default --keep-alive window: long enough to attach, short enough to never strand a target. */
 export declare const KEEP_ALIVE_DEFAULT_TTL_MS: number;
-export declare const KEEP_ALIVE_MAX_TTL_MS: number;
 export declare function parseKeepAliveTtl(raw: string | undefined): number | undefined;
 /**
  * A run is interactive only on a real TTY outside CI. `CI` is the

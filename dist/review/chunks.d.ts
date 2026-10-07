@@ -7,7 +7,6 @@
  * larger than the target is split at hunk boundaries. Every chunk records
  * which files it carries so a partial review can say what it did not cover.
  */
-export declare const CHUNK_TOKEN_TARGET = 6000;
 export interface ChunkFile {
     filename: string;
     patch?: string;

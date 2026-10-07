@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 
 
-export const INIT_USAGE = `Usage: argus-reviewer init [options]
+const INIT_USAGE = `Usage: argus-reviewer init [options]
 
 
 Scaffolds a working setup in the current directory:
@@ -33,7 +33,7 @@ Options:
 already exists, reports it instead of creating another.`
 
 /** `argus-reviewer init --pr` — open an onboarding PR through local git + gh. */
-export async function cmdInitPr(
+async function cmdInitPr(
   values: { force?: boolean | undefined; repo?: string | undefined; branch?: string | undefined },
   ctx: Ctx,
   deps: CliDeps,

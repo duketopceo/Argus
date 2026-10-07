@@ -30,11 +30,6 @@ export type ProbeParseResult = {
     ok: false;
     reason: string;
 };
-/**
- * Basename-only, forced test extension — no separators, no `..`. The write
- * happens on the host, so this is the traversal boundary.
- */
-export declare const PROBE_FILENAME_RE: RegExp;
 /** Probe files are bounded — a runaway generation is rejected, not truncated. */
 export declare const PROBE_CONTENT_CAP: number;
 export declare function parseProbe(raw: string): ProbeParseResult;

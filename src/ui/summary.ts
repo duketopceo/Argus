@@ -13,7 +13,7 @@ import type { Styler } from './style.js'
  *     total $0.004210 of $1.00 budget · report argus-reviewer-report/run-manifest.json
  */
 
-export interface SummaryLane {
+interface SummaryLane {
   lane: string
   status: LaneStatus
   detail: string
@@ -37,7 +37,7 @@ export interface SummaryInput {
 }
 
 /** The config key that raises each lane's dollar cap (ARGUS_BUDGET_USD overrides all). */
-export const BUDGET_KEY: Record<string, string> = {
+const BUDGET_KEY: Record<string, string> = {
   review: 'codeReviewBudgetUsd',
   flow: 'budgetUsd',
   app: 'app.budgetUsd',

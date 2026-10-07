@@ -53,7 +53,7 @@ export type ProbeParseResult = { ok: true; probe: AuthoredProbe } | { ok: false;
  * Basename-only, forced test extension — no separators, no `..`. The write
  * happens on the host, so this is the traversal boundary.
  */
-export const PROBE_FILENAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]*\.test\.[jt]sx?$/
+const PROBE_FILENAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]*\.test\.[jt]sx?$/
 
 /** Probe files are bounded — a runaway generation is rejected, not truncated. */
 export const PROBE_CONTENT_CAP = 32 * 1024

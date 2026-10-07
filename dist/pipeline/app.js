@@ -52,7 +52,7 @@ export function buildExpectationCheck(expected) {
  * the expected-state predicate is re-verified on a fresh observation after
  * the loop stops, so a page that merely loads can never pass.
  */
-export async function runAppTask(input) {
+async function runAppTask(input) {
     const expectation = buildExpectationCheck(input.expected);
     const result = await runExplore({
         driver: input.driver,

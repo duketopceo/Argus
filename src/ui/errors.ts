@@ -26,7 +26,7 @@ export const ERROR_CODES = [
 ] as const
 export type ErrorCode = (typeof ERROR_CODES)[number]
 
-export const ISSUE_URL = 'https://github.com/duketopceo/Argus/issues/new'
+const ISSUE_URL = 'https://github.com/duketopceo/Argus/issues/new'
 
 /** One-line summary per code. USAGE uses the error message itself. */
 const TITLE: Record<ErrorCode, string> = {
@@ -85,7 +85,7 @@ export class CliError extends Error {
 }
 
 /** Seconds until the provider's rate limit resets, from the response headers. */
-export function retryAfterSeconds(headers: Headers | undefined, now = Date.now()): number | undefined {
+function retryAfterSeconds(headers: Headers | undefined, now = Date.now()): number | undefined {
   if (headers === undefined) return undefined
   const ra = headers.get('retry-after')
   if (ra !== null && ra.trim() !== '') {

@@ -8,7 +8,7 @@
  * which files it carries so a partial review can say what it did not cover.
  */
 
-export const CHUNK_TOKEN_TARGET = 6000
+const CHUNK_TOKEN_TARGET = 6000
 const CHUNK_FILE_OVERHEAD = 100
 
 export interface ChunkFile {

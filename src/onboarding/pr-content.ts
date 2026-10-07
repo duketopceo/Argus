@@ -29,7 +29,7 @@ export function validateBranch(branch: string): string | undefined {
   return undefined
 }
 
-export interface PrBodyInput {
+interface PrBodyInput {
   repo: string
   /** Default per-run budget in USD, from the resolved config defaults. */
   budgetUsd: number

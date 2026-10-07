@@ -30,7 +30,7 @@ const RISK_AREA_CRITERIA = {
   none: 'no meaningful risk area in this diff',
 } as const
 
-export const TRIAGE_AREAS = Object.keys(RISK_AREA_CRITERIA) as TriageArea[]
+const TRIAGE_AREAS = Object.keys(RISK_AREA_CRITERIA) as TriageArea[]
 export type TriageArea = keyof typeof RISK_AREA_CRITERIA
 
 export interface TriageRecord {

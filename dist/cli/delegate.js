@@ -3,7 +3,7 @@ import { A0_DEFAULT_TIMEOUT_MS, isLoopback, runA0Task, a0TaskPrompt } from '../e
 import { CliError } from '../ui/errors.js';
 import { usageError, resolveCheckoutTrust, loadCliConfig, reportError } from './shared.js';
 import { parseArgs } from 'node:util';
-export const DELEGATE_USAGE = `Usage: argus-reviewer delegate "<task>" [options]
+const DELEGATE_USAGE = `Usage: argus-reviewer delegate "<task>" [options]
 
 Sends a task to an Agent Zero instance (a0 headless). The agent works
 autonomously in its own browser/desktop and streams back its result. Every

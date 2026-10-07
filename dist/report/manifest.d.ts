@@ -1,7 +1,7 @@
 import { type ExecFn } from '../detect.js';
 import type { CallCost } from '../vision/cost.js';
 /** Whether a report's source can be tied to the intended PR head. */
-export type HeadBindingStatus = 'match' | 'mismatch' | 'unknown' | 'not_applicable';
+type HeadBindingStatus = 'match' | 'mismatch' | 'unknown' | 'not_applicable';
 export type HeadSource = 'github' | 'fixture' | 'local';
 export declare const LANE_IDS: readonly ["review", "flow", "app", "a0"];
 export type LaneId = (typeof LANE_IDS)[number];
@@ -94,7 +94,6 @@ export declare function classifyHeadBinding(intendedSha: string | undefined, che
 /** True when runtime evidence is bound to the intended head (or a fixture). */
 export declare function isHeadBindingConclusive(binding: HeadBinding | undefined): boolean;
 export declare function emptyUsage(provider?: UsageSummary['provider']): UsageSummary;
-export declare function emptyBudget(): BudgetSummary;
 export declare function emptyLane(lane: LaneId, selected: boolean): LaneManifest;
 export declare function aggregateLanes(lanes: Record<LaneId, LaneManifest>): {
     status: LaneStatus;
@@ -104,8 +103,6 @@ export declare function aggregateLanes(lanes: Record<LaneId, LaneManifest>): {
     tokens: number;
 };
 export declare function addProviderUsage(usage: UsageSummary, calls: CallCost[] | undefined): UsageSummary;
-/** Run manifests are archived under `<reportDir>/manifests/<runId>.json`. */
-export declare const MANIFEST_HISTORY_DIR = "manifests";
 /**
  * Archive a completed verify manifest into local history and prune to the
  * retention bound — the dashboard/TUI run list reads this directory.
@@ -114,3 +111,4 @@ export declare const MANIFEST_HISTORY_DIR = "manifests";
  * clears nothing existing (retention governs new archives, not deletes).
  */
 export declare function archiveManifest(reportDir: string, manifest: RunManifest, keep: number): Promise<void>;
+export {};

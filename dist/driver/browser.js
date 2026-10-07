@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { debug } from '../debug.js';
 import { chromium, firefox, webkit } from 'playwright';
 /** Distinct capture signatures kept per browser session. */
-export const MAX_CAPTURE_SIGNATURES = 50;
+const MAX_CAPTURE_SIGNATURES = 50;
 /** Per-capture message length — console text is attacker/page-controlled. */
 const MAX_CAPTURE_TEXT = 240;
 const DEFAULT_VIEWPORT = { width: 1280, height: 720 };

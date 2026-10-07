@@ -126,7 +126,7 @@ export async function discoverTestFiles(dir) {
     }
     return found.sort();
 }
-export async function importModule(file, tmpDir) {
+async function importModule(file, tmpDir) {
     let target = file;
     if (extname(file) === '.ts' || extname(file) === '.mts') {
         let transpile;

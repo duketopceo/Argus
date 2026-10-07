@@ -316,7 +316,7 @@ export async function runVerify(input) {
     return { manifest, exitCode: aggregate.ok ? 0 : 1 };
 }
 /** Package version for report footers; dist/ and src/ both sit two levels deep. */
-export function argusVersion() {
+function argusVersion() {
     try {
         return createRequire(import.meta.url)('../../package.json').version;
     }

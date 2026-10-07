@@ -75,7 +75,7 @@ export interface CodeReviewInput {
     };
 }
 /** The subset of run.json the comment head reads. */
-export type ReportInput = Pick<RunReport, 'ok' | 'durationMs'> & {
+type ReportInput = Pick<RunReport, 'ok' | 'durationMs'> & {
     totals: Pick<RunReport['totals'], 'tests' | 'passed' | 'visionCostUsd'>;
     tests: {
         healEvents?: unknown[];
@@ -133,3 +133,4 @@ export declare function renderManifestComment(manifest: RunManifest, meta: Comme
 export type CheckConclusion = 'success' | 'failure' | 'neutral';
 /** Map a run report (and optional missing-key flag) to a check-run conclusion. */
 export declare function conclusionFromReport(report: RunReport | undefined, missingKey?: boolean): CheckConclusion;
+export {};

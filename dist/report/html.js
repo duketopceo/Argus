@@ -24,7 +24,7 @@ const num = (v) => typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 const str = (v) => typeof v === 'string' && v !== '' ? v : undefined;
 // ---- Escaping and formatting ------------------------------------------------
 /** Mask secret-shaped tokens, then escape for HTML text and attributes. */
-export function esc(v) {
+function esc(v) {
     return maskSecrets(String(v ?? ''))
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -37,7 +37,7 @@ const usdTotal = (n) => ((n ?? 0) >= 0.01 ? `$${(n ?? 0).toFixed(4)}` : formatUs
 /** Budget caps read as set: `$1.00`. */
 const usdCap = (n) => `$${n.toFixed(2)}`;
 /** `450ms`, `12.3s`, `4m 05s`, `2h 14m` (DESIGN.md 6.2). */
-export function formatDuration(ms) {
+function formatDuration(ms) {
     if (ms === undefined || !Number.isFinite(ms) || ms < 0)
         return undefined;
     if (ms < 1000)
@@ -117,7 +117,7 @@ const HTML_LEAD = {
  * pass the shared guard, and each lane that fails `isLaneManifest` is
  * reported missing rather than sinking the whole report.
  */
-export function readManifest(text) {
+function readManifest(text) {
     if (text === undefined)
         return { state: 'missing' };
     let value;

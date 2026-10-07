@@ -5,7 +5,7 @@ import type { CheckRun } from './ci.js';
  * demonstrated the defect (KTD4). `linkFindings` never produces it; the probe
  * stage is the only writer and can only move `not_exercised` → `reproduced`.
  */
-export type EvidenceStatus = 'exercised' | 'corroborated' | 'not_exercised' | 'inconclusive' | 'reproduced';
+type EvidenceStatus = 'exercised' | 'corroborated' | 'not_exercised' | 'inconclusive' | 'reproduced';
 export interface Evidence {
     status: EvidenceStatus;
     detail: string;
@@ -38,3 +38,4 @@ export declare function linkFindings<T extends {
 }>(findings: T[], index: RepoIndex | undefined, checkRuns: CheckRun[] | undefined): (T & {
     evidence: Evidence;
 })[];
+export {};

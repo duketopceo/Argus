@@ -6,7 +6,7 @@
  * report so the drop is never silent.
  */
 
-export type DropReason =
+type DropReason =
   | 'file_not_in_diff'
   | 'file_excluded'
   | 'file_deleted'
@@ -27,7 +27,7 @@ export interface ValidationAudit {
 }
 
 /** Lines of slack around a hunk: models are often off by a line or two. */
-export const HUNK_TOLERANCE = 2
+const HUNK_TOLERANCE = 2
 const MAX_EXAMPLES = 10
 
 export interface ParsedHunks {

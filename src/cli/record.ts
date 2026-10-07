@@ -156,7 +156,7 @@ export async function discoverTestFiles(dir: string): Promise<string[]> {
 }
 
 
-export async function importModule(file: string, tmpDir: string): Promise<Record<string, unknown>> {
+async function importModule(file: string, tmpDir: string): Promise<Record<string, unknown>> {
   let target = file
   if (extname(file) === '.ts' || extname(file) === '.mts') {
     let transpile: (source: string) => string
@@ -186,7 +186,7 @@ export async function importTestFile(file: string, tmpDir: string): Promise<void
 }
 
 
-export type PageSetupFn = (page: unknown) => void | Promise<void>
+type PageSetupFn = (page: unknown) => void | Promise<void>
 
 
 /**

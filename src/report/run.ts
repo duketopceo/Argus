@@ -40,7 +40,7 @@ export interface TestReport {
   captures?: PageCapture[]
 }
 
-export interface RunTotals {
+interface RunTotals {
   tests: number
   passed: number
   failed: number

@@ -3,38 +3,12 @@ import { type ExecFn } from '../detect.js';
 import type { PrMeta } from '../evidence/ci.js';
 import type { RepoIndex } from '../index/scan.js';
 import type { VisionClient } from '../engine/loop.js';
-import type { JsonSchema, Message } from '../vision/openrouter.js';
+import type { Message } from '../vision/openrouter.js';
 import type { CallCost } from '../vision/cost.js';
 import type { Ledger } from '../vision/ledger.js';
 import { type AuthoredProbe } from './author.js';
 import { type Harness } from './harness.js';
-/**
- * U2 — diff-scoped test generation. Where the probe lane authors one
- * reproducer per `not_exercised` finding, this lane reads the whole PR
- * diff and authors general-purpose spec leafs covering the changed
- * behavior, sandbox-validates them green on head when a real head
- * checkout is present, and deposits the result on a reviewable PR under
- * the tests corpus root.
- *
- * Two trust postures the probe lane already established carry over:
- * - model-authored code is hostile input — filename, content cap, import
- *   scan, secret-env and path checks are identical (parseProbe reuse),
- *   with a stricter leaf-name contract on top;
- * - the PR is the boundary — sandbox green proves "passes in a
- *   container", never safety; the specs execute host-side in consumer CI
- *   after a human merges them.
- */
-/**
- * Leaf-name contract for generated specs — stricter than the probe
- * basename RE: lowercase slug, a single `.test.` separator, no dots
- * inside the stem (so `foo.config.test.ts`, `vitest.setup.test.ts` and
- * `a.b.test.tsx` can never slip a config/setup-looking basename past).
- */
-export declare const GEN_FILENAME_RE: RegExp;
-/** The diff text handed to the authoring call, hard-capped. */
-export declare const GENERATE_DIFF_CAP: number;
-export declare const GENERATE_SCHEMA: JsonSchema;
-export interface GenerateSpecRecord {
+interface GenerateSpecRecord {
     /** Repo-relative write path (`<testsDir>/<filename>`). */
     path: string;
     /** committed → on the write PR; draft → excluded or never deposited; rejected → failed validation gates. */
@@ -122,3 +96,4 @@ export declare function buildGenerateMessages(diff: string, exemplarTest: {
  * changes the review verdict, ok, or the exit code.
  */
 export declare function runGenerateLane(o: GenerateLaneOptions): Promise<GenerateLaneResult>;
+export {};

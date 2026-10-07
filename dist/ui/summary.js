@@ -1,7 +1,7 @@
 import { LANE_IDS } from '../report/manifest.js';
 import { formatDuration, formatUsd, LANE_STATUS_LABEL, maskSecrets, shortSha } from '../report/viewmodel.js';
 /** The config key that raises each lane's dollar cap (ARGUS_BUDGET_USD overrides all). */
-export const BUDGET_KEY = {
+const BUDGET_KEY = {
     review: 'codeReviewBudgetUsd',
     flow: 'budgetUsd',
     app: 'app.budgetUsd',

@@ -46,7 +46,7 @@ export interface PageCapture {
 }
 
 /** Distinct capture signatures kept per browser session. */
-export const MAX_CAPTURE_SIGNATURES = 50
+const MAX_CAPTURE_SIGNATURES = 50
 /** Per-capture message length — console text is attacker/page-controlled. */
 const MAX_CAPTURE_TEXT = 240
 

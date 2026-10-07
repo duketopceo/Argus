@@ -34,15 +34,6 @@ opts?: {
 }) => Promise<ExecResult>;
 export declare const defaultExec: ExecFn;
 export type ProbeFn = (url: string, timeoutMs: number) => Promise<boolean>;
-/**
- * The only environment keys an Agent Zero child process may inherit.
- * Provider keys, GitHub tokens, `ARGUS_*`, and npm auth variables never
- * propagate (R12) — the child is a remote agent harness, not an extension
- * of this process's trust. Lives here (not in executor/a0.ts) because every
- * `a0` spawn — delegation, the lane's `--version` preflight, and init's
- * environment probe — must use it or the contract leaks.
- */
-export declare const A0_CHILD_ENV_KEYS: readonly ["PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "LC_ALL", "TERM", "TMPDIR", "XDG_RUNTIME_DIR", "DOCKER_HOST", "AGENT_ZERO_HOST", "A0_USERNAME", "A0_PASSWORD"];
 /** Build the sanitized child env: allowlisted keys that exist in `env`. */
 export declare function buildA0ChildEnv(env: NodeJS.ProcessEnv | Record<string, string | undefined>): Record<string, string>;
 /**

@@ -15,7 +15,7 @@ export interface ScanSkipped {
   reason: string
 }
 
-export interface ScanSpend {
+interface ScanSpend {
   calls: number
   tokens: number
   costUsd: number

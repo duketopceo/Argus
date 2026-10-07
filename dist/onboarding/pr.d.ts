@@ -1,7 +1,5 @@
 import type { ExecFn } from '../detect.js';
-export { DEFAULT_BRANCH, renderPrBody, validateBranch, validateRepo, type PrBodyInput } from './pr-content.js';
-/** owner/name from a GitHub remote URL (ssh, https, with or without .git). */
-export declare function parseGithubRemote(url: string): string | undefined;
+export { DEFAULT_BRANCH, renderPrBody, validateBranch, validateRepo } from './pr-content.js';
 export interface InitPrOptions {
     cwd: string;
     exec: ExecFn;

@@ -26,10 +26,6 @@ export interface SynthesizedDiff {
     /** Files skipped — oversized or unreadable mid-synthesis. */
     filesSkipped: number;
 }
-/** Files above this size are skipped during diff synthesis. */
-export declare const SCAN_FILE_CAP_BYTES: number;
-/** Total synthesized-diff cap — pathological trees degrade to filesSkipped. */
-export declare const SCAN_DIFF_CAP_BYTES: number;
 /**
  * U7 — synthesize a unified diff treating every walked file as new
  * (`--- /dev/null` / `+++ b/`), so the deterministic lanes (rules,

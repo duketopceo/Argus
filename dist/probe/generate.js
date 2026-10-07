@@ -28,14 +28,14 @@ import { checkSandboxPaths, dockerAvailable, resolveSandboxImage, runProbeInSand
  * inside the stem (so `foo.config.test.ts`, `vitest.setup.test.ts` and
  * `a.b.test.tsx` can never slip a config/setup-looking basename past).
  */
-export const GEN_FILENAME_RE = /^[a-z0-9][a-z0-9-]{0,80}\.test\.[jt]sx?$/;
+const GEN_FILENAME_RE = /^[a-z0-9][a-z0-9-]{0,80}\.test\.[jt]sx?$/;
 /** Stems that must never be authored even though they parse as test leafs. */
 const GEN_FORBIDDEN_STEMS = new Set(['setup', 'conftest', 'config', 'fixture']);
 /** The diff text handed to the authoring call, hard-capped. */
-export const GENERATE_DIFF_CAP = 48 * 1024;
+const GENERATE_DIFF_CAP = 48 * 1024;
 /** Schema ceiling independent of config — the lane also truncates at parse. */
 const GEN_SCHEMA_MAX = 8;
-export const GENERATE_SCHEMA = {
+const GENERATE_SCHEMA = {
     name: 'argus-generate',
     strict: true,
     schema: {

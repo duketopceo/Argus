@@ -1,7 +1,7 @@
 import { type LaneId, type RunIdentity, type RunManifest } from '../report/manifest.js';
 import { type BudgetOptions } from './budget.js';
 import type { LaneSelection } from './contracts.js';
-export interface VerifyRunners {
+interface VerifyRunners {
     review: () => Promise<number>;
     flow?: (url: string) => Promise<number>;
     app?: () => Promise<number>;
@@ -30,8 +30,6 @@ export interface VerifyResult {
  * start, not the run's.
  */
 export declare function runVerify(input: VerifyInput): Promise<VerifyResult>;
-/** Package version for report footers; dist/ and src/ both sit two levels deep. */
-export declare function argusVersion(): string;
 /**
  * Write the offline HTML evidence report (U14) beside run-manifest.json.
  * Lane reports are read only when the manifest points at them: a runner that
@@ -42,3 +40,4 @@ export declare function writeEvidenceReport(reportDir: string, manifest: RunMani
     version?: string;
     runUrl?: string;
 }): Promise<string>;
+export {};

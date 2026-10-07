@@ -21,9 +21,3 @@ export function makeDecisionsCallCost(response, kind) {
         kind,
     };
 }
-export function extractUsageCost(response) {
-    return {
-        costUsd: response.usage.cost,
-        upstreamCostUsd: response.usage.cost_details.upstream_inference_cost,
-    };
-}

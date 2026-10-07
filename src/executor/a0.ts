@@ -167,7 +167,7 @@ export interface A0LaneReport {
   metered: false
 }
 
-export interface A0LaneDeps {
+interface A0LaneDeps {
   exec?: ExecFn
   /** Host reachability probe — requires an Agent Zero marker in the HTML. */
   probe?: ProbeFn

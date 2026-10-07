@@ -53,7 +53,7 @@ export interface RuleFailure {
   error: string
 }
 
-export interface RuleOutput {
+interface RuleOutput {
   findings: RuleFinding[]
   records: Omit<RuleRecord, 'rule'>[]
   /** The secrets rule's native result — feeds report.secretsScan. */

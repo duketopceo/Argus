@@ -177,16 +177,7 @@ export interface CodeReviewReport {
      */
     persistPayload?: string;
 }
-export declare const MAX_PR_FILE_PAGES = 10;
 export declare function fetchPrFiles(repo: string, pr: string, token: string, ctx: Ctx): Promise<PrFile[] | undefined>;
-export declare const MAX_COMMENT_PAGES = 3;
-/**
- * The `argus:last-reviewed-sha` marker off the PR's sticky comment. The
- * marker is attacker-editable by design — every caller verifies the stored
- * SHA (compare ancestry + the repo's own Argus commit status) before it
- * may shrink a review range.
- */
-export declare function fetchLastReviewedSha(repo: string, pr: string, token: string, ctx: Ctx): Promise<string | undefined>;
 export interface IncrementalBaseline {
     kind: 'incremental' | 'full' | 'equal';
     /** Verified baseline SHA — present on 'incremental' and 'equal'. */
@@ -213,7 +204,6 @@ export declare function resolveIncrementalBaseline(repo: string, pr: string, hea
  * per file). `+++ b/` names new/copied files; `--- a/` covers deletions.
  */
 export declare function filesFromUnifiedDiff(diff: string): PrFile[];
-export declare const DIFF_PREFIX_FLAGS: string[];
 /**
  * `--fixture <dir>` seam: the dir is a real git repo with an
  * `argus-fixture-base` ref (the merge base) and HEAD at the PR head —
@@ -253,11 +243,6 @@ export declare function loadLocalDiff(cwd: string, baseRef: string, exec?: ExecF
 export declare function buildPatchChunks(files: PrFile[], contexts?: Record<string, string>): string[];
 export declare function buildCodeReviewMessages(repo: string, pr: string, patchText: string, chunkIndex?: number, totalChunks?: number, profiles?: readonly string[], instructions?: readonly string[]): Message[];
 export declare function buildSynthesisMessages(repo: string, pr: string, files: string[], findings: CodeReviewReport['findings']): Message[];
-export declare function deriveSeverity(message: string): string;
-export declare const FINDING_CATEGORIES: readonly ["correctness", "security", "performance", "usability", "convention", "other"];
-/** R1 — a suggestion is a committable patch; bound its size and span at parse. */
-export declare const MAX_SUGGESTION_CHARS = 2000;
-export declare const MAX_SUGGESTION_SPAN = 25;
 export declare function parseCodeReview(content: string): {
     summary: string;
     verdict: 'pass' | 'needs_changes' | 'approve';
@@ -288,18 +273,6 @@ export declare function diffLineTexts(files: readonly {
     filename: string;
     patch?: string | undefined;
 }[]): Map<string, Map<number, string>>;
-export declare const REVERT_VERB: RegExp;
-export declare const REPLACE_VERB: RegExp;
-/**
- * A finding that must reach the verdict even when its cite can't be
- * anchored or looks like a revert-nit: blocker severities (bug/risk and
- * anything the operator configured via `severity`/`severityGate`) and
- * security-category findings. Posting already drops comments that don't
- * anchor (sticky-comment isOnDiff); dropping these here would erase them
- * from the verdict, adjudication, and the probe lane — failing open on
- * exactly the class of finding the review exists to catch.
- */
-export declare function isVerdictDriving(f: ReviewFinding, blockSeverities: readonly string[]): boolean;
 /**
  * Drop nit/q findings that ask to remove or revert text the cited diff
  * line itself contains — i.e. findings that would undo wording the PR
@@ -347,24 +320,6 @@ export declare function computeReviewEvent(findings: ReviewFinding[], blockSever
     provenBlockers: number;
     highConfidenceBlockers: number;
 };
-/** Message text bound after sanitization — bodies stay one-paragraph. */
-export declare const MAX_COMMENT_MESSAGE = 500;
-/** R2 — stable severity order applied before the maxComments cap. */
-export declare const SEVERITY_RANK: Record<string, number>;
-/**
- * R5 — `message`/`evidence.detail` are model-or-runner-controlled text
- * landing in a PR comment body. Collapse to a single line (a fenced block
- * needs a line start), zero-width-break backtick/tilde runs of ≥3 so a
- * fake ```suggestion block can't ride the message past the suggestion-side
- * guards, and defuse @mentions so findings can't ping arbitrary users.
- */
-export declare function sanitizeCommentText(s: string): string;
-/**
- * Suggestion fence must exceed every backtick run inside the suggestion —
- * tilde runs can't close a backtick fence, so only backticks count. Min 4
- * so a suggestion already containing ``` stays wrapped.
- */
-export declare function suggestionFence(suggestion: string): string;
 /**
  * KTD3 — pre-render the inline review surface: eligibility-filtered
  * (R8's static half — real path, positive integer line), severity-sorted

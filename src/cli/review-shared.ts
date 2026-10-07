@@ -227,7 +227,7 @@ export interface CodeReviewReport {
 }
 
 
-export const MAX_PR_FILE_PAGES = 10
+const MAX_PR_FILE_PAGES = 10
 
 
 export async function fetchPrFiles(
@@ -251,7 +251,7 @@ export async function fetchPrFiles(
 }
 
 
-export const MAX_COMMENT_PAGES = 3
+const MAX_COMMENT_PAGES = 3
 
 
 /**
@@ -260,7 +260,7 @@ export const MAX_COMMENT_PAGES = 3
  * SHA (compare ancestry + the repo's own Argus commit status) before it
  * may shrink a review range.
  */
-export async function fetchLastReviewedSha(
+async function fetchLastReviewedSha(
   repo: string,
   pr: string,
   token: string,
@@ -392,7 +392,7 @@ export function filesFromUnifiedDiff(diff: string): PrFile[] {
 // rewrites the a/ and b/ headers filesFromUnifiedDiff and the rules
 // lane's addedLines walker parse — GIT_DIFF_PATH_FLAGS pins them so a
 // user's gitconfig cannot silently empty the scan surface.
-export const DIFF_PREFIX_FLAGS = GIT_DIFF_PATH_FLAGS
+const DIFF_PREFIX_FLAGS = GIT_DIFF_PATH_FLAGS
 
 
 /**
@@ -612,7 +612,7 @@ export function buildSynthesisMessages(
 }
 
 
-export function deriveSeverity(message: string): string {
+function deriveSeverity(message: string): string {
   if (message.includes('🔴') || /(?:^|\W)bug:/.test(message)) return 'bug'
   if (message.includes('🟡') || /(?:^|\W)risk:/.test(message)) return 'risk'
   if (message.includes('🔵') || /(?:^|\W)nit:/.test(message)) return 'nit'
@@ -621,7 +621,7 @@ export function deriveSeverity(message: string): string {
 }
 
 
-export const FINDING_CATEGORIES = [
+const FINDING_CATEGORIES = [
   'correctness',
   'security',
   'performance',
@@ -632,9 +632,9 @@ export const FINDING_CATEGORIES = [
 
 
 /** R1 — a suggestion is a committable patch; bound its size and span at parse. */
-export const MAX_SUGGESTION_CHARS = 2000
+const MAX_SUGGESTION_CHARS = 2000
 
-export const MAX_SUGGESTION_SPAN = 25
+const MAX_SUGGESTION_SPAN = 25
 
 
 export function parseCodeReview(content: string): {
@@ -782,9 +782,9 @@ export function diffLineTexts(
 }
 
 
-export const REVERT_VERB = /\b(?:remove|delete|drop|strip|revert)\s+[`'"]([^`'"]{2,80})[`'"]/i
+const REVERT_VERB = /\b(?:remove|delete|drop|strip|revert)\s+[`'"]([^`'"]{2,80})[`'"]/i
 
-export const REPLACE_VERB =
+const REPLACE_VERB =
 
   /\b(?:replace|rename|reword|swap)\s+[`'"][^`'"]{2,80}[`'"]\s+(?:with|to|by)\s+[`'"]([^`'"]{2,80})[`'"]/i
 
@@ -797,7 +797,7 @@ export const REPLACE_VERB =
  * from the verdict, adjudication, and the probe lane — failing open on
  * exactly the class of finding the review exists to catch.
  */
-export function isVerdictDriving(f: ReviewFinding, blockSeverities: readonly string[]): boolean {
+function isVerdictDriving(f: ReviewFinding, blockSeverities: readonly string[]): boolean {
   return (
     f.severity === 'bug' ||
     f.severity === 'risk' ||
@@ -922,11 +922,11 @@ export function computeReviewEvent(
 
 
 /** Message text bound after sanitization — bodies stay one-paragraph. */
-export const MAX_COMMENT_MESSAGE = 500
+const MAX_COMMENT_MESSAGE = 500
 
 
 /** R2 — stable severity order applied before the maxComments cap. */
-export const SEVERITY_RANK: Record<string, number> = { bug: 0, risk: 1, nit: 2, q: 3 }
+const SEVERITY_RANK: Record<string, number> = { bug: 0, risk: 1, nit: 2, q: 3 }
 
 
 /**
@@ -936,7 +936,7 @@ export const SEVERITY_RANK: Record<string, number> = { bug: 0, risk: 1, nit: 2, 
  * fake ```suggestion block can't ride the message past the suggestion-side
  * guards, and defuse @mentions so findings can't ping arbitrary users.
  */
-export function sanitizeCommentText(s: string): string {
+function sanitizeCommentText(s: string): string {
   return (
     s
       .replace(/\s+/g, ' ')
@@ -956,7 +956,7 @@ export function sanitizeCommentText(s: string): string {
  * tilde runs can't close a backtick fence, so only backticks count. Min 4
  * so a suggestion already containing ``` stays wrapped.
  */
-export function suggestionFence(suggestion: string): string {
+function suggestionFence(suggestion: string): string {
   let longest = 0
   for (const m of suggestion.matchAll(/`+/g)) longest = Math.max(longest, m[0].length)
   return '`'.repeat(Math.max(4, longest + 1))

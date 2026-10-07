@@ -5,7 +5,7 @@
  * hallucinated or stale anchor; it is dropped here and counted in the
  * report so the drop is never silent.
  */
-export type DropReason = 'file_not_in_diff' | 'file_excluded' | 'file_deleted' | 'line_beyond_file' | 'line_outside_diff';
+type DropReason = 'file_not_in_diff' | 'file_excluded' | 'file_deleted' | 'line_beyond_file' | 'line_outside_diff';
 export interface DroppedFinding {
     file: string;
     line?: number;
@@ -17,8 +17,6 @@ export interface ValidationAudit {
     /** Up to 10 dropped anchors, for the Diagnostics fold. */
     examples: DroppedFinding[];
 }
-/** Lines of slack around a hunk: models are often off by a line or two. */
-export declare const HUNK_TOLERANCE = 2;
 export interface ParsedHunks {
     /** Inclusive new-side [start, end] line ranges, one per hunk with new lines. */
     ranges: [number, number][];
@@ -51,3 +49,4 @@ export declare function isOnDiff(c: {
     line: number;
     startLine?: number;
 }, diffLines: ReadonlyMap<string, ReadonlySet<number>>): boolean;
+export {};

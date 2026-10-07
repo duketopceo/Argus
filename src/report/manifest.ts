@@ -6,7 +6,7 @@ import type { CallCost } from '../vision/cost.js'
 import { writeAtomicJson } from '../fsutil.js'
 
 /** Whether a report's source can be tied to the intended PR head. */
-export type HeadBindingStatus = 'match' | 'mismatch' | 'unknown' | 'not_applicable'
+type HeadBindingStatus = 'match' | 'mismatch' | 'unknown' | 'not_applicable'
 export type HeadSource = 'github' | 'fixture' | 'local'
 
 export const LANE_IDS = ['review', 'flow', 'app', 'a0'] as const
@@ -197,7 +197,7 @@ export function emptyUsage(provider: UsageSummary['provider'] = 'unknown'): Usag
   }
 }
 
-export function emptyBudget(): BudgetSummary {
+function emptyBudget(): BudgetSummary {
   return {
     limitUsd: undefined,
     spentUsd: 0,
@@ -272,7 +272,7 @@ export function addProviderUsage(usage: UsageSummary, calls: CallCost[] | undefi
 }
 
 /** Run manifests are archived under `<reportDir>/manifests/<runId>.json`. */
-export const MANIFEST_HISTORY_DIR = 'manifests'
+const MANIFEST_HISTORY_DIR = 'manifests'
 
 /**
  * Archive a completed verify manifest into local history and prune to the

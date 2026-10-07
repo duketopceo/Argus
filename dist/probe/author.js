@@ -30,7 +30,7 @@ export const PROBE_SCHEMA = {
  * Basename-only, forced test extension — no separators, no `..`. The write
  * happens on the host, so this is the traversal boundary.
  */
-export const PROBE_FILENAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]*\.test\.[jt]sx?$/;
+const PROBE_FILENAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]*\.test\.[jt]sx?$/;
 /** Probe files are bounded — a runaway generation is rejected, not truncated. */
 export const PROBE_CONTENT_CAP = 32 * 1024;
 /** Reads of secret-looking env vars are forbidden — defense in depth on the stripped container env. */

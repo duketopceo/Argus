@@ -7,7 +7,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
-export const INIT_USAGE = `Usage: argus-reviewer init [options]
+const INIT_USAGE = `Usage: argus-reviewer init [options]
 
 
 Scaffolds a working setup in the current directory:
@@ -30,7 +30,7 @@ Options:
 --pr refuses to overwrite existing files and, if the branch or an open PR
 already exists, reports it instead of creating another.`;
 /** `argus-reviewer init --pr` — open an onboarding PR through local git + gh. */
-export async function cmdInitPr(values, ctx, deps) {
+async function cmdInitPr(values, ctx, deps) {
     const branch = values.branch ?? DEFAULT_PR_BRANCH;
     const invalid = (values.force
         ? '--force cannot be combined with --pr (a PR never overwrites files)'

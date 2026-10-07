@@ -16,7 +16,7 @@ import { resolve, join } from 'node:path'
 import { parseArgs } from 'node:util'
 
 
-export const SCAN_USAGE = `Usage: argus-reviewer scan [path] [options]
+const SCAN_USAGE = `Usage: argus-reviewer scan [path] [options]
 
 
 Audits a tree with no PR: walks the tree (dotfiles, VCS internals, lockfiles
@@ -41,16 +41,16 @@ context; dot-directories stay excluded.`
  * containers, key-file suffixes, prefixed credential names, and the
  * canonical bare basenames (`credentials`, `htpasswd`, `shadow`).
  */
-export const CREDENTIAL_PATH_RE =
+const CREDENTIAL_PATH_RE =
 
   /(^|\/)(\.env(\..*)?|[^/]*\.env|\.netrc|\.npmrc|\.pypirc|\.pgpass|\.git-credentials|[^/]*\.(pem|key|p8|ppk|p12|pfx|keystore|jks|keytab|kdbx|asc|gpg)(\.[^/]*)?|id_(rsa|dsa|ecdsa|ed25519)(\.[^/]*)?|[^/]*(credentials?|creds|secrets?)\.[^/]*|credentials?|htpasswd|shadow|client_secret[^/]*\.json|service[-_]?account[^/]*\.json)$/i
 
 /** Credential-shaped dotfiles the scan walk opts back in for local scanning. */
-export const CREDENTIAL_DOTFILE_RE = /^\.(env|netrc|npmrc|pypirc|pgpass|git-credentials)(\..*)?$/i
+const CREDENTIAL_DOTFILE_RE = /^\.(env|netrc|npmrc|pypirc|pgpass|git-credentials)(\..*)?$/i
 
 
 /** Scan-flavored review prompt — same findings contract as code-review. */
-export function buildScanMessages(patchText: string, chunkIndex: number, totalChunks: number): Message[] {
+function buildScanMessages(patchText: string, chunkIndex: number, totalChunks: number): Message[] {
   return [
     {
       role: 'system',

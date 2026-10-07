@@ -13,7 +13,7 @@ interface Ctx {
  * - `upsert`: the file's current blob sha is read on the branch and the PUT
  *   carries it — an update, still branch-scoped.
  */
-export interface WritePrFile {
+interface WritePrFile {
     /** Repo-relative write path — callers validate `isSafeRepoPath` upstream. */
     path: string;
     /** File content (utf8 — encoded by the caller-side write). */

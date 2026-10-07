@@ -17,7 +17,7 @@ import { createFilesPr } from './write-pr.js';
  */
 /** Largest suggestion span applied — a suggestion over this many lines is a
  *  rewrite, not a fix, and is skipped with a named reason. */
-export const MAX_FIX_SPAN = 50;
+const MAX_FIX_SPAN = 50;
 /** Repo-relative path guard — suggestions come from API payloads, but the
  *  write path must never leave the tree anyway. */
 function safePath(path) {

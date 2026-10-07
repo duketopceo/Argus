@@ -133,7 +133,7 @@ const str = (v: unknown): string | undefined =>
 // ---- Escaping and formatting ------------------------------------------------
 
 /** Mask secret-shaped tokens, then escape for HTML text and attributes. */
-export function esc(v: unknown): string {
+function esc(v: unknown): string {
   return maskSecrets(String(v ?? ''))
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -148,7 +148,7 @@ const usdTotal = (n: number | undefined) => ((n ?? 0) >= 0.01 ? `$${(n ?? 0).toF
 const usdCap = (n: number) => `$${n.toFixed(2)}`
 
 /** `450ms`, `12.3s`, `4m 05s`, `2h 14m` (DESIGN.md 6.2). */
-export function formatDuration(ms: number | undefined): string | undefined {
+function formatDuration(ms: number | undefined): string | undefined {
   if (ms === undefined || !Number.isFinite(ms) || ms < 0) return undefined
   if (ms < 1000) return `${Math.round(ms)}ms`
   if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
@@ -247,7 +247,7 @@ type ManifestState =
  * pass the shared guard, and each lane that fails `isLaneManifest` is
  * reported missing rather than sinking the whole report.
  */
-export function readManifest(text: string | undefined): ManifestState {
+function readManifest(text: string | undefined): ManifestState {
   if (text === undefined) return { state: 'missing' }
   let value: unknown
   try {

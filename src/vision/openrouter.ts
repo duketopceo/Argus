@@ -3,17 +3,17 @@ import { debug } from '../debug.js'
 import { classifyHttpStatus, CliError, pickProviderError } from '../ui/errors.js'
 import { CallCost, CallKind, makeCallCost, OpenRouterResponse } from './cost.js'
 
-export interface TextContentPart {
+interface TextContentPart {
   type: 'text'
   text: string
 }
 
-export interface ImageContentPart {
+interface ImageContentPart {
   type: 'image'
   source: string
 }
 
-export type ContentPart = TextContentPart | ImageContentPart
+type ContentPart = TextContentPart | ImageContentPart
 
 export interface Message {
   role: 'user' | 'system' | 'assistant'

@@ -13,7 +13,7 @@ import { resolve, join } from 'node:path'
 import { parseArgs } from 'node:util'
 
 
-export const MENTION_USAGE = `Usage: argus-reviewer mention [--report-dir <dir>]
+const MENTION_USAGE = `Usage: argus-reviewer mention [--report-dir <dir>]
 
 
 Dispatch an @argus command from a GitHub issue_comment event. Reads
@@ -24,7 +24,7 @@ against the base checkout.
 
 Commands: @argus review [full] · @argus record "<flow>" · @argus persist · @argus generate · @argus fix · @argus help`
 
-export interface IssueCommentPayload {
+interface IssueCommentPayload {
   issue?: { number?: number; pull_request?: unknown }
   comment?: { body?: string; author_association?: string }
 }

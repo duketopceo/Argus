@@ -43,7 +43,7 @@ export const CODE_REVIEW_SCHEMA = {
         required: ['summary', 'verdict', 'findings'],
     },
 };
-export const MAX_PR_FILE_PAGES = 10;
+const MAX_PR_FILE_PAGES = 10;
 export async function fetchPrFiles(repo, pr, token, ctx) {
     const files = [];
     for (let page = 1; page <= MAX_PR_FILE_PAGES; page++) {
@@ -56,14 +56,14 @@ export async function fetchPrFiles(repo, pr, token, ctx) {
     }
     return files;
 }
-export const MAX_COMMENT_PAGES = 3;
+const MAX_COMMENT_PAGES = 3;
 /**
  * The `argus:last-reviewed-sha` marker off the PR's sticky comment. The
  * marker is attacker-editable by design — every caller verifies the stored
  * SHA (compare ancestry + the repo's own Argus commit status) before it
  * may shrink a review range.
  */
-export async function fetchLastReviewedSha(repo, pr, token, ctx) {
+async function fetchLastReviewedSha(repo, pr, token, ctx) {
     for (let page = 1; page <= MAX_COMMENT_PAGES; page++) {
         const comments = (await ghGet(`https://api.github.com/repos/${repo}/issues/${pr}/comments?per_page=100&page=${page}`, token, ctx));
         if (!Array.isArray(comments))
@@ -164,7 +164,7 @@ export function filesFromUnifiedDiff(diff) {
 // rewrites the a/ and b/ headers filesFromUnifiedDiff and the rules
 // lane's addedLines walker parse — GIT_DIFF_PATH_FLAGS pins them so a
 // user's gitconfig cannot silently empty the scan surface.
-export const DIFF_PREFIX_FLAGS = GIT_DIFF_PATH_FLAGS;
+const DIFF_PREFIX_FLAGS = GIT_DIFF_PATH_FLAGS;
 /**
  * `--fixture <dir>` seam: the dir is a real git repo with an
  * `argus-fixture-base` ref (the merge base) and HEAD at the PR head —
@@ -332,7 +332,7 @@ export function buildSynthesisMessages(repo, pr, files, findings) {
         },
     ];
 }
-export function deriveSeverity(message) {
+function deriveSeverity(message) {
     if (message.includes('🔴') || /(?:^|\W)bug:/.test(message))
         return 'bug';
     if (message.includes('🟡') || /(?:^|\W)risk:/.test(message))
@@ -343,7 +343,7 @@ export function deriveSeverity(message) {
         return 'q';
     return 'nit';
 }
-export const FINDING_CATEGORIES = [
+const FINDING_CATEGORIES = [
     'correctness',
     'security',
     'performance',
@@ -352,8 +352,8 @@ export const FINDING_CATEGORIES = [
     'other',
 ];
 /** R1 — a suggestion is a committable patch; bound its size and span at parse. */
-export const MAX_SUGGESTION_CHARS = 2000;
-export const MAX_SUGGESTION_SPAN = 25;
+const MAX_SUGGESTION_CHARS = 2000;
+const MAX_SUGGESTION_SPAN = 25;
 export function parseCodeReview(content) {
     const defaultFindings = [];
     try {
@@ -478,8 +478,8 @@ export function diffLineTexts(files) {
     }
     return byFile;
 }
-export const REVERT_VERB = /\b(?:remove|delete|drop|strip|revert)\s+[`'"]([^`'"]{2,80})[`'"]/i;
-export const REPLACE_VERB = /\b(?:replace|rename|reword|swap)\s+[`'"][^`'"]{2,80}[`'"]\s+(?:with|to|by)\s+[`'"]([^`'"]{2,80})[`'"]/i;
+const REVERT_VERB = /\b(?:remove|delete|drop|strip|revert)\s+[`'"]([^`'"]{2,80})[`'"]/i;
+const REPLACE_VERB = /\b(?:replace|rename|reword|swap)\s+[`'"][^`'"]{2,80}[`'"]\s+(?:with|to|by)\s+[`'"]([^`'"]{2,80})[`'"]/i;
 /**
  * A finding that must reach the verdict even when its cite can't be
  * anchored or looks like a revert-nit: blocker severities (bug/risk and
@@ -489,7 +489,7 @@ export const REPLACE_VERB = /\b(?:replace|rename|reword|swap)\s+[`'"][^`'"]{2,80
  * from the verdict, adjudication, and the probe lane — failing open on
  * exactly the class of finding the review exists to catch.
  */
-export function isVerdictDriving(f, blockSeverities) {
+function isVerdictDriving(f, blockSeverities) {
     return (f.severity === 'bug' ||
         f.severity === 'risk' ||
         f.category === 'security' ||
@@ -580,9 +580,9 @@ export function computeReviewEvent(findings, blockSeverities, allowRequestChange
     return { reviewEvent, provenBlockers, highConfidenceBlockers };
 }
 /** Message text bound after sanitization — bodies stay one-paragraph. */
-export const MAX_COMMENT_MESSAGE = 500;
+const MAX_COMMENT_MESSAGE = 500;
 /** R2 — stable severity order applied before the maxComments cap. */
-export const SEVERITY_RANK = { bug: 0, risk: 1, nit: 2, q: 3 };
+const SEVERITY_RANK = { bug: 0, risk: 1, nit: 2, q: 3 };
 /**
  * R5 — `message`/`evidence.detail` are model-or-runner-controlled text
  * landing in a PR comment body. Collapse to a single line (a fenced block
@@ -590,7 +590,7 @@ export const SEVERITY_RANK = { bug: 0, risk: 1, nit: 2, q: 3 };
  * fake ```suggestion block can't ride the message past the suggestion-side
  * guards, and defuse @mentions so findings can't ping arbitrary users.
  */
-export function sanitizeCommentText(s) {
+function sanitizeCommentText(s) {
     return (s
         .replace(/\s+/g, ' ')
         .replace(/([`~])\1{2,}/g, (run) => `${run[0]}\u200B${run.slice(1)}`)
@@ -606,7 +606,7 @@ export function sanitizeCommentText(s) {
  * tilde runs can't close a backtick fence, so only backticks count. Min 4
  * so a suggestion already containing ``` stays wrapped.
  */
-export function suggestionFence(suggestion) {
+function suggestionFence(suggestion) {
     let longest = 0;
     for (const m of suggestion.matchAll(/`+/g))
         longest = Math.max(longest, m[0].length);

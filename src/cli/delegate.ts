@@ -5,7 +5,7 @@ import { type Ctx, type CliDeps, usageError, resolveCheckoutTrust, loadCliConfig
 import { parseArgs } from 'node:util'
 
 
-export const DELEGATE_USAGE = `Usage: argus-reviewer delegate "<task>" [options]
+const DELEGATE_USAGE = `Usage: argus-reviewer delegate "<task>" [options]
 
 Sends a task to an Agent Zero instance (a0 headless). The agent works
 autonomously in its own browser/desktop and streams back its result. Every

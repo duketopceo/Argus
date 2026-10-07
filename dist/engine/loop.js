@@ -684,7 +684,7 @@ const LOCATE_STOPWORDS = new Set([
     'item', 'button', 'link', 'field', 'input', 'section', 'area', 'panel',
     'that', 'this', 'into', 'onto', 'page', 'view', 'menu', 'click', 'find',
 ]);
-export function instructionMatchesNode(instruction, nodeSnippet) {
+function instructionMatchesNode(instruction, nodeSnippet) {
     const words = instruction
         .replace(/^locate:\s*/i, '')
         .toLowerCase()

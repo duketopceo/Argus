@@ -13,7 +13,7 @@
 export const ACTION_PIN_SHA = 'bc462fa66018e149eac1b32e36ac34b4f2eb2d56';
 export const ACTION_PIN_TAG = 'v0.4.2';
 const ACTION_PIN = `${ACTION_PIN_SHA} # ${ACTION_PIN_TAG}`;
-export function initConfig(a0Host) {
+function initConfig(a0Host) {
     // R19 — a detected Agent Zero host earns a labeled suggestion, never an
     // enabled lane: `verify --a0` is explicit opt-in per run, and completed
     // delegations cap at inconclusive (self-reported evidence).
@@ -63,12 +63,12 @@ export default defineConfig({
 })
 `;
 }
-export const INIT_TEST = `test('home renders', async (td) => {
+const INIT_TEST = `test('home renders', async (td) => {
   const ok = await td.assert('the page rendered without obvious errors')
   if (!ok) throw new Error('home did not render')
 })
 `;
-export const INIT_WORKFLOW = `name: argus-reviewer
+const INIT_WORKFLOW = `name: argus-reviewer
 
 on:
   pull_request:
@@ -126,7 +126,7 @@ jobs:
       # its PR through the same write path — set it in the trusted
       # argus-reviewer.config.ts and flip contents to 'write'.
 `.replace('@@ACTION_PIN@@', ACTION_PIN);
-export const INIT_MENTION_WORKFLOW = `name: argus-mention
+const INIT_MENTION_WORKFLOW = `name: argus-mention
 
 # @argus mention commands on PR comments — '@argus review [full]', '@argus
 # record "<flow>"', '@argus persist', '@argus generate', '@argus fix',
@@ -176,7 +176,7 @@ jobs:
             .argus-reviewer-cache/
           if-no-files-found: ignore
 `.replace('@@ACTION_PIN@@', ACTION_PIN);
-export const CONFIG_PATH = 'argus-reviewer.config.ts';
+const CONFIG_PATH = 'argus-reviewer.config.ts';
 /** The files `init` writes, in write order. */
 export function renderScaffold(opts) {
     const files = [

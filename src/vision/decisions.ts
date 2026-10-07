@@ -1,7 +1,7 @@
 import { debug } from '../debug.js'
 import { classifyHttpStatus, type ErrorCode } from '../ui/errors.js'
 import { makeDecisionsCallCost } from './cost.js'
-import type { CallCost, DecisionsResponse, ProviderValue } from './cost.js'
+import type { CallCost, DecisionsResponse } from './cost.js'
 
 /**
  * Pinned confidence-model slug — the alias `~typesafe/jev-latest` drifts silently and
@@ -33,7 +33,7 @@ export class DecisionError extends Error {
   }
 }
 
-export interface NoulQuestion {
+interface NoulQuestion {
   type: 'noul'
   instructions: string
   /** Optional yes/no clarifications, sent verbatim. */
@@ -41,14 +41,14 @@ export interface NoulQuestion {
   false?: string
 }
 
-export interface ChoiceQuestion {
+interface ChoiceQuestion {
   type: 'choice'
   instructions: string
   /** Option ID -> description. Up to 255 options. */
   criteria: Record<string, string>
 }
 
-export interface ScoreQuestion {
+interface ScoreQuestion {
   type: 'score'
   instructions: string
   /** 2-10 ordered rubric levels, low to high. */
@@ -335,6 +335,3 @@ export class DecisionClient {
     throw lastErr ?? new DecisionError('unexpected', 'decide: failed', false)
   }
 }
-
-// Re-export so callers can type responses without reaching into cost.ts.
-export type { ProviderValue }

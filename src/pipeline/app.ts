@@ -94,7 +94,7 @@ export function buildExpectationCheck(expected: AppExpectation): ExpectationChec
   }
 }
 
-export interface AppTaskInput {
+interface AppTaskInput {
   driver: BrowserDriver
   actions: Actions
   client: VisionClient
@@ -119,7 +119,7 @@ export interface AppTaskInput {
  * the expected-state predicate is re-verified on a fresh observation after
  * the loop stops, so a page that merely loads can never pass.
  */
-export async function runAppTask(input: AppTaskInput): Promise<{
+async function runAppTask(input: AppTaskInput): Promise<{
   result: ExploreResult
   expectedMet: boolean
   verifyError: string | undefined
@@ -159,7 +159,7 @@ export async function runAppTask(input: AppTaskInput): Promise<{
   return { result, expectedMet, verifyError }
 }
 
-export interface AppLaneDeps {
+interface AppLaneDeps {
   /** Browser launch — default Chromium with error-capture taps on. */
   launchDriver?: (config: Config) => Promise<BrowserDriver>
   /** Vision client factory — lazy key resolution stays with the caller. */

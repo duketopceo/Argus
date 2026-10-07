@@ -30,7 +30,7 @@ export interface LinkedFinding {
     message?: string | undefined;
     evidence: Evidence;
 }
-export type ProbeReportOutcome = 'reproduced' | 'clean' | 'load-error' | 'not-collected' | 'error';
+type ProbeReportOutcome = 'reproduced' | 'clean' | 'load-error' | 'not-collected' | 'error';
 export interface ProbeRecord {
     /** Probe filename (basename — it is written beside the exemplar test). */
     file: string;
@@ -115,3 +115,4 @@ export declare function findExemplarTest(index: RepoIndex | undefined, findingFi
  * report surface can render.
  */
 export declare function runProbeLane(findings: LinkedFinding[], o: ProbeLaneOptions): Promise<ProbeLaneResult | undefined>;
+export {};

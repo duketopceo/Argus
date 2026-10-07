@@ -32,7 +32,7 @@ import {
 import type { LaneSelection } from './contracts.js'
 import type { CallCost } from '../vision/cost.js'
 
-export interface VerifyRunners {
+interface VerifyRunners {
   review: () => Promise<number>
   flow?: (url: string) => Promise<number>
   app?: () => Promise<number>
@@ -461,7 +461,7 @@ export async function runVerify(input: VerifyInput): Promise<VerifyResult> {
 }
 
 /** Package version for report footers; dist/ and src/ both sit two levels deep. */
-export function argusVersion(): string {
+function argusVersion(): string {
   try {
     return (createRequire(import.meta.url)('../../package.json') as { version: string }).version
   } catch {

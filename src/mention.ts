@@ -10,7 +10,7 @@ import { labelCoversHead } from './evidence/gate.js'
  * posture `code-review` already uses.
  */
 
-export type MentionName = 'review' | 'record' | 'persist' | 'generate' | 'fix' | 'help'
+type MentionName = 'review' | 'record' | 'persist' | 'generate' | 'fix' | 'help'
 
 export interface MentionCommand {
   name: MentionName

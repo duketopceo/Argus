@@ -80,7 +80,7 @@ export interface CodeReviewInput {
 }
 
 /** The subset of run.json the comment head reads. */
-export type ReportInput = Pick<RunReport, 'ok' | 'durationMs'> & {
+type ReportInput = Pick<RunReport, 'ok' | 'durationMs'> & {
   totals: Pick<RunReport['totals'], 'tests' | 'passed' | 'visionCostUsd'>
   tests: { healEvents?: unknown[] }[]
 }

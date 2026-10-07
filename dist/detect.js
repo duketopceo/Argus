@@ -66,7 +66,7 @@ export const defaultExec = (cmd, args, timeoutMs, env, opts) => new Promise((res
  * `a0` spawn — delegation, the lane's `--version` preflight, and init's
  * environment probe — must use it or the contract leaks.
  */
-export const A0_CHILD_ENV_KEYS = [
+const A0_CHILD_ENV_KEYS = [
     'PATH',
     'HOME',
     'USER',

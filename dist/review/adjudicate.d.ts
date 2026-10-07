@@ -20,7 +20,7 @@ export interface AdjudicableFinding {
     category?: string;
     message: string;
 }
-export interface FindingAdjudicationRecord {
+interface FindingAdjudicationRecord {
     file: string;
     line?: number;
     severity: string;
@@ -61,3 +61,4 @@ export declare function adjudicateFindings<T extends AdjudicableFinding>(opts: {
     client: DecisionClient;
     model?: string;
 }): Promise<FindingAdjudicationResult<T>>;
+export {};

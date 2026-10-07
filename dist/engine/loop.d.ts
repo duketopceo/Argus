@@ -134,4 +134,3 @@ export declare class Engine {
     private _result;
     private _resetCacheStats;
 }
-export declare function instructionMatchesNode(instruction: string, nodeSnippet: string): boolean;

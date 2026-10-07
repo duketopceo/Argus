@@ -20,7 +20,7 @@ import { defaultExec, type ExecFn } from '../detect.js'
 export const SANDBOX_OUTPUT_CAP = 32 * 1024
 
 /** Filesystem path inside the container where the workspace lands. */
-export const CONTAINER_WORKDIR = '/work'
+const CONTAINER_WORKDIR = '/work'
 
 /** Name of the single writable mount — lives under reportDir/probes-out. */
 export const SCRATCH_DIR_NAME = 'probes-out'

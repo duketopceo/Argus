@@ -6,7 +6,7 @@ import type { CheckRun } from './ci.js'
  * demonstrated the defect (KTD4). `linkFindings` never produces it; the probe
  * stage is the only writer and can only move `not_exercised` → `reproduced`.
  */
-export type EvidenceStatus =
+type EvidenceStatus =
   | 'exercised'
   | 'corroborated'
   | 'not_exercised'

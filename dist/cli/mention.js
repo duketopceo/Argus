@@ -10,7 +10,7 @@ import { usageError } from './shared.js';
 import { readFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { parseArgs } from 'node:util';
-export const MENTION_USAGE = `Usage: argus-reviewer mention [--report-dir <dir>]
+const MENTION_USAGE = `Usage: argus-reviewer mention [--report-dir <dir>]
 
 
 Dispatch an @argus command from a GitHub issue_comment event. Reads

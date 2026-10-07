@@ -42,7 +42,7 @@ export interface RuleFailure {
     rule: string;
     error: string;
 }
-export interface RuleOutput {
+interface RuleOutput {
     findings: RuleFinding[];
     records: Omit<RuleRecord, 'rule'>[];
     /** The secrets rule's native result — feeds report.secretsScan. */
@@ -94,3 +94,4 @@ export declare function runRules(diff: string, opts?: {
     /** Test seam — swap the registry. */
     rules?: ReviewRule[];
 } & RuleRunContext): Promise<RulesRunResult>;
+export {};
