@@ -34,7 +34,7 @@ const PROBE_FILENAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]*\.test\.[jt]sx?$/;
 /** Probe files are bounded — a runaway generation is rejected, not truncated. */
 export const PROBE_CONTENT_CAP = 32 * 1024;
 /** Reads of secret-looking env vars are forbidden — defense in depth on the stripped container env. */
-const SECRET_ENV_RE = /process\.env\s*(?:\.|\[)\s*['"]?\w*(KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL)/i;
+const SECRET_ENV_RE = /process\.env\s*(?:\.|\[)\s*['"]?\w*(KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|AUTH)/i;
 /**
  * Import specifiers via the TypeScript scanner (same seam as the index) —
  * a regex misses bare side-effect imports like `import '/abs/x'`. Returns
