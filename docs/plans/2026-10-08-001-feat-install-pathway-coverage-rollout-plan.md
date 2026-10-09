@@ -201,12 +201,12 @@ existing CI step.
 **Requirements:** R5 (deploy half).
 **Files:** `app/worker/wrangler.toml` (`workers_dev = true`); deployment note
 in `docs/self-host-app.md` if the hosted steps differ.
-**Approach:** `wrangler deploy` from `app/worker/`; `wrangler secret put` for
-the three secrets after the App exists (U6 ordering: register App → secrets
-→ deploy). Record the resulting `*.workers.dev` URL. Optionally add
-`dry-run` to U1's job if unauthenticated.
-**Dependencies:** none at plan time — U6 must precede the secret-setting
-step; deploy itself can happen first.
+**Approach:** one sequence across U5+U6: `wrangler deploy` first to obtain
+the `*.workers.dev` URL, then register the App (U6's manifest flow needs the
+URL), then `wrangler secret put` for the three secrets, then install.
+Optionally add `dry-run` to U1's job if unauthenticated.
+**Dependencies:** secrets can't be set until the App exists, but they gate
+nothing in the deploy itself — deploy → register → secrets → install.
 **Test scenarios:** `curl -X POST <url>/webhook` with a bad signature → 401;
 GET/other paths → 404/405; `X-GitHub-Delivery` replay handled.
 **Verification:** webhook endpoint live and fail-closed.
@@ -253,8 +253,8 @@ disclosures from U6.
 **Files (per repo):** `.github/workflows/argus-reviewer.yml` (kurultai,
 Pace-Server), `.github/workflows/argus.yml` (wisp) — `uses:` SHA +
 version comment only.
-**Approach:** One PR per repo: pin `27887be6438ad284566073835939210edc4cdeb8
-# v0.5.0`. Pace-Server's comment explains its pin already; update to match.
+**Approach:** One PR per repo: pin `27887be6438ad284566073835939210edc4cdeb8 # v0.5.0`.
+Pace-Server's comment explains its pin already; update to match.
 Optionally also install the App on these repos (U6) instead of hand-editing —
 but the pin bump is a separate concern from onboarding (they're already
 onboarded); do both.
@@ -287,7 +287,7 @@ candidate has an eval gate or an explicit defer reason.
 |---|---|
 | Worker holds the App private key | Key lives only in `wrangler secret`; never in the repo or logs (`redact.ts`); rotation steps in `docs/self-host-app.md`; custody is the accepted trade-off for hosted install (Q3) |
 | Forged webhook | HMAC-SHA256 constant-time verify, 401 before parsing — already implemented + tested; U5 verifies live fail-closed behavior |
-| Coverage-invariant gamed | Invariant test is inside the glob itself; deleting it also fails the suite's file-count expectations indirectly — and reviewers see the deletion in the diff |
+| Coverage-invariant gamed | Deleting the invariant file removes the check itself — detectable only through review; the residual is reviewers noticing a deleted test in the diff |
 | Consumer pin bumps bypass review | PRs on protected branches; their own CI + reviewer lane runs |
 | `workers.dev` URL enumeration/abuse | Worker only accepts `POST /webhook` with valid signature; unsigned hits get 401 — no open endpoint |
 

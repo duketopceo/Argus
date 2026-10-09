@@ -27,6 +27,9 @@ const check = (name, cond, detail = '') => {
   checks.push({ name, ok: !!cond, detail })
   console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}${detail ? ` (${detail})` : ''}`)
 }
+// textContent() on a missing element waits out the timeout and aborts the
+// whole run; returning '' turns it into a named FAIL for that check.
+const textOrEmpty = async (loc) => ((await loc.count()) ? ((await loc.textContent()) ?? '') : '')
 
 let browser
 let server
@@ -212,6 +215,8 @@ try {
   )
 
   // ---- Heals + Spend views (per-view coverage) ---------------------------
+  // Row contents/order are a fixture contract with dashboard-fixture.mjs
+  // (j-0930 seeded before j-0928, newest first); fixture changes update this.
   await page.click('.tab[data-view="heals"]')
   const healHeads = await page.locator('#heals table th').allTextContents()
   check(
@@ -228,15 +233,17 @@ try {
   )
 
   await page.click('.tab[data-view="spend"]')
-  const figure = await page.locator('#spend .figure').textContent()
+  const figure = await textOrEmpty(page.locator('#spend .figure'))
   check('spend shows a total figure', figure.includes('$'), figure)
   const parts = await page.locator('#spend .ledger-part h3').allTextContents()
   check('spend ledger splits model, lane and day', parts.join(',') === 'By model,By lane,By day', JSON.stringify(parts))
-  const laneCells = await page.locator('#spend .ledger-part').nth(1).locator('tbody tr').allTextContents()
+  const laneLedger = page.locator('#spend .ledger-part').filter({ has: page.locator('h3', { hasText: 'By lane' }) })
+  const laneCells = await laneLedger.locator('tbody tr').allTextContents()
   check('by-lane ledger has all four lanes', laneCells.length === 4, `${laneCells.length} rows`)
-  const modelCells = await page.locator('#spend .ledger-part').first().locator('tbody tr').allTextContents()
+  const modelLedger = page.locator('#spend .ledger-part').filter({ has: page.locator('h3', { hasText: 'By model' }) })
+  const modelCells = await modelLedger.locator('tbody tr').allTextContents()
   check('by-model ledger surfaces unmetered usage', modelCells.some((r) => r.includes('unmetered')), JSON.stringify(modelCells))
-  const tally = await page.locator('#spend .tally').textContent()
+  const tally = await textOrEmpty(page.locator('#spend .tally'))
   check('spend tally states latest run vs budget', tally.includes('latest run spent') && tally.includes('of $1.00'), tally.trim())
   const tallyTicks = await page.locator('#spend .tally .ticks i').count()
   check('tally meter renders its 20-tick strip', tallyTicks === 20, `${tallyTicks}/20`)
@@ -277,7 +284,7 @@ try {
         (await page.locator('#heals img').count()) === 1,
     )
     await page.click('.tab[data-view="spend"]')
-    const spendEmpty = await page.locator('#spend').textContent()
+    const spendEmpty = await textOrEmpty(page.locator('#spend'))
     check(
       'empty spend: sentence plus configured budget line',
       spendEmpty.includes('No spend recorded yet') && spendEmpty.includes('Run budget') && spendEmpty.includes('argus-reviewer.config.ts'),
@@ -288,7 +295,7 @@ try {
   {
     const { context, page } = await openDesk({ state: partialState })
     await page.click('.tab[data-view="heals"]')
-    const partial = await page.locator('#heals').textContent()
+    const partial = await textOrEmpty(page.locator('#heals'))
     check(
       'partial heals: banner names the unreadable journal, rows still render',
       partial.includes('unreadable') && (await page.locator('#heals table tbody tr').count()) === 2,

@@ -49,6 +49,9 @@ is a hypothesis, not evidence.
 - [ ] U4(c) deterministic bundling — measure recall lift on multi-file PRs
 - [ ] Walkthrough paragraph in sticky head — measure against comment-count goals (must not add noise)
 - [ ] `emit path instructions`-style config mining — blocked on U6 feedback data
+- [ ] Confidence floor on blocking severities — dogfood data (2026-10-08): AACR labeled blocking precision 0.86 raw, 1.00 at p>=0.5 keeping 5/6 TPs; `adjudicate.ts` annotates `p` but never gates. Gate: measure precision/recall delta on the corpus at several floors; pick the floor that hits ~1.00 precision without gutting recall, demote below-floor bug/risk to the fold instead of inline + verdict-driving
+- [ ] Clean-PR silence eval — no corpus row currently measures "PR with zero real issues emits zero blocking findings" (dogfood measured ~0.06 blocking precision on a 121-file diff). Gate: AACR incorrect-labeled rows + synthetic clean diffs; target P(blocking | clean) ~= 0, sliced by diff size since that's the confound
+- [ ] Repo-index staleness surfacing — Greptile gap item: index is opt-in and goes stale silently. Gate: none needed for surfacing (warning, not mechanism); adoption criterion is the stale-index warning rendering in the sticky without noise
 
 ## Skips, recorded
 

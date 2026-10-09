@@ -24,7 +24,7 @@ function walk(dir) {
   const out = []
   for (const ent of readdirSync(dir, { withFileTypes: true })) {
     if (ent.isDirectory()) {
-      if (!SKIP_DIRS.has(ent.name) && !ent.name.startsWith('.')) out.push(...walk(join(dir, ent.name)))
+      if (!SKIP_DIRS.has(ent.name)) out.push(...walk(join(dir, ent.name)))
     } else if (ent.name.endsWith('.test.ts')) {
       out.push(join(dir, ent.name))
     }
