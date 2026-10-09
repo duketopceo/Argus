@@ -44,3 +44,19 @@ jobs:
       # The dashboard is a release surface — render it headless against a
       # seeded manifest so a renderer break can't ship green unit tests.
       - run: npm run smoke:dashboard
+
+  # app/worker is a standalone package (own lockfile, excluded from root
+  # lint/tsconfig by design). Its suite imports src/onboarding/ directly, so
+  # main-tree changes can break it — run on every PR, not just app/ diffs.
+  worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/worker/package-lock.json
+      - run: npm --prefix app/worker ci
+      - run: npm --prefix app/worker run typecheck
+      - run: npm --prefix app/worker test
