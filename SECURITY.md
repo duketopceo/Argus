@@ -25,11 +25,12 @@ You should receive an acknowledgement within a few days.
   with a real browser — run it only against targets you are willing to have
   an agent click through.
 
-## GitHub App and Worker boundary (planned)
+## GitHub App and Worker boundary
 
-Argus is bring-your-own-key and runs in your own GitHub Actions. A GitHub App
-and webhook Worker for one-click onboarding are planned and not yet available
-(`docs/onboarding.md`). When they exist, this boundary holds by design:
+Argus is bring-your-own-key and runs in your own GitHub Actions. The GitHub
+App and webhook Worker that power one-click onboarding are built (the Worker
+is deployed; hosted public registration is pending — `docs/onboarding.md`).
+This boundary holds by design:
 
 - The App and its Worker never hold, see, proxy or log a customer
   `OPENROUTER_API_KEY`, and never set repository secrets.

@@ -1,12 +1,12 @@
 # Onboarding
 
-Argus runs in your GitHub Actions with your own OpenRouter key. Onboarding a repository means adding two workflow files, a config and a smoke test, then adding one secret. There are three paths. Only the first exists today.
+Argus runs in your GitHub Actions with your own OpenRouter key. Onboarding a repository means adding two workflow files, a config and a smoke test, then adding one secret. There are three paths.
 
 | Path | Status | What you do |
 |---|---|---|
 | CLI `init --pr` | Available now | Run one command, add one secret, merge the PR |
-| GitHub App | Planned (Phase 2), not yet available | Install the App on selected repos; it opens the same onboarding PR |
-| Self-hosted App | Planned, not yet available | Register and run your own copy of the App |
+| GitHub App (hosted) | Built; pending public registration | Install the App on selected repos; it opens the same onboarding PR |
+| Self-hosted App | Available now | Register and run your own copy of the App — [`self-host-app.md`](self-host-app.md) |
 
 Plain `argus-reviewer init` (writes the files into your working tree) remains the manual path.
 
@@ -36,17 +36,17 @@ The generated workflows use `pull_request` (never `pull_request_target`), `persi
 
 The command never reads, prints or transmits `OPENROUTER_API_KEY`. The PR only names the secret and links to the page where you add it.
 
-## Path 2: GitHub App (planned, not yet available)
+## Path 2: GitHub App (hosted — pending registration)
 
-The plan is a thin onboarding and identity layer: you install the App on selected repositories and it opens the same onboarding PR that `init --pr` does, generated from the same scaffold module so the two cannot drift. This is Phase 2 of the onboarding plan (`docs/plans/2026-10-04-0002-feat-github-app-onboarding-plan.md`). It is not built and there is no App to install today.
+The App is a thin onboarding and identity layer: you install it on selected repositories and it opens the same onboarding PR that `init --pr` does, generated from the same scaffold module so the two cannot drift. This is Phase 2 of the onboarding plan (`docs/plans/2026-10-04-0002-feat-github-app-onboarding-plan.md`). The App and its webhook Worker are built and the Worker is deployed; the public App registration is pending — the install link lands when it is listed. Until then, use Path 1 or self-host (Path 3).
 
-The boundary is fixed in advance and is stated in [`SECURITY.md`](../SECURITY.md): the App and its webhook Worker never hold an OpenRouter key, never check out or run customer code, and never run reviews. Reviews keep running in your Actions with your key. A later, optional phase may add a bot identity and check runs; the fork pull request trust rules would not change.
+Known v1 limits: `repository_selection: all` delivers no repo list (the install is a no-op — pick *selected repositories*); more than ~3–4 fresh repos in one delivery are `deferred` with no retry queue — re-add them or run `init --pr` there.
 
-Until the App exists, use Path 1.
+The boundary is fixed and stated in [`SECURITY.md`](../SECURITY.md): the App and its webhook Worker never hold an OpenRouter key, never check out or run customer code, and never run reviews. Reviews keep running in your Actions with your key. A later, optional phase may add a bot identity and check runs; the fork pull request trust rules would not change.
 
-## Path 3: self-hosted App (planned, not yet available)
+## Path 3: self-hosted App (available now)
 
-For organizations that will not install a third-party App, the plan is a manifest-flow script and deploy guide so you can register the same App under your own account and run the Worker yourself, with your own App key. Not built yet. Use Path 1 in the meantime.
+For organizations that will not install a third-party App: `app/register/manifest.mjs` generates a one-page form that registers the same App under your own account, and `app/worker/` deploys as its webhook Worker on your own Cloudflare account. Full walkthrough: [`self-host-app.md`](self-host-app.md).
 
 ## Secrets checklist
 
