@@ -44,9 +44,7 @@ npx argus-reviewer init          # config, a smoke test, and the PR workflow
 
 `init` checks your environment and tells you what is missing. Add `OPENROUTER_API_KEY` to your shell and to the repository secrets, commit the files, and every pull request gets a review.
 
-A GitHub App that opens the onboarding PR for you on install is planned and not available yet; see [`docs/onboarding.md`](docs/onboarding.md).
-
-To have an App open that PR when you install it on a repository, register and host your own: [`docs/self-host-app.md`](docs/self-host-app.md).
+A GitHub App that opens the onboarding PR on install is live for self-hosting — register your own and it opens the same PR `init --pr` does: [`docs/self-host-app.md`](docs/self-host-app.md). A hosted public App is pending registration; see [`docs/onboarding.md`](docs/onboarding.md).
 
 Record a browser flow once, then replay it on every run:
 

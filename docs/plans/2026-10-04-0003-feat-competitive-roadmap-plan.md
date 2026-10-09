@@ -857,6 +857,16 @@ real source line; the sandbox-scope claim matches
   `notifications/progress` is a follow-up if agent UX demands it.
 - **Desk heal accept/reject** — if desk triage ever ships as writable,
   it needs an agent equivalent or it becomes parity debt.
+- **Confidence floor on blocking severities** — post-v0.5.0 eval data
+  (AACR labeled rows): blocking precision 0.86 raw, 1.00 at p>=0.5
+  keeping 5/6 true positives. `adjudicate.ts` annotates `p` but never
+  gates. Deferred pending a floor sweep on the corpus (the variance
+  rider applies — one run's delta is a hypothesis). Candidate queue:
+  `docs/competitive-review.md`.
+- **Clean-PR silence eval** — no corpus row measures "zero real issues
+  -> zero blocking findings"; dogfood on a 121-file diff measured ~0.06
+  blocking precision. Needs AACR incorrect-labeled rows or synthetic
+  clean diffs sliced by diff size before any gate is tuned.
 
 ## Open Questions
 

@@ -44,7 +44,10 @@ runs on Node 22 and 24. `consumer-smoke.yml` additionally runs on PRs touching
 - **Tests are `tests/**/*.test.ts` only** (`vitest.config.ts`), with
   `tests/setup-env.ts` as the setup file and a 60s timeout. Unit tests need
   no browser; driver/e2e tests need Playwright chromium. A test placed
-  outside `tests/` silently does not run.
+  outside `tests/` silently does not run — except allowlisted td-DSL targets
+  (`e2e/`, `evals/`, `examples/`, demo `fixtures/`), which are dogfood files
+  for `argus run`, not vitest. `tests/unit/test-coverage-glob.test.ts`
+  enforces the boundary; `app/worker/test/` runs in the `worker` CI job.
 - **The review workflow runs on a self-hosted runner**, not a GitHub-hosted
   label. `argus-reviewer.yml` targets `self-hosted, linux, x64, argus-reviewer`
   via `runner/register-runner.sh`. If no such runner is registered, that

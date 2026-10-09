@@ -2,10 +2,10 @@ name = "argus-app-worker"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
 
-# No public URL until you add a route (or set workers_dev = true).
-# See docs/self-host-app.md. Example, on a zone in your own account:
+# workers.dev for the hosted onboarding App; a custom route on your own zone
+# is the self-host path — see docs/self-host-app.md. Example:
 #   routes = [{ pattern = "argus.example.com/webhook", zone_name = "example.com" }]
-workers_dev = false
+workers_dev = true
 preview_urls = false
 
 [observability]

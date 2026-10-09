@@ -9,23 +9,13 @@ mode: pipeline (non-interactive)
 
 # feat: GitHub App onboarding for Argus
 
-## Status as of 2026-10-04 (evening)
+## Status as of 2026-10-09
 
-Verified against `gh pr list -R duketopceo/Argus` and `git ls-tree origin/main` (main at `b9c19a4`). The plan itself is on main (#115). v0.4.0 is released and v0.4.1 (scaffold pin correctness, #129 and #130) is on main. The v0.4.0 tag move (`c91fbd5` to `1f6bdc3`) awaits the user. The GitHub App install docs and opt-in approval wiring in the `init` scaffold (#116) are a separate, smaller path from this plan.
+Verified against `gh pr list -R duketopceo/Argus` (main at `4ba6ea8`, v0.5.0 released). All of U1–U7 shipped: `src/onboarding/` scaffold + `init --pr`, `app/worker/` (signature verify, replay guard, App auth, onboarding PR on install, manifest self-registration), and the worker suite runs in CI (#177). The worker is deployed at `argus-app-worker.duketopceo.workers.dev`; App registration + live install test remain in `docs/plans/2026-10-08-001-feat-install-pathway-coverage-rollout-plan.md` U5/U6.
 
-**Done on main:** none of U1 to U9 (no `src/onboarding/` or `app/worker/` on main; U1 to U5 exist only on open PR branches).
+**Done on main:** U1, U2, U3, U4, U5, U6, U7.
 
-**In review (all open):** U1 + U2 in #125 (base #124 branch); U3 in #126 (base #125 branch); U4 + U5 in #131 (base main, not a draft, changes requested). The repo requires 1 review to merge.
-
-**Todo:** U6 (needs #125's scaffold module on main first), U7, and optional U8, U9.
-
-**Reviewer work outside this plan's units (open):** #121 chunked review and batch mode (base main) -> #124 bake-off defaults (base #121) -> #125 -> #126 -> #127 $1 default budget cap (base #126 branch); #123 bake-off evals (base main, independent). Stack: #121 -> #124 -> #125 -> #126 -> #127.
-
-**Merged since the morning status:** #122 (OCR static-lane plan, docs only), #128 (previous plan status), #129 and #130 (v0.4.1).
-
-**Blocked on the user:** the pipeline-mode open questions below (notably the Q5 gate for any hosted key) before Phase 3; the v0.4.0 tag move. No Phase 1 blocker beyond review.
-
-**Recommended merge order:** #123, then #121, #124, #125, #126 in that order (retarget each to main after its parent merges), with #131 after #125 lands if U6 builds on it. Cut a release after #126 so the onboarding path is installable, then measure demand before starting U6.
+**Deferred (optional Phase 3):** U8 (OIDC token broker) and U9 (check-run identity) — still gated on the Q5 key-custody question and real demand.
 
 ## Verdict
 
