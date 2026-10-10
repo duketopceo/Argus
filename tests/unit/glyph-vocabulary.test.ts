@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { LANE_STATUSES } from '../../src/report/manifest.js'
+import { LANE_STATUSES } from '../../src/reporter/manifest.js'
 import {
   LANE_STATUS_LABEL,
   PROOF_LEVELS,
@@ -13,7 +13,7 @@ import {
   VERDICT_STATUS,
   VERDICTS,
   verdictGlyph,
-} from '../../src/report/viewmodel.js'
+} from '../../src/reporter/viewmodel.js'
 
 describe('Ocellus status vocabulary (DESIGN.md section 6.7)', () => {
   it('maps every LaneStatus to exactly one text glyph and one lowercase word', () => {

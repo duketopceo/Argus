@@ -12,7 +12,7 @@ import {
 import type { VisionClient } from '../engine/loop.js'
 import type { ErrorRecord } from '../journal/schema.js'
 import type { Logger } from '../log.js'
-import type { LaneStatus } from '../report/manifest.js'
+import type { LaneStatus } from '../reporter/manifest.js'
 import type { CallCost } from '../vision/cost.js'
 import { Ledger } from '../vision/ledger.js'
 

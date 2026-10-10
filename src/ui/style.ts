@@ -1,5 +1,5 @@
-import type { LaneStatus } from '../report/manifest.js'
-import { STATUS_GLYPH } from '../report/viewmodel.js'
+import type { LaneStatus } from '../reporter/manifest.js'
+import { STATUS_GLYPH } from '../reporter/viewmodel.js'
 
 /**
  * TTY-aware terminal styler (plan KTD5, DESIGN.md 7.7). No dependency: SGR

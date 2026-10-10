@@ -17,7 +17,7 @@ import {
   readMasters,
   readThemeColors,
 } from '../../scripts/build-brand.mjs'
-import { LANE_IDS, LANE_STATUSES } from '../../src/report/manifest.js'
+import { LANE_IDS, LANE_STATUSES } from '../../src/reporter/manifest.js'
 import {
   PROOF_LEVELS,
   proofMeter,
@@ -26,7 +26,7 @@ import {
   STATUS_GLYPH,
   VERDICTS,
   verdictGlyph,
-} from '../../src/report/viewmodel.js'
+} from '../../src/reporter/viewmodel.js'
 
 const ROOT = join(import.meta.dirname, '..', '..')
 

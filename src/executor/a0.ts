@@ -6,7 +6,7 @@ import {
   type ExecFn,
   type ProbeFn,
 } from '../detect.js'
-import type { LaneStatus } from '../report/manifest.js'
+import type { LaneStatus } from '../reporter/manifest.js'
 
 // The allowlist lives in detect.ts beside the exec seam — re-exported here
 // so `executor/a0` stays the single import site for delegation internals.

@@ -10,9 +10,9 @@ import {
   renderMissingKeyComment,
   SENTINEL,
   type CommentInput,
-} from '../../src/report/comment.js'
-import type { RunManifest } from '../../src/report/manifest.js'
-import * as vocab from '../../src/report/viewmodel.js'
+} from '../../src/reporter/comment.js'
+import type { RunManifest } from '../../src/reporter/manifest.js'
+import * as vocab from '../../src/reporter/viewmodel.js'
 import { renderReviewComments, type ReviewFinding } from '../../src/cli.js'
 
 /**

@@ -1,4 +1,4 @@
-import { SEVERITIES, SEVERITY_LABEL } from '../report/viewmodel.js'
+import { SEVERITIES, SEVERITY_LABEL } from '../reporter/viewmodel.js'
 
 /**
  * Inline review comment identity (plan KTD4, U6).

@@ -1,5 +1,5 @@
 import type { CallCost } from '../vision/cost.js'
-import type { BudgetSummary, LaneId } from '../report/manifest.js'
+import type { BudgetSummary, LaneId } from '../reporter/manifest.js'
 
 export interface BudgetOptions {
   limitUsd?: number

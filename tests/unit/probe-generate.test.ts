@@ -7,7 +7,7 @@ import { resolveConfig } from '../../src/config.js'
 import type { ExecFn, ExecResult } from '../../src/detect.js'
 import type { PrMeta } from '../../src/evidence/ci.js'
 import type { VisionClient } from '../../src/engine/loop.js'
-import type { RepoIndex } from '../../src/index/scan.js'
+import type { RepoIndex } from '../../src/repoindex/scan.js'
 import {
   buildGenerateMessages,
   isDocsOnlyDiff,

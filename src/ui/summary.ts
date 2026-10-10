@@ -1,5 +1,5 @@
-import { LANE_IDS, type LaneId, type LaneStatus, type RunManifest } from '../report/manifest.js'
-import { formatDuration, formatUsd, LANE_STATUS_LABEL, maskSecrets, shortSha } from '../report/viewmodel.js'
+import { LANE_IDS, type LaneId, type LaneStatus, type RunManifest } from '../reporter/manifest.js'
+import { formatDuration, formatUsd, LANE_STATUS_LABEL, maskSecrets, shortSha } from '../reporter/viewmodel.js'
 import type { Styler } from './style.js'
 
 /**

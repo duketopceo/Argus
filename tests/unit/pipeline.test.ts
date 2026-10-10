@@ -16,8 +16,8 @@ import {
   selectionFromFlags,
 } from '../../src/pipeline/contracts.js'
 import { runVerify } from '../../src/pipeline/verify.js'
-import { buildRunReport } from '../../src/report/run.js'
-import type { TestReport } from '../../src/report/run.js'
+import { buildRunReport } from '../../src/reporter/run.js'
+import type { TestReport } from '../../src/reporter/run.js'
 import type { CallCost } from '../../src/vision/cost.js'
 
 function call(costUsd: number, model = 'test/model'): CallCost {

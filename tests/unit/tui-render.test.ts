@@ -11,7 +11,7 @@ import {
 } from '../../scripts/tui/render.mjs'
 import { reduceKey } from '../../scripts/tui/keys.mjs'
 import { colorEnabled, createStyler } from '../../src/ui/style.js'
-import { manifestToRunView, STATUS_GLYPH } from '../../src/report/viewmodel.js'
+import { manifestToRunView, STATUS_GLYPH } from '../../src/reporter/viewmodel.js'
 import { fixtureManifest } from '../fixtures/manifest.js'
 
 const NOW = Date.parse('2026-10-03T12:00:00.000Z')

@@ -1,4 +1,4 @@
-import { TestReport } from '../report/run.js'
+import { TestReport } from '../reporter/run.js'
 
 import { ErrorRecord, JOURNAL_SCHEMA_VERSION, JournalEntry } from './schema.js'
 

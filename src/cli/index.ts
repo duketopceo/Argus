@@ -1,4 +1,4 @@
-import { scanRepo, writeIndex } from '../index/scan.js'
+import { scanRepo, writeIndex } from '../repoindex/scan.js'
 import { type Ctx, resolveCheckoutTrust, loadCliConfig } from './shared.js'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'

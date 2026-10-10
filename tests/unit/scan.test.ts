@@ -6,7 +6,7 @@ import { join } from 'node:path'
 
 import { main } from '../../src/cli.js'
 import type { CliDeps } from '../../src/cli.js'
-import type { ScanReport } from '../../src/report/scan.js'
+import type { ScanReport } from '../../src/reporter/scan.js'
 import type { VisionClient } from '../../src/engine/loop.js'
 import type { CallCost, CallKind } from '../../src/vision/cost.js'
 import type { JsonSchema, Message } from '../../src/vision/openrouter.js'

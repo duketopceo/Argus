@@ -4,8 +4,8 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { buildPatchChunks } from '../../src/cli.js'
-import { buildReviewContext, loadReviewContext } from '../../src/index/context.js'
-import { INDEX_SCHEMA_VERSION, type RepoIndex } from '../../src/index/scan.js'
+import { buildReviewContext, loadReviewContext } from '../../src/repoindex/context.js'
+import { INDEX_SCHEMA_VERSION, type RepoIndex } from '../../src/repoindex/scan.js'
 
 function makeIndex(entries: RepoIndex['entries']): RepoIndex {
   return {

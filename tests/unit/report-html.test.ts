@@ -8,9 +8,9 @@ import { describe, expect, it } from 'vitest'
 import * as sticky from '../../action/sticky-comment.cjs'
 // @ts-expect-error plain-node build script, no type declarations
 import { buildBrand, buildReportAssets } from '../../scripts/build-brand.mjs'
-import { renderManifestComment } from '../../src/report/comment.js'
-import { renderReportHtml, REPORT_HTML, type ReportHtmlInput } from '../../src/report/html.js'
-import type { RunManifest } from '../../src/report/manifest.js'
+import { renderManifestComment } from '../../src/reporter/comment.js'
+import { renderReportHtml, REPORT_HTML, type ReportHtmlInput } from '../../src/reporter/html.js'
+import type { RunManifest } from '../../src/reporter/manifest.js'
 import { writeEvidenceReport } from '../../src/pipeline/verify.js'
 import { fixtureManifest } from '../fixtures/manifest.js'
 

@@ -13,7 +13,7 @@ import {
   classifyHeadBinding,
   isHeadBindingConclusive,
   readCheckoutSha,
-} from '../../src/report/manifest.js'
+} from '../../src/reporter/manifest.js'
 
 describe('head binding', () => {
   it('reads a checkout SHA through the injected git runner', async () => {

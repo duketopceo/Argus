@@ -10,7 +10,7 @@ import {
   summarizeTestRuns,
   testReachableFiles,
 } from '../../src/evidence/link.js'
-import type { RepoIndex } from '../../src/index/scan.js'
+import type { RepoIndex } from '../../src/repoindex/scan.js'
 
 function idx(entries: [string, string[]][]): RepoIndex {
   return {

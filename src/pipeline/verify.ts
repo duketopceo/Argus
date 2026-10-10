@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { join, relative } from 'node:path'
 
 import { writeAtomicText } from '../fsutil.js'
-import { renderReportHtml, REPORT_HTML } from '../report/html.js'
+import { renderReportHtml, REPORT_HTML } from '../reporter/html.js'
 
 import {
   aggregateLanes,
@@ -22,7 +22,7 @@ import {
   type LaneStatus,
   type RunIdentity,
   type RunManifest,
-} from '../report/manifest.js'
+} from '../reporter/manifest.js'
 import {
   addProviderCalls,
   createBudget,

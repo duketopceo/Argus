@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { readIndex, scanRepo, writeIndex } from '../../src/index/scan.js'
+import { readIndex, scanRepo, writeIndex } from '../../src/repoindex/scan.js'
 
 async function fixtureRepo(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'argus-index-'))

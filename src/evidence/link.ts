@@ -1,4 +1,4 @@
-import type { RepoIndex } from '../index/scan.js'
+import type { RepoIndex } from '../repoindex/scan.js'
 import type { CheckRun } from './ci.js'
 
 /**

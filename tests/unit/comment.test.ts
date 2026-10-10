@@ -6,8 +6,8 @@ import {
   renderManifestComment,
   renderMissingKeyComment,
   SENTINEL,
-} from '../../src/report/comment.js'
-import { RunReport } from '../../src/report/run.js'
+} from '../../src/reporter/comment.js'
+import { RunReport } from '../../src/reporter/run.js'
 import { fixtureManifest } from '../fixtures/manifest.js'
 
 const meta = { version: '0.4.0', runUrl: 'https://github.com/run/1' }

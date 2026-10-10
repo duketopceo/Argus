@@ -1,4 +1,4 @@
-import { maskSecrets, STATUS_GLYPH } from '../report/viewmodel.js'
+import { maskSecrets, STATUS_GLYPH } from '../reporter/viewmodel.js'
 import type { Styler } from './style.js'
 
 /**

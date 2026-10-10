@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { dependentCone, invalidateForDiff } from '../../src/index/invalidate.js'
-import { INDEX_SCHEMA_VERSION, RepoIndex } from '../../src/index/scan.js'
+import { dependentCone, invalidateForDiff } from '../../src/repoindex/invalidate.js'
+import { INDEX_SCHEMA_VERSION, RepoIndex } from '../../src/repoindex/scan.js'
 
 function indexOf(entries: Array<[string, string[]]>): RepoIndex {
   // [path, importedBy]

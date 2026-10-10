@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { renderJunitXml, writeJunitXml } from '../../src/report/junit.js'
+import { renderJunitXml, writeJunitXml } from '../../src/reporter/junit.js'
 
 describe('renderJunitXml', () => {
   it('renders one testcase per case with pass/fail counts', () => {

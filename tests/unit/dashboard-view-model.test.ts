@@ -10,8 +10,8 @@ import {
   maskSecrets,
   shortSha,
   STATUS_GLYPH,
-} from '../../src/report/viewmodel.js'
-import { emptyLane, LANE_STATUSES } from '../../src/report/manifest.js'
+} from '../../src/reporter/viewmodel.js'
+import { emptyLane, LANE_STATUSES } from '../../src/reporter/manifest.js'
 import { fixtureLane, fixtureManifest } from '../fixtures/manifest.js'
 
 describe('manifestToRunView', () => {

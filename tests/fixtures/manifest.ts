@@ -1,5 +1,5 @@
-import type { LaneId, LaneManifest, RunManifest } from '../../src/report/manifest.js'
-import { emptyLane, MANIFEST_SCHEMA_VERSION } from '../../src/report/manifest.js'
+import type { LaneId, LaneManifest, RunManifest } from '../../src/reporter/manifest.js'
+import { emptyLane, MANIFEST_SCHEMA_VERSION } from '../../src/reporter/manifest.js'
 
 /**
  * Shared manifest fixture — the parity contract tests render the same

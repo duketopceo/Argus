@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { main } from '../../src/cli.js'
-import { STATUS_GLYPH } from '../../src/report/viewmodel.js'
+import { STATUS_GLYPH } from '../../src/reporter/viewmodel.js'
 import { CliError, ERROR_CODES, classifyHttpStatus } from '../../src/ui/errors.js'
 import { DecisionClient } from '../../src/vision/decisions.js'
 import { OpenRouterClient } from '../../src/vision/openrouter.js'

@@ -44,7 +44,7 @@ import {
   parseInlineBody,
 } from '../../src/review/inline.js'
 
-import { renderManifestComment } from '../../src/report/comment.js'
+import { renderManifestComment } from '../../src/reporter/comment.js'
 import { fixtureLane, fixtureManifest } from '../fixtures/manifest.js'
 
 const execFileAsync = promisify(execFile)
