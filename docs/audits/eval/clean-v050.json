@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "tag": "clean-v050",
+  "cli": "3ed703e-dirty",
+  "entries": 3,
+  "results": [
+    {
+      "name": "clean-170-setup-node-bump",
+      "note": "dependabot actions/setup-node 6->7, +4/-4 in 4 workflow files — nothing to find",
+      "ms": 19283,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "approve",
+        "findings": 1,
+        "ruleFindings": 0,
+        "comments": 0,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "nit": 1
+        },
+        "byPathType": {
+          "src": 1
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 1,
+        "clean": true,
+        "blockingFindings": 0,
+        "flooredBlockers": 0,
+        "blockingVerdict": false
+      },
+      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/clean-170-setup-node-bump-1e23780f-clean-v050.json"
+    },
+    {
+      "name": "clean-176-action-pin",
+      "note": "action pin -> v0.5.0, +19/-16 in 9 docs/onboarding files — nothing to find",
+      "ms": 14495,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "pass",
+        "findings": 0,
+        "ruleFindings": 0,
+        "comments": 0,
+        "commentsOverflow": 0,
+        "bySeverity": {},
+        "byPathType": {},
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0,
+        "clean": true,
+        "blockingFindings": 0,
+        "flooredBlockers": 0,
+        "blockingVerdict": false
+      },
+      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/clean-176-action-pin-9a47589b-clean-v050.json"
+    },
+    {
+      "name": "clean-175-release-prep",
+      "note": "v0.5.0 release prep, +61/-3 in 3 files (CHANGELOG/version) — docs clean",
+      "ms": 120424,
+      "exitCode": 1,
+      "stalled": true,
+      "metrics": {
+        "ok": false,
+        "skipped": true,
+        "findings": 0,
+        "ruleFindings": 0,
+        "comments": 0,
+        "commentsOverflow": 0,
+        "bySeverity": {},
+        "byPathType": {},
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0,
+        "clean": true,
+        "blockingFindings": 0,
+        "flooredBlockers": 0,
+        "blockingVerdict": false
+      }
+    }
+  ],
+  "at": "2026-10-10T22:09:06.181Z"
+}
