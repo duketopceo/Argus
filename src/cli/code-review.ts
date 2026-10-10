@@ -893,11 +893,6 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
     // validation/capping above; rules findings keep their own audit and
     // severity ceiling (the runner cannot claim `bug` without
     // adjudicated confidence).
-    const flooredBlockers = finalFindings.filter(
-      (f) =>
-        blockSeverities.includes(f.severity) &&
-        !isEffectiveBlocker(f, blockSeverities, config.review.confidenceFloor),
-    ).length
     let verdict: 'pass' | 'needs_changes' | 'approve'
     let summary: string
     if (finalFindings.length === 0) {
@@ -915,9 +910,6 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
     } else {
       summary = `${finalFindings.length} low-severity finding(s)`
       verdict = 'approve'
-    }
-    if (flooredBlockers > 0) {
-      summary += ` (${flooredBlockers} blocking-severity finding(s) below the confidence floor; posted, not gating)`
     }
     if (modelVerdict === verdict && modelSummary !== undefined) summary = modelSummary
     // A budget stop leaves the tail of the plan unreviewed; the scope and
@@ -1115,6 +1107,17 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
     if (hasBlocker && verdict !== 'needs_changes') {
       verdict = 'needs_changes'
       summary = `Proven or high-confidence blocker(s) found. ${summary}`
+    }
+    // computed post-probe on linkedFindings — a probe can promote a
+    // below-floor finding to gating, so a pre-link count would leave the
+    // "posted, not gating" suffix contradicting the verdict.
+    const flooredBlockers = linkedFindings.filter(
+      (f) =>
+        blockSeverities.includes(f.severity) &&
+        !isEffectiveBlocker(f, blockSeverities, config.review.confidenceFloor),
+    ).length
+    if (flooredBlockers > 0) {
+      summary += ` (${flooredBlockers} blocking-severity finding(s) below the confidence floor; posted, not gating)`
     }
     // E1.U3 — reproduced probes carry serialized source; embed the
     // machine-readable payload so a later `issue_comment` run can persist
