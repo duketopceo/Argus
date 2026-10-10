@@ -384,9 +384,9 @@ describe('action input contract', () => {
       .find((line) => line.startsWith('cli-json='))
     const cli = JSON.parse(cliLine!.slice('cli-json='.length)) as string[]
     expect(cli[0]).toBe(process.execPath)
-    expect(cli[1]).toMatch(
-      /argus-reviewer-action-pinned-[^/]+\/node_modules\/argus-reviewer-e2e\/dist\/cli\.js$/,
-    )
+    // pinned-checkout path: the action runs the committed dist/ in place,
+    // after `npm ci --omit=dev --ignore-scripts` when node_modules is absent
+    expect(cli[1]).toMatch(/Argus\/dist\/cli\.js$/)
   })
 
   it('rejects a config path that escapes the working directory', async () => {

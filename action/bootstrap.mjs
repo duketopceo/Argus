@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { existsSync } from 'node:fs'
 import { copyFile, mkdtemp } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
@@ -57,24 +58,23 @@ if (override !== '') {
 } else {
   const version = process.env.ARGUS_ARGUS_VERSION?.trim() ?? ''
   if (version === '') {
-    const runtime = await mkdtemp(join(tmpdir(), 'argus-reviewer-action-pinned-'))
-    const result = spawnSync(
-      'npm',
-      [
-        'install',
-        '--prefix',
-        runtime,
-        '--ignore-scripts',
-        '--no-audit',
-        '--no-fund',
-        '--no-package-lock',
-        '--no-save',
-        resolve(actionDir, '..'),
-      ],
-      { stdio: 'inherit', shell: false },
-    )
-    if (result.status !== 0) throw new Error('could not install the CLI from the pinned action ref')
-    cli = [process.execPath, join(runtime, 'node_modules', 'argus-reviewer-e2e', 'dist', 'cli.js')]
+    // The action checkout already carries a committed dist/ — it only needs
+    // production deps. `npm install <folder>` is wrong here: npm packs the
+    // folder and runs its `prepare` (tsc) without devDependencies installed,
+    // which dies on @types/node. `npm ci --omit=dev --ignore-scripts` in the
+    // checkout installs the locked prod graph with every lifecycle script
+    // off. Skipped entirely when node_modules already exists (dev checkouts,
+    // test runs) so bootstrap never clobbers a working install.
+    const repoRoot = resolve(actionDir, '..')
+    if (!existsSync(join(repoRoot, 'node_modules'))) {
+      const result = spawnSync(
+        'npm',
+        ['ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'],
+        { stdio: 'inherit', shell: false, cwd: repoRoot },
+      )
+      if (result.status !== 0) throw new Error('could not install CLI deps from the pinned action ref')
+    }
+    cli = [process.execPath, join(repoRoot, 'dist', 'cli.js')]
   } else {
     validateVersion(version)
     const runtime = await mkdtemp(join(tmpdir(), `argus-reviewer-action-${version}-`))
