@@ -25,7 +25,7 @@ import { CallCost } from '../vision/cost.js'
 import { DecisionClient } from '../vision/decisions.js'
 import { Ledger } from '../vision/ledger.js'
 import { BatchItemResult } from '../vision/openrouter.js'
-import { type PrFile, type CodeReviewReport, loadFixture, loadLocalDiff, resolveIncrementalBaseline, fetchPrFiles, diffLineRanges, diffLineTexts, type DroppedFinding, type ReviewFinding, type ReviewBatch, buildCodeReviewMessages, CODE_REVIEW_SCHEMA, parseCodeReview, filterToDiffLines, filterRevertNits, buildSynthesisMessages, carryForwardSuggestions, type ReviewScope, computeReviewEvent, renderReviewComments } from './review-shared.js'
+import { type PrFile, type CodeReviewReport, loadFixture, loadLocalDiff, resolveIncrementalBaseline, fetchPrFiles, diffLineRanges, diffLineTexts, type DroppedFinding, type ReviewFinding, type ReviewBatch, buildCodeReviewMessages, CODE_REVIEW_SCHEMA, parseCodeReview, filterToDiffLines, filterRevertNits, buildSynthesisMessages, carryForwardSuggestions, type ReviewScope, computeReviewEvent, isEffectiveBlocker, renderReviewComments } from './review-shared.js'
 import { type Ctx, type CliDeps, CODE_REVIEW_USAGE, parseOpenRouterTrace, resolveCheckoutTrust, loadCliConfig, usageError, runNonceFrom, createClient, reportError } from './shared.js'
 import { mkdir } from 'node:fs/promises'
 import { resolve, join, basename } from 'node:path'
@@ -893,6 +893,11 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
     // validation/capping above; rules findings keep their own audit and
     // severity ceiling (the runner cannot claim `bug` without
     // adjudicated confidence).
+    const flooredBlockers = finalFindings.filter(
+      (f) =>
+        blockSeverities.includes(f.severity) &&
+        !isEffectiveBlocker(f, blockSeverities, config.review.confidenceFloor),
+    ).length
     let verdict: 'pass' | 'needs_changes' | 'approve'
     let summary: string
     if (finalFindings.length === 0) {
@@ -902,12 +907,17 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
           ? `No issues found – ${dropped} model finding(s) dropped as off-diff or self-reverting`
           : 'No issues found'
       verdict = 'pass'
-    } else if (finalFindings.some((f) => blockSeverities.includes(f.severity))) {
+    } else if (
+      finalFindings.some((f) => isEffectiveBlocker(f, blockSeverities, config.review.confidenceFloor))
+    ) {
       summary = `${finalFindings.length} finding(s) include a blocking severity`
       verdict = 'needs_changes'
     } else {
       summary = `${finalFindings.length} low-severity finding(s)`
       verdict = 'approve'
+    }
+    if (flooredBlockers > 0) {
+      summary += ` (${flooredBlockers} blocking-severity finding(s) below the confidence floor; posted, not gating)`
     }
     if (modelVerdict === verdict && modelSummary !== undefined) summary = modelSummary
     // A budget stop leaves the tail of the plan unreviewed; the scope and
@@ -1085,12 +1095,27 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
     // linkedFindings (post-probe `evidence`, adjudicated/carried `p`), and
     // serialized: posters read `reviewEvent` and POST `reviewComments`
     // verbatim rather than re-deriving render or gate policy.
-    const gate = computeReviewEvent(linkedFindings, blockSeverities, config.review.requestChanges)
+    const gate = computeReviewEvent(
+      linkedFindings,
+      blockSeverities,
+      config.review.requestChanges,
+      config.review.confidenceFloor,
+    )
     const rendered = renderReviewComments(linkedFindings, maxComments, {
       nitsInline,
     })
 
-    const hasBlocker = finalFindings.some((f) => blockSeverities.includes(f.severity))
+    // linkedFindings carry post-probe `evidence` — a probe can reproduce a
+    // below-floor blocker, so the commit-status gate is computed here (not
+    // on pre-link finalFindings). If probes turned a floored finding into a
+    // reproduced one, the verdict derived above must agree.
+    const hasBlocker = linkedFindings.some((f) =>
+      isEffectiveBlocker(f, blockSeverities, config.review.confidenceFloor),
+    )
+    if (hasBlocker && verdict !== 'needs_changes') {
+      verdict = 'needs_changes'
+      summary = `Proven or high-confidence blocker(s) found. ${summary}`
+    }
     // E1.U3 — reproduced probes carry serialized source; embed the
     // machine-readable payload so a later `issue_comment` run can persist
     // them without a head checkout. Keyed to the reviewed head sha.

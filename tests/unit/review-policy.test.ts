@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   carryForwardSuggestions,
   computeReviewEvent,
+  isEffectiveBlocker,
   P_TRUE_POSITIVE_THRESHOLD,
   parseCodeReview,
   renderReviewComments,
@@ -35,6 +36,15 @@ describe('review policy config', () => {
 
   it('maxComments 0 is valid — inline posting disabled', () => {
     expect(resolveConfig({ review: { maxComments: 0 } }).review.maxComments).toBe(0)
+  })
+
+  it('confidenceFloor defaults to the TP threshold; clamps out-of-range', () => {
+    expect(resolveConfig({}).review.confidenceFloor).toBe(0.7)
+    expect(resolveConfig({ review: { confidenceFloor: 0.5 } }).review.confidenceFloor).toBe(0.5)
+    expect(resolveConfig({ review: { confidenceFloor: 0 } }).review.confidenceFloor).toBe(0)
+    for (const bad of [1.5, -0.1, NaN]) {
+      expect(resolveConfig({ review: { confidenceFloor: bad } }).review.confidenceFloor).toBe(0.7)
+    }
   })
 
   it('clamps out-of-range secretsThreshold to default', () => {
@@ -482,6 +492,56 @@ describe('computeReviewEvent', () => {
       provenBlockers: 0,
       highConfidenceBlockers: 0,
     })
+  })
+
+  it('floor param overrides the default threshold', () => {
+    const r = computeReviewEvent([finding({ p: 0.6 })], block, true, 0.5)
+    expect(r.reviewEvent).toBe('request_changes')
+    expect(r.highConfidenceBlockers).toBe(1)
+    const r2 = computeReviewEvent([finding({ p: 0.6 })], block, true, 0.8)
+    expect(r2.reviewEvent).toBe('comment')
+    expect(r2.highConfidenceBlockers).toBe(0)
+  })
+})
+
+describe('isEffectiveBlocker', () => {
+  const block = ['bug']
+  const finding = (over: Partial<ReviewFinding> = {}): ReviewFinding => ({
+    file: 'a.ts',
+    line: 1,
+    severity: 'bug',
+    message: 'L1: bug: boom',
+    ...over,
+  })
+
+  it('blocking severity with no p gates — degrade closed', () => {
+    expect(isEffectiveBlocker(finding(), block)).toBe(true)
+  })
+
+  it('adjudicated below the floor stops gating but keeps its severity', () => {
+    expect(isEffectiveBlocker(finding({ p: 0.4 }), block)).toBe(false)
+    expect(isEffectiveBlocker(finding({ p: 0.4 }), block, 0.3)).toBe(true)
+  })
+
+  it('p exactly at the floor still gates', () => {
+    expect(isEffectiveBlocker(finding({ p: P_TRUE_POSITIVE_THRESHOLD }), block)).toBe(true)
+  })
+
+  it('reproduced evidence gates regardless of p', () => {
+    expect(
+      isEffectiveBlocker(
+        finding({ p: 0.1, evidence: { status: 'reproduced', detail: 'probe failed' } }),
+        block,
+      ),
+    ).toBe(true)
+  })
+
+  it('non-blocking severity never gates even at p=1', () => {
+    expect(isEffectiveBlocker(finding({ severity: 'nit', p: 1 }), block)).toBe(false)
+  })
+
+  it('floor 0 disables the floor — adjudicated findings behave like unadjudicated', () => {
+    expect(isEffectiveBlocker(finding({ p: 0.01 }), block, 0)).toBe(true)
   })
 })
 
