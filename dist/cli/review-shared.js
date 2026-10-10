@@ -562,6 +562,22 @@ export function filterToDiffLines(findings, rangesByFile, blockSeverities = []) 
  */
 export const P_TRUE_POSITIVE_THRESHOLD = 0.7;
 /**
+ * The verdict/commit-status gate's per-finding view of "blocking": a
+ * blocking-severity finding gates unless the confidence model scored it
+ * below `floor`. Reproduced evidence always gates (the probe proved it),
+ * and unadjudicated findings (rules lane, adjudication outage, overflow)
+ * keep their severity — the status check degrades closed where
+ * computeReviewEvent degrades open. Findings below the floor still post;
+ * they just stop driving the verdict.
+ */
+export function isEffectiveBlocker(f, blockSeverities, floor = P_TRUE_POSITIVE_THRESHOLD) {
+    if (!blockSeverities.includes(f.severity))
+        return false;
+    if (f.evidence?.status === 'reproduced')
+        return true;
+    return typeof f.p !== 'number' || f.p >= floor;
+}
+/**
  * KTD2 — the poster-facing review gate, computed once at report assembly
  * on linkedFindings (post-adjudication `p`, post-probe `evidence`,
  * secrets-lane `pLive` already carried as `p`) and serialized into
@@ -570,10 +586,10 @@ export const P_TRUE_POSITIVE_THRESHOLD = 0.7;
  * degrade-open by design. The two counts overlap deliberately: a
  * reproduced AND high-confidence finding is reported under both.
  */
-export function computeReviewEvent(findings, blockSeverities, allowRequestChanges) {
+export function computeReviewEvent(findings, blockSeverities, allowRequestChanges, floor = P_TRUE_POSITIVE_THRESHOLD) {
     const blockers = findings.filter((f) => blockSeverities.includes(f.severity));
     const provenBlockers = blockers.filter((f) => f.evidence?.status === 'reproduced').length;
-    const highConfidenceBlockers = blockers.filter((f) => typeof f.p === 'number' && f.p >= P_TRUE_POSITIVE_THRESHOLD).length;
+    const highConfidenceBlockers = blockers.filter((f) => typeof f.p === 'number' && f.p >= floor).length;
     const reviewEvent = allowRequestChanges && provenBlockers + highConfidenceBlockers > 0
         ? 'request_changes'
         : 'comment';
