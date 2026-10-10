@@ -3,6 +3,17 @@
 All notable changes to argus-reviewer are documented here. The project is
 pre-1.0; breaking changes may ship without a major bump until `1.0.0`.
 
+## [Unreleased]
+
+### Added
+- **Confidence floor on blocking severities** — `review.confidenceFloor`
+  (default `0.7`, matching the existing REQUEST_CHANGES true-positive gate).
+  A bug/risk the confidence model scores below the floor still posts with
+  its `p` shown but no longer drives `verdict` or the commit-status gate;
+  reproduced evidence and unadjudicated findings always gate. Sweep on the
+  AACR corpus: blocking precision 0.86 → 1.00 at floor 0.5–0.7. Set `0` to
+  restore the pre-floor behavior.
+
 ## [0.5.0] — 2026-10-07
 
 Review polish at scale plus the execution-moat lanes. Nits fold into the
