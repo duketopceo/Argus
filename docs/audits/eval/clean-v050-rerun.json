@@ -79,7 +79,7 @@
         "flooredBlockers": 0,
         "blockingVerdict": false
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/clean-175-release-prep-cba1d1c7-clean-v050-rerun.json"
+      "reportPath": "docs/audits/eval/reports/clean-175-release-prep-cba1d1c7-clean-v050-rerun.json"
     }
   ],
   "at": "2026-10-10T22:14:25.227Z"

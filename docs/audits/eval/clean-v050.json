@@ -6,7 +6,7 @@
   "results": [
     {
       "name": "clean-170-setup-node-bump",
-      "note": "dependabot actions/setup-node 6->7, +4/-4 in 4 workflow files — nothing to find",
+      "note": "dependabot actions/setup-node 6->7, +4/-4 in 4 workflow files \u2014 nothing to find",
       "ms": 19283,
       "exitCode": 0,
       "stalled": false,
@@ -33,11 +33,11 @@
         "flooredBlockers": 0,
         "blockingVerdict": false
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/clean-170-setup-node-bump-1e23780f-clean-v050.json"
+      "reportPath": "docs/audits/eval/reports/clean-170-setup-node-bump-1e23780f-clean-v050.json"
     },
     {
       "name": "clean-176-action-pin",
-      "note": "action pin -> v0.5.0, +19/-16 in 9 docs/onboarding files — nothing to find",
+      "note": "action pin -> v0.5.0, +19/-16 in 9 docs/onboarding files \u2014 nothing to find",
       "ms": 14495,
       "exitCode": 0,
       "stalled": false,
@@ -60,11 +60,11 @@
         "flooredBlockers": 0,
         "blockingVerdict": false
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/clean-176-action-pin-9a47589b-clean-v050.json"
+      "reportPath": "docs/audits/eval/reports/clean-176-action-pin-9a47589b-clean-v050.json"
     },
     {
       "name": "clean-175-release-prep",
-      "note": "v0.5.0 release prep, +61/-3 in 3 files (CHANGELOG/version) — docs clean",
+      "note": "v0.5.0 release prep, +61/-3 in 3 files (CHANGELOG/version) \u2014 docs clean",
       "ms": 120424,
       "exitCode": 1,
       "stalled": true,
