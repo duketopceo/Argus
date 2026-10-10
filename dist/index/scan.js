@@ -52,7 +52,7 @@ async function walk(root, dir, out, includeDotfile) {
         }
     }
 }
-function sha256(buf) {
+export function sha256(buf) {
     return createHash('sha256').update(buf).digest('hex').slice(0, 16);
 }
 /** Resolve an import specifier to a repo-relative path when it's local. */

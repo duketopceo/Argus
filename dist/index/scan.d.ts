@@ -19,6 +19,7 @@ export interface RepoIndex {
     root: string;
     entries: IndexEntry[];
 }
+export declare function sha256(buf: Buffer): string;
 export interface SynthesizedDiff {
     diff: string;
     /** Files that got a new-file section. */
