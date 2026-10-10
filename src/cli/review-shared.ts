@@ -198,6 +198,9 @@ export interface CodeReviewReport {
   modelVerdict?: 'pass' | 'needs_changes' | 'approve'
   /** How much of the PR the review covered, and what was left out. */
   scope?: ReviewScope
+  /** Repo-index staleness over the reviewed files — present only when an
+   *  index was loaded; `stale` = on-disk hash drifted from the index entry. */
+  indexStaleness?: { generatedAt: string; checked: number; stale: number; missing: number }
   /** Present when `review.mode` is batch: whether the batch served the review. */
   batch?: ReviewBatch
   /** Findings dropped by deterministic validation, with reasons. */

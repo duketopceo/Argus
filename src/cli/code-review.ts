@@ -5,6 +5,7 @@ import { type PrMeta, fetchPrMeta, fetchCheckRuns } from '../evidence/ci.js'
 import { linkFindings } from '../evidence/link.js'
 import { writeAtomicJson } from '../fsutil.js'
 import { buildReviewContext } from '../index/context.js'
+import { indexStaleness } from '../index/staleness.js'
 import { readIndex } from '../index/scan.js'
 import { liveLog } from '../live.js'
 import { affordableBatchPrefix } from '../pipeline/budget.js'
@@ -382,6 +383,20 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
   const attached = Object.keys(contexts).length
   if (attached > 0) {
     debug('code-review', `contexts=${attached}/${files.length}`)
+  }
+  // Exact staleness: a reviewed file whose on-disk hash drifted from its
+  // index entry means the context block may describe old code. Surfaced
+  // in the sticky Diagnostics fold, never folded into the verdict.
+  const idxStale =
+    index !== undefined
+      ? await indexStaleness(
+          index,
+          files.map((f) => f.filename),
+          fixtureDir ?? ctx.cwd,
+        )
+      : undefined
+  if (idxStale !== undefined && idxStale.stale > 0) {
+    stage(`repo index stale for ${idxStale.stale} of ${idxStale.checked} reviewed file(s)`)
   }
 
   const plan = planChunks(files, contexts)
@@ -1147,6 +1162,7 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
       ...(droppedFindings.length > 0 ? { droppedFindings } : {}),
       ...(modelVerdict !== undefined && modelVerdict !== verdict ? { modelVerdict } : {}),
       scope,
+      ...(idxStale !== undefined ? { indexStaleness: idxStale } : {}),
       ...(batchRecord !== undefined ? { batch: batchRecord } : {}),
       ...(validation !== undefined ? { validation } : {}),
       ...(testFileCapped > 0 ? { testFileCapped } : {}),
