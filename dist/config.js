@@ -117,6 +117,7 @@ const defaults = {
         triage: 'annotate',
         lowRiskModel: undefined,
         findingThreshold: 1.0,
+        confidenceFloor: 0.7,
         requestChanges: true,
         nitsInline: false,
         profiles: [],
@@ -309,6 +310,7 @@ export function resolveConfig(input = {}) {
         review.lowRiskModel = undefined;
     }
     review.findingThreshold = prob01(review.findingThreshold, defaults.review.findingThreshold);
+    review.confidenceFloor = prob01(review.confidenceFloor, defaults.review.confidenceFloor);
     // Advisory-only escape hatch — only literal `false` opts out; anything
     // else (mis-typed values included) keeps the default-true posture.
     review.requestChanges = review.requestChanges !== false;

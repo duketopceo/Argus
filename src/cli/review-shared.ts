@@ -895,6 +895,26 @@ export const P_TRUE_POSITIVE_THRESHOLD = 0.7
 
 
 /**
+ * The verdict/commit-status gate's per-finding view of "blocking": a
+ * blocking-severity finding gates unless the confidence model scored it
+ * below `floor`. Reproduced evidence always gates (the probe proved it),
+ * and unadjudicated findings (rules lane, adjudication outage, overflow)
+ * keep their severity — the status check degrades closed where
+ * computeReviewEvent degrades open. Findings below the floor still post;
+ * they just stop driving the verdict.
+ */
+export function isEffectiveBlocker(
+  f: ReviewFinding,
+  blockSeverities: string[],
+  floor: number = P_TRUE_POSITIVE_THRESHOLD,
+): boolean {
+  if (!blockSeverities.includes(f.severity)) return false
+  if (f.evidence?.status === 'reproduced') return true
+  return typeof f.p !== 'number' || f.p >= floor
+}
+
+
+/**
  * KTD2 — the poster-facing review gate, computed once at report assembly
  * on linkedFindings (post-adjudication `p`, post-probe `evidence`,
  * secrets-lane `pLive` already carried as `p`) and serialized into
@@ -907,6 +927,7 @@ export function computeReviewEvent(
   findings: ReviewFinding[],
   blockSeverities: string[],
   allowRequestChanges: boolean,
+  floor: number = P_TRUE_POSITIVE_THRESHOLD,
 ): {
   reviewEvent: 'comment' | 'request_changes'
   provenBlockers: number
@@ -915,7 +936,7 @@ export function computeReviewEvent(
   const blockers = findings.filter((f) => blockSeverities.includes(f.severity))
   const provenBlockers = blockers.filter((f) => f.evidence?.status === 'reproduced').length
   const highConfidenceBlockers = blockers.filter(
-    (f) => typeof f.p === 'number' && f.p >= P_TRUE_POSITIVE_THRESHOLD,
+    (f) => typeof f.p === 'number' && f.p >= floor,
   ).length
   const reviewEvent =
     allowRequestChanges && provenBlockers + highConfidenceBlockers > 0

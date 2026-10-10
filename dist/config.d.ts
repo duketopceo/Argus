@@ -269,6 +269,11 @@ export interface Config {
      * `requestChanges`: allow the review event to escalate to
      * REQUEST_CHANGES for proven blockers (probe-reproduced or confidence-model
      * high-confidence). Default true — set false for advisory-only posting.
+     * `confidenceFloor`: P(true-positive) floor applied to blocking-severity
+     * findings — a bug/risk adjudicated below the floor still posts but does
+     * not drive the verdict or the commit-status gate (reproduced evidence
+     * and unadjudicated findings are exempt). Default 0.7, matching the
+     * reviewEvent high-confidence gate; 0 disables the floor entirely.
      * `profiles`: named review lenses appended to the review prompt
      * ('security'|'perf'|'debloat' — see src/review/packs.ts). Unknown names
      * are dropped at config load. Default [] — no extra rubric.
@@ -280,6 +285,7 @@ export interface Config {
         triage: 'off' | 'annotate' | 'route';
         lowRiskModel: string | undefined;
         findingThreshold: number;
+        confidenceFloor: number;
         requestChanges: boolean;
         /**
          * `nitsInline` posts nit-severity findings as individual inline review

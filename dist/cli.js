@@ -97,4 +97,4 @@ if (invokedAsScript) {
         process.exitCode = 1;
     });
 }
-export { filesFromUnifiedDiff, loadFixture, loadLocalDiff, buildPatchChunks, buildCodeReviewMessages, parseCodeReview, carryForwardSuggestions, diffLineRanges, diffLineTexts, filterRevertNits, filterToDiffLines, P_TRUE_POSITIVE_THRESHOLD, computeReviewEvent, renderReviewComments } from './cli/review-shared.js';
+export { filesFromUnifiedDiff, loadFixture, loadLocalDiff, buildPatchChunks, buildCodeReviewMessages, parseCodeReview, carryForwardSuggestions, diffLineRanges, diffLineTexts, filterRevertNits, filterToDiffLines, P_TRUE_POSITIVE_THRESHOLD, computeReviewEvent, isEffectiveBlocker, renderReviewComments } from './cli/review-shared.js';

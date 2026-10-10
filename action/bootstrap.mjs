@@ -19,6 +19,7 @@ import {
   validateReviewProfiles,
   validateVersion,
 } from './runtime.mjs'
+import { resolvePinnedCli } from './pinned-cli.mjs'
 
 const actionDir = dirname(fileURLToPath(import.meta.url))
 const workspace = resolve(process.env.GITHUB_WORKSPACE || process.cwd())
@@ -57,24 +58,7 @@ if (override !== '') {
 } else {
   const version = process.env.ARGUS_ARGUS_VERSION?.trim() ?? ''
   if (version === '') {
-    const runtime = await mkdtemp(join(tmpdir(), 'argus-reviewer-action-pinned-'))
-    const result = spawnSync(
-      'npm',
-      [
-        'install',
-        '--prefix',
-        runtime,
-        '--ignore-scripts',
-        '--no-audit',
-        '--no-fund',
-        '--no-package-lock',
-        '--no-save',
-        resolve(actionDir, '..'),
-      ],
-      { stdio: 'inherit', shell: false },
-    )
-    if (result.status !== 0) throw new Error('could not install the CLI from the pinned action ref')
-    cli = [process.execPath, join(runtime, 'node_modules', 'argus-reviewer-e2e', 'dist', 'cli.js')]
+    cli = resolvePinnedCli(resolve(actionDir, '..'))
   } else {
     validateVersion(version)
     const runtime = await mkdtemp(join(tmpdir(), `argus-reviewer-action-${version}-`))

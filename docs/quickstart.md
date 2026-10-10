@@ -512,6 +512,12 @@ export default defineConfig({
     // secrets-lane finding confirmed live. Set false for a permanently advisory (COMMENT-only)
     // posture — e.g. while evaluating the tool.
     requestChanges: true,
+    // P(true-positive) floor for blocking severities — a bug/risk the
+    // confidence model scores below this still posts (with its p shown)
+    // but does not drive the verdict or the commit-status gate.
+    // Reproduced evidence and unadjudicated findings always gate.
+    // Default 0.7 (matches the REQUEST_CHANGES gate). 0 disables.
+    confidenceFloor: 0.7,
     // Post each nit as its own inline comment instead of consolidating
     // them into the sticky's nit fold. Default false — nits stay counted
     // in `findings` and render in the fold, capped at 15 with overflow

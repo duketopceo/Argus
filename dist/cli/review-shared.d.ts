@@ -311,6 +311,16 @@ export declare function filterToDiffLines(findings: readonly ReviewFinding[], ra
  */
 export declare const P_TRUE_POSITIVE_THRESHOLD = 0.7;
 /**
+ * The verdict/commit-status gate's per-finding view of "blocking": a
+ * blocking-severity finding gates unless the confidence model scored it
+ * below `floor`. Reproduced evidence always gates (the probe proved it),
+ * and unadjudicated findings (rules lane, adjudication outage, overflow)
+ * keep their severity — the status check degrades closed where
+ * computeReviewEvent degrades open. Findings below the floor still post;
+ * they just stop driving the verdict.
+ */
+export declare function isEffectiveBlocker(f: ReviewFinding, blockSeverities: string[], floor?: number): boolean;
+/**
  * KTD2 — the poster-facing review gate, computed once at report assembly
  * on linkedFindings (post-adjudication `p`, post-probe `evidence`,
  * secrets-lane `pLive` already carried as `p`) and serialized into
@@ -319,7 +329,7 @@ export declare const P_TRUE_POSITIVE_THRESHOLD = 0.7;
  * degrade-open by design. The two counts overlap deliberately: a
  * reproduced AND high-confidence finding is reported under both.
  */
-export declare function computeReviewEvent(findings: ReviewFinding[], blockSeverities: string[], allowRequestChanges: boolean): {
+export declare function computeReviewEvent(findings: ReviewFinding[], blockSeverities: string[], allowRequestChanges: boolean, floor?: number): {
     reviewEvent: 'comment' | 'request_changes';
     provenBlockers: number;
     highConfidenceBlockers: number;

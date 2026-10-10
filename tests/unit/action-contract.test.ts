@@ -6,6 +6,9 @@ import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 // @ts-expect-error plain-node action helper — no type declarations
+import { resolvePinnedCli } from '../../action/pinned-cli.mjs'
+
+// @ts-expect-error plain-node action helper — no type declarations
 import {
   assertRegularFile,
   assertRegularFileInside,
@@ -384,9 +387,52 @@ describe('action input contract', () => {
       .find((line) => line.startsWith('cli-json='))
     const cli = JSON.parse(cliLine!.slice('cli-json='.length)) as string[]
     expect(cli[0]).toBe(process.execPath)
-    expect(cli[1]).toMatch(
-      /argus-reviewer-action-pinned-[^/]+\/node_modules\/argus-reviewer-e2e\/dist\/cli\.js$/,
-    )
+    // pinned-checkout path: the action runs the committed dist/ in place
+    expect(cli[1]).toMatch(/Argus\/dist\/cli\.js$/)
+    // …and the emitted CLI is actually launchable
+    const help = await execFileAsync(cli[0]!, [cli[1]!, '--help'])
+    expect(help.stdout).toContain('argus-reviewer')
+  })
+
+  it('resolvePinnedCli installs locked prod deps only when node_modules is absent', () => {
+    const calls: { cmd: string; args: string[]; opts: { cwd?: string } }[] = []
+    const spawn = (cmd: string, args: string[], opts: { cwd?: string }) => {
+      calls.push({ cmd, args, opts })
+      return { status: 0 }
+    }
+
+    // fresh checkout — no node_modules: must npm ci --omit=dev in the repo root
+    const cli = resolvePinnedCli('/repo', {
+      existsSync: () => false,
+      spawnSync: spawn,
+      execPath: '/node',
+    })
+    expect(calls).toEqual([
+      {
+        cmd: 'npm',
+        args: ['ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'],
+        opts: { stdio: 'inherit', shell: false, cwd: '/repo' },
+      },
+    ])
+    expect(cli).toEqual(['/node', '/repo/dist/cli.js'])
+
+    // node_modules present (dev checkout) — install is skipped entirely
+    calls.length = 0
+    resolvePinnedCli('/repo', {
+      existsSync: () => true,
+      spawnSync: spawn,
+      execPath: '/node',
+    })
+    expect(calls).toEqual([])
+
+    // failed install surfaces loudly
+    expect(() =>
+      resolvePinnedCli('/repo', {
+        existsSync: () => false,
+        spawnSync: () => ({ status: 1 }),
+        execPath: '/node',
+      }),
+    ).toThrow(/could not install CLI deps/)
   })
 
   it('rejects a config path that escapes the working directory', async () => {
