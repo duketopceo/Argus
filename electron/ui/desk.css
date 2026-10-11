@@ -840,7 +840,8 @@ main:focus {
 .ticks i {
   width: 3px;
   height: 12px;
-  background: var(--hairline);
+  /* control-border keeps the empty ticks visible as a 3:1 graphic (WCAG 1.4.11). */
+  background: var(--control);
 }
 
 .tally.tone-passed .ticks i.on {
