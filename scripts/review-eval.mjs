@@ -28,7 +28,7 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
@@ -337,7 +337,7 @@ async function run(corpusPath, tag, cacheDir) {
         // The model that produced the findings — ambient ARGUS_CODE_MODEL
         // drift between runs otherwise masquerades as a code regression.
         model: report.spend?.model,
-        reportPath: keptReport,
+        reportPath: keptReport !== undefined ? relative(REPO_ROOT, keptReport) : undefined,
       })
       flush()
       console.error(
@@ -391,13 +391,13 @@ function printTable(results) {
   if (cleanRows.length > 0) {
     // Stalled entries reviewed nothing — a stub report's zero-blocker
     // reading is a stall artifact, not silence evidence.
-    const ran = cleanRows.filter((r) => health(r) !== 'yes')
+    const ran = cleanRows.filter((r) => health(r) === 'no')
     const silent = ran.filter((r) => r.metrics.blockingFindings === 0).length
     const gated = ran.filter((r) => r.metrics.blockingVerdict === true).length
     console.log(
       `clean rows: ${silent}/${ran.length} silent (0 blocking findings)` +
         (ran.length !== cleanRows.length
-          ? ` - ${cleanRows.length - ran.length} stalled/skipped`
+          ? ` - ${cleanRows.length - ran.length} stalled or skipped`
           : '') +
         `; ${gated} claimed a blocking verdict`,
     )
@@ -419,7 +419,10 @@ function compare(aPath, bPath) {
     }
     const d = (k) => (m1[k] - m0[k]).toFixed(2)
     const blkDelta =
-      m1.blockingFindings !== undefined && m0.blockingFindings !== undefined
+      m1.blockingFindings !== undefined &&
+      m0.blockingFindings !== undefined &&
+      health(byName.get(r.name)) === 'no' &&
+      stalled === 'no'
         ? String(m1.blockingFindings - m0.blockingFindings)
         : '-'
     console.log(

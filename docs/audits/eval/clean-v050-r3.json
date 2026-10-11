@@ -54,7 +54,7 @@
         "flooredBlockers": 0,
         "blockingVerdict": false
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/clean-176-action-pin-9a47589b-clean-v050-r3.json"
+      "reportPath": "docs/audits/eval/reports/clean-176-action-pin-9a47589b-clean-v050-r3.json"
     },
     {
       "name": "clean-175-release-prep",
@@ -81,7 +81,7 @@
         "flooredBlockers": 0,
         "blockingVerdict": false
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/clean-175-release-prep-cba1d1c7-clean-v050-r3.json"
+      "reportPath": "docs/audits/eval/reports/clean-175-release-prep-cba1d1c7-clean-v050-r3.json"
     }
   ],
   "at": "2026-10-10T22:17:00.755Z"

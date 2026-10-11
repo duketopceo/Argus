@@ -5,7 +5,7 @@
     "base": "a3f8864d3f5fa2fafeade484254c650b545c610a",
     "head": "1e317e36e647982e6af493e973563b27d1d75256",
     "clean": true,
-    "note": "dependabot actions/setup-node 6->7, +4/-4 in 4 workflow files - nothing to find"
+    "note": "dependabot setup-node v6->v7 single workflow - 1 floored blocker seen (p=.52 cross-workflow consistency); floor held"
   },
   {
     "name": "clean-176-action-pin",
@@ -21,6 +21,22 @@
     "base": "a3f8864d3f5fa2fafeade484254c650b545c610a",
     "head": "be3c9e332546c68742d5ab46a4075c04525c7e02",
     "clean": true,
-    "note": "v0.5.0 release prep, +61/-3 in 3 files (CHANGELOG/version) - docs clean"
+    "note": "v0.5.0 release prep - v2 run produced 5 blocking changelog cross-ref FPs (p .66-.78, 1 floored), v3 run silent; nondeterministic meta-diff FP class"
+  },
+  {
+    "name": "clean-wisp-101-docs",
+    "repo": "https://github.com/duketopceo/wisp",
+    "base": "33e6be0b1f22339249e284bd29a535b9b10ee0ea",
+    "head": "c72b3783a14c72acde7d96594f174f49a88c38d8",
+    "clean": true,
+    "note": "docs+renders README wave, 28f - stalled 2x on provider timeout (possible large-binary-diff perf gap, unconfirmed)"
+  },
+  {
+    "name": "clean-large-rename-synthetic",
+    "repo": ".",
+    "base": "3ed703ee57b505177d193ffa2cb26f12a43f10dc",
+    "head": "3d8a2f089973dd724147dc14a6bcd0fa91448307",
+    "clean": true,
+    "note": "synthetic mechanical rename src/{index,report}->src/{repoindex,reporter}, 54f tsc-verified - 2 runs 0 blockers; 6 p~.3 verify-move nits (correct uncertainty shape)"
   }
 ]

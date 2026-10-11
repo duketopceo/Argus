@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "tag": "2026-10-10T23-04-41-314Z",
+  "cli": "a09fc0d-dirty",
+  "entries": 5,
+  "results": [
+    {
+      "name": "clean-170-setup-node-bump",
+      "note": "dependabot actions/setup-node 6->7, +4/-4 in 4 workflow files - nothing to find",
+      "ms": 15175,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "approve",
+        "findings": 1,
+        "ruleFindings": 0,
+        "comments": 1,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "bug": 1
+        },
+        "byPathType": {
+          "src": 1
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0,
+        "clean": true,
+        "blockingFindings": 1,
+        "flooredBlockers": 1,
+        "blockingVerdict": false
+      },
+      "reportPath": "docs/audits/eval/reports/clean-170-setup-node-bump-1e23780f-2026-10-10T23-04-41-314Z.json"
+    },
+    {
+      "name": "clean-176-action-pin",
+      "note": "action pin -> v0.5.0, +19/-16 in 9 docs/onboarding files - nothing to find",
+      "ms": 12654,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "pass",
+        "findings": 0,
+        "ruleFindings": 0,
+        "comments": 0,
+        "commentsOverflow": 0,
+        "bySeverity": {},
+        "byPathType": {},
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0,
+        "clean": true,
+        "blockingFindings": 0,
+        "flooredBlockers": 0,
+        "blockingVerdict": false
+      },
+      "reportPath": "docs/audits/eval/reports/clean-176-action-pin-9a47589b-2026-10-10T23-04-41-314Z.json"
+    },
+    {
+      "name": "clean-175-release-prep",
+      "note": "v0.5.0 release prep, +61/-3 in 3 files (CHANGELOG/version) - docs clean",
+      "ms": 12806,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "pass",
+        "findings": 0,
+        "ruleFindings": 0,
+        "comments": 0,
+        "commentsOverflow": 0,
+        "bySeverity": {},
+        "byPathType": {},
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0,
+        "clean": true,
+        "blockingFindings": 0,
+        "flooredBlockers": 0,
+        "blockingVerdict": false
+      },
+      "reportPath": "docs/audits/eval/reports/clean-175-release-prep-cba1d1c7-2026-10-10T23-04-41-314Z.json"
+    },
+    {
+      "name": "clean-wisp-101-docs",
+      "note": "docs+renders README wave, 28f +1224/-233 - 3 small lint/test scripts are the only code; near-clean",
+      "ms": 120417,
+      "exitCode": 1,
+      "stalled": true,
+      "metrics": {
+        "ok": false,
+        "skipped": true,
+        "findings": 0,
+        "ruleFindings": 0,
+        "comments": 0,
+        "commentsOverflow": 0,
+        "bySeverity": {},
+        "byPathType": {},
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0,
+        "clean": true,
+        "blockingFindings": 0,
+        "flooredBlockers": 0,
+        "blockingVerdict": false
+      }
+    },
+    {
+      "name": "clean-large-rename-synthetic",
+      "note": "synthetic mechanical rename src/index->repoindex + src/report->reporter, 54f moves+import updates, tsc-verified",
+      "ms": 70907,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "approve",
+        "findings": 6,
+        "ruleFindings": 0,
+        "comments": 0,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "nit": 6
+        },
+        "byPathType": {
+          "test": 6
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 1,
+        "clean": true,
+        "blockingFindings": 0,
+        "flooredBlockers": 0,
+        "blockingVerdict": false
+      },
+      "reportPath": "docs/audits/eval/reports/clean-large-rename-synthetic-6e8d5bea-2026-10-10T23-04-41-314Z.json"
+    }
+  ],
+  "at": "2026-10-10T23:08:33.610Z"
+}
