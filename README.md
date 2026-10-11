@@ -21,7 +21,7 @@ It is a GitHub Action and a CLI. It runs on your infrastructure with your own Op
 From a checkout of your GitHub repository, with `git` and the GitHub CLI (`gh auth login`) set up:
 
 ```bash
-npx argus-reviewer init --pr
+npx -p argus-reviewer-e2e argus-reviewer init --pr
 ```
 
 This opens a pull request that adds the Argus workflows, a config and a smoke test. Nothing runs until you merge it. Then:
@@ -29,7 +29,7 @@ This opens a pull request that adds the Argus workflows, a config and a smoke te
 1. Add `OPENROUTER_API_KEY` as a repository secret (the PR links to the exact page, or run `gh secret set OPENROUTER_API_KEY --repo owner/name`).
 2. Review and merge the PR. Every pull request after that gets a review.
 
-`init --pr` uses your own `git` and `gh`, so your credentials do the pushing. Optional flags: `--repo owner/name` (must match the checkout's `origin`) and `--branch <name>` (default `argus/onboarding`). It never overwrites existing files, reports the existing PR instead of opening a second one, and never reads your OpenRouter key. Details, defaults, what is sent to the model provider, and troubleshooting: [`docs/onboarding.md`](docs/onboarding.md).
+The npm package is `argus-reviewer-e2e`; `argus-reviewer` is its command. Before the package is installed, `npx` needs `-p argus-reviewer-e2e` to find it (there is no npm package named `argus-reviewer`). `init --pr` uses your own `git` and `gh`, so your credentials do the pushing. Optional flags: `--repo owner/name` (must match the checkout's `origin`) and `--branch <name>` (default `argus/onboarding`). It never overwrites existing files, reports the existing PR instead of opening a second one, and never reads your OpenRouter key. Details, defaults, what is sent to the model provider, and troubleshooting: [`docs/onboarding.md`](docs/onboarding.md).
 
 ### Manual setup
 

@@ -1,7 +1,7 @@
 # Self-host the onboarding App
 
 The onboarding App opens a pull request that adds the Argus workflow whenever
-you install it on a repository. It is the same PR `npx argus-reviewer init --pr`
+you install it on a repository. It is the same PR `npx -p argus-reviewer-e2e argus-reviewer init --pr`
 opens, triggered by an install instead of a command. You register the App on
 your own account or organization and run its webhook Worker on your own
 Cloudflare account. Nothing is hosted for you.
@@ -124,7 +124,7 @@ One fresh repository costs up to 12 subrequests, so **one delivery onboards at
 most 3 fresh repositories**. Repositories that are forks, archived or already
 onboarded cost less, so more of those fit. A repository that did not fit is
 logged as deferred and gets no PR. To onboard it, remove and re-add it in the
-installation settings, or run `npx argus-reviewer init --pr` in it. Install on
+installation settings, or run `npx -p argus-reviewer-e2e argus-reviewer init --pr` in it. Install on
 a few repositories at a time rather than "All repositories" on a large
 organization.
 

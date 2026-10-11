@@ -22,7 +22,8 @@ comment, TUI, and Electron dashboard all render it):
   expected-state check: real execution, not just read diffs.
 - **A0 lane** (`--a0`) — opt-in, budgeted escalation to a self-hosted Agent
   Zero host over a sanitized child env; reports `inconclusive`, never
-  `passed`, until live round-trips are proven (#53).
+  `passed`, because the agent's answer is self-reported. The live
+  round-trip (#53) was proven and closed 2026-10-01 (#109).
 - **Output** — one sticky PR comment with per-model dollar cost, test
   evidence, review verdict, and a commit status that gates merge.
 
@@ -51,8 +52,9 @@ Post-launch roadmap (plan: `docs/plans/2026-09-14-006-feat-post-launch-roadmap-p
    probes that execute suspected-defect paths in a sandbox. Reproduced
    findings, not suspected ones, are the differentiation vs. review bots.
 3. **Agent Zero depth**: the `verify --a0` seam (scoped, budgeted,
-   env-sanitized) ships with the insight-first follow-through; live-verify
-   `delegate`/`heal:'a0'`/`--a0` remains blocked on a reachable host (#53);
+   env-sanitized) shipped with the insight-first follow-through (#102);
+   live verification of `delegate`/`heal:'a0'`/`--a0` closed as proven
+   2026-10-01 (#53, via #109);
    optional autonomous desktop/browser addon, never a prerequisite.
 4. **Scale & ops** (gated on observed external adoption): runner health
    dashboard (#21), org spend caps (#22), GHE/GitLab (#23).

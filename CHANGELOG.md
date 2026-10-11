@@ -13,6 +13,17 @@ pre-1.0; breaking changes may ship without a major bump until `1.0.0`.
   reproduced evidence and unadjudicated findings always gate. Sweep on the
   AACR corpus: blocking precision 0.86 → 1.00 at floor 0.5–0.7. Set `0` to
   restore the pre-floor behavior.
+- **Repo-index staleness in the sticky Diagnostics fold** — a `Repo index
+  stale: N of M` line when indexed entries no longer match the checkout
+  (#181).
+
+### Fixed
+- Review prompt suppresses meta-diff cross-reference hallucinations (#184).
+- Action bootstraps the pinned ref with `npm ci --omit=dev`; `prepare`/`tsc`
+  had broken installs (#179).
+
+### Eval
+- Clean-PR silence metric and large-diff clean corpus rows (#180).
 
 ## [0.5.0] — 2026-10-07
 
@@ -115,7 +126,11 @@ spend cap makes runaway cost opt-in rather than default.
   filters — not the pre-release pin the 0.4.0 tarball shipped with.
 - Internal rename `TestDriverApi` → `UiDriverApi` (no behavior change).
 
-## [Unreleased]
+## Notes recorded between 0.4.1 and 0.4.2
+
+These entries were written under a second `[Unreleased]` heading that was
+never renamed at release time. All of them are included in the `v0.5.0`
+tag; they were not split per release.
 
 ### Changed
 - **Every run is capped at $1 by default.** `budgetUsd` now resolves to `1`
