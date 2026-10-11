@@ -8,13 +8,13 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/argus-reviewer-e2e"><img src="https://img.shields.io/npm/v/argus-reviewer-e2e" alt="npm version" /></a>
   <a href="https://github.com/duketopceo/Argus/actions/workflows/ci.yml"><img src="https://github.com/duketopceo/Argus/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="AGPL-3.0 license" /></a>
   <a href="https://github.com/duketopceo/Argus/security/policy"><img src="https://img.shields.io/badge/security-policy-orange" alt="security policy" /></a>
 </p>
 
 **Argus reviews your pull request, runs your real app in a browser, and posts a verdict with its exact cost.**
 
-It is a GitHub Action and a CLI. It runs on your infrastructure with your own OpenRouter key: no hosted service, no telemetry, no per-seat pricing. MIT licensed.
+It is a GitHub Action and a CLI. It runs on your infrastructure with your own OpenRouter key: no hosted service, no telemetry, no per-seat pricing. AGPL-3.0 licensed.
 
 ## Get started
 
@@ -155,4 +155,8 @@ Full shape: [`src/config.ts`](src/config.ts). Setup walkthrough: [`docs/quicksta
 
 The repository also has a terminal view (`npm run watch`) and a desktop dashboard (`npm run app`). They are contributor tools: they run only from a clone of this repository, and the npm package does not ship them. The casts above are recorded by `npm run demo:record` (see `scripts/demo-record.mjs`). Guidelines: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
-License: [MIT](LICENSE).
+## License
+
+AGPL-3.0. Free to use and modify, including privately. If you host or distribute a modified version, you must publish your source under the same license. See [`LICENSE`](LICENSE). Using Argus to test your own code does not put that code under the AGPL.
+
+Releases up to and including v0.5.0, including the `argus-reviewer-e2e` npm package versions 0.4.1 to 0.5.0, were published under the MIT License and remain available under MIT.
