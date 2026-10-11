@@ -44,7 +44,7 @@ comment formats, branding, or code.
 Every gate below inherits the variance rider above: a single run's delta
 is a hypothesis, not evidence.
 
-- [ ] U4(a) positioning check — verify against `droppedUnanchored` counts in eval runs (already partially present; extend to downgrade+count)
+- [x] U4(a) positioning check — measured → **rejected**: `droppedUnanchored` fired twice across all 20 committed eval reports (1 finding each on pr126, pr173); `validation.dropped` twice more. The `filterToDiffLines` anchor check already catches the rare bad position; a downgrade+count mechanism has ~2-finding headroom over the whole corpus. Existing check suffices.
 - [ ] U4(b) reflection pass — measure precision delta on `eval-corpus.aacr.json` before adopting
 - [ ] U4(c) deterministic bundling — measure recall lift on multi-file PRs
 - [ ] Walkthrough paragraph in sticky head — measure against comment-count goals (must not add noise)
