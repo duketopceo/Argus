@@ -1,0 +1,141 @@
+{
+  "ok": true,
+  "skipped": false,
+  "summary": "2 low-severity finding(s)",
+  "verdict": "approve",
+  "findings": [
+    {
+      "file": "plugins/org.jkiss.dbeaver.model.rcp/src/org/jkiss/dbeaver/model/navigator/DBNResource.java",
+      "line": 427,
+      "severity": "risk",
+      "category": "performance",
+      "message": "L427: 🟡 risk: `file.getContents()` InputStream not closed on success path. Wrap `file.getContents()` in try-with-resources or ensure caller closes it.",
+      "p": 0.72,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "plugins/org.jkiss.dbeaver.model/src/org/jkiss/dbeaver/model/navigator/fs/DBNPathBase.java",
+      "severity": "nit",
+      "category": "testing",
+      "message": "nit: this diff modifies 2 source file(s) and no test file - if the change is behavior-bearing, point at the coverage that exercises it.",
+      "rule": "missing-test",
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [
+    {
+      "path": "plugins/org.jkiss.dbeaver.model.rcp/src/org/jkiss/dbeaver/model/navigator/DBNResource.java",
+      "line": 427,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\n`file.getContents()` InputStream not closed on success path. Wrap `file.getContents()` in try-with-resources or ensure caller closes it.",
+      "dedupKey": "plugins/org.jkiss.dbeaver.model.rcp/src/org/jkiss/dbeaver/model/navigator/DBNResource.java:427:risk:`file.getContents()` InputStream not closed on success path. Wrap `file.getContents()` in try-with-resources or ensure caller closes it.:00001505"
+    }
+  ],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async",
+      "dep-diff",
+      "missing-test"
+    ],
+    "records": [
+      {
+        "file": "plugins/org.jkiss.dbeaver.model/src/org/jkiss/dbeaver/model/navigator/fs/DBNPathBase.java",
+        "detail": "source-only diff: 2 source file(s), no test file",
+        "rule": "missing-test"
+      }
+    ],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 3020,
+    "needsDeepReview": 0.84,
+    "risk": 2.41,
+    "topRiskArea": "data",
+    "topRiskAreaConfidence": 0.55
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "plugins/org.jkiss.dbeaver.model.rcp/src/org/jkiss/dbeaver/model/navigator/DBNResource.java",
+        "line": 427,
+        "severity": "risk",
+        "category": "performance",
+        "message": "L427: 🟡 risk: `file.getContents()` InputStream not closed on success path. Wrap `file.getContents()` in try-with-resources or ensure caller closes it.",
+        "adjudicated": true,
+        "p": 0.72
+      }
+    ],
+    "overflow": 0
+  },
+  "scope": {
+    "totalFiles": 2,
+    "reviewedFiles": 2,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1544,
+      "costUsd": 0.000061194,
+      "kind": "decide"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 1629,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 900,
+      "costUsd": 0.000036876,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.00009806999999999999,
+  "tokens": 4073,
+  "model": "deepseek/deepseek-v4-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "6f52de00e923dbc377880d9fd130275c7020c328",
+    "checkoutSha": "6f52de00e923dbc377880d9fd130275c7020c328",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "6f52de00e923dbc377880d9fd130275c7020c328",
+  "diffRange": {
+    "base": "24ad3c4030412df3d9c843c405e90a0b1e2ad5dd",
+    "baseSha": "24ad3c4030412df3d9c843c405e90a0b1e2ad5dd",
+    "headSha": "6f52de00e923dbc377880d9fd130275c7020c328"
+  }
+}

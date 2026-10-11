@@ -1,0 +1,100 @@
+{
+  "ok": true,
+  "skipped": false,
+  "summary": "1 low-severity finding(s)",
+  "verdict": "approve",
+  "findings": [
+    {
+      "file": "adapters/saml/wildfly/wildfly-subsystem/src/main/java/org/keycloak/subsystem/adapter/saml/extension/KeycloakDependencyProcessor.java",
+      "severity": "nit",
+      "category": "testing",
+      "message": "nit: this diff modifies 3 source file(s) and no test file - if the change is behavior-bearing, point at the coverage that exercises it.",
+      "rule": "missing-test",
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async",
+      "dep-diff",
+      "missing-test"
+    ],
+    "records": [
+      {
+        "file": "adapters/saml/wildfly/wildfly-subsystem/src/main/java/org/keycloak/subsystem/adapter/saml/extension/KeycloakDependencyProcessor.java",
+        "detail": "source-only diff: 3 source file(s), no test file",
+        "rule": "missing-test"
+      }
+    ],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 5796,
+    "needsDeepReview": 0.45,
+    "risk": 2.31,
+    "topRiskArea": "auth",
+    "topRiskAreaConfidence": 0.37
+  },
+  "scope": {
+    "totalFiles": 3,
+    "reviewedFiles": 3,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 2589,
+      "costUsd": 0.000105084,
+      "kind": "decide"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 2436,
+      "costUsd": 0,
+      "kind": "code"
+    }
+  ],
+  "visionCostUsd": 0.000105084,
+  "tokens": 5025,
+  "model": "deepseek/deepseek-v4-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "abffd8017718fe28e5a63e7f74ff5e4efe5cdbab",
+    "checkoutSha": "abffd8017718fe28e5a63e7f74ff5e4efe5cdbab",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "abffd8017718fe28e5a63e7f74ff5e4efe5cdbab",
+  "diffRange": {
+    "base": "949ef35a3bda916b24763c435033258a84ba8596",
+    "baseSha": "725f1e40f0f8195833a4c1ecade693aa3a0d6ed0",
+    "headSha": "abffd8017718fe28e5a63e7f74ff5e4efe5cdbab"
+  }
+}

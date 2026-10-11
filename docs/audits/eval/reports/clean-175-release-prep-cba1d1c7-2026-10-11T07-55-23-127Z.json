@@ -1,0 +1,180 @@
+{
+  "ok": true,
+  "skipped": false,
+  "summary": "Reviewed 2 of 3 changed files (1 excluded by review.exclude). 4 low-severity finding(s)",
+  "verdict": "approve",
+  "findings": [
+    {
+      "file": "CHANGELOG.md",
+      "line": 7,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L7: 🔵 nit: 'execution-moat lanes' is internal jargon. Use plain language like 'dedicated rules lanes'.",
+      "p": 0.16,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "CHANGELOG.md",
+      "line": 22,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L22: 🔵 nit: 'probes' is jargon for test cases. Use 'test cases' for clarity.",
+      "p": 0.13,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "CHANGELOG.md",
+      "line": 33,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L33: 🔵 nit: 'committed flow recordings' is ambiguous. Use 'recorded test flows'.",
+      "p": 0.13,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "CHANGELOG.md",
+      "line": 38,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L38: 🔵 nit: 'contract test keeps it honest' is informal. Replace with 'a contract test enforces consistency'.",
+      "p": 0.14,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async",
+      "dep-diff",
+      "missing-test"
+    ],
+    "records": [],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 3769,
+    "needsDeepReview": 0.48,
+    "topRiskArea": "ops",
+    "topRiskAreaConfidence": 0.55
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "CHANGELOG.md",
+        "line": 7,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L7: 🔵 nit: 'execution-moat lanes' is internal jargon. Use plain language like 'dedicated rules lanes'.",
+        "adjudicated": true,
+        "p": 0.16
+      },
+      {
+        "file": "CHANGELOG.md",
+        "line": 22,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L22: 🔵 nit: 'probes' is jargon for test cases. Use 'test cases' for clarity.",
+        "adjudicated": true,
+        "p": 0.13
+      },
+      {
+        "file": "CHANGELOG.md",
+        "line": 33,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L33: 🔵 nit: 'committed flow recordings' is ambiguous. Use 'recorded test flows'.",
+        "adjudicated": true,
+        "p": 0.13
+      },
+      {
+        "file": "CHANGELOG.md",
+        "line": 38,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L38: 🔵 nit: 'contract test keeps it honest' is informal. Replace with 'a contract test enforces consistency'.",
+        "adjudicated": true,
+        "p": 0.14
+      }
+    ],
+    "overflow": 0
+  },
+  "scope": {
+    "totalFiles": 3,
+    "reviewedFiles": 2,
+    "excludedFiles": 1,
+    "excludedSample": [
+      "package-lock.json"
+    ],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1852,
+      "costUsd": 0.00007413,
+      "kind": "decide"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 2295,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1894,
+      "costUsd": 0.000076356,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.000150486,
+  "tokens": 6041,
+  "model": "deepseek/deepseek-v4-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "be3c9e332546c68742d5ab46a4075c04525c7e02",
+    "checkoutSha": "be3c9e332546c68742d5ab46a4075c04525c7e02",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "be3c9e332546c68742d5ab46a4075c04525c7e02",
+  "diffRange": {
+    "base": "a3f8864d3f5fa2fafeade484254c650b545c610a",
+    "baseSha": "a3f8864d3f5fa2fafeade484254c650b545c610a",
+    "headSha": "be3c9e332546c68742d5ab46a4075c04525c7e02"
+  }
+}

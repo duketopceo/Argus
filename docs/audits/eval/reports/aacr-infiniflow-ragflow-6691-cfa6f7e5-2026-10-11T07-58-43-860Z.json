@@ -1,0 +1,225 @@
+{
+  "ok": false,
+  "skipped": false,
+  "summary": "5 finding(s) include a blocking severity (1 blocking-severity finding(s) below the confidence floor; posted, not gating)",
+  "verdict": "needs_changes",
+  "findings": [
+    {
+      "file": "graphrag/entity_resolution.py",
+      "line": 114,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L114: 🔴 bug: Lambda captures `merging_nodes` by reference, so all tasks will use the final value. Use `functools.partial` or a default argument: `lambda nodes=merging_nodes: ...`.",
+      "p": 0.54,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "graphrag/utils.py",
+      "line": 442,
+      "severity": "risk",
+      "category": "performance",
+      "message": "L442: 🟡 risk: `settings.docStoreConn.delete` is likely a blocking I/O call; running it inside an async nursery without offloading to `trio.to_thread.run_sync` will block the event loop. Already partially wrapped but missing the outer wrapper; ensure the call is fully offloaded.",
+      "p": 0.72,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "graphrag/general/extractor.py",
+      "line": 204,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L204: 🔴 bug: `list.extend()` returns `None`; `sorted(set(None))` will crash. `node0_attrs[\"source_id\"].extend(...)` must be called before sorting: `node0_attrs[\"source_id\"].extend(node1_attrs.get(\"source_id\", [])); node0_attrs[\"source_id\"] = sorted(set(node0_attrs[\"source_id\"]))`.",
+      "p": 0.81,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "graphrag/general/extractor.py",
+      "line": 215,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L215: 🔴 bug: Same `extend()` returns `None` issue for `edge0_attrs[attr]`. Must call `extend` first then assign `sorted(set(...))`.",
+      "p": 0.76,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "graphrag/general/extractor.py",
+      "severity": "nit",
+      "category": "testing",
+      "message": "nit: this diff modifies 3 source file(s) and no test file - if the change is behavior-bearing, point at the coverage that exercises it.",
+      "rule": "missing-test",
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "request_changes",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 2,
+  "reviewComments": [
+    {
+      "path": "graphrag/entity_resolution.py",
+      "line": 114,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\nLambda captures `merging_nodes` by reference, so all tasks will use the final value. Use `functools.partial` or a default argument: `lambda nodes=merging_nodes: ...`.",
+      "dedupKey": "graphrag/entity_resolution.py:114:bug:Lambda captures `merging_nodes` by reference, so all tasks will use the final value. Use `functools.partial` or a default argument: `lambda nodes=merging_nodes: ...`.:00001505"
+    },
+    {
+      "path": "graphrag/general/extractor.py",
+      "line": 204,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`list.extend()` returns `None`; `sorted(set(None))` will crash. `node0_attrs[\"source_id\"].extend(...)` must be called before sorting: `node0_attrs[\"source_id\"].extend(node1_attrs.get(\"source_id\", [])); node0_attrs[\"source_id\"] = sorted(set(node0_attrs[\"source_id\"]))`.",
+      "dedupKey": "graphrag/general/extractor.py:204:bug:`list.extend()` returns `None`; `sorted(set(None))` will crash. `node0_attrs[\"source_id\"].extend(...)` must be called before sorting: `node0_attrs[\"source_id\"].extend(node1_attrs.get(\"source_id\", [])); node0_attrs[\"source_id\"] = sorted(set(node0_attrs[\"source_id\"]))`.:00001505"
+    },
+    {
+      "path": "graphrag/general/extractor.py",
+      "line": 215,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\nSame `extend()` returns `None` issue for `edge0_attrs[attr]`. Must call `extend` first then assign `sorted(set(...))`.",
+      "dedupKey": "graphrag/general/extractor.py:215:bug:Same `extend()` returns `None` issue for `edge0_attrs[attr]`. Must call `extend` first then assign `sorted(set(...))`.:00001505"
+    },
+    {
+      "path": "graphrag/utils.py",
+      "line": 442,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\n`settings.docStoreConn.delete` is likely a blocking I/O call; running it inside an async nursery without offloading to `trio.to_thread.run_sync` will block the event loop. Already partially wrapped but missing the outer wrapper; ensure the call is fully offloaded.",
+      "dedupKey": "graphrag/utils.py:442:risk:`settings.docStoreConn.delete` is likely a blocking I/O call; running it inside an async nursery without offloading to `trio.to_thread.run_sync` will block the event loop. Already partially wrapped but missing the outer wrapper; ensure the call is fully offloaded.:00001505"
+    }
+  ],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async",
+      "dep-diff",
+      "missing-test"
+    ],
+    "records": [
+      {
+        "file": "graphrag/general/extractor.py",
+        "detail": "source-only diff: 3 source file(s), no test file",
+        "rule": "missing-test"
+      }
+    ],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 3541,
+    "needsDeepReview": 0.92,
+    "risk": 2.65,
+    "topRiskArea": "data",
+    "topRiskAreaConfidence": 0.99
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "graphrag/entity_resolution.py",
+        "line": 114,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L114: 🔴 bug: Lambda captures `merging_nodes` by reference, so all tasks will use the final value. Use `functools.partial` or a default argument: `lambda nodes=merging_nodes: ...`.",
+        "adjudicated": true,
+        "p": 0.54
+      },
+      {
+        "file": "graphrag/utils.py",
+        "line": 442,
+        "severity": "risk",
+        "category": "performance",
+        "message": "L442: 🟡 risk: `settings.docStoreConn.delete` is likely a blocking I/O call; running it inside an async nursery without offloading to `trio.to_thread.run_sync` will block the event loop. Already partially wrapped but missing the outer wrapper; ensure the call is fully offloaded.",
+        "adjudicated": true,
+        "p": 0.72
+      },
+      {
+        "file": "graphrag/general/extractor.py",
+        "line": 204,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L204: 🔴 bug: `list.extend()` returns `None`; `sorted(set(None))` will crash. `node0_attrs[\"source_id\"].extend(...)` must be called before sorting: `node0_attrs[\"source_id\"].extend(node1_attrs.get(\"source_id\", [])); node0_attrs[\"source_id\"] = sorted(set(node0_attrs[\"source_id\"]))`.",
+        "adjudicated": true,
+        "p": 0.81
+      },
+      {
+        "file": "graphrag/general/extractor.py",
+        "line": 215,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L215: 🔴 bug: Same `extend()` returns `None` issue for `edge0_attrs[attr]`. Must call `extend` first then assign `sorted(set(...))`.",
+        "adjudicated": true,
+        "p": 0.76
+      }
+    ],
+    "overflow": 0
+  },
+  "scope": {
+    "totalFiles": 3,
+    "reviewedFiles": 3,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1620,
+      "costUsd": 0.000064386,
+      "kind": "decide"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 2154,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1970,
+      "costUsd": 0.000079548,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.00014393400000000002,
+  "tokens": 5744,
+  "model": "deepseek/deepseek-v4-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "36881278bf059ad4f79eea31edb34fa2afec6a23",
+    "checkoutSha": "36881278bf059ad4f79eea31edb34fa2afec6a23",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "36881278bf059ad4f79eea31edb34fa2afec6a23",
+  "diffRange": {
+    "base": "0a42e5777eb966b26aaf8f2a7d593ae99a4aa87a",
+    "baseSha": "0a42e5777eb966b26aaf8f2a7d593ae99a4aa87a",
+    "headSha": "36881278bf059ad4f79eea31edb34fa2afec6a23"
+  }
+}

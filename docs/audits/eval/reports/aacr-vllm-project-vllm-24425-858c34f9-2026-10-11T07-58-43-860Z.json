@@ -1,0 +1,141 @@
+{
+  "ok": true,
+  "skipped": false,
+  "summary": "2 low-severity finding(s) (1 blocking-severity finding(s) below the confidence floor; posted, not gating)",
+  "verdict": "approve",
+  "findings": [
+    {
+      "file": "vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py",
+      "line": 101,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L101: 🔴 bug: earlier `shutdown()` exceptions are overwritten by later ones, losing error context. Collect all exceptions with `ExceptionGroup` or log each and raise a composite.",
+      "p": 0.68,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py",
+      "severity": "nit",
+      "category": "testing",
+      "message": "nit: this diff modifies 1 source file(s) and no test file - if the change is behavior-bearing, point at the coverage that exercises it.",
+      "rule": "missing-test",
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [
+    {
+      "path": "vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py",
+      "line": 101,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\nearlier `shutdown()` exceptions are overwritten by later ones, losing error context. Collect all exceptions with `ExceptionGroup` or log each and raise a composite.",
+      "dedupKey": "vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py:101:bug:earlier `shutdown()` exceptions are overwritten by later ones, losing error context. Collect all exceptions with `ExceptionGroup` or log each and raise a composite.:00001505"
+    }
+  ],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async",
+      "dep-diff",
+      "missing-test"
+    ],
+    "records": [
+      {
+        "file": "vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py",
+        "detail": "source-only diff: 1 source file(s), no test file",
+        "rule": "missing-test"
+      }
+    ],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 967,
+    "needsDeepReview": 0.68,
+    "risk": 1.7,
+    "topRiskArea": "ops",
+    "topRiskAreaConfidence": 0.34
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py",
+        "line": 101,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L101: 🔴 bug: earlier `shutdown()` exceptions are overwritten by later ones, losing error context. Collect all exceptions with `ExceptionGroup` or log each and raise a composite.",
+        "adjudicated": true,
+        "p": 0.68
+      }
+    ],
+    "overflow": 0
+  },
+  "scope": {
+    "totalFiles": 1,
+    "reviewedFiles": 1,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 950,
+      "costUsd": 0.000036246,
+      "kind": "decide"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 1113,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 733,
+      "costUsd": 0.000029862,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.000066108,
+  "tokens": 2796,
+  "model": "deepseek/deepseek-v4-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "d67e5ba822935a1fd2dd01a11ca01c01b3b9b4c6",
+    "checkoutSha": "d67e5ba822935a1fd2dd01a11ca01c01b3b9b4c6",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "d67e5ba822935a1fd2dd01a11ca01c01b3b9b4c6",
+  "diffRange": {
+    "base": "f4962a6d55a340ebb569d377c842deff7611d8f7",
+    "baseSha": "f4962a6d55a340ebb569d377c842deff7611d8f7",
+    "headSha": "d67e5ba822935a1fd2dd01a11ca01c01b3b9b4c6"
+  }
+}
