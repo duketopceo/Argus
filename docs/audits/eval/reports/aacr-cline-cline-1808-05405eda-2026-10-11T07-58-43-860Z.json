@@ -1,0 +1,141 @@
+{
+  "ok": true,
+  "skipped": false,
+  "summary": "2 low-severity finding(s) (1 blocking-severity finding(s) below the confidence floor; posted, not gating)",
+  "verdict": "approve",
+  "findings": [
+    {
+      "file": "src/api/providers/openai.ts",
+      "line": 22,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L22: 🔴 bug: excluding `deepseek` models from the Azure path may break requests for DeepSeek models hosted on Azure. Add a separate Azure configuration for DeepSeek models instead of filtering them out.",
+      "p": 0.58,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/api/providers/openai.ts",
+      "severity": "nit",
+      "category": "testing",
+      "message": "nit: this diff modifies 1 source file(s) and no test file - if the change is behavior-bearing, point at the coverage that exercises it.",
+      "rule": "missing-test",
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [
+    {
+      "path": "src/api/providers/openai.ts",
+      "line": 22,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\nexcluding `deepseek` models from the Azure path may break requests for DeepSeek models hosted on Azure. Add a separate Azure configuration for DeepSeek models instead of filtering them out.",
+      "dedupKey": "src/api/providers/openai.ts:22:bug:excluding `deepseek` models from the Azure path may break requests for DeepSeek models hosted on Azure. Add a separate Azure configuration for DeepSeek models instead of filtering them out.:00001505"
+    }
+  ],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async",
+      "dep-diff",
+      "missing-test"
+    ],
+    "records": [
+      {
+        "file": "src/api/providers/openai.ts",
+        "detail": "source-only diff: 1 source file(s), no test file",
+        "rule": "missing-test"
+      }
+    ],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 1196,
+    "needsDeepReview": 0.55,
+    "risk": 2.04,
+    "topRiskArea": "ops",
+    "topRiskAreaConfidence": 0.57
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "src/api/providers/openai.ts",
+        "line": 22,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L22: 🔴 bug: excluding `deepseek` models from the Azure path may break requests for DeepSeek models hosted on Azure. Add a separate Azure configuration for DeepSeek models instead of filtering them out.",
+        "adjudicated": true,
+        "p": 0.58
+      }
+    ],
+    "overflow": 0
+  },
+  "scope": {
+    "totalFiles": 2,
+    "reviewedFiles": 2,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1106,
+      "costUsd": 0.000042798,
+      "kind": "decide"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 1214,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 756,
+      "costUsd": 0.000030828,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.000073626,
+  "tokens": 3076,
+  "model": "deepseek/deepseek-v4-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "59c19fd996443a14b19aff8a63426e8006bdacac",
+    "checkoutSha": "59c19fd996443a14b19aff8a63426e8006bdacac",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "59c19fd996443a14b19aff8a63426e8006bdacac",
+  "diffRange": {
+    "base": "4d8bdf29458db722a2bce1dfacc50771959b32fa",
+    "baseSha": "9cb6cf52fc13a2339d97b9a90afecad7c1820da7",
+    "headSha": "59c19fd996443a14b19aff8a63426e8006bdacac"
+  }
+}

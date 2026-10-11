@@ -1,0 +1,169 @@
+{
+  "ok": true,
+  "skipped": false,
+  "summary": "3 low-severity finding(s)",
+  "verdict": "approve",
+  "findings": [
+    {
+      "file": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/FileAccessTree.java",
+      "line": 206,
+      "severity": "q",
+      "category": "other",
+      "message": "L206: ❓ q: `checkPath` trace logs array length but `paths` may contain user-controlled data. Confirm no sensitive path info is leaked.",
+      "p": 0.5,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyManager.java",
+      "line": 313,
+      "severity": "q",
+      "category": "performance",
+      "message": "L313: ❓ q: `DEFAULT_FILESYSTEM_CLASS` is compared with `!=` but `getClass()` returns the runtime class; this is safe (no inheritance) but an `instanceof` or `equals` would be more idiomatic. Keep as-is if intentional.",
+      "p": 0.15,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyManager.java",
+      "severity": "nit",
+      "category": "testing",
+      "message": "nit: this diff modifies 2 source file(s) and no test file - if the change is behavior-bearing, point at the coverage that exercises it.",
+      "rule": "missing-test",
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [
+    {
+      "path": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/FileAccessTree.java",
+      "line": 206,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n□ **question** · ▰▱▱▱ suspected\n`checkPath` trace logs array length but `paths` may contain user-controlled data. Confirm no sensitive path info is leaked.",
+      "dedupKey": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/FileAccessTree.java:206:q:`checkPath` trace logs array length but `paths` may contain user-controlled data. Confirm no sensitive path info is leaked.:00001505"
+    },
+    {
+      "path": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyManager.java",
+      "line": 313,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n□ **question** · ▰▱▱▱ suspected\n`DEFAULT_FILESYSTEM_CLASS` is compared with `!=` but `getClass()` returns the runtime class; this is safe (no inheritance) but an `instanceof` or `equals` would be more idiomatic. Keep as-is if intentional.",
+      "dedupKey": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyManager.java:313:q:`DEFAULT_FILESYSTEM_CLASS` is compared with `!=` but `getClass()` returns the runtime class; this is safe (no inheritance) but an `instanceof` or `equals` would be more idiomatic. Keep as-is if intentional.:00001505"
+    }
+  ],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async",
+      "dep-diff",
+      "missing-test"
+    ],
+    "records": [
+      {
+        "file": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyManager.java",
+        "detail": "source-only diff: 2 source file(s), no test file",
+        "rule": "missing-test"
+      }
+    ],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 4796,
+    "needsDeepReview": 0.8,
+    "risk": 2.97,
+    "topRiskArea": "auth",
+    "topRiskAreaConfidence": 0.9
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/FileAccessTree.java",
+        "line": 206,
+        "severity": "q",
+        "category": "other",
+        "message": "L206: ❓ q: `checkPath` trace logs array length but `paths` may contain user-controlled data. Confirm no sensitive path info is leaked.",
+        "adjudicated": true,
+        "p": 0.5
+      },
+      {
+        "file": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyManager.java",
+        "line": 313,
+        "severity": "q",
+        "category": "performance",
+        "message": "L313: ❓ q: `DEFAULT_FILESYSTEM_CLASS` is compared with `!=` but `getClass()` returns the runtime class; this is safe (no inheritance) but an `instanceof` or `equals` would be more idiomatic. Keep as-is if intentional.",
+        "adjudicated": true,
+        "p": 0.15
+      }
+    ],
+    "overflow": 0
+  },
+  "scope": {
+    "totalFiles": 3,
+    "reviewedFiles": 3,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 2090,
+      "costUsd": 0.000084126,
+      "kind": "decide"
+    },
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "provider": "DeepInfra",
+      "tokens": 2274,
+      "costUsd": 0,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1829,
+      "costUsd": 0.000075138,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.000159264,
+  "tokens": 6193,
+  "model": "deepseek/deepseek-v4-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "e4e5576b3455478071e0fd26a80ec9fd8eb35437",
+    "checkoutSha": "e4e5576b3455478071e0fd26a80ec9fd8eb35437",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "e4e5576b3455478071e0fd26a80ec9fd8eb35437",
+  "diffRange": {
+    "base": "ba5a9c83310ce6fbe27ff251aba00e37fad1d205",
+    "baseSha": "ba5a9c83310ce6fbe27ff251aba00e37fad1d205",
+    "headSha": "e4e5576b3455478071e0fd26a80ec9fd8eb35437"
+  }
+}
