@@ -698,6 +698,21 @@ describe('sticky review top block (U4)', () => {
     expect(diagnostics).toContain(`- CI evidence inconclusive for 3 findings: no repo index; run \`argus-reviewer index\` first`)
   })
 
+  it('states repo-index staleness in Diagnostics only when drifted', () => {
+    const cr = review({
+      indexStaleness: { generatedAt: '2026-10-01T00:00:00.000Z', checked: 5, stale: 2, missing: 1 },
+    })
+    const body = renderReviewOnlyBody(cr, 'https://github.com/run/1', false, undefined)
+    const diagnostics = body.slice(body.indexOf('<summary>Diagnostics</summary>'))
+    expect(diagnostics).toContain('Repo index stale: 2 of 5 reviewed file(s)')
+
+    const clean = review({
+      indexStaleness: { generatedAt: '2026-10-01T00:00:00.000Z', checked: 5, stale: 0, missing: 1 },
+    })
+    const cleanBody = renderReviewOnlyBody(clean, 'https://github.com/run/1', false, undefined)
+    expect(cleanBody).not.toContain('Repo index stale')
+  })
+
   it('states a skipped rules lane in Diagnostics (U8)', () => {
     const cr = review({
       secretsScan: { skipped: 'the rules lane is disabled (review.rules)' },

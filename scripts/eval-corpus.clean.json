@@ -1,0 +1,26 @@
+[
+  {
+    "name": "clean-170-setup-node-bump",
+    "repo": ".",
+    "base": "a3f8864d3f5fa2fafeade484254c650b545c610a",
+    "head": "1e317e36e647982e6af493e973563b27d1d75256",
+    "clean": true,
+    "note": "dependabot actions/setup-node 6->7, +4/-4 in 4 workflow files - nothing to find"
+  },
+  {
+    "name": "clean-176-action-pin",
+    "repo": ".",
+    "base": "27887be6438ad284566073835939210edc4cdeb8",
+    "head": "3843b780911c1b7f6f28ab732cfddb2cad923fea",
+    "clean": true,
+    "note": "action pin -> v0.5.0, +19/-16 in 9 docs/onboarding files - nothing to find"
+  },
+  {
+    "name": "clean-175-release-prep",
+    "repo": ".",
+    "base": "a3f8864d3f5fa2fafeade484254c650b545c610a",
+    "head": "be3c9e332546c68742d5ab46a4075c04525c7e02",
+    "clean": true,
+    "note": "v0.5.0 release prep, +61/-3 in 3 files (CHANGELOG/version) - docs clean"
+  }
+]

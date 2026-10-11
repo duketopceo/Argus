@@ -61,6 +61,45 @@ describe('metricsFromReport', () => {
     expect(m.precision).toBe(0)
     expect(m.recall).toBe(0)
   })
+
+  it('clean rows emit silence metrics - bug/risk counts and verdict', () => {
+    const cleanReport = {
+      ok: false,
+      skipped: false,
+      verdict: 'needs_changes',
+      findings: [
+        { file: 'src/a.ts', line: 1, severity: 'bug', message: 'b1', p: 0.4 },
+        { file: 'src/a.ts', line: 2, severity: 'risk', message: 'r1', p: 0.9 },
+        { file: 'src/b.ts', line: 3, severity: 'nit', message: 'n1', p: 0.2 },
+      ],
+      reviewComments: [],
+    }
+    const m = metricsFromReport(cleanReport, undefined, true)
+    expect(m.clean).toBe(true)
+    expect(m.blockingFindings).toBe(2)
+    expect(m.flooredBlockers).toBe(1) // only p=0.4 is below the 0.7 floor
+    expect(m.blockingVerdict).toBe(true)
+    expect(m.precision).toBeUndefined()
+  })
+
+  it('clean flag absent → no silence metrics even with labels empty', () => {
+    const m = metricsFromReport(report, [])
+    expect(m.clean).toBeUndefined()
+    expect(m.blockingFindings).toBeUndefined()
+  })
+
+  it('fully silent clean row: zero blockers, verdict not blocking', () => {
+    const m = metricsFromReport(
+      { ok: true, skipped: false, verdict: 'approve', findings: [
+        { file: 'src/a.ts', line: 1, severity: 'nit', message: 'n1' },
+      ], reviewComments: [] },
+      undefined,
+      true,
+    )
+    expect(m.blockingFindings).toBe(0)
+    expect(m.flooredBlockers).toBe(0)
+    expect(m.blockingVerdict).toBe(false)
+  })
 })
 
 import { selectPrs, toCorpus } from '../../scripts/aacr-corpus.mjs'

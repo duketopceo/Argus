@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest'
 
 import { buildPatchChunks } from '../../src/cli.js'
 import { buildReviewContext, loadReviewContext } from '../../src/index/context.js'
-import { INDEX_SCHEMA_VERSION, type RepoIndex } from '../../src/index/scan.js'
+import { INDEX_SCHEMA_VERSION, sha256, type RepoIndex } from '../../src/index/scan.js'
+import { indexStaleness } from '../../src/index/staleness.js'
 
 function makeIndex(entries: RepoIndex['entries']): RepoIndex {
   return {
@@ -155,5 +156,40 @@ describe('buildPatchChunks with contexts', () => {
     const ctx = { 'src/b.ts': '> context: purpose=y' }
     const chunks = buildPatchChunks([file('src/a.ts', big), file('src/b.ts', big)], ctx)
     expect(chunks.length).toBeGreaterThan(1)
+  })
+})
+
+describe('indexStaleness', () => {
+  it('counts hash drift, misses, and clean files exactly', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'idx-stale-'))
+    await writeFile(join(dir, 'fresh.ts'), 'const a = 1\n')
+    await writeFile(join(dir, 'drifted.ts'), 'const b = 2\n')
+    const freshBuf = Buffer.from('const a = 1\n')
+    const index = makeIndex([
+      entry({ path: 'fresh.ts', contentHash: sha256(freshBuf) }),
+      entry({ path: 'drifted.ts', contentHash: 'old-hash' }),
+      // missing.ts has no entry
+    ])
+    const st = await indexStaleness(index, ['fresh.ts', 'drifted.ts', 'missing.ts'], dir)
+    expect(st.checked).toBe(2)
+    expect(st.stale).toBe(1)
+    expect(st.missing).toBe(1)
+    expect(st.generatedAt).toBe(index.generatedAt)
+  })
+
+  it('unreadable files count as stale - the hash can no longer be proven', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'idx-stale-'))
+    const index = makeIndex([entry({ path: 'gone.ts' })])
+    const st = await indexStaleness(index, ['gone.ts'], dir)
+    expect(st).toMatchObject({ checked: 1, stale: 1, missing: 0 })
+  })
+
+  it('all-clean index reports zero staleness', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'idx-stale-'))
+    await writeFile(join(dir, 'a.ts'), 'x')
+    const index = makeIndex([entry({ path: 'a.ts', contentHash: sha256(Buffer.from('x')) })])
+    const st = await indexStaleness(index, ['a.ts'], dir)
+    expect(st.stale).toBe(0)
+    expect(st.checked).toBe(1)
   })
 })

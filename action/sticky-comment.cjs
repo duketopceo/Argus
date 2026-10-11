@@ -668,6 +668,14 @@ function diagnosticsFold(manifest, report, codeReview) {
     if (typeof codeReview.testFileCapped === 'number' && codeReview.testFileCapped > 0) {
       items.push(`Test-file findings capped at nit: ${codeReview.testFileCapped}`)
     }
+    const ist = codeReview.indexStaleness
+    if (ist && ist.stale > 0) {
+      items.push(
+        `Repo index stale: ${ist.stale} of ${ist.checked} reviewed file(s) changed since ` +
+          `the index was written (${cell(ist.generatedAt)}); file context may be outdated. ` +
+          'Re-run `argus index` to refresh.',
+      )
+    }
     const t = codeReview.triage
     if (t) {
       if (t.unadjudicated === true) {

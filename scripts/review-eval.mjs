@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 // review-eval - offline review-corpus runner and metrics diff.
 //
-// Corpus JSON: [{ name, repo, base, head, labels? }]
+// Corpus JSON: [{ name, repo, base, head, labels?, clean? }]
 //   repo    absolute path or https URL (init'd into --cache dir, only the
 //           entry's two SHAs fetched - no full clone)
 //   base    ref/sha the PR diverged from (merge-base source)
 //   head    sha to check out and review
 //   labels  optional [{ path, fromLine, toLine, valid, fileLevel?, category?, note? }]
 //           ground truth; fileLevel:true matches any finding line on path
+//   clean   optional true — the diff is verified free of real issues;
+//           emits silence metrics (blockingFindings/flooredBlockers/
+//           blockingVerdict) instead of precision/recall
 //
 // run:     node scripts/review-eval.mjs run --corpus c.json [--tag t]
 //            replays each entry in a temp worktree via
@@ -68,7 +71,7 @@ const matchLabel = (finding, labels) => {
 }
 
 // metricsFromReport: pure - unit-testable without a repo.
-export function metricsFromReport(report, labels) {
+export function metricsFromReport(report, labels, clean) {
   const findings = report.findings ?? []
   const posted = report.reviewComments ?? []
   const bySeverity = {}
@@ -119,6 +122,20 @@ export function metricsFromReport(report, labels) {
     m.tp = tp
     m.tpRules = tpRules
     m.validLabels = validLabels.length
+  }
+  // Clean-row silence: `clean` entries carry no labels because there is
+  // nothing to find — the metrics are how loudly the review says so.
+  // blockingFindings counts posted bug/risk severities (the union of
+  // common gates); flooredBlockers is the subset the confidence floor
+  // already de-gated (p < 0.7, matching the shipped default).
+  if (clean === true) {
+    const BLOCKING = new Set(['bug', 'risk'])
+    m.clean = true
+    m.blockingFindings = findings.filter((f) => BLOCKING.has(f.severity)).length
+    m.flooredBlockers = findings.filter(
+      (f) => BLOCKING.has(f.severity) && typeof f.p === 'number' && f.p < 0.7,
+    ).length
+    m.blockingVerdict = report.verdict === 'needs_changes'
   }
   return m
 }
@@ -256,7 +273,7 @@ async function run(corpusPath, tag, cacheDir) {
       ms,
       exitCode: 2,
       stalled: true,
-      metrics: metricsFromReport({ ok: false, skipped: true }, entry.labels),
+      metrics: metricsFromReport({ ok: false, skipped: true }, entry.labels, entry.clean === true),
       error: String(e?.message ?? e).slice(0, 200),
     })
     flush()
@@ -302,7 +319,7 @@ async function run(corpusPath, tag, cacheDir) {
       const report = existsSync(reportPath)
         ? JSON.parse(readFileSync(reportPath, 'utf8'))
         : { ok: false, skipped: true, summary: `exit ${code}` }
-      const metrics = metricsFromReport(report, entry.labels)
+      const metrics = metricsFromReport(report, entry.labels, entry.clean === true)
       const stalled = code !== 0 || !existsSync(reportPath)
       // Tag-scoped: an entry-keyed name overwrites the previous run's
       // report while older run files keep dangling reportPath links.
@@ -327,6 +344,9 @@ async function run(corpusPath, tag, cacheDir) {
         `${entry.name}: findings=${metrics.findings} comments=${metrics.comments}` +
           (metrics.precision !== undefined
             ? ` precision=${metrics.precision.toFixed(2)} recall=${metrics.recall.toFixed(2)}`
+            : '') +
+          (metrics.clean === true
+            ? ` blocking=${metrics.blockingFindings} floored=${metrics.flooredBlockers}`
             : '') +
           ` (${(ms / 1000).toFixed(0)}s)`,
       )
@@ -356,14 +376,30 @@ const health = (r) =>
   r.stalled === true || r.exitCode !== 0 ? 'yes' : r.metrics?.skipped ? 'skipped' : 'no'
 
 function printTable(results) {
-  console.log('\nentry | findings | comments | nit% | gen-path | precision | recall | drop(od/rev) | stalled')
+  console.log('\nentry | findings | comments | nit% | gen-path | precision | recall | drop(od/rev) | blk(fl) | stalled')
   for (const r of results) {
     const m = r.metrics
     const stalled = health(r)
+    const blk = m.clean === true ? `${m.blockingFindings}(${m.flooredBlockers})` : '-'
     console.log(
       `${r.name} | ${m.findings} | ${m.comments} | ${(m.nitShare * 100).toFixed(0)}% | ` +
         `${m.generatedPathComments} | ${m.precision?.toFixed(2) ?? '-'} | ` +
-        `${m.recall?.toFixed(2) ?? '-'} | ${m.droppedOutsideDiff}/${m.droppedReverted} | ${stalled}`,
+        `${m.recall?.toFixed(2) ?? '-'} | ${m.droppedOutsideDiff}/${m.droppedReverted} | ${blk} | ${stalled}`,
+    )
+  }
+  const cleanRows = results.filter((r) => r.metrics.clean === true)
+  if (cleanRows.length > 0) {
+    // Stalled entries reviewed nothing — a stub report's zero-blocker
+    // reading is a stall artifact, not silence evidence.
+    const ran = cleanRows.filter((r) => health(r) !== 'yes')
+    const silent = ran.filter((r) => r.metrics.blockingFindings === 0).length
+    const gated = ran.filter((r) => r.metrics.blockingVerdict === true).length
+    console.log(
+      `clean rows: ${silent}/${ran.length} silent (0 blocking findings)` +
+        (ran.length !== cleanRows.length
+          ? ` - ${cleanRows.length - ran.length} stalled/skipped`
+          : '') +
+        `; ${gated} claimed a blocking verdict`,
     )
   }
 }
@@ -372,7 +408,7 @@ function compare(aPath, bPath) {
   const a = JSON.parse(readFileSync(aPath, 'utf8'))
   const b = JSON.parse(readFileSync(bPath, 'utf8'))
   const byName = new Map(a.results.map((r) => [r.name, r]))
-  console.log('entry | Δfindings | Δcomments | Δnit% | Δgen-path | Δprecision | Δrecall | stalled')
+  console.log('entry | Δfindings | Δcomments | Δnit% | Δgen-path | Δprecision | Δrecall | Δblk | stalled')
   for (const r of b.results) {
     const stalled = health(r)
     const m0 = byName.get(r.name)?.metrics
@@ -382,11 +418,15 @@ function compare(aPath, bPath) {
       continue
     }
     const d = (k) => (m1[k] - m0[k]).toFixed(2)
+    const blkDelta =
+      m1.blockingFindings !== undefined && m0.blockingFindings !== undefined
+        ? String(m1.blockingFindings - m0.blockingFindings)
+        : '-'
     console.log(
       `${r.name} | ${m1.findings - m0.findings} | ${m1.comments - m0.comments} | ` +
         `${d('nitShare')} | ${m1.generatedPathComments - m0.generatedPathComments} | ` +
         `${m1.precision !== undefined && m0.precision !== undefined ? d('precision') : '-'} | ` +
-        `${m1.recall !== undefined && m0.recall !== undefined ? d('recall') : '-'} | ${stalled}`,
+        `${m1.recall !== undefined && m0.recall !== undefined ? d('recall') : '-'} | ${blkDelta} | ${stalled}`,
     )
   }
 }

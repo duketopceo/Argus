@@ -463,7 +463,10 @@ Code review is **index-informed**: when `argus.index.json` exists (the action's
 sent with a bounded `> context:` block — the file's purpose plus its top
 importers/imports — so the reviewer model can weigh caller blast radius, not
 just the patch. Index metadata is sanitized before reaching the prompt and
-framed as unverified; no extra config or model calls are needed.
+framed as unverified; no extra config or model calls are needed. Staleness
+is checked exactly: any reviewed file whose on-disk hash drifted from its
+index entry surfaces a `Repo index stale: N of M` line in the sticky's
+Diagnostics fold (re-run `argus index` to refresh).
 
 Findings are also **evidence-linked**: Argus reads the PR's check-runs and tags
 each finding with whether the repo's own CI exercised the implicated path —

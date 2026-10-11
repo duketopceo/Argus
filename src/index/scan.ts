@@ -80,7 +80,7 @@ async function walk(
   }
 }
 
-function sha256(buf: Buffer): string {
+export function sha256(buf: Buffer): string {
   return createHash('sha256').update(buf).digest('hex').slice(0, 16)
 }
 
