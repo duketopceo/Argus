@@ -781,7 +781,7 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
       if (triage !== undefined) stage(triageLine(triage))
     }
 
-    // U4(b) reflection pass — one batched confidence-model decide() re-reads
+    // U4(b) reflection pass: one batched confidence-model decide() re-reads
     // each surviving model finding against its file's patch and drops
     // ungrounded ones. Sequential and before adjudication: dropped findings
     // never reach p-scoring, the rules union, or the probe lane. Any severity
@@ -805,8 +805,8 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
       const { findings: _kept, ...audit } = refl
       reflection = audit
       stage(
-        `reflection — ${audit.records.length} checked, ${audit.dropped} dropped` +
-          (audit.unchecked === true ? ' (reflection unavailable — none dropped)' : '') +
+        `reflection: ${audit.records.length} checked, ${audit.dropped} dropped` +
+          (audit.unchecked === true ? ' (reflection unavailable, none dropped)' : '') +
           (audit.overflow > 0 ? `, +${audit.overflow} over cap` : ''),
       )
     }
