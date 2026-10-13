@@ -6,6 +6,17 @@ pre-1.0; breaking changes may ship without a major bump until `1.0.0`.
 ## [Unreleased]
 
 ### Added
+- **Deterministic file bundling** — `planChunks` now packs a source file
+  with its test/spec/stories/`__tests__`/`__snapshots__`/generated
+  siblings as one bundle, so a finding on `foo.ts` reviews in the same
+  chunk as `foo.test.ts`. Bundles larger than the chunk target still pack
+  per-unit, preserving hunk-level splits for oversized files.
+- **Opt-in grounding reflection** — `review.reflection` (default off) /
+  `ARGUS_REVIEW_REFLECTION=1` re-reads each model finding against its
+  file's patch through the confidence model and drops ungrounded ones.
+  Runs before adjudication, never touches rules-lane findings, degrades
+  open on failure, and records a per-finding audit on the report.
+  Measured inert on the current corpus — kept opt-in pending evidence.
 - **Confidence floor on blocking severities** — `review.confidenceFloor`
   (default `0.7`, matching the existing REQUEST_CHANGES true-positive gate).
   A bug/risk the confidence model scores below the floor still posts with

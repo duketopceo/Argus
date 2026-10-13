@@ -42,6 +42,25 @@ function groupByDir<T extends ChunkFile>(files: T[]): T[] {
   return [...groups.values()].flat()
 }
 
+/** Directories whose files belong to the parent dir's namespace for bundling. */
+const BUNDLE_DIR_NAMES = new Set(['__tests__', '__snapshots__', '__mocks__'])
+
+/**
+ * Deterministic bundle key (U4c): a source file and its test/spec/snapshot/
+ * generated siblings share a key, so they review in the same chunk and the
+ * model sees the pair's full context.
+ *   src/foo.ts + src/foo.test.ts          -> src/foo
+ *   src/__tests__/foo.ts                  -> src/foo
+ *   src/__snapshots__/foo.test.ts.snap    -> src/foo
+ */
+function bundleKey(filename: string): string {
+  const dir = dirOf(filename)
+  const segs = dir === '' ? [] : dir.split('/').filter((s) => !BUNDLE_DIR_NAMES.has(s))
+  const base = filename.slice(dir === '' ? 0 : dir.length + 1)
+  const stem = base.replace(/\.(test|spec|test-d|stories|e2e|generated|gen)\./g, '.').replace(/\.snap$/, '')
+  return segs.length === 0 ? stem : `${segs.join('/')}/${stem}`
+}
+
 /** Split a patch at `@@` hunk starts into parts that each fit `budgetTokens`. */
 function splitPatch(patch: string, budgetTokens: number): string[] {
   const firstHunk = patch.search(/^@@/m)
@@ -96,6 +115,17 @@ export function planChunks(
     })
   }
 
+  // U4(c): pack whole bundles, not bare units — a bundle fits in one chunk
+  // whenever it is within the target; an oversized bundle falls back to
+  // per-unit packing so a giant file still splits at the cap.
+  const bundles = new Map<string, Unit[]>()
+  for (const u of units) {
+    const key = bundleKey(u.filename)
+    const b = bundles.get(key)
+    if (b === undefined) bundles.set(key, [u])
+    else b.push(u)
+  }
+
   const chunks: PlannedChunk[] = []
   let cur: Unit[] = []
   let curTokens = 0
@@ -108,10 +138,20 @@ export function planChunks(
     cur = []
     curTokens = 0
   }
-  for (const u of units) {
+  const packUnit = (u: Unit): void => {
     if (cur.length > 0 && curTokens + u.tokens > targetTokens) flush()
     cur.push(u)
     curTokens += u.tokens
+  }
+  for (const bundle of bundles.values()) {
+    const bundleTokens = bundle.reduce((t, u) => t + u.tokens, 0)
+    if (bundleTokens > targetTokens) {
+      for (const u of bundle) packUnit(u)
+      continue
+    }
+    if (cur.length > 0 && curTokens + bundleTokens > targetTokens) flush()
+    cur.push(...bundle)
+    curTokens += bundleTokens
   }
   flush()
   return chunks
