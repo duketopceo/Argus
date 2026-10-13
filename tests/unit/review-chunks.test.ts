@@ -8,6 +8,7 @@ const bigBody = (n: number, tag: string): string =>
 
 describe('planChunks', () => {
   const file = (filename: string, patch: string) => ({ filename, patch })
+  const order = (plan: ReturnType<typeof planChunks>) => plan.flatMap((c) => c.files)
 
   it('groups files of one directory into adjacent chunks', () => {
     const p = 'x'.repeat(2500 * 4)
@@ -17,9 +18,52 @@ describe('planChunks', () => {
       file('b/two.ts', p),
       file('a/two.ts', p),
     ])
-    const order = plan.flatMap((c) => c.files)
-    expect(order).toEqual(['b/one.ts', 'b/two.ts', 'a/one.ts', 'a/two.ts'])
+    expect(order(plan)).toEqual(['b/one.ts', 'b/two.ts', 'a/one.ts', 'a/two.ts'])
     expect(plan).toHaveLength(2)
+  })
+
+  it('bundles a source file with its test and spec siblings in one chunk', () => {
+    const p = 'x'.repeat(1800 * 4)
+    const plan = planChunks([
+      file('src/foo.ts', p),
+      file('src/bar.ts', p),
+      file('src/foo.test.ts', p),
+      file('src/foo.spec.ts', p),
+    ])
+    const idx = new Map<string, number>()
+    plan.forEach((c, i) => c.files.forEach((f) => idx.set(f, i)))
+    expect(idx.get('src/foo.ts')).toBe(idx.get('src/foo.test.ts'))
+    expect(idx.get('src/foo.ts')).toBe(idx.get('src/foo.spec.ts'))
+    expect(idx.get('src/foo.ts')).not.toBe(idx.get('src/bar.ts'))
+    expect(order(plan)).toEqual(['src/foo.ts', 'src/foo.test.ts', 'src/foo.spec.ts', 'src/bar.ts'])
+  })
+
+  it('bundles across __tests__/__snapshots__ dirs and .snap/.stories suffixes', () => {
+    const p = 'x'.repeat(1100 * 4)
+    const plan = planChunks([
+      file('src/foo.ts', p),
+      file('src/__tests__/foo.ts', p),
+      file('src/__snapshots__/foo.test.ts.snap', p),
+      file('src/foo.stories.ts', p),
+      file('src/unrelated.ts', 'x'.repeat(1500 * 4)),
+    ])
+    const chunkOf = (f: string) => plan.findIndex((c) => c.files.includes(f))
+    expect(chunkOf('src/foo.ts')).toBe(chunkOf('src/__tests__/foo.ts'))
+    expect(chunkOf('src/foo.ts')).toBe(chunkOf('src/__snapshots__/foo.test.ts.snap'))
+    expect(chunkOf('src/foo.ts')).toBe(chunkOf('src/foo.stories.ts'))
+    expect(chunkOf('src/foo.ts')).not.toBe(chunkOf('src/unrelated.ts'))
+  })
+
+  it('pulls an interleaved test next to its source even across a big sibling', () => {
+    const big = 'x'.repeat(5000 * 4)
+    const small = 'x'.repeat(200 * 4)
+    const plan = planChunks([
+      file('d/foo.ts', small),
+      file('d/huge.ts', big),
+      file('d/foo.test.ts', small),
+    ])
+    const chunkOf = (f: string) => plan.findIndex((c) => c.files.includes(f))
+    expect(chunkOf('d/foo.ts')).toBe(chunkOf('d/foo.test.ts'))
   })
 
   it('splits a single oversized patch at hunk boundaries, keeping every hunk', () => {

@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "tag": "u4c-bundle-on",
+  "cli": "802f24d-dirty",
+  "entries": 4,
+  "results": [
+    {
+      "name": "aacr-infiniflow-ragflow-6691",
+      "note": "AACR-Bench Python PR, 11 changed lines, 6 verified issues",
+      "ms": 8130,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": false,
+        "skipped": false,
+        "verdict": "needs_changes",
+        "findings": 6,
+        "ruleFindings": 1,
+        "comments": 4,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "bug": 4,
+          "nit": 2
+        },
+        "byPathType": {
+          "src": 6
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0.3333333333333333,
+        "precision": 0.8,
+        "recall": 0.3333333333333333,
+        "tp": 4,
+        "tpRules": 1,
+        "validLabels": 6
+      },
+      "reportPath": "docs/audits/eval/reports/aacr-infiniflow-ragflow-6691-cfa6f7e5-u4c-bundle-on.json"
+    },
+    {
+      "name": "aacr-keycloak-keycloak-41672",
+      "note": "AACR-Bench Java PR, 19 changed lines, 1 verified issues",
+      "ms": 3407,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "approve",
+        "findings": 2,
+        "ruleFindings": 1,
+        "comments": 0,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "nit": 2
+        },
+        "byPathType": {
+          "src": 2
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 1,
+        "precision": 0,
+        "recall": 0,
+        "tp": 0,
+        "tpRules": 0,
+        "validLabels": 1
+      },
+      "reportPath": "docs/audits/eval/reports/aacr-keycloak-keycloak-41672-e27e807c-u4c-bundle-on.json"
+    },
+    {
+      "name": "aacr-langflow-ai-langflow-5388",
+      "note": "AACR-Bench Python PR, 22 changed lines, 3 verified issues",
+      "ms": 6313,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "approve",
+        "findings": 3,
+        "ruleFindings": 1,
+        "comments": 0,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "nit": 3
+        },
+        "byPathType": {
+          "src": 3
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 1,
+        "precision": 1,
+        "recall": 0.6666666666666666,
+        "tp": 2,
+        "tpRules": 1,
+        "validLabels": 3
+      },
+      "reportPath": "docs/audits/eval/reports/aacr-langflow-ai-langflow-5388-ce2579a5-u4c-bundle-on.json"
+    },
+    {
+      "name": "aacr-ollama-ollama-8938",
+      "note": "AACR-Bench Go PR, 24 changed lines, 2 verified issues",
+      "ms": 5638,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "pass",
+        "findings": 0,
+        "ruleFindings": 0,
+        "comments": 0,
+        "commentsOverflow": 0,
+        "bySeverity": {},
+        "byPathType": {},
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0,
+        "precision": 0,
+        "recall": 0,
+        "tp": 0,
+        "tpRules": 0,
+        "validLabels": 2
+      },
+      "reportPath": "docs/audits/eval/reports/aacr-ollama-ollama-8938-67202c79-u4c-bundle-on.json"
+    }
+  ],
+  "at": "2026-10-13T22:42:28.039Z"
+}

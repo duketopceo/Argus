@@ -1,0 +1,211 @@
+{
+  "ok": false,
+  "skipped": false,
+  "summary": "5 finding(s) include a blocking severity",
+  "verdict": "needs_changes",
+  "findings": [
+    {
+      "file": "graphrag/entity_resolution.py",
+      "line": 114,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L114: 🔵 nit: The `lambda` function creates a closure over `graph`, `merging_nodes`, and `change` from the loop. Make these explicit arguments to avoid potential late binding issues with `lambda` in a loop. Use `nursery.start_soon(self._merge_graph_nodes, graph, merging_nodes, change)`.",
+      "p": 0.34,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "graphrag/utils.py",
+      "line": 443,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L443: 🔵 nit: The `lambda` function creates a closure over `tenant_id`, `kb_id`, `from_node`, and `to_node` from the loop. Make these explicit arguments to avoid potential late binding issues with `lambda` in a loop. Use `nursery.start_soon(trio.to_thread.run_sync, settings.docStoreConn.delete, {\"knowledge_graph_kwd\": [\"relation\"], \"from_entity_kwd\": from_node, \"to_entity_kwd\": to_node}, search.index_name(tenant_id), kb_id)`.",
+      "p": 0.42,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "graphrag/general/extractor.py",
+      "line": 204,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L204: 🔴 bug: `list.extend()` modifies the list in place and returns `None`. Calling `sorted()` on `None` will raise a `TypeError`. The result of `extend()` should not be passed to `sorted()`. The correct way to merge and sort `source_id` is `node0_attrs[\"source_id\"] = sorted(set(node0_attrs[\"source_id\"]) | set(node1_attrs.get(\"source_id\", [])))`.",
+      "p": 0.85,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "graphrag/general/extractor.py",
+      "line": 217,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L217: 🔴 bug: `list.extend()` modifies the list in place and returns `None`. Calling `sorted()` on `None` will raise a `TypeError`. The result of `extend()` should not be passed to `sorted()`. The correct way to merge and sort `attr` values is `edge0_attrs[attr] = sorted(set(edge0_attrs[attr]) | set(edge1_attrs.get(attr, [])))`.",
+      "p": 0.79,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "graphrag/general/extractor.py",
+      "severity": "nit",
+      "category": "testing",
+      "message": "nit: this diff modifies 3 source file(s) and no test file - if the change is behavior-bearing, point at the coverage that exercises it.",
+      "rule": "missing-test",
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "request_changes",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 2,
+  "reviewComments": [
+    {
+      "path": "graphrag/general/extractor.py",
+      "line": 204,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`list.extend()` modifies the list in place and returns `None`. Calling `sorted()` on `None` will raise a `TypeError`. The result of `extend()` should not be passed to `sorted()`. The correct way to merge and sort `source_id` is `node0_attrs[\"source_id\"] = sorted(set(node0_attrs[\"source_id\"]) | set(node1_attrs.get(\"source_id\", [])))`.",
+      "dedupKey": "graphrag/general/extractor.py:204:bug:`list.extend()` modifies the list in place and returns `None`. Calling `sorted()` on `None` will raise a `TypeError`. The result of `extend()` should not be passed to `sorted()`. The correct way to merge and sort `source_id` is `node0_attrs[\"source_id\"] = sorted(set(node0_attrs[\"source_id\"]) | set(node1_attrs.get(\"source_id\", [])))`.:00001505"
+    },
+    {
+      "path": "graphrag/general/extractor.py",
+      "line": 217,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`list.extend()` modifies the list in place and returns `None`. Calling `sorted()` on `None` will raise a `TypeError`. The result of `extend()` should not be passed to `sorted()`. The correct way to merge and sort `attr` values is `edge0_attrs[attr] = sorted(set(edge0_attrs[attr]) | set(edge1_attrs.get(attr, [])))`.",
+      "dedupKey": "graphrag/general/extractor.py:217:bug:`list.extend()` modifies the list in place and returns `None`. Calling `sorted()` on `None` will raise a `TypeError`. The result of `extend()` should not be passed to `sorted()`. The correct way to merge and sort `attr` values is `edge0_attrs[attr] = sorted(set(edge0_attrs[attr]) | set(edge1_attrs.get(attr, [])))`.:00001505"
+    }
+  ],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async",
+      "dep-diff",
+      "missing-test"
+    ],
+    "records": [
+      {
+        "file": "graphrag/general/extractor.py",
+        "detail": "source-only diff: 3 source file(s), no test file",
+        "rule": "missing-test"
+      }
+    ],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 3541,
+    "needsDeepReview": 0.93,
+    "risk": 2.67,
+    "topRiskArea": "data",
+    "topRiskAreaConfidence": 0.99
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "graphrag/entity_resolution.py",
+        "line": 114,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L114: 🔵 nit: The `lambda` function creates a closure over `graph`, `merging_nodes`, and `change` from the loop. Make these explicit arguments to avoid potential late binding issues with `lambda` in a loop. Use `nursery.start_soon(self._merge_graph_nodes, graph, merging_nodes, change)`.",
+        "adjudicated": true,
+        "p": 0.34
+      },
+      {
+        "file": "graphrag/utils.py",
+        "line": 443,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L443: 🔵 nit: The `lambda` function creates a closure over `tenant_id`, `kb_id`, `from_node`, and `to_node` from the loop. Make these explicit arguments to avoid potential late binding issues with `lambda` in a loop. Use `nursery.start_soon(trio.to_thread.run_sync, settings.docStoreConn.delete, {\"kn",
+        "adjudicated": true,
+        "p": 0.42
+      },
+      {
+        "file": "graphrag/general/extractor.py",
+        "line": 204,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L204: 🔴 bug: `list.extend()` modifies the list in place and returns `None`. Calling `sorted()` on `None` will raise a `TypeError`. The result of `extend()` should not be passed to `sorted()`. The correct way to merge and sort `source_id` is `node0_attrs[\"source_id\"] = sorted(set(node0_attrs[\"source",
+        "adjudicated": true,
+        "p": 0.85
+      },
+      {
+        "file": "graphrag/general/extractor.py",
+        "line": 217,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L217: 🔴 bug: `list.extend()` modifies the list in place and returns `None`. Calling `sorted()` on `None` will raise a `TypeError`. The result of `extend()` should not be passed to `sorted()`. The correct way to merge and sort `attr` values is `edge0_attrs[attr] = sorted(set(edge0_attrs[attr]) | set",
+        "adjudicated": true,
+        "p": 0.79
+      }
+    ],
+    "overflow": 0
+  },
+  "scope": {
+    "totalFiles": 3,
+    "reviewedFiles": 3,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1620,
+      "costUsd": 0.000064386,
+      "kind": "decide"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 2886,
+      "costUsd": 0.002932776,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 2109,
+      "costUsd": 0.000085386,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.0030825479999999996,
+  "tokens": 6615,
+  "model": "google/gemini-2.5-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "36881278bf059ad4f79eea31edb34fa2afec6a23",
+    "checkoutSha": "36881278bf059ad4f79eea31edb34fa2afec6a23",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "36881278bf059ad4f79eea31edb34fa2afec6a23",
+  "diffRange": {
+    "base": "0a42e5777eb966b26aaf8f2a7d593ae99a4aa87a",
+    "baseSha": "0a42e5777eb966b26aaf8f2a7d593ae99a4aa87a",
+    "headSha": "36881278bf059ad4f79eea31edb34fa2afec6a23"
+  }
+}
