@@ -1,0 +1,106 @@
+{
+  "ok": true,
+  "skipped": false,
+  "summary": "Reviewed 53 of 54 changed files (1 excluded by review.exclude). Reviewed all 3 chunks (53 of 53 files). No issues found",
+  "verdict": "pass",
+  "findings": [],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async",
+      "dep-diff",
+      "missing-test"
+    ],
+    "records": [],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 12038,
+    "needsDeepReview": 0.27,
+    "risk": 1.62,
+    "topRiskArea": "none",
+    "topRiskAreaConfidence": 0.3
+  },
+  "modelVerdict": "approve",
+  "scope": {
+    "totalFiles": 54,
+    "reviewedFiles": 53,
+    "excludedFiles": 1,
+    "excludedSample": [
+      "src/report/brand-assets.generated.ts"
+    ],
+    "chunksTotal": 3,
+    "chunksReviewed": 3,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 5181,
+      "costUsd": 0.000213948,
+      "kind": "decide"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 5675,
+      "costUsd": 0.001855359,
+      "kind": "code"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 6036,
+      "costUsd": 0.001929906,
+      "kind": "code"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 1672,
+      "costUsd": 0.000622908,
+      "kind": "code"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 783,
+      "costUsd": 0.000382833,
+      "kind": "code"
+    }
+  ],
+  "visionCostUsd": 0.005004954,
+  "tokens": 19347,
+  "model": "google/gemini-2.5-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "3d8a2f089973dd724147dc14a6bcd0fa91448307",
+    "checkoutSha": "3d8a2f089973dd724147dc14a6bcd0fa91448307",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "3d8a2f089973dd724147dc14a6bcd0fa91448307",
+  "diffRange": {
+    "base": "3ed703ee57b505177d193ffa2cb26f12a43f10dc",
+    "baseSha": "3ed703ee57b505177d193ffa2cb26f12a43f10dc",
+    "headSha": "3d8a2f089973dd724147dc14a6bcd0fa91448307"
+  }
+}

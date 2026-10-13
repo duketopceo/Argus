@@ -16,6 +16,7 @@ import { classifyHeadBinding, readCheckoutSha, isHeadBindingConclusive } from '.
 import { type FindingAdjudicationAudit, adjudicateFindings } from '../review/adjudicate.js'
 import { planChunks } from '../review/chunks.js'
 import { isReviewProfile } from '../review/packs.js'
+import { reflectFindings, type FindingReflectionAudit } from '../review/reflect.js'
 import { type RuleFinding, rulesLaneScans, runRules } from '../review/rules.js'
 import { partitionByExclude, rulesForFiles } from '../review/scope.js'
 import { type SecretsScanResult, materializeMergeBaseDiff } from '../review/secrets.js'
@@ -151,6 +152,11 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
       ctx.err(`warning: ignoring invalid ARGUS_REVIEW_INSTRUCTIONS: ${(e as Error).message}`)
     }
   }
+  // ARGUS_REVIEW_REFLECTION (1/0) follows the same operator-env pattern —
+  // the only lever in the untrusted lane, where config never executes.
+  const envReflection = ctx.env.ARGUS_REVIEW_REFLECTION?.trim()
+  if (envReflection === '1' || envReflection === 'true') config.review.reflection = true
+  else if (envReflection === '0' || envReflection === 'false') config.review.reflection = false
   // Review mode: --mode beats the operator env, which beats config (same
   // operator-env pattern as ARGUS_CODE_MODEL — the only lever in the
   // untrusted lane, where PR-controlled config never executes).
@@ -775,6 +781,36 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
       if (triage !== undefined) stage(triageLine(triage))
     }
 
+    // U4(b) reflection pass — one batched confidence-model decide() re-reads
+    // each surviving model finding against its file's patch and drops
+    // ungrounded ones. Sequential and before adjudication: dropped findings
+    // never reach p-scoring, the rules union, or the probe lane. Any severity
+    // may drop — that is the point — but a failed call keeps everything
+    // (degrade open). Rules-lane findings never enter; the deterministic
+    // lane cannot be reflected away.
+    let reflection: FindingReflectionAudit | undefined
+    if (
+      config.review.reflection &&
+      decisionClient !== undefined &&
+      !ledger.budgetExceeded &&
+      finalFindings.length > 0
+    ) {
+      const refl = await reflectFindings({
+        findings: finalFindings,
+        patchByFile: new Map(files.map((f) => [f.filename, f.patch ?? ''])),
+        client: decisionClient,
+        ...(config.decisionModel !== undefined ? { model: config.decisionModel } : {}),
+      })
+      finalFindings = refl.findings
+      const { findings: _kept, ...audit } = refl
+      reflection = audit
+      stage(
+        `reflection — ${audit.records.length} checked, ${audit.dropped} dropped` +
+          (audit.unchecked === true ? ' (reflection unavailable — none dropped)' : '') +
+          (audit.overflow > 0 ? `, +${audit.overflow} over cap` : ''),
+      )
+    }
+
     // U8 finding adjudication — one batched confidence-model noul per synthesized
     // finding. Runs on the model findings only (rules-lane findings carry
     // their own adjudication or severity ceiling) and BEFORE the rules
@@ -1157,6 +1193,7 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
       ...(rulesScan !== undefined ? { rulesScan } : {}),
       ...(triage !== undefined ? { triage } : {}),
       ...(findingAdjudication !== undefined ? { findingAdjudication } : {}),
+      ...(reflection !== undefined ? { reflection } : {}),
       ...(droppedUnanchored > 0 ? { droppedUnanchored } : {}),
       ...(droppedReverted > 0 ? { droppedReverted } : {}),
       ...(droppedFindings.length > 0 ? { droppedFindings } : {}),

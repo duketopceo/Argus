@@ -47,6 +47,14 @@ describe('review policy config', () => {
     }
   })
 
+  it('reflection defaults off; only literal true enables', () => {
+    expect(resolveConfig({}).review.reflection).toBe(false)
+    expect(resolveConfig({ review: { reflection: true } }).review.reflection).toBe(true)
+    for (const bad of [1, 'yes', 'true']) {
+      expect(resolveConfig({ review: { reflection: bad } }).review.reflection).toBe(false)
+    }
+  })
+
   it('clamps out-of-range secretsThreshold to default', () => {
     for (const bad of [1.5, -0.2, NaN]) {
       expect(resolveConfig({ review: { secretsThreshold: bad } }).review.secretsThreshold).toBe(0.3)

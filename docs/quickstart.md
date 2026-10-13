@@ -521,6 +521,12 @@ export default defineConfig({
     // Reproduced evidence and unadjudicated findings always gate.
     // Default 0.7 (matches the REQUEST_CHANGES gate). 0 disables.
     confidenceFloor: 0.7,
+    // Grounding reflection pass — one batched confidence-model decide()
+    // re-reads each model finding against its file's patch and drops
+    // findings the diff does not support, at any severity (rules-lane
+    // findings never enter). Dropped findings stay in the report's
+    // reflection audit. Default false; also `ARGUS_REVIEW_REFLECTION=1`.
+    reflection: false,
     // Post each nit as its own inline comment instead of consolidating
     // them into the sticky's nit fold. Default false — nits stay counted
     // in `findings` and render in the fold, capped at 15 with overflow

@@ -118,6 +118,7 @@ const defaults = {
         lowRiskModel: undefined,
         findingThreshold: 1.0,
         confidenceFloor: 0.7,
+        reflection: false,
         requestChanges: true,
         nitsInline: false,
         profiles: [],
@@ -311,6 +312,7 @@ export function resolveConfig(input = {}) {
     }
     review.findingThreshold = prob01(review.findingThreshold, defaults.review.findingThreshold);
     review.confidenceFloor = prob01(review.confidenceFloor, defaults.review.confidenceFloor);
+    review.reflection = review.reflection === true;
     // Advisory-only escape hatch — only literal `false` opts out; anything
     // else (mis-typed values included) keeps the default-true posture.
     review.requestChanges = review.requestChanges !== false;

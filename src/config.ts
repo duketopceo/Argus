@@ -279,6 +279,11 @@ export interface Config {
    * not drive the verdict or the commit-status gate (reproduced evidence
    * and unadjudicated findings are exempt). Default 0.7, matching the
    * reviewEvent high-confidence gate; 0 disables the floor entirely.
+   * `reflection`: run the grounding reflection pass — one batched
+   * confidence-model decide() that re-reads each model finding against its
+   * file's patch and drops findings the diff does not support (any
+   * severity; rules-lane findings never enter). Dropped findings stay in
+   * the report's reflection audit. Default false — opt-in mechanism.
    * `profiles`: named review lenses appended to the review prompt
    * ('security'|'perf'|'debloat' — see src/review/packs.ts). Unknown names
    * are dropped at config load. Default [] — no extra rubric.
@@ -291,6 +296,7 @@ export interface Config {
     lowRiskModel: string | undefined
     findingThreshold: number
     confidenceFloor: number
+    reflection: boolean
     requestChanges: boolean
     /**
      * `nitsInline` posts nit-severity findings as individual inline review
@@ -497,6 +503,7 @@ const defaults: Config = {
     lowRiskModel: undefined,
     findingThreshold: 1.0,
     confidenceFloor: 0.7,
+    reflection: false,
     requestChanges: true,
     nitsInline: false,
     profiles: [],
@@ -705,6 +712,7 @@ export function resolveConfig(input: ConfigInput = {}): Config {
   }
   review.findingThreshold = prob01(review.findingThreshold, defaults.review.findingThreshold)
   review.confidenceFloor = prob01(review.confidenceFloor, defaults.review.confidenceFloor)
+  review.reflection = review.reflection === true
   // Advisory-only escape hatch — only literal `false` opts out; anything
   // else (mis-typed values included) keeps the default-true posture.
   review.requestChanges = review.requestChanges !== false

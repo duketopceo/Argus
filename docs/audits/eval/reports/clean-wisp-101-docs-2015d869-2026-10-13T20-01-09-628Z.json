@@ -1,0 +1,1584 @@
+{
+  "ok": true,
+  "skipped": false,
+  "summary": "Reviewed all 5 chunks (28 of 28 files). 47 low-severity finding(s)",
+  "verdict": "approve",
+  "findings": [
+    {
+      "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 35,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "W12 is marked `todo` and states \"open question 3 (STT engine) still with the user\". This implies an external dependency or unresolved decision. This should ideally be resolved or have a clear path forward before marking a plan as 'unified' and nearly complete, as it impacts a core component. Add an owner and a deadline to `open question 3`.",
+      "p": 0.79,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 49,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "W30 is marked `in progress` and states \"refactor of `pipeline.py` on its own branch; no code on master\". A significant refactor of a core file (`pipeline.py`) being outside of `master` and not yet integrated poses a risk to the stability and completeness of the 'unified' plan. This should be prioritized for merging.",
+      "p": 0.56,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 50,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "W31 is marked `todo (partial)` and mentions \"the Rust freeze and `py-only` marks are not done\". This implies core language/architecture decisions or transitions are incomplete, which is a major concern for a unified plan. This should be addressed with high priority.",
+      "p": 0.69,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 52,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "W33 is marked `in progress` and explicitly states \"Screen recordings need a person\". This indicates a missing deliverable that requires external action, which could block completion of the plan's documentation aspects. Assign an owner and a deadline to the `Screen recordings`.",
+      "p": 0.6,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 53,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "W34 is `todo` and lists `soak, a clean-VM install and two learning cycles`. These are critical validation steps that are not started. This unit should be prioritized for execution to ensure overall system stability and user experience.",
+      "p": 0.63,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 55,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "The \"Open questions still with the user\" list (STT engine, alias period, Rust core, premium handoff) highlights several unresolved, potentially critical decisions. For a unified plan, these should have clear owners, options, and timelines for resolution. These are significant enough to impact multiple units.",
+      "p": 0.7,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "scripts/ui/readme_media.py",
+      "line": 59,
+      "severity": "risk",
+      "category": "correctness",
+      "message": "The `tempfile.TemporaryDirectory` is cleaned up automatically on exit, but if `encode` fails before `tmp` is created or before `tmp.read_bytes()` is called, the comparison logic might not handle the error gracefully, or the `dest.exists()` check could fail. Ensure robust error handling for `encode`.",
+      "p": 0.37,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "tests/test_docs_lint.py",
+      "line": 215,
+      "severity": "nit",
+      "category": "correctness",
+      "message": "The `code_words` function's regex for finding config keys might miss keys constructed dynamically or read from variables. Consider a more robust static analysis tool or a runtime check to ensure all `config` access is covered.",
+      "p": 0.38,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "tests/test_docs_lint.py",
+      "line": 227,
+      "severity": "nit",
+      "category": "correctness",
+      "message": "The regex `ROW` could be more robust to handle additional whitespace or alternative separators between `code` blocks. Ensure it can handle variations found in Markdown tables.",
+      "p": 0.32,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "README.md",
+      "line": 4,
+      "severity": "nit",
+      "category": "usability",
+      "message": "The sentence is a bit long and dense. Consider breaking it into two shorter sentences for readability.",
+      "p": 0.19,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "README.md",
+      "line": 10,
+      "severity": "nit",
+      "category": "usability",
+      "message": "The phrase \"labelled soak\" might not be clear to all readers. Consider adding a brief explanation or rephrasing.",
+      "p": 0.22,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "README.md",
+      "line": 13,
+      "severity": "nit",
+      "category": "usability",
+      "message": "\"Windows is scaffolded, not supported\" is slightly ambiguous. Clarify if it means development has started but it's not functional, or if it's intentionally not supported.",
+      "p": 0.27,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "README.md",
+      "line": 23,
+      "severity": "nit",
+      "category": "usability",
+      "message": "\"offscreen snapshot goldens\" is technical jargon. Consider adding a brief, high-level explanation for non-technical readers.",
+      "p": 0.26,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "README.md",
+      "line": 107,
+      "severity": "nit",
+      "category": "convention",
+      "message": "The command `wispd onboard` is mentioned but not fully explained in this section. Add a brief description of what it does here or ensure its purpose is clear from context.",
+      "p": 0.29,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "README.md",
+      "line": 113,
+      "severity": "nit",
+      "category": "convention",
+      "message": "\"cua-driver\" is not a common term. Consider adding a very brief explanation of what CUA stands for or what its purpose is.",
+      "p": 0.31,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "README.md",
+      "line": 122,
+      "severity": "nit",
+      "category": "usability",
+      "message": "`docs/INSTALL.md` and `docs/CONFIG.md` are linked without explicit links in markdown. Use `[docs/INSTALL.md](docs/INSTALL.md)` format to make them clickable.",
+      "p": 0.43,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "README.md",
+      "line": 140,
+      "severity": "nit",
+      "category": "usability",
+      "message": "\"Desktop entry\" could be clarified for users unfamiliar with Linux desktop environments. Explain it means an entry in the application menu.",
+      "p": 0.31,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "README.md",
+      "line": 145,
+      "severity": "nit",
+      "category": "usability",
+      "message": "`docs/IPC_CONTRACT.md` is linked without an explicit markdown link. Use `[docs/IPC_CONTRACT.md](docs/IPC_CONTRACT.md)`.",
+      "p": 0.4,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "README.md",
+      "line": 153,
+      "severity": "nit",
+      "category": "usability",
+      "message": "\"Hyprland submap named `wisp`\" could be briefly explained for readers not deeply familiar with Hyprland's keybinding system.",
+      "p": 0.3,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "README.md",
+      "line": 169,
+      "severity": "nit",
+      "category": "usability",
+      "message": "The bullet point about `[agent] browseros_first` from the old README seems to be missing in the new 'Tools' description. If still relevant, re-add it or clarify its status.",
+      "p": 0.35,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "README.md",
+      "line": 194,
+      "severity": "nit",
+      "category": "usability",
+      "message": "`docs/CUA.md` is linked without an explicit markdown link. Use `[docs/CUA.md](docs/CUA.md)`.",
+      "p": 0.3,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "README.md",
+      "line": 221,
+      "severity": "nit",
+      "category": "usability",
+      "message": "`docs/CONFIG.md` is linked without an explicit markdown link. Use `[docs/CONFIG.md](docs/CONFIG.md)`.",
+      "p": 0.3,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "README.md",
+      "line": 242,
+      "severity": "nit",
+      "category": "usability",
+      "message": "The commands section is quite long. Consider grouping related commands under subheadings for easier navigation, e.g., \"Daemon Management\", \"Configuration\", \"Learning & Training\".",
+      "p": 0.29,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "README.md",
+      "line": 286,
+      "severity": "nit",
+      "category": "usability",
+      "message": "The layout description mentions `docs/` for \"install, config, IPC contract, CUA, plans\". While comprehensive, listing all these might be overwhelming. Consider a higher-level summary or linking to specific docs if needed for a particular point.",
+      "p": 0.3,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "ROADMAP.md",
+      "line": 4,
+      "severity": "nit",
+      "category": "convention",
+      "message": "The date format `2026-10-04-0100` in the plan file name is non-standard. Use `YYYY-MM-DD` for consistency, e.g., `2026-10-04-wisp-unified-plan.md`.",
+      "p": 0.3,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "ROADMAP.md",
+      "line": 34,
+      "severity": "nit",
+      "category": "usability",
+      "message": "'pasted into the release notes' might be better as 'referenced in the release notes' or 'attached to the release notes'. Pasting raw JSON can make release notes hard to read. Link to the archived JSON instead.",
+      "p": 0.3,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "ROADMAP.md",
+      "line": 57,
+      "severity": "nit",
+      "category": "usability",
+      "message": "The plural 'Media' in the README section name suggests multiple items, but the current text only mentions 'list in `README.md`, section Media'. Clarify if this implies a sub-section or just a single list of recordings.",
+      "p": 0.3,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/CONFIG.md",
+      "line": 81,
+      "severity": "nit",
+      "category": "usability",
+      "message": "The `risk_threshold` default changing from `1.5` to `9` is a large jump without clear reasoning in the config itself. Add a brief comment or link to documentation explaining the new scale and why `9` is now the default for 'extreme risk'.",
+      "p": 0.31,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/CONFIG.md",
+      "line": 84,
+      "severity": "nit",
+      "category": "convention",
+      "message": "The `denylist` value `built-in` could be more descriptive, e.g., `internal` or `hardcoded`. `built-in` can sometimes imply it's configurable or can be extended.",
+      "p": 0.36,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/plans/2026-09-18-001-feat-dim-autonomous-assistant-plan.md",
+      "line": 6,
+      "severity": "nit",
+      "category": "convention",
+      "message": "The plan uses a string value for `status`. Prefer a bare value without quotes if it's a simple identifier or a boolean for clarity, unless the schema dictates a string.",
+      "p": 0.34,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/plans/2026-09-20-001-feat-dim-v1-roadmap-plan.md",
+      "line": 6,
+      "severity": "nit",
+      "category": "convention",
+      "message": "The plan uses a string value for `status`. Prefer a bare value without quotes if it's a simple identifier or a boolean for clarity, unless the schema dictates a string.",
+      "p": 0.35,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 23,
+      "severity": "nit",
+      "category": "usability",
+      "message": "The reference to `b88c098` and `7ec4236` as specific commit hashes is too granular for a high-level status report. Replace these with more descriptive references or omit them if the PR numbers are sufficient.",
+      "p": 0.35,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 27,
+      "severity": "nit",
+      "category": "convention",
+      "message": "The table headers should be consistent in casing. Change `Status` to `status` or `Evidence` to `Evidence`.",
+      "p": 0.36,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 29,
+      "severity": "nit",
+      "category": "correctness",
+      "message": "The status for W1 mentions `W33` in parentheses, which refers to a later unit (`this unit`) that handles plan closure. This creates a circular dependency or implies W33 is needed to fully close W1, which might be confusing. Clarify the role of W33 here or remove the parenthetical reference if W1 is independently 'done'.",
+      "p": 0.35,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 34,
+      "severity": "nit",
+      "category": "usability",
+      "message": "The phrase \"Jev 400 ms deadline\" is internal jargon. Elaborate or simplify to be understandable to all readers.",
+      "p": 0.33,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 36,
+      "severity": "nit",
+      "category": "usability",
+      "message": "The `wisp/grounding.py` reference should mention if it's a new file or an existing one, and how it relates to `#77`. Clarify the status of W13 relative to `#77`.",
+      "p": 0.35,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 38,
+      "severity": "nit",
+      "category": "usability",
+      "message": "The ledger policy description `paid fallbacks stop at a cap; the primary continues unless [budget] gate_primary` is vague. Provide more context or reference a document where this policy is fully explained.",
+      "p": 0.33,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 40,
+      "severity": "nit",
+      "category": "usability",
+      "message": "The phrase `opt-in scrubbed GlitchTip ([report] dsn)` could be simplified for clarity. Explain `dsn` or avoid its use without context.",
+      "p": 0.33,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 46,
+      "severity": "nit",
+      "category": "usability",
+      "message": "The phrase `SNI detection (no tray item shipped)` is unclear. Clarify what SNI detection achieves and why a tray item is not shipped.",
+      "p": 0.31,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 48,
+      "severity": "nit",
+      "category": "usability",
+      "message": "The phrase `oomd-safe unit templates` is technical jargon. Explain `oomd-safe` or provide a link to its definition for better understanding.",
+      "p": 0.3,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 51,
+      "severity": "nit",
+      "category": "usability",
+      "message": "The status for W32 mentions \"orch gate and matrix policy\". Explain these terms or provide references to where they are defined.",
+      "p": 0.3,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "scripts/ui/readme_media.py",
+      "line": 6,
+      "severity": "nit",
+      "category": "convention",
+      "message": "The module docstring has a blank line in the middle of a sentence, breaking the flow. Remove the blank line to ensure proper formatting.",
+      "p": 0.32,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "scripts/ui/readme_media.py",
+      "line": 6,
+      "severity": "nit",
+      "category": "convention",
+      "message": "The module docstring is too long to fit on one line and should be split into multiple lines for readability, following PEP 8 recommendations for multi-line docstrings.",
+      "p": 0.32,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "scripts/ui/readme_media.py",
+      "line": 39,
+      "severity": "nit",
+      "category": "convention",
+      "message": "The variable `py` is very generic and could be confused with Python itself in a script context. Rename `py` to `current_y` or `tile_y` for clarity.",
+      "p": 0.32,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "scripts/ui/readme_media.py",
+      "line": 57,
+      "severity": "nit",
+      "category": "performance",
+      "message": "The temporary directory `t` is created using `tempfile.TemporaryDirectory()`, but the path `tmp` is then constructed by joining `t` with `dest.name`. This is fine, but `tempfile.NamedTemporaryFile` or `tempfile.mkstemp` might be more direct if only a single temporary file is needed, avoiding the overhead of a directory.",
+      "p": 0.3,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "tests/test_docs_lint.py",
+      "line": 221,
+      "severity": "nit",
+      "category": "convention",
+      "message": "The `BRACKET` regex uses a greedy `+` for `[\\[\\w.]` which could lead to unexpected matches if the bracketed section contains multiple dots or non-word characters. Consider `[a-z][\\w.]*` or be more specific about the allowed characters inside the bracket.",
+      "p": 0.33,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "tests/test_docs_lint.py",
+      "line": 222,
+      "severity": "nit",
+      "category": "convention",
+      "message": "The `DOTTED` regex uses `_` in `[a-z_]+` for keys but the `BRACKET` regex uses `[\\w]*`. Align these to `[\\w-]+` if hyphens are allowed, or `[a-z_]+` otherwise, for consistency across config key parsing.",
+      "p": 0.31,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [
+    {
+      "path": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 35,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\nW12 is marked `todo` and states \"open question 3 (STT engine) still with the user\". This implies an external dependency or unresolved decision. This should ideally be resolved or have a clear path forward before marking a plan as 'unified' and nearly complete, as it impacts a core component. Add an owner and a deadline to `open question 3`.",
+      "dedupKey": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md:35:risk:W12 is marked `todo` and states \"open question 3 (STT engine) still with the user\". This implies an external dependency or unresolved decision. This should ideally be resolved or have a clear path forward before marking a plan as 'unified' and nearly complete, as it impacts a core component. Add an owner and a deadline to `open question 3`.:00001505"
+    },
+    {
+      "path": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 49,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\nW30 is marked `in progress` and states \"refactor of `pipeline.py` on its own branch; no code on master\". A significant refactor of a core file (`pipeline.py`) being outside of `master` and not yet integrated poses a risk to the stability and completeness of the 'unified' plan. This should be prioritized for merging.",
+      "dedupKey": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md:49:risk:W30 is marked `in progress` and states \"refactor of `pipeline.py` on its own branch; no code on master\". A significant refactor of a core file (`pipeline.py`) being outside of `master` and not yet integrated poses a risk to the stability and completeness of the 'unified' plan. This should be prioritized for merging.:00001505"
+    },
+    {
+      "path": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 50,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\nW31 is marked `todo (partial)` and mentions \"the Rust freeze and `py-only` marks are not done\". This implies core language/architecture decisions or transitions are incomplete, which is a major concern for a unified plan. This should be addressed with high priority.",
+      "dedupKey": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md:50:risk:W31 is marked `todo (partial)` and mentions \"the Rust freeze and `py-only` marks are not done\". This implies core language/architecture decisions or transitions are incomplete, which is a major concern for a unified plan. This should be addressed with high priority.:00001505"
+    },
+    {
+      "path": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 52,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\nW33 is marked `in progress` and explicitly states \"Screen recordings need a person\". This indicates a missing deliverable that requires external action, which could block completion of the plan's documentation aspects. Assign an owner and a deadline to the `Screen recordings`.",
+      "dedupKey": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md:52:risk:W33 is marked `in progress` and explicitly states \"Screen recordings need a person\". This indicates a missing deliverable that requires external action, which could block completion of the plan's documentation aspects. Assign an owner and a deadline to the `Screen recordings`.:00001505"
+    },
+    {
+      "path": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 53,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\nW34 is `todo` and lists `soak, a clean-VM install and two learning cycles`. These are critical validation steps that are not started. This unit should be prioritized for execution to ensure overall system stability and user experience.",
+      "dedupKey": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md:53:risk:W34 is `todo` and lists `soak, a clean-VM install and two learning cycles`. These are critical validation steps that are not started. This unit should be prioritized for execution to ensure overall system stability and user experience.:00001505"
+    },
+    {
+      "path": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 55,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\nThe \"Open questions still with the user\" list (STT engine, alias period, Rust core, premium handoff) highlights several unresolved, potentially critical decisions. For a unified plan, these should have clear owners, options, and timelines for resolution. These are significant enough to impact multiple units.",
+      "dedupKey": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md:55:risk:The \"Open questions still with the user\" list (STT engine, alias period, Rust core, premium handoff) highlights several unresolved, potentially critical decisions. For a unified plan, these should have clear owners, options, and timelines for resolution. These are significant enough to impact multiple units.:00001505"
+    },
+    {
+      "path": "scripts/ui/readme_media.py",
+      "line": 59,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◈ **risk** · ▰▱▱▱ suspected\nThe `tempfile.TemporaryDirectory` is cleaned up automatically on exit, but if `encode` fails before `tmp` is created or before `tmp.read_bytes()` is called, the comparison logic might not handle the error gracefully, or the `dest.exists()` check could fail. Ensure robust error handling for `encode`.",
+      "dedupKey": "scripts/ui/readme_media.py:59:risk:The `tempfile.TemporaryDirectory` is cleaned up automatically on exit, but if `encode` fails before `tmp` is created or before `tmp.read_bytes()` is called, the comparison logic might not handle the error gracefully, or the `dest.exists()` check could fail. Ensure robust error handling for `encode`.:00001505"
+    }
+  ],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async",
+      "dep-diff",
+      "missing-test"
+    ],
+    "records": [
+      {
+        "file": "docs/CONFIG.md",
+        "line": 271,
+        "detail": "url-with-ip-host",
+        "suppressed": "data/prose path",
+        "rule": "hardcoded-endpoint"
+      }
+    ],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 12014,
+    "needsDeepReview": 0.51,
+    "topRiskArea": "ops",
+    "topRiskAreaConfidence": 0.66
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 35,
+        "severity": "risk",
+        "category": "correctness",
+        "message": "W12 is marked `todo` and states \"open question 3 (STT engine) still with the user\". This implies an external dependency or unresolved decision. This should ideally be resolved or have a clear path forward before marking a plan as 'unified' and nearly complete, as it impacts a core component. Add an ",
+        "adjudicated": true,
+        "p": 0.79
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 49,
+        "severity": "risk",
+        "category": "correctness",
+        "message": "W30 is marked `in progress` and states \"refactor of `pipeline.py` on its own branch; no code on master\". A significant refactor of a core file (`pipeline.py`) being outside of `master` and not yet integrated poses a risk to the stability and completeness of the 'unified' plan. This should be priorit",
+        "adjudicated": true,
+        "p": 0.56
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 50,
+        "severity": "risk",
+        "category": "correctness",
+        "message": "W31 is marked `todo (partial)` and mentions \"the Rust freeze and `py-only` marks are not done\". This implies core language/architecture decisions or transitions are incomplete, which is a major concern for a unified plan. This should be addressed with high priority.",
+        "adjudicated": true,
+        "p": 0.69
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 52,
+        "severity": "risk",
+        "category": "correctness",
+        "message": "W33 is marked `in progress` and explicitly states \"Screen recordings need a person\". This indicates a missing deliverable that requires external action, which could block completion of the plan's documentation aspects. Assign an owner and a deadline to the `Screen recordings`.",
+        "adjudicated": true,
+        "p": 0.6
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 53,
+        "severity": "risk",
+        "category": "correctness",
+        "message": "W34 is `todo` and lists `soak, a clean-VM install and two learning cycles`. These are critical validation steps that are not started. This unit should be prioritized for execution to ensure overall system stability and user experience.",
+        "adjudicated": true,
+        "p": 0.63
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 55,
+        "severity": "risk",
+        "category": "correctness",
+        "message": "The \"Open questions still with the user\" list (STT engine, alias period, Rust core, premium handoff) highlights several unresolved, potentially critical decisions. For a unified plan, these should have clear owners, options, and timelines for resolution. These are significant enough to impact multip",
+        "adjudicated": true,
+        "p": 0.7
+      },
+      {
+        "file": "scripts/ui/readme_media.py",
+        "line": 59,
+        "severity": "risk",
+        "category": "correctness",
+        "message": "The `tempfile.TemporaryDirectory` is cleaned up automatically on exit, but if `encode` fails before `tmp` is created or before `tmp.read_bytes()` is called, the comparison logic might not handle the error gracefully, or the `dest.exists()` check could fail. Ensure robust error handling for `encode`.",
+        "adjudicated": true,
+        "p": 0.37
+      },
+      {
+        "file": "tests/test_docs_lint.py",
+        "line": 215,
+        "severity": "nit",
+        "category": "correctness",
+        "message": "The `code_words` function's regex for finding config keys might miss keys constructed dynamically or read from variables. Consider a more robust static analysis tool or a runtime check to ensure all `config` access is covered.",
+        "adjudicated": true,
+        "p": 0.38
+      },
+      {
+        "file": "tests/test_docs_lint.py",
+        "line": 227,
+        "severity": "nit",
+        "category": "correctness",
+        "message": "The regex `ROW` could be more robust to handle additional whitespace or alternative separators between `code` blocks. Ensure it can handle variations found in Markdown tables.",
+        "adjudicated": true,
+        "p": 0.32
+      },
+      {
+        "file": "README.md",
+        "line": 4,
+        "severity": "nit",
+        "category": "usability",
+        "message": "The sentence is a bit long and dense. Consider breaking it into two shorter sentences for readability.",
+        "adjudicated": true,
+        "p": 0.19
+      },
+      {
+        "file": "README.md",
+        "line": 10,
+        "severity": "nit",
+        "category": "usability",
+        "message": "The phrase \"labelled soak\" might not be clear to all readers. Consider adding a brief explanation or rephrasing.",
+        "adjudicated": true,
+        "p": 0.22
+      },
+      {
+        "file": "README.md",
+        "line": 13,
+        "severity": "nit",
+        "category": "usability",
+        "message": "\"Windows is scaffolded, not supported\" is slightly ambiguous. Clarify if it means development has started but it's not functional, or if it's intentionally not supported.",
+        "adjudicated": true,
+        "p": 0.27
+      },
+      {
+        "file": "README.md",
+        "line": 23,
+        "severity": "nit",
+        "category": "usability",
+        "message": "\"offscreen snapshot goldens\" is technical jargon. Consider adding a brief, high-level explanation for non-technical readers.",
+        "adjudicated": true,
+        "p": 0.26
+      },
+      {
+        "file": "README.md",
+        "line": 107,
+        "severity": "nit",
+        "category": "convention",
+        "message": "The command `wispd onboard` is mentioned but not fully explained in this section. Add a brief description of what it does here or ensure its purpose is clear from context.",
+        "adjudicated": true,
+        "p": 0.29
+      },
+      {
+        "file": "README.md",
+        "line": 113,
+        "severity": "nit",
+        "category": "convention",
+        "message": "\"cua-driver\" is not a common term. Consider adding a very brief explanation of what CUA stands for or what its purpose is.",
+        "adjudicated": true,
+        "p": 0.31
+      },
+      {
+        "file": "README.md",
+        "line": 122,
+        "severity": "nit",
+        "category": "usability",
+        "message": "`docs/INSTALL.md` and `docs/CONFIG.md` are linked without explicit links in markdown. Use `[docs/INSTALL.md](docs/INSTALL.md)` format to make them clickable.",
+        "adjudicated": true,
+        "p": 0.43
+      },
+      {
+        "file": "README.md",
+        "line": 140,
+        "severity": "nit",
+        "category": "usability",
+        "message": "\"Desktop entry\" could be clarified for users unfamiliar with Linux desktop environments. Explain it means an entry in the application menu.",
+        "adjudicated": true,
+        "p": 0.31
+      },
+      {
+        "file": "README.md",
+        "line": 145,
+        "severity": "nit",
+        "category": "usability",
+        "message": "`docs/IPC_CONTRACT.md` is linked without an explicit markdown link. Use `[docs/IPC_CONTRACT.md](docs/IPC_CONTRACT.md)`.",
+        "adjudicated": true,
+        "p": 0.4
+      },
+      {
+        "file": "README.md",
+        "line": 153,
+        "severity": "nit",
+        "category": "usability",
+        "message": "\"Hyprland submap named `wisp`\" could be briefly explained for readers not deeply familiar with Hyprland's keybinding system.",
+        "adjudicated": true,
+        "p": 0.3
+      },
+      {
+        "file": "README.md",
+        "line": 169,
+        "severity": "nit",
+        "category": "usability",
+        "message": "The bullet point about `[agent] browseros_first` from the old README seems to be missing in the new 'Tools' description. If still relevant, re-add it or clarify its status.",
+        "adjudicated": true,
+        "p": 0.35
+      },
+      {
+        "file": "README.md",
+        "line": 194,
+        "severity": "nit",
+        "category": "usability",
+        "message": "`docs/CUA.md` is linked without an explicit markdown link. Use `[docs/CUA.md](docs/CUA.md)`.",
+        "adjudicated": true,
+        "p": 0.3
+      },
+      {
+        "file": "README.md",
+        "line": 221,
+        "severity": "nit",
+        "category": "usability",
+        "message": "`docs/CONFIG.md` is linked without an explicit markdown link. Use `[docs/CONFIG.md](docs/CONFIG.md)`.",
+        "adjudicated": true,
+        "p": 0.3
+      },
+      {
+        "file": "README.md",
+        "line": 242,
+        "severity": "nit",
+        "category": "usability",
+        "message": "The commands section is quite long. Consider grouping related commands under subheadings for easier navigation, e.g., \"Daemon Management\", \"Configuration\", \"Learning & Training\".",
+        "adjudicated": true,
+        "p": 0.29
+      },
+      {
+        "file": "README.md",
+        "line": 286,
+        "severity": "nit",
+        "category": "usability",
+        "message": "The layout description mentions `docs/` for \"install, config, IPC contract, CUA, plans\". While comprehensive, listing all these might be overwhelming. Consider a higher-level summary or linking to specific docs if needed for a particular point.",
+        "adjudicated": true,
+        "p": 0.3
+      },
+      {
+        "file": "ROADMAP.md",
+        "line": 4,
+        "severity": "nit",
+        "category": "convention",
+        "message": "The date format `2026-10-04-0100` in the plan file name is non-standard. Use `YYYY-MM-DD` for consistency, e.g., `2026-10-04-wisp-unified-plan.md`.",
+        "adjudicated": true,
+        "p": 0.3
+      },
+      {
+        "file": "ROADMAP.md",
+        "line": 34,
+        "severity": "nit",
+        "category": "usability",
+        "message": "'pasted into the release notes' might be better as 'referenced in the release notes' or 'attached to the release notes'. Pasting raw JSON can make release notes hard to read. Link to the archived JSON instead.",
+        "adjudicated": true,
+        "p": 0.3
+      },
+      {
+        "file": "ROADMAP.md",
+        "line": 57,
+        "severity": "nit",
+        "category": "usability",
+        "message": "The plural 'Media' in the README section name suggests multiple items, but the current text only mentions 'list in `README.md`, section Media'. Clarify if this implies a sub-section or just a single list of recordings.",
+        "adjudicated": true,
+        "p": 0.3
+      },
+      {
+        "file": "docs/CONFIG.md",
+        "line": 81,
+        "severity": "nit",
+        "category": "usability",
+        "message": "The `risk_threshold` default changing from `1.5` to `9` is a large jump without clear reasoning in the config itself. Add a brief comment or link to documentation explaining the new scale and why `9` is now the default for 'extreme risk'.",
+        "adjudicated": true,
+        "p": 0.31
+      },
+      {
+        "file": "docs/CONFIG.md",
+        "line": 84,
+        "severity": "nit",
+        "category": "convention",
+        "message": "The `denylist` value `built-in` could be more descriptive, e.g., `internal` or `hardcoded`. `built-in` can sometimes imply it's configurable or can be extended.",
+        "adjudicated": true,
+        "p": 0.36
+      },
+      {
+        "file": "docs/plans/2026-09-18-001-feat-dim-autonomous-assistant-plan.md",
+        "line": 6,
+        "severity": "nit",
+        "category": "convention",
+        "message": "The plan uses a string value for `status`. Prefer a bare value without quotes if it's a simple identifier or a boolean for clarity, unless the schema dictates a string.",
+        "adjudicated": true,
+        "p": 0.34
+      },
+      {
+        "file": "docs/plans/2026-09-20-001-feat-dim-v1-roadmap-plan.md",
+        "line": 6,
+        "severity": "nit",
+        "category": "convention",
+        "message": "The plan uses a string value for `status`. Prefer a bare value without quotes if it's a simple identifier or a boolean for clarity, unless the schema dictates a string.",
+        "adjudicated": true,
+        "p": 0.35
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 23,
+        "severity": "nit",
+        "category": "usability",
+        "message": "The reference to `b88c098` and `7ec4236` as specific commit hashes is too granular for a high-level status report. Replace these with more descriptive references or omit them if the PR numbers are sufficient.",
+        "adjudicated": true,
+        "p": 0.35
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 27,
+        "severity": "nit",
+        "category": "convention",
+        "message": "The table headers should be consistent in casing. Change `Status` to `status` or `Evidence` to `Evidence`.",
+        "adjudicated": true,
+        "p": 0.36
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 29,
+        "severity": "nit",
+        "category": "correctness",
+        "message": "The status for W1 mentions `W33` in parentheses, which refers to a later unit (`this unit`) that handles plan closure. This creates a circular dependency or implies W33 is needed to fully close W1, which might be confusing. Clarify the role of W33 here or remove the parenthetical reference if W1 is ",
+        "adjudicated": true,
+        "p": 0.35
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 34,
+        "severity": "nit",
+        "category": "usability",
+        "message": "The phrase \"Jev 400 ms deadline\" is internal jargon. Elaborate or simplify to be understandable to all readers.",
+        "adjudicated": true,
+        "p": 0.33
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 36,
+        "severity": "nit",
+        "category": "usability",
+        "message": "The `wisp/grounding.py` reference should mention if it's a new file or an existing one, and how it relates to `#77`. Clarify the status of W13 relative to `#77`.",
+        "adjudicated": true,
+        "p": 0.35
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 38,
+        "severity": "nit",
+        "category": "usability",
+        "message": "The ledger policy description `paid fallbacks stop at a cap; the primary continues unless [budget] gate_primary` is vague. Provide more context or reference a document where this policy is fully explained.",
+        "adjudicated": true,
+        "p": 0.33
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 40,
+        "severity": "nit",
+        "category": "usability",
+        "message": "The phrase `opt-in scrubbed GlitchTip ([report] dsn)` could be simplified for clarity. Explain `dsn` or avoid its use without context.",
+        "adjudicated": true,
+        "p": 0.33
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 46,
+        "severity": "nit",
+        "category": "usability",
+        "message": "The phrase `SNI detection (no tray item shipped)` is unclear. Clarify what SNI detection achieves and why a tray item is not shipped.",
+        "adjudicated": true,
+        "p": 0.31
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 48,
+        "severity": "nit",
+        "category": "usability",
+        "message": "The phrase `oomd-safe unit templates` is technical jargon. Explain `oomd-safe` or provide a link to its definition for better understanding.",
+        "adjudicated": true,
+        "p": 0.3
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 51,
+        "severity": "nit",
+        "category": "usability",
+        "message": "The status for W32 mentions \"orch gate and matrix policy\". Explain these terms or provide references to where they are defined.",
+        "adjudicated": true,
+        "p": 0.3
+      },
+      {
+        "file": "scripts/ui/readme_media.py",
+        "line": 6,
+        "severity": "nit",
+        "category": "convention",
+        "message": "The module docstring has a blank line in the middle of a sentence, breaking the flow. Remove the blank line to ensure proper formatting.",
+        "adjudicated": true,
+        "p": 0.32
+      },
+      {
+        "file": "scripts/ui/readme_media.py",
+        "line": 6,
+        "severity": "nit",
+        "category": "convention",
+        "message": "The module docstring is too long to fit on one line and should be split into multiple lines for readability, following PEP 8 recommendations for multi-line docstrings.",
+        "adjudicated": true,
+        "p": 0.32
+      },
+      {
+        "file": "scripts/ui/readme_media.py",
+        "line": 39,
+        "severity": "nit",
+        "category": "convention",
+        "message": "The variable `py` is very generic and could be confused with Python itself in a script context. Rename `py` to `current_y` or `tile_y` for clarity.",
+        "adjudicated": true,
+        "p": 0.32
+      },
+      {
+        "file": "scripts/ui/readme_media.py",
+        "line": 57,
+        "severity": "nit",
+        "category": "performance",
+        "message": "The temporary directory `t` is created using `tempfile.TemporaryDirectory()`, but the path `tmp` is then constructed by joining `t` with `dest.name`. This is fine, but `tempfile.NamedTemporaryFile` or `tempfile.mkstemp` might be more direct if only a single temporary file is needed, avoiding the ove",
+        "adjudicated": true,
+        "p": 0.3
+      },
+      {
+        "file": "tests/test_docs_lint.py",
+        "line": 221,
+        "severity": "nit",
+        "category": "convention",
+        "message": "The `BRACKET` regex uses a greedy `+` for `[\\[\\w.]` which could lead to unexpected matches if the bracketed section contains multiple dots or non-word characters. Consider `[a-z][\\w.]*` or be more specific about the allowed characters inside the bracket.",
+        "adjudicated": true,
+        "p": 0.33
+      },
+      {
+        "file": "tests/test_docs_lint.py",
+        "line": 222,
+        "severity": "nit",
+        "category": "convention",
+        "message": "The `DOTTED` regex uses `_` in `[a-z_]+` for keys but the `BRACKET` regex uses `[\\w]*`. Align these to `[\\w-]+` if hyphens are allowed, or `[a-z_]+` otherwise, for consistency across config key parsing.",
+        "adjudicated": true,
+        "p": 0.31
+      }
+    ],
+    "overflow": 0
+  },
+  "reflection": {
+    "records": [
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 35,
+        "severity": "risk",
+        "message": "W12 is marked `todo` and states \"open question 3 (STT engine) still with the user\". This implies an external dependency or unresolved decision. This should ideally be resolved or have a clear path forward before marking a plan as 'unified' and nearly complete, as it impacts a core component. Add an ",
+        "checked": true,
+        "grounded": 0.51
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 49,
+        "severity": "risk",
+        "message": "W30 is marked `in progress` and states \"refactor of `pipeline.py` on its own branch; no code on master\". A significant refactor of a core file (`pipeline.py`) being outside of `master` and not yet integrated poses a risk to the stability and completeness of the 'unified' plan. This should be priorit",
+        "checked": true,
+        "grounded": 0.37
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 50,
+        "severity": "risk",
+        "message": "W31 is marked `todo (partial)` and mentions \"the Rust freeze and `py-only` marks are not done\". This implies core language/architecture decisions or transitions are incomplete, which is a major concern for a unified plan. This should be addressed with high priority.",
+        "checked": true,
+        "grounded": 0.48
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 52,
+        "severity": "risk",
+        "message": "W33 is marked `in progress` and explicitly states \"Screen recordings need a person\". This indicates a missing deliverable that requires external action, which could block completion of the plan's documentation aspects. Assign an owner and a deadline to the `Screen recordings`.",
+        "checked": true,
+        "grounded": 0.54
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 53,
+        "severity": "risk",
+        "message": "W34 is `todo` and lists `soak, a clean-VM install and two learning cycles`. These are critical validation steps that are not started. This unit should be prioritized for execution to ensure overall system stability and user experience.",
+        "checked": true,
+        "grounded": 0.67
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 55,
+        "severity": "risk",
+        "message": "The \"Open questions still with the user\" list (STT engine, alias period, Rust core, premium handoff) highlights several unresolved, potentially critical decisions. For a unified plan, these should have clear owners, options, and timelines for resolution. These are significant enough to impact multip",
+        "checked": true,
+        "grounded": 0.52
+      },
+      {
+        "file": "scripts/ui/readme_media.py",
+        "line": 59,
+        "severity": "risk",
+        "message": "The `tempfile.TemporaryDirectory` is cleaned up automatically on exit, but if `encode` fails before `tmp` is created or before `tmp.read_bytes()` is called, the comparison logic might not handle the error gracefully, or the `dest.exists()` check could fail. Ensure robust error handling for `encode`.",
+        "checked": true,
+        "grounded": 0.39
+      },
+      {
+        "file": "tests/test_docs_lint.py",
+        "line": 215,
+        "severity": "nit",
+        "message": "The `code_words` function's regex for finding config keys might miss keys constructed dynamically or read from variables. Consider a more robust static analysis tool or a runtime check to ensure all `config` access is covered.",
+        "checked": true,
+        "grounded": 0.54
+      },
+      {
+        "file": "tests/test_docs_lint.py",
+        "line": 227,
+        "severity": "nit",
+        "message": "The regex `ROW` could be more robust to handle additional whitespace or alternative separators between `code` blocks. Ensure it can handle variations found in Markdown tables.",
+        "checked": true,
+        "grounded": 0.48
+      },
+      {
+        "file": "README.md",
+        "line": 4,
+        "severity": "nit",
+        "message": "The sentence is a bit long and dense. Consider breaking it into two shorter sentences for readability.",
+        "checked": true,
+        "grounded": 0.51
+      },
+      {
+        "file": "README.md",
+        "line": 10,
+        "severity": "nit",
+        "message": "The phrase \"labelled soak\" might not be clear to all readers. Consider adding a brief explanation or rephrasing.",
+        "checked": true,
+        "grounded": 0.49
+      },
+      {
+        "file": "README.md",
+        "line": 13,
+        "severity": "nit",
+        "message": "\"Windows is scaffolded, not supported\" is slightly ambiguous. Clarify if it means development has started but it's not functional, or if it's intentionally not supported.",
+        "checked": true,
+        "grounded": 0.47
+      },
+      {
+        "file": "README.md",
+        "line": 23,
+        "severity": "nit",
+        "message": "\"offscreen snapshot goldens\" is technical jargon. Consider adding a brief, high-level explanation for non-technical readers.",
+        "checked": true,
+        "grounded": 0.5
+      },
+      {
+        "file": "README.md",
+        "line": 107,
+        "severity": "nit",
+        "message": "The command `wispd onboard` is mentioned but not fully explained in this section. Add a brief description of what it does here or ensure its purpose is clear from context.",
+        "checked": true,
+        "grounded": 0.45
+      },
+      {
+        "file": "README.md",
+        "line": 113,
+        "severity": "nit",
+        "message": "\"cua-driver\" is not a common term. Consider adding a very brief explanation of what CUA stands for or what its purpose is.",
+        "checked": true,
+        "grounded": 0.5
+      },
+      {
+        "file": "README.md",
+        "line": 122,
+        "severity": "nit",
+        "message": "`docs/INSTALL.md` and `docs/CONFIG.md` are linked without explicit links in markdown. Use `[docs/INSTALL.md](docs/INSTALL.md)` format to make them clickable.",
+        "checked": true,
+        "grounded": 0.48
+      },
+      {
+        "file": "README.md",
+        "line": 140,
+        "severity": "nit",
+        "message": "\"Desktop entry\" could be clarified for users unfamiliar with Linux desktop environments. Explain it means an entry in the application menu.",
+        "checked": true,
+        "grounded": 0.46
+      },
+      {
+        "file": "README.md",
+        "line": 145,
+        "severity": "nit",
+        "message": "`docs/IPC_CONTRACT.md` is linked without an explicit markdown link. Use `[docs/IPC_CONTRACT.md](docs/IPC_CONTRACT.md)`.",
+        "checked": true,
+        "grounded": 0.51
+      },
+      {
+        "file": "README.md",
+        "line": 153,
+        "severity": "nit",
+        "message": "\"Hyprland submap named `wisp`\" could be briefly explained for readers not deeply familiar with Hyprland's keybinding system.",
+        "checked": true,
+        "grounded": 0.47
+      },
+      {
+        "file": "README.md",
+        "line": 169,
+        "severity": "nit",
+        "message": "The bullet point about `[agent] browseros_first` from the old README seems to be missing in the new 'Tools' description. If still relevant, re-add it or clarify its status.",
+        "checked": true,
+        "grounded": 0.49
+      },
+      {
+        "file": "README.md",
+        "line": 194,
+        "severity": "nit",
+        "message": "`docs/CUA.md` is linked without an explicit markdown link. Use `[docs/CUA.md](docs/CUA.md)`.",
+        "checked": true,
+        "grounded": 0.5
+      },
+      {
+        "file": "README.md",
+        "line": 221,
+        "severity": "nit",
+        "message": "`docs/CONFIG.md` is linked without an explicit markdown link. Use `[docs/CONFIG.md](docs/CONFIG.md)`.",
+        "checked": true,
+        "grounded": 0.5
+      },
+      {
+        "file": "README.md",
+        "line": 242,
+        "severity": "nit",
+        "message": "The commands section is quite long. Consider grouping related commands under subheadings for easier navigation, e.g., \"Daemon Management\", \"Configuration\", \"Learning & Training\".",
+        "checked": true,
+        "grounded": 0.5
+      },
+      {
+        "file": "README.md",
+        "line": 286,
+        "severity": "nit",
+        "message": "The layout description mentions `docs/` for \"install, config, IPC contract, CUA, plans\". While comprehensive, listing all these might be overwhelming. Consider a higher-level summary or linking to specific docs if needed for a particular point.",
+        "checked": true,
+        "grounded": 0.5
+      },
+      {
+        "file": "ROADMAP.md",
+        "line": 4,
+        "severity": "nit",
+        "message": "The date format `2026-10-04-0100` in the plan file name is non-standard. Use `YYYY-MM-DD` for consistency, e.g., `2026-10-04-wisp-unified-plan.md`.",
+        "checked": true,
+        "grounded": 0.48
+      },
+      {
+        "file": "ROADMAP.md",
+        "line": 34,
+        "severity": "nit",
+        "message": "'pasted into the release notes' might be better as 'referenced in the release notes' or 'attached to the release notes'. Pasting raw JSON can make release notes hard to read. Link to the archived JSON instead.",
+        "checked": true,
+        "grounded": 0.43
+      },
+      {
+        "file": "ROADMAP.md",
+        "line": 57,
+        "severity": "nit",
+        "message": "The plural 'Media' in the README section name suggests multiple items, but the current text only mentions 'list in `README.md`, section Media'. Clarify if this implies a sub-section or just a single list of recordings.",
+        "checked": true,
+        "grounded": 0.47
+      },
+      {
+        "file": "docs/CONFIG.md",
+        "line": 81,
+        "severity": "nit",
+        "message": "The `risk_threshold` default changing from `1.5` to `9` is a large jump without clear reasoning in the config itself. Add a brief comment or link to documentation explaining the new scale and why `9` is now the default for 'extreme risk'.",
+        "checked": true,
+        "grounded": 0.46
+      },
+      {
+        "file": "docs/CONFIG.md",
+        "line": 84,
+        "severity": "nit",
+        "message": "The `denylist` value `built-in` could be more descriptive, e.g., `internal` or `hardcoded`. `built-in` can sometimes imply it's configurable or can be extended.",
+        "checked": true,
+        "grounded": 0.53
+      },
+      {
+        "file": "docs/plans/2026-09-18-001-feat-dim-autonomous-assistant-plan.md",
+        "line": 6,
+        "severity": "nit",
+        "message": "The plan uses a string value for `status`. Prefer a bare value without quotes if it's a simple identifier or a boolean for clarity, unless the schema dictates a string.",
+        "checked": true,
+        "grounded": 0.5
+      },
+      {
+        "file": "docs/plans/2026-09-20-001-feat-dim-v1-roadmap-plan.md",
+        "line": 6,
+        "severity": "nit",
+        "message": "The plan uses a string value for `status`. Prefer a bare value without quotes if it's a simple identifier or a boolean for clarity, unless the schema dictates a string.",
+        "checked": true,
+        "grounded": 0.49
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 23,
+        "severity": "nit",
+        "message": "The reference to `b88c098` and `7ec4236` as specific commit hashes is too granular for a high-level status report. Replace these with more descriptive references or omit them if the PR numbers are sufficient.",
+        "checked": true,
+        "grounded": 0.48
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 27,
+        "severity": "nit",
+        "message": "The table headers should be consistent in casing. Change `Status` to `status` or `Evidence` to `Evidence`.",
+        "checked": true,
+        "grounded": 0.51
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 29,
+        "severity": "nit",
+        "message": "The status for W1 mentions `W33` in parentheses, which refers to a later unit (`this unit`) that handles plan closure. This creates a circular dependency or implies W33 is needed to fully close W1, which might be confusing. Clarify the role of W33 here or remove the parenthetical reference if W1 is ",
+        "checked": true,
+        "grounded": 0.51
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 34,
+        "severity": "nit",
+        "message": "The phrase \"Jev 400 ms deadline\" is internal jargon. Elaborate or simplify to be understandable to all readers.",
+        "checked": true,
+        "grounded": 0.51
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 36,
+        "severity": "nit",
+        "message": "The `wisp/grounding.py` reference should mention if it's a new file or an existing one, and how it relates to `#77`. Clarify the status of W13 relative to `#77`.",
+        "checked": true,
+        "grounded": 0.52
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 38,
+        "severity": "nit",
+        "message": "The ledger policy description `paid fallbacks stop at a cap; the primary continues unless [budget] gate_primary` is vague. Provide more context or reference a document where this policy is fully explained.",
+        "checked": true,
+        "grounded": 0.52
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 40,
+        "severity": "nit",
+        "message": "The phrase `opt-in scrubbed GlitchTip ([report] dsn)` could be simplified for clarity. Explain `dsn` or avoid its use without context.",
+        "checked": true,
+        "grounded": 0.52
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 46,
+        "severity": "nit",
+        "message": "The phrase `SNI detection (no tray item shipped)` is unclear. Clarify what SNI detection achieves and why a tray item is not shipped.",
+        "checked": true,
+        "grounded": 0.5
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 48,
+        "severity": "nit",
+        "message": "The phrase `oomd-safe unit templates` is technical jargon. Explain `oomd-safe` or provide a link to its definition for better understanding.",
+        "checked": true,
+        "grounded": 0.5
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 51,
+        "severity": "nit",
+        "message": "The status for W32 mentions \"orch gate and matrix policy\". Explain these terms or provide references to where they are defined.",
+        "checked": true,
+        "grounded": 0.47
+      },
+      {
+        "file": "scripts/ui/readme_media.py",
+        "line": 6,
+        "severity": "nit",
+        "message": "The module docstring has a blank line in the middle of a sentence, breaking the flow. Remove the blank line to ensure proper formatting.",
+        "checked": true,
+        "grounded": 0.47
+      },
+      {
+        "file": "scripts/ui/readme_media.py",
+        "line": 6,
+        "severity": "nit",
+        "message": "The module docstring is too long to fit on one line and should be split into multiple lines for readability, following PEP 8 recommendations for multi-line docstrings.",
+        "checked": true,
+        "grounded": 0.48
+      },
+      {
+        "file": "scripts/ui/readme_media.py",
+        "line": 39,
+        "severity": "nit",
+        "message": "The variable `py` is very generic and could be confused with Python itself in a script context. Rename `py` to `current_y` or `tile_y` for clarity.",
+        "checked": true,
+        "grounded": 0.46
+      },
+      {
+        "file": "scripts/ui/readme_media.py",
+        "line": 57,
+        "severity": "nit",
+        "message": "The temporary directory `t` is created using `tempfile.TemporaryDirectory()`, but the path `tmp` is then constructed by joining `t` with `dest.name`. This is fine, but `tempfile.NamedTemporaryFile` or `tempfile.mkstemp` might be more direct if only a single temporary file is needed, avoiding the ove",
+        "checked": true,
+        "grounded": 0.49
+      },
+      {
+        "file": "tests/test_docs_lint.py",
+        "line": 221,
+        "severity": "nit",
+        "message": "The `BRACKET` regex uses a greedy `+` for `[\\[\\w.]` which could lead to unexpected matches if the bracketed section contains multiple dots or non-word characters. Consider `[a-z][\\w.]*` or be more specific about the allowed characters inside the bracket.",
+        "checked": true,
+        "grounded": 0.47
+      },
+      {
+        "file": "tests/test_docs_lint.py",
+        "line": 222,
+        "severity": "nit",
+        "message": "The `DOTTED` regex uses `_` in `[a-z_]+` for keys but the `BRACKET` regex uses `[\\w]*`. Align these to `[\\w-]+` if hyphens are allowed, or `[a-z_]+` otherwise, for consistency across config key parsing.",
+        "checked": true,
+        "grounded": 0.49
+      }
+    ],
+    "dropped": 0,
+    "overflow": 0
+  },
+  "droppedUnanchored": 2,
+  "droppedFindings": [
+    {
+      "file": "docs/CONFIG.md",
+      "severity": "nit",
+      "message": "L105: 🔵 nit: The `[pointer]` section defines `guide`, `drive`, and `auto` modes. The default `guide` implies user interaction for clicks, but `drive` 'inject real input'. This needs a strong security warning somewhere for the `drive` mode. Add a note here to refer to the security implications.",
+      "reason": "outside-diff",
+      "line": 105,
+      "category": "usability"
+    },
+    {
+      "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "severity": "nit",
+      "message": "L15: 🔵 nit: The `supersedes` list should be kept sorted for easier maintenance and readability. Sort these entries alphabetically by filename.",
+      "reason": "outside-diff",
+      "line": 15,
+      "category": "convention"
+    }
+  ],
+  "modelVerdict": "needs_changes",
+  "scope": {
+    "totalFiles": 28,
+    "reviewedFiles": 28,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 5,
+    "chunksReviewed": 5,
+    "unreviewedFiles": 0
+  },
+  "testFileCapped": 2,
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 4915,
+      "costUsd": 0.000202776,
+      "kind": "decide"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 9830,
+      "costUsd": 0.006086322,
+      "kind": "code"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 5057,
+      "costUsd": 0.003520935,
+      "kind": "code"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 7899,
+      "costUsd": 0.002999403,
+      "kind": "code"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 11213,
+      "costUsd": 0.009820701,
+      "kind": "code"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 5918,
+      "costUsd": 0.0029403,
+      "kind": "code"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 11216,
+      "costUsd": 0.014480334,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 16416,
+      "costUsd": 0.000652218,
+      "kind": "decide"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 16275,
+      "costUsd": 0.000646296,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.041349285,
+  "tokens": 88739,
+  "model": "google/gemini-2.5-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "c72b3783a14c72acde7d96594f174f49a88c38d8",
+    "checkoutSha": "c72b3783a14c72acde7d96594f174f49a88c38d8",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "c72b3783a14c72acde7d96594f174f49a88c38d8",
+  "diffRange": {
+    "base": "33e6be0b1f22339249e284bd29a535b9b10ee0ea",
+    "baseSha": "33e6be0b1f22339249e284bd29a535b9b10ee0ea",
+    "headSha": "c72b3783a14c72acde7d96594f174f49a88c38d8"
+  }
+}

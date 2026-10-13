@@ -8,6 +8,7 @@ import { SENTINEL, LAST_REVIEWED_RE, sanitizeCommentText } from '../report/comme
 import { type HeadBinding } from '../report/manifest.js'
 import { SEVERITY_GLYPH, SEVERITY_LABEL, PROOF_LEVELS, proofMeter } from '../report/viewmodel.js'
 import { type FindingAdjudicationAudit } from '../review/adjudicate.js'
+import { type FindingReflectionAudit } from '../review/reflect.js'
 import { planChunks } from '../review/chunks.js'
 import { GIT_DIFF_PATH_FLAGS } from '../review/difftext.js'
 import { normalizeFindingMessage, INLINE_SENTINEL, inlineDedupKey } from '../review/inline.js'
@@ -188,6 +189,8 @@ export interface CodeReviewReport {
   triage?: TriageRecord
   /** U8 adjudication audit — per-finding p + suppressed records. */
   findingAdjudication?: FindingAdjudicationAudit
+  /** U4(b) reflection audit — per-finding groundedness + dropped records. */
+  reflection?: FindingReflectionAudit
   /** Findings dropped for citing a file/line the diff never shows. */
   droppedUnanchored?: number
   /** nit/q findings dropped for asking to revert text the diff added. */

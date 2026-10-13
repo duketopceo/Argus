@@ -1,0 +1,146 @@
+{
+  "ok": true,
+  "skipped": false,
+  "summary": "2 low-severity finding(s)",
+  "verdict": "approve",
+  "findings": [
+    {
+      "file": "src/backend/base/langflow/graph/graph/utils.py",
+      "line": 150,
+      "severity": "nit",
+      "category": "performance",
+      "message": "L150: 🔵 nit: The `for` loop iterates through all nodes even after `node` is found. Add an `else` clause for the `for` loop or move the `if node:` check after the loop to ensure `node` is not `None` before using it, but a `break` is more efficient.",
+      "suggestion": "                set_new_target_handle(proxy_id, new_edge, target_handle, node)\n                break",
+      "startLine": 149,
+      "p": 0.34,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "src/backend/base/langflow/graph/graph/utils.py",
+      "severity": "nit",
+      "category": "testing",
+      "message": "nit: this diff modifies 1 source file(s) and no test file - if the change is behavior-bearing, point at the coverage that exercises it.",
+      "rule": "missing-test",
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async",
+      "dep-diff",
+      "missing-test"
+    ],
+    "records": [
+      {
+        "file": "src/backend/base/langflow/graph/graph/utils.py",
+        "detail": "source-only diff: 1 source file(s), no test file",
+        "rule": "missing-test"
+      }
+    ],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 1746,
+    "needsDeepReview": 0.4,
+    "risk": 1.84,
+    "topRiskArea": "data",
+    "topRiskAreaConfidence": 0.4
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "src/backend/base/langflow/graph/graph/utils.py",
+        "line": 150,
+        "severity": "nit",
+        "category": "performance",
+        "message": "L150: 🔵 nit: The `for` loop iterates through all nodes even after `node` is found. Add an `else` clause for the `for` loop or move the `if node:` check after the loop to ensure `node` is not `None` before using it, but a `break` is more efficient.",
+        "adjudicated": true,
+        "p": 0.34
+      }
+    ],
+    "overflow": 0
+  },
+  "droppedUnanchored": 1,
+  "droppedFindings": [
+    {
+      "file": "src/backend/base/langflow/graph/graph/utils.py",
+      "severity": "nit",
+      "message": "L179: 🔵 nit: The variable `field_template_proxy` is only used once. It can be inlined for brevity.",
+      "reason": "outside-diff",
+      "line": 179,
+      "category": "convention"
+    }
+  ],
+  "scope": {
+    "totalFiles": 1,
+    "reviewedFiles": 1,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1169,
+      "costUsd": 0.000045444,
+      "kind": "decide"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 1804,
+      "costUsd": 0.00145926,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 976,
+      "costUsd": 0.000040068,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.001544772,
+  "tokens": 3949,
+  "model": "google/gemini-2.5-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "f7db861b87dd6827ad55de67f473dc372e5877d8",
+    "checkoutSha": "f7db861b87dd6827ad55de67f473dc372e5877d8",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "f7db861b87dd6827ad55de67f473dc372e5877d8",
+  "diffRange": {
+    "base": "f9b2ce18a4945c04ab786e66e6fc10e4b49e2677",
+    "baseSha": "4b0c42e52076fb7cdca084a1ab06d46f87fecff1",
+    "headSha": "f7db861b87dd6827ad55de67f473dc372e5877d8"
+  }
+}

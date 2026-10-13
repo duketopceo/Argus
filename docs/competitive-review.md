@@ -45,7 +45,7 @@ Every gate below inherits the variance rider above: a single run's delta
 is a hypothesis, not evidence.
 
 - [x] U4(a) positioning check — measured → **rejected**: `droppedUnanchored` fired twice across all 20 committed eval reports (1 finding each on pr126, pr173); `validation.dropped` twice more. The `filterToDiffLines` anchor check already catches the rare bad position; a downgrade+count mechanism has ~2-finding headroom over the whole corpus. Existing check suffices.
-- [ ] U4(b) reflection pass — measure precision delta on `eval-corpus.aacr.json` before adopting
+- [x] U4(b) reflection pass — shipped opt-in (`review.reflection`, `ARGUS_REVIEW_REFLECTION=1`, floor 0.3, degrade-open). Gate measured: **inert** — 0 drops across ~50 checked findings; grounded scores cluster at 0.4–0.5 uncertainty with no separation between noise and labeled-true hits (no floor discriminates). The observed FP classes (cross-ref — prompt-fixed; plan-doc state-as-defect — new) are judgment failures, not grounding failures. Kept opt-in as machinery for question/floor retuning; default-on requires evidence the current data doesn't have.
 - [ ] U4(c) deterministic bundling — measure recall lift on multi-file PRs
 - [ ] Walkthrough paragraph in sticky head — measure against comment-count goals (must not add noise)
 - [ ] `emit path instructions`-style config mining — blocked on U6 feedback data

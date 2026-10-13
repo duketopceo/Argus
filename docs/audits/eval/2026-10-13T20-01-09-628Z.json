@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "tag": "2026-10-13T20-01-09-628Z",
+  "cli": "cbc9cba-dirty",
+  "entries": 3,
+  "results": [
+    {
+      "name": "clean-175-release-prep",
+      "note": "v0.5.0 release prep - v2 run produced 5 blocking changelog cross-ref FPs (p .66-.78, 1 floored), v3 run silent; nondeterministic meta-diff FP class",
+      "ms": 2490,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "pass",
+        "findings": 0,
+        "ruleFindings": 0,
+        "comments": 0,
+        "commentsOverflow": 0,
+        "bySeverity": {},
+        "byPathType": {},
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0,
+        "clean": true,
+        "blockingFindings": 0,
+        "flooredBlockers": 0,
+        "blockingVerdict": false
+      },
+      "reportPath": "docs/audits/eval/reports/clean-175-release-prep-cba1d1c7-2026-10-13T20-01-09-628Z.json"
+    },
+    {
+      "name": "clean-wisp-101-docs",
+      "note": "docs+renders README wave, 28f - stalled 2x on provider timeout (possible large-binary-diff perf gap, unconfirmed)",
+      "ms": 173174,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "approve",
+        "findings": 47,
+        "ruleFindings": 0,
+        "comments": 7,
+        "commentsOverflow": 0,
+        "bySeverity": {
+          "risk": 7,
+          "nit": 40
+        },
+        "byPathType": {
+          "docs": 20,
+          "src": 23,
+          "test": 4
+        },
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 2,
+        "droppedReverted": 0,
+        "nitShare": 0.851063829787234,
+        "clean": true,
+        "blockingFindings": 7,
+        "flooredBlockers": 5,
+        "blockingVerdict": false
+      },
+      "reportPath": "docs/audits/eval/reports/clean-wisp-101-docs-2015d869-2026-10-13T20-01-09-628Z.json"
+    },
+    {
+      "name": "clean-large-rename-synthetic",
+      "note": "synthetic mechanical rename src/{index,report}->src/{repoindex,reporter}, 54f tsc-verified - 2 runs 0 blockers; 6 p~.3 verify-move nits (correct uncertainty shape)",
+      "ms": 58474,
+      "exitCode": 0,
+      "stalled": false,
+      "metrics": {
+        "ok": true,
+        "skipped": false,
+        "verdict": "pass",
+        "findings": 0,
+        "ruleFindings": 0,
+        "comments": 0,
+        "commentsOverflow": 0,
+        "bySeverity": {},
+        "byPathType": {},
+        "generatedPathComments": 0,
+        "droppedOutsideDiff": 0,
+        "droppedReverted": 0,
+        "nitShare": 0,
+        "clean": true,
+        "blockingFindings": 0,
+        "flooredBlockers": 0,
+        "blockingVerdict": false
+      },
+      "reportPath": "docs/audits/eval/reports/clean-large-rename-synthetic-6e8d5bea-2026-10-13T20-01-09-628Z.json"
+    }
+  ],
+  "at": "2026-10-13T20:05:04.159Z"
+}

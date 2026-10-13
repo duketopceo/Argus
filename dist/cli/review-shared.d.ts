@@ -5,6 +5,7 @@ import { type GenerateLaneResult } from '../probe/generate.js';
 import { type ProbeRecord } from '../probe/queue.js';
 import { type HeadBinding } from '../report/manifest.js';
 import { type FindingAdjudicationAudit } from '../review/adjudicate.js';
+import { type FindingReflectionAudit } from '../review/reflect.js';
 import { type RuleRecord, type RuleFailure } from '../review/rules.js';
 import { type SecretsScanResult } from '../review/secrets.js';
 import { type TriageRecord } from '../review/triage.js';
@@ -132,6 +133,8 @@ export interface CodeReviewReport {
     triage?: TriageRecord;
     /** U8 adjudication audit — per-finding p + suppressed records. */
     findingAdjudication?: FindingAdjudicationAudit;
+    /** U4(b) reflection audit — per-finding groundedness + dropped records. */
+    reflection?: FindingReflectionAudit;
     /** Findings dropped for citing a file/line the diff never shows. */
     droppedUnanchored?: number;
     /** nit/q findings dropped for asking to revert text the diff added. */

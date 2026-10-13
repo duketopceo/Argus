@@ -1,0 +1,211 @@
+{
+  "ok": false,
+  "skipped": false,
+  "summary": "5 finding(s) include a blocking severity",
+  "verdict": "needs_changes",
+  "findings": [
+    {
+      "file": "graphrag/entity_resolution.py",
+      "line": 114,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L114: 🔵 nit: Use `sub_connect_graph.nodes` directly for better readability in modern NetworkX versions. `nodes()` is redundant.",
+      "p": 0.14,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "graphrag/utils.py",
+      "line": 442,
+      "severity": "nit",
+      "category": "performance",
+      "message": "L442: 🔵 nit: The lambda `lambda: trio.to_thread.run_sync(...)` is redundant. `trio.to_thread.run_sync` is already a callable. Pass `trio.to_thread.run_sync` directly and pass arguments using `args`.",
+      "p": 0.33,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "graphrag/general/extractor.py",
+      "line": 204,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L204: 🔴 bug: `list.extend` modifies in place and returns `None`. Assigning its result will set `node0_attrs[\"source_id\"]` to `None`. Use `+` for list concatenation or `update` for sets if you intend to modify the set in place and then convert to a list.",
+      "p": 0.77,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "graphrag/general/extractor.py",
+      "line": 219,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L219: 🔴 bug: Similar to L204, `list.extend` modifies in place and returns `None`. Assigning its result will set the attribute to `None`. Use `+` for list concatenation or `update` for sets if you intend to modify the set in place and then convert to a list.",
+      "p": 0.72,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "graphrag/general/extractor.py",
+      "severity": "nit",
+      "category": "testing",
+      "message": "nit: this diff modifies 3 source file(s) and no test file - if the change is behavior-bearing, point at the coverage that exercises it.",
+      "rule": "missing-test",
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "request_changes",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 2,
+  "reviewComments": [
+    {
+      "path": "graphrag/general/extractor.py",
+      "line": 204,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`list.extend` modifies in place and returns `None`. Assigning its result will set `node0_attrs[\"source_id\"]` to `None`. Use `+` for list concatenation or `update` for sets if you intend to modify the set in place and then convert to a list.",
+      "dedupKey": "graphrag/general/extractor.py:204:bug:`list.extend` modifies in place and returns `None`. Assigning its result will set `node0_attrs[\"source_id\"]` to `None`. Use `+` for list concatenation or `update` for sets if you intend to modify the set in place and then convert to a list.:00001505"
+    },
+    {
+      "path": "graphrag/general/extractor.py",
+      "line": 219,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\nSimilar to L204, `list.extend` modifies in place and returns `None`. Assigning its result will set the attribute to `None`. Use `+` for list concatenation or `update` for sets if you intend to modify the set in place and then convert to a list.",
+      "dedupKey": "graphrag/general/extractor.py:219:bug:Similar to L204, `list.extend` modifies in place and returns `None`. Assigning its result will set the attribute to `None`. Use `+` for list concatenation or `update` for sets if you intend to modify the set in place and then convert to a list.:00001505"
+    }
+  ],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async",
+      "dep-diff",
+      "missing-test"
+    ],
+    "records": [
+      {
+        "file": "graphrag/general/extractor.py",
+        "detail": "source-only diff: 3 source file(s), no test file",
+        "rule": "missing-test"
+      }
+    ],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 3541,
+    "needsDeepReview": 0.93,
+    "risk": 2.64,
+    "topRiskArea": "data",
+    "topRiskAreaConfidence": 0.99
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "graphrag/entity_resolution.py",
+        "line": 114,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L114: 🔵 nit: Use `sub_connect_graph.nodes` directly for better readability in modern NetworkX versions. `nodes()` is redundant.",
+        "adjudicated": true,
+        "p": 0.14
+      },
+      {
+        "file": "graphrag/utils.py",
+        "line": 442,
+        "severity": "nit",
+        "category": "performance",
+        "message": "L442: 🔵 nit: The lambda `lambda: trio.to_thread.run_sync(...)` is redundant. `trio.to_thread.run_sync` is already a callable. Pass `trio.to_thread.run_sync` directly and pass arguments using `args`.",
+        "adjudicated": true,
+        "p": 0.33
+      },
+      {
+        "file": "graphrag/general/extractor.py",
+        "line": 204,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L204: 🔴 bug: `list.extend` modifies in place and returns `None`. Assigning its result will set `node0_attrs[\"source_id\"]` to `None`. Use `+` for list concatenation or `update` for sets if you intend to modify the set in place and then convert to a list.",
+        "adjudicated": true,
+        "p": 0.77
+      },
+      {
+        "file": "graphrag/general/extractor.py",
+        "line": 219,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L219: 🔴 bug: Similar to L204, `list.extend` modifies in place and returns `None`. Assigning its result will set the attribute to `None`. Use `+` for list concatenation or `update` for sets if you intend to modify the set in place and then convert to a list.",
+        "adjudicated": true,
+        "p": 0.72
+      }
+    ],
+    "overflow": 0
+  },
+  "scope": {
+    "totalFiles": 3,
+    "reviewedFiles": 3,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1620,
+      "costUsd": 0.000064386,
+      "kind": "decide"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 2723,
+      "costUsd": 0.002529351,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1962,
+      "costUsd": 0.000079212,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.002672949,
+  "tokens": 6305,
+  "model": "google/gemini-2.5-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "36881278bf059ad4f79eea31edb34fa2afec6a23",
+    "checkoutSha": "36881278bf059ad4f79eea31edb34fa2afec6a23",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "36881278bf059ad4f79eea31edb34fa2afec6a23",
+  "diffRange": {
+    "base": "0a42e5777eb966b26aaf8f2a7d593ae99a4aa87a",
+    "baseSha": "0a42e5777eb966b26aaf8f2a7d593ae99a4aa87a",
+    "headSha": "36881278bf059ad4f79eea31edb34fa2afec6a23"
+  }
+}

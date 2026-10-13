@@ -1,0 +1,137 @@
+{
+  "ok": true,
+  "skipped": false,
+  "summary": "1 low-severity finding(s)",
+  "verdict": "approve",
+  "findings": [
+    {
+      "file": "envconfig/config.go",
+      "line": 169,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L169: 🔵 nit: The comment for `ContextLength` should start with `//` directly above the variable definition, not on the same line as the variable's declaration, for consistency with other `envconfig` variables. Move the comment to its own line.",
+      "p": 0.3,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async",
+      "dep-diff",
+      "missing-test"
+    ],
+    "records": [],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 2671,
+    "needsDeepReview": 0.64,
+    "risk": 1.95,
+    "topRiskArea": "ops",
+    "topRiskAreaConfidence": 0.89
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "envconfig/config.go",
+        "line": 169,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L169: 🔵 nit: The comment for `ContextLength` should start with `//` directly above the variable definition, not on the same line as the variable's declaration, for consistency with other `envconfig` variables. Move the comment to its own line.",
+        "adjudicated": true,
+        "p": 0.3
+      }
+    ],
+    "overflow": 0
+  },
+  "reflection": {
+    "records": [
+      {
+        "file": "envconfig/config.go",
+        "line": 169,
+        "severity": "nit",
+        "message": "L169: 🔵 nit: The comment for `ContextLength` should start with `//` directly above the variable definition, not on the same line as the variable's declaration, for consistency with other `envconfig` variables. Move the comment to its own line.",
+        "checked": true,
+        "grounded": 0.69
+      }
+    ],
+    "dropped": 0,
+    "overflow": 0
+  },
+  "scope": {
+    "totalFiles": 4,
+    "reviewedFiles": 4,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1677,
+      "costUsd": 0.00006678,
+      "kind": "decide"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 2127,
+      "costUsd": 0.001097811,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 822,
+      "costUsd": 0.0000336,
+      "kind": "decide"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 819,
+      "costUsd": 0.000033474,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.0012316649999999998,
+  "tokens": 5445,
+  "model": "google/gemini-2.5-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "09f15872d92531f5b41caa51e9b1547eeb7ab694",
+    "checkoutSha": "09f15872d92531f5b41caa51e9b1547eeb7ab694",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "09f15872d92531f5b41caa51e9b1547eeb7ab694",
+  "diffRange": {
+    "base": "f53f4198c36d0a943de598ad91a20baa9481c5c5",
+    "baseSha": "ed443a03930a10bec6182c55091f0880baa1e620",
+    "headSha": "09f15872d92531f5b41caa51e9b1547eeb7ab694"
+  }
+}
