@@ -1,0 +1,372 @@
+{
+  "ok": true,
+  "skipped": false,
+  "summary": "Reviewed all 5 chunks (28 of 28 files). The PR largely consists of documentation updates, including a significant restructuring of plans and the addition of a comprehensive unified plan. There are several minor nits related to consistency in formatting, terminology, and clarity across various `docs` files and the `ROADMAP.md`. While no critical bugs or risks were identified, addressing these nits will improve the overall quality and readability of the documentation. All identified issues are minor and do not block merging.",
+  "verdict": "approve",
+  "findings": [
+    {
+      "file": "docs/CUA.md",
+      "line": 6,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L6: 🔵 nit: Acronym CUA is not defined. Define `CUA` on first use.",
+      "p": 0.5,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/CUA.md",
+      "line": 13,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L13: 🔵 nit: The diagram should use consistent indenting. Align `1.` through `7.` to the same column.",
+      "p": 0.28,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/CUA.md",
+      "line": 128,
+      "severity": "nit",
+      "category": "usability",
+      "message": "L128: 🔵 nit: Explain `sha` and `salt`. Explain the reasoning for this type of hash and why it cannot be looked up in a dictionary.",
+      "p": 0.56,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/CUA.md",
+      "line": 204,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L204: 🔵 nit: The bullet point `cua driver` is too generic. Rename to `cua driver state` for clarity.",
+      "p": 0.29,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/CUA.md",
+      "line": 218,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L218: 🔵 nit: This bullet point is a paragraph. Refactor this into a more concise point or remove it.",
+      "p": 0.28,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/CONFIG.md",
+      "line": 81,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L81: 🔵 nit: The `risk_threshold` explanation is a bit verbose. Shorten to 'numeric risk gate; default blocks extreme risk only. Real protection is denylist, `allow_shell`, and confirm tier.'.",
+      "suggestion": "| `risk_threshold` | `9` | numeric risk gate; default blocks extreme risk only. Real protection is denylist, `allow_shell`, and confirm tier |",
+      "p": 0.34,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "ROADMAP.md",
+      "line": 4,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L4: 🔵 nit: The date format `YYYY-MM-DD-HHMM` is more common for plan documents. Consider `2026-10-04-0100` for consistency.",
+      "suggestion": "Last updated: 2026-10-04. Plan of record: `docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md`.",
+      "p": 0.14,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "ROADMAP.md",
+      "line": 50,
+      "severity": "nit",
+      "category": "usability",
+      "message": "L50: 🔵 nit: 'needs a VM and a person' could be rephrased to be more formal. Suggest 'Requires a dedicated VM and manual execution.'",
+      "suggestion": "Not yet done: requires a dedicated VM and manual execution.",
+      "p": 0.23,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 56,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L56: 🔵 nit: Update the comment regarding `superseded` front matter to reflect that it has now been applied to the old plans as part of this PR. The comment says \"supersession front matter not applied\" but this PR applies it. Remove \"supersession front matter not applied\" from the status description.",
+      "p": 0.39,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+      "line": 64,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L64: 🔵 nit: The status for W2 now correctly says \"done (fakes baseline)\", but the detail still mentions `needs_live_baseline`. Clarify if a live baseline is still an outstanding item, or if the fakes baseline is considered sufficient for this unit's closure. If `needs_live_baseline` is still true, add a separate task for it.",
+      "p": 0.4,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "scripts/ui/readme_media.py",
+      "line": 134,
+      "severity": "nit",
+      "category": "convention",
+      "message": "L134: 🔵 nit: The shebang `#!/usr/bin/env python3` is used. For consistency with other Python scripts in the repository, consider using `#!/usr/bin/python3` if it's generally preferred, or ensure `env` is consistently used. Standardize the shebang. If `env` is preferred, this is fine.",
+      "p": 0.11,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "comment",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 0,
+  "reviewComments": [],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async",
+      "dep-diff",
+      "missing-test"
+    ],
+    "records": [
+      {
+        "file": "docs/CONFIG.md",
+        "line": 271,
+        "detail": "url-with-ip-host",
+        "suppressed": "data/prose path",
+        "rule": "hardcoded-endpoint"
+      }
+    ],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 12014,
+    "needsDeepReview": 0.55,
+    "topRiskArea": "ops",
+    "topRiskAreaConfidence": 0.7
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "docs/CUA.md",
+        "line": 6,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L6: 🔵 nit: Acronym CUA is not defined. Define `CUA` on first use.",
+        "adjudicated": true,
+        "p": 0.5
+      },
+      {
+        "file": "docs/CUA.md",
+        "line": 13,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L13: 🔵 nit: The diagram should use consistent indenting. Align `1.` through `7.` to the same column.",
+        "adjudicated": true,
+        "p": 0.28
+      },
+      {
+        "file": "docs/CUA.md",
+        "line": 128,
+        "severity": "nit",
+        "category": "usability",
+        "message": "L128: 🔵 nit: Explain `sha` and `salt`. Explain the reasoning for this type of hash and why it cannot be looked up in a dictionary.",
+        "adjudicated": true,
+        "p": 0.56
+      },
+      {
+        "file": "docs/CUA.md",
+        "line": 204,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L204: 🔵 nit: The bullet point `cua driver` is too generic. Rename to `cua driver state` for clarity.",
+        "adjudicated": true,
+        "p": 0.29
+      },
+      {
+        "file": "docs/CUA.md",
+        "line": 218,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L218: 🔵 nit: This bullet point is a paragraph. Refactor this into a more concise point or remove it.",
+        "adjudicated": true,
+        "p": 0.28
+      },
+      {
+        "file": "docs/CONFIG.md",
+        "line": 81,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L81: 🔵 nit: The `risk_threshold` explanation is a bit verbose. Shorten to 'numeric risk gate; default blocks extreme risk only. Real protection is denylist, `allow_shell`, and confirm tier.'.",
+        "adjudicated": true,
+        "p": 0.34
+      },
+      {
+        "file": "ROADMAP.md",
+        "line": 4,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L4: 🔵 nit: The date format `YYYY-MM-DD-HHMM` is more common for plan documents. Consider `2026-10-04-0100` for consistency.",
+        "adjudicated": true,
+        "p": 0.14
+      },
+      {
+        "file": "ROADMAP.md",
+        "line": 50,
+        "severity": "nit",
+        "category": "usability",
+        "message": "L50: 🔵 nit: 'needs a VM and a person' could be rephrased to be more formal. Suggest 'Requires a dedicated VM and manual execution.'",
+        "adjudicated": true,
+        "p": 0.23
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 56,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L56: 🔵 nit: Update the comment regarding `superseded` front matter to reflect that it has now been applied to the old plans as part of this PR. The comment says \"supersession front matter not applied\" but this PR applies it. Remove \"supersession front matter not applied\" from the status description",
+        "adjudicated": true,
+        "p": 0.39
+      },
+      {
+        "file": "docs/plans/2026-10-04-0100-feat-wisp-unified-plan.md",
+        "line": 64,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L64: 🔵 nit: The status for W2 now correctly says \"done (fakes baseline)\", but the detail still mentions `needs_live_baseline`. Clarify if a live baseline is still an outstanding item, or if the fakes baseline is considered sufficient for this unit's closure. If `needs_live_baseline` is still true, ",
+        "adjudicated": true,
+        "p": 0.4
+      },
+      {
+        "file": "scripts/ui/readme_media.py",
+        "line": 134,
+        "severity": "nit",
+        "category": "convention",
+        "message": "L134: 🔵 nit: The shebang `#!/usr/bin/env python3` is used. For consistency with other Python scripts in the repository, consider using `#!/usr/bin/python3` if it's generally preferred, or ensure `env` is consistently used. Standardize the shebang. If `env` is preferred, this is fine.",
+        "adjudicated": true,
+        "p": 0.11
+      }
+    ],
+    "overflow": 0
+  },
+  "walkthrough": "The PR largely consists of documentation updates, including a significant restructuring of plans and the addition of a comprehensive unified plan. There are several minor nits related to consistency in formatting, terminology, and clarity across various `docs` files and the `ROADMAP.md`. While no critical bugs or risks were identified, addressing these nits will improve the overall quality and readability of the documentation. All identified issues are minor and do not block merging.",
+  "scope": {
+    "totalFiles": 28,
+    "reviewedFiles": 28,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 5,
+    "chunksReviewed": 5,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 4915,
+      "costUsd": 0.000202776,
+      "kind": "decide"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 8491,
+      "costUsd": 0.002776653,
+      "kind": "code"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 4576,
+      "costUsd": 0.002334816,
+      "kind": "code"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 8235,
+      "costUsd": 0.003835359,
+      "kind": "code"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 8775,
+      "costUsd": 0.003791007,
+      "kind": "code"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 5490,
+      "costUsd": 0.001885356,
+      "kind": "code"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 3444,
+      "costUsd": 0.004270266,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 8891,
+      "costUsd": 0.000364896,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.019461129,
+  "tokens": 52817,
+  "model": "google/gemini-2.5-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "c72b3783a14c72acde7d96594f174f49a88c38d8",
+    "checkoutSha": "c72b3783a14c72acde7d96594f174f49a88c38d8",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "c72b3783a14c72acde7d96594f174f49a88c38d8",
+  "diffRange": {
+    "base": "33e6be0b1f22339249e284bd29a535b9b10ee0ea",
+    "baseSha": "33e6be0b1f22339249e284bd29a535b9b10ee0ea",
+    "headSha": "c72b3783a14c72acde7d96594f174f49a88c38d8"
+  }
+}

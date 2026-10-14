@@ -614,6 +614,13 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
 
     const reviewedChunks = new Set<number>()
     let chunkSpend = 0
+    let modelVerdict: 'pass' | 'needs_changes' | 'approve' | undefined
+    let modelSummary: string | undefined
+    // Model-finding count at the moment the prose was written; adoption
+    // later requires the same count to survive validation, reflection,
+    // and adjudication so the summary cannot cite a dropped finding.
+    let describedFindings: number | undefined
+    let walkthrough: string | undefined
     for (let i = 0; i < chunks.length; i++) {
       const fromBatch = batched.get(i)
       // Batch results are already paid for: always take them. Only
@@ -666,6 +673,21 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
         )
       }
       allFindings.push(...vetted.kept)
+      // A lone chunk's own summary and verdict describe the whole PR, so
+      // adopt them under the synthesis guards: keep the prose only when
+      // this pass dropped nothing and the model emitted text; the verdict
+      // match and the survival of the described set are checked where the
+      // final summary is built.
+      if (chunks.length === 1) {
+        modelVerdict = parsed.verdict
+        if (
+          anchored.dropped.length + vetted.dropped.length === 0 &&
+          (parsed.summary ?? '').trim() !== ''
+        ) {
+          modelSummary = parsed.summary
+          describedFindings = vetted.kept.length
+        }
+      }
       stage(`chunk ${i + 1}/${chunks.length} — ${parsed.findings.length} finding(s)`)
       if (ledger.budgetExceeded && fromBatch === undefined) {
         ctx.err(`code-review: budget exceeded after chunk ${i + 1}; stopping early`)
@@ -673,8 +695,6 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
     }
     const chunksReviewed = reviewedChunks.size
 
-    let modelVerdict: 'pass' | 'needs_changes' | 'approve' | undefined
-    let modelSummary: string | undefined
     let finalFindings = allFindings
 
     // Synthesis is paid too: project it at the mean chunk cost.
@@ -716,7 +736,11 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
         // The model's summary describes the set it emitted — reuse it only
         // when this pass dropped nothing, else its prose can cite findings
         // that were filtered out.
-        if (anchored.dropped.length + vetted.dropped.length > 0) modelSummary = undefined
+        if (anchored.dropped.length + vetted.dropped.length > 0) {
+          modelSummary = undefined
+        } else {
+          describedFindings = finalFindings.length
+        }
         if (ledger.budgetExceeded) {
           ctx.err('code-review: budget exceeded after synthesis; stopping early')
         }
@@ -962,7 +986,19 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
       summary = `${finalFindings.length} low-severity finding(s)`
       verdict = 'approve'
     }
-    if (modelVerdict === verdict && modelSummary !== undefined) summary = modelSummary
+    // Adopted prose must still describe the emitted set: a verdict
+    // mismatch, a post-write drop (validation, reflection, adjudication),
+    // or a pending budget stop all leave the deterministic summary in
+    // place. `walkthrough` carries the same prose for the sticky head.
+    if (
+      modelVerdict === verdict &&
+      modelSummary !== undefined &&
+      describedFindings === finalFindings.length - rulesFindings.length &&
+      !ledger.budgetExceeded
+    ) {
+      summary = modelSummary
+      walkthrough = modelSummary
+    }
     // A budget stop leaves the tail of the plan unreviewed; the scope and
     // summary must say so. Decorations preserve pre-U8 ordering: coverage,
     // exclusions, validation drops, budget, head binding.
@@ -1198,6 +1234,7 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
       ...(droppedReverted > 0 ? { droppedReverted } : {}),
       ...(droppedFindings.length > 0 ? { droppedFindings } : {}),
       ...(modelVerdict !== undefined && modelVerdict !== verdict ? { modelVerdict } : {}),
+      ...(walkthrough !== undefined ? { walkthrough } : {}),
       scope,
       ...(idxStale !== undefined ? { indexStaleness: idxStale } : {}),
       ...(batchRecord !== undefined ? { batch: batchRecord } : {}),

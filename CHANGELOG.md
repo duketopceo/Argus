@@ -6,6 +6,15 @@ pre-1.0; breaking changes may ship without a major bump until `1.0.0`.
 ## [Unreleased]
 
 ### Added
+- **Walkthrough line in the sticky head** — the chunk review call already
+  returned a `summary`; single-chunk reviews parsed and discarded it.
+  When the adoption guards pass (verdict match, non-empty model text,
+  every finding the prose described survives post-capture filtering, no
+  pending budget stop) the report gains `walkthrough` and the sticky
+  renders it as a sanitized line above the findings counts — zero added
+  model calls or spend. `parseCodeReview` now returns `summary?: string`
+  so an absent field is distinguishable from its display fallbacks, and
+  the Findings fold's summary lead is sanitized like other model text.
 - **Deterministic file bundling** — `planChunks` now packs a source file
   with its test/spec/stories/`__tests__`/`__snapshots__`/generated
   siblings as one bundle, so a finding on `foo.ts` reviews in the same

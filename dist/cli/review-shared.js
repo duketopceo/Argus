@@ -394,14 +394,14 @@ export function parseCodeReview(content) {
             })
             : defaultFindings;
         return {
-            summary: parsed.summary ?? (validVerdict === 'pass' ? 'No issues found' : 'Code review completed'),
+            summary: typeof parsed.summary === 'string' ? parsed.summary : undefined,
             verdict: validVerdict,
             findings,
         };
     }
     catch {
         return {
-            summary: 'Code review completed but could not parse the model response',
+            summary: undefined,
             verdict: 'needs_changes',
             findings: defaultFindings,
         };

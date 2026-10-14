@@ -1,0 +1,178 @@
+{
+  "ok": false,
+  "skipped": false,
+  "summary": "The PR fixes an issue where `sub_connect_graph.nodes` was being called without parentheses, and wraps a blocking `delete` call in `trio.to_thread.run_sync`. It also corrects an attribute merging logic in `Extractor` to handle cases where attributes might be missing and uses proper sorting for merged lists.",
+  "verdict": "needs_changes",
+  "findings": [
+    {
+      "file": "graphrag/general/extractor.py",
+      "line": 204,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L204: 🔴 bug: `list.extend()` returns `None`, so `sorted(set(None))` will raise an error. Directly use `set.update()` or concatenate and convert to set for merging lists.",
+      "suggestion": "            for attr in [\"keywords\", \"source_id\"]:\n                node0_attrs[attr] = sorted(list(set(node0_attrs[attr]).union(node1_attrs.get(attr, []))))",
+      "startLine": 203,
+      "p": 0.82,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "graphrag/general/extractor.py",
+      "line": 218,
+      "severity": "bug",
+      "category": "correctness",
+      "message": "L218: 🔴 bug: `list.extend()` returns `None`, so `set(None)` will raise an error. Directly use `set.update()` or concatenate and convert to set for merging lists.",
+      "suggestion": "                        for attr in [\"keywords\", \"source_id\"]:\n                            edge0_attrs[attr] = sorted(list(set(edge0_attrs[attr]).union(edge1_attrs.get(attr, []))))",
+      "startLine": 217,
+      "p": 0.77,
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    },
+    {
+      "file": "graphrag/general/extractor.py",
+      "severity": "nit",
+      "category": "testing",
+      "message": "nit: this diff modifies 3 source file(s) and no test file - if the change is behavior-bearing, point at the coverage that exercises it.",
+      "rule": "missing-test",
+      "evidence": {
+        "status": "inconclusive",
+        "detail": "could not fetch CI check-runs"
+      }
+    }
+  ],
+  "reviewEvent": "request_changes",
+  "provenBlockers": 0,
+  "highConfidenceBlockers": 2,
+  "reviewComments": [
+    {
+      "path": "graphrag/general/extractor.py",
+      "line": 204,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`list.extend()` returns `None`, so `sorted(set(None))` will raise an error. Directly use `set.update()` or concatenate and convert to set for merging lists.\n\n````suggestion\n            for attr in [\"keywords\", \"source_id\"]:\n                node0_attrs[attr] = sorted(list(set(node0_attrs[attr]).union(node1_attrs.get(attr, []))))\n````\n\n*Suggested change: review before committing.*",
+      "dedupKey": "graphrag/general/extractor.py:204:bug:`list.extend()` returns `None`, so `sorted(set(None))` will raise an error. Directly use `set.update()` or concatenate and convert to set for merging lists.:626d6382",
+      "start_line": 203,
+      "start_side": "RIGHT"
+    },
+    {
+      "path": "graphrag/general/extractor.py",
+      "line": 218,
+      "side": "RIGHT",
+      "body": "<!-- argus-reviewer:inline -->\n◆ **bug** · ▰▱▱▱ suspected\n`list.extend()` returns `None`, so `set(None)` will raise an error. Directly use `set.update()` or concatenate and convert to set for merging lists.\n\n````suggestion\n                        for attr in [\"keywords\", \"source_id\"]:\n                            edge0_attrs[attr] = sorted(list(set(edge0_attrs[attr]).union(edge1_attrs.get(attr, []))))\n````\n\n*Suggested change: review before committing.*",
+      "dedupKey": "graphrag/general/extractor.py:218:bug:`list.extend()` returns `None`, so `set(None)` will raise an error. Directly use `set.update()` or concatenate and convert to set for merging lists.:1754414f",
+      "start_line": 217,
+      "start_side": "RIGHT"
+    }
+  ],
+  "commentsOverflow": 0,
+  "nitsInline": false,
+  "secretsScan": {
+    "findings": [],
+    "records": [],
+    "overflow": 0
+  },
+  "rulesScan": {
+    "ran": [
+      "secrets",
+      "hardcoded-endpoint",
+      "leftover-todo",
+      "sync-in-async",
+      "dep-diff",
+      "missing-test"
+    ],
+    "records": [
+      {
+        "file": "graphrag/general/extractor.py",
+        "detail": "source-only diff: 3 source file(s), no test file",
+        "rule": "missing-test"
+      }
+    ],
+    "failures": []
+  },
+  "triage": {
+    "mode": "annotate",
+    "model": "typesafe/jev-1.13-20260917",
+    "diffExcerptChars": 3541,
+    "needsDeepReview": 0.93,
+    "risk": 2.67,
+    "topRiskArea": "data",
+    "topRiskAreaConfidence": 0.99
+  },
+  "findingAdjudication": {
+    "records": [
+      {
+        "file": "graphrag/general/extractor.py",
+        "line": 204,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L204: 🔴 bug: `list.extend()` returns `None`, so `sorted(set(None))` will raise an error. Directly use `set.update()` or concatenate and convert to set for merging lists.",
+        "adjudicated": true,
+        "p": 0.82
+      },
+      {
+        "file": "graphrag/general/extractor.py",
+        "line": 218,
+        "severity": "bug",
+        "category": "correctness",
+        "message": "L218: 🔴 bug: `list.extend()` returns `None`, so `set(None)` will raise an error. Directly use `set.update()` or concatenate and convert to set for merging lists.",
+        "adjudicated": true,
+        "p": 0.77
+      }
+    ],
+    "overflow": 0
+  },
+  "walkthrough": "The PR fixes an issue where `sub_connect_graph.nodes` was being called without parentheses, and wraps a blocking `delete` call in `trio.to_thread.run_sync`. It also corrects an attribute merging logic in `Extractor` to handle cases where attributes might be missing and uses proper sorting for merged lists.",
+  "scope": {
+    "totalFiles": 3,
+    "reviewedFiles": 3,
+    "excludedFiles": 0,
+    "excludedSample": [],
+    "chunksTotal": 1,
+    "chunksReviewed": 1,
+    "unreviewedFiles": 0
+  },
+  "maxComments": 20,
+  "calls": [
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1620,
+      "costUsd": 0.000064386,
+      "kind": "decide"
+    },
+    {
+      "model": "google/gemini-2.5-flash",
+      "provider": "Google",
+      "tokens": 2367,
+      "costUsd": 0.001648251,
+      "kind": "code"
+    },
+    {
+      "model": "typesafe/jev-1.13-20260917",
+      "provider": "TypeSafe",
+      "tokens": 1085,
+      "costUsd": 0.00004389,
+      "kind": "decide"
+    }
+  ],
+  "visionCostUsd": 0.0017565270000000001,
+  "tokens": 5072,
+  "model": "google/gemini-2.5-flash",
+  "budgetExceeded": false,
+  "headBinding": {
+    "intendedSha": "36881278bf059ad4f79eea31edb34fa2afec6a23",
+    "checkoutSha": "36881278bf059ad4f79eea31edb34fa2afec6a23",
+    "status": "not_applicable",
+    "source": "local",
+    "detail": "local diff is bound to the working tree, not a pushed head"
+  },
+  "reviewedHeadSha": "36881278bf059ad4f79eea31edb34fa2afec6a23",
+  "diffRange": {
+    "base": "0a42e5777eb966b26aaf8f2a7d593ae99a4aa87a",
+    "baseSha": "0a42e5777eb966b26aaf8f2a7d593ae99a4aa87a",
+    "headSha": "36881278bf059ad4f79eea31edb34fa2afec6a23"
+  }
+}

@@ -79,6 +79,40 @@ describe('renderCommentHead', () => {
     })
     expect(head).toContain('### Argus: ⊘ failed\n')
   })
+
+  it('renders the walkthrough as a head line above the findings summary', () => {
+    const head = renderCommentHead({
+      body: 'review-only',
+      ok: true,
+      codeReview: {
+        ok: true,
+        skipped: false,
+        verdict: 'approve',
+        findings: [{ file: 'a.ts', line: 1, severity: 'nit', message: 'm' }],
+        walkthrough: 'Adds the a.ts helper module',
+      },
+    })
+    const wi = head.indexOf('Adds the a.ts helper module')
+    const fi = head.indexOf('nit')
+    expect(wi).toBeGreaterThan(-1)
+    expect(wi).toBeLessThan(fi)
+  })
+
+  it('sanitizes and flattens walkthrough prose', () => {
+    const head = renderCommentHead({
+      body: 'review-only',
+      ok: true,
+      codeReview: {
+        ok: true,
+        skipped: false,
+        verdict: 'approve',
+        findings: [],
+        walkthrough: 'line one\nline two @mention </details>',
+      },
+    })
+    expect(head).not.toContain('</details>')
+    expect(head).not.toContain('line one\nline two')
+  })
 })
 
 describe('renderMissingKeyComment', () => {

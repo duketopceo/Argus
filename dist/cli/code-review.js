@@ -530,6 +530,13 @@ export async function cmdCodeReview(args, ctx, deps) {
         }
         const reviewedChunks = new Set();
         let chunkSpend = 0;
+        let modelVerdict;
+        let modelSummary;
+        // Model-finding count at the moment the prose was written; adoption
+        // later requires the same count to survive validation, reflection,
+        // and adjudication so the summary cannot cite a dropped finding.
+        let describedFindings;
+        let walkthrough;
         for (let i = 0; i < chunks.length; i++) {
             const fromBatch = batched.get(i);
             // Batch results are already paid for: always take them. Only
@@ -572,14 +579,25 @@ export async function cmdCodeReview(args, ctx, deps) {
                 debug('code-review', `chunk ${i + 1}: dropped ${anchored.dropped.length} outside-diff, ${vetted.dropped.length} revert-nit finding(s)`);
             }
             allFindings.push(...vetted.kept);
+            // A lone chunk's own summary and verdict describe the whole PR, so
+            // adopt them under the synthesis guards: keep the prose only when
+            // this pass dropped nothing and the model emitted text; the verdict
+            // match and the survival of the described set are checked where the
+            // final summary is built.
+            if (chunks.length === 1) {
+                modelVerdict = parsed.verdict;
+                if (anchored.dropped.length + vetted.dropped.length === 0 &&
+                    (parsed.summary ?? '').trim() !== '') {
+                    modelSummary = parsed.summary;
+                    describedFindings = vetted.kept.length;
+                }
+            }
             stage(`chunk ${i + 1}/${chunks.length} — ${parsed.findings.length} finding(s)`);
             if (ledger.budgetExceeded && fromBatch === undefined) {
                 ctx.err(`code-review: budget exceeded after chunk ${i + 1}; stopping early`);
             }
         }
         const chunksReviewed = reviewedChunks.size;
-        let modelVerdict;
-        let modelSummary;
         let finalFindings = allFindings;
         // Synthesis is paid too: project it at the mean chunk cost.
         const synthAllowed = !ledger.budgetExceeded &&
@@ -614,8 +632,12 @@ export async function cmdCodeReview(args, ctx, deps) {
                 // The model's summary describes the set it emitted — reuse it only
                 // when this pass dropped nothing, else its prose can cite findings
                 // that were filtered out.
-                if (anchored.dropped.length + vetted.dropped.length > 0)
+                if (anchored.dropped.length + vetted.dropped.length > 0) {
                     modelSummary = undefined;
+                }
+                else {
+                    describedFindings = finalFindings.length;
+                }
                 if (ledger.budgetExceeded) {
                     ctx.err('code-review: budget exceeded after synthesis; stopping early');
                 }
@@ -835,8 +857,17 @@ export async function cmdCodeReview(args, ctx, deps) {
             summary = `${finalFindings.length} low-severity finding(s)`;
             verdict = 'approve';
         }
-        if (modelVerdict === verdict && modelSummary !== undefined)
+        // Adopted prose must still describe the emitted set: a verdict
+        // mismatch, a post-write drop (validation, reflection, adjudication),
+        // or a pending budget stop all leave the deterministic summary in
+        // place. `walkthrough` carries the same prose for the sticky head.
+        if (modelVerdict === verdict &&
+            modelSummary !== undefined &&
+            describedFindings === finalFindings.length - rulesFindings.length &&
+            !ledger.budgetExceeded) {
             summary = modelSummary;
+            walkthrough = modelSummary;
+        }
         // A budget stop leaves the tail of the plan unreviewed; the scope and
         // summary must say so. Decorations preserve pre-U8 ordering: coverage,
         // exclusions, validation drops, budget, head binding.
@@ -1053,6 +1084,7 @@ export async function cmdCodeReview(args, ctx, deps) {
             ...(droppedReverted > 0 ? { droppedReverted } : {}),
             ...(droppedFindings.length > 0 ? { droppedFindings } : {}),
             ...(modelVerdict !== undefined && modelVerdict !== verdict ? { modelVerdict } : {}),
+            ...(walkthrough !== undefined ? { walkthrough } : {}),
             scope,
             ...(idxStale !== undefined ? { indexStaleness: idxStale } : {}),
             ...(batchRecord !== undefined ? { batch: batchRecord } : {}),
