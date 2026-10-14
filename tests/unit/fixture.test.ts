@@ -369,6 +369,186 @@ describe('code-review --fixture', () => {
     expect(b.startLine).toBeUndefined()
   })
 
+  // Single-chunk reviews adopt the chunk call's own summary as the report
+  // walkthrough, under the same guards the synthesis path applies.
+  const singleChunkRun = async (
+    response: { summary?: string; verdict: string; findings: unknown[] },
+    files: Record<string, string> = { 'src/a.ts': 'one\ntwo\nthree\n' },
+  ) => {
+    const repo = await mkdtemp(join(tmpdir(), 'argus-fix-'))
+    materializeFixture(repo, {}, files)
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-fix-cwd-'))
+    const reportDir = join(cwd, 'report')
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({ decisionModel: '', reportDir }),
+    )
+    const client = new StubClient([{ content: JSON.stringify(response) }])
+    const code = await main(['code-review', '--fixture', repo, '--report-dir', reportDir], {
+      cwd,
+      env: { ...MIN_ENV, OPENROUTER_API_KEY: 'test-key' },
+      out: () => {},
+      err: () => {},
+      createClient: () => client,
+    })
+    expect(code).toBe(0)
+    const report = JSON.parse(await readFile(join(reportDir, 'code-review.json'), 'utf8'))
+    return { report, client }
+  }
+
+  it('adopts the single-chunk model summary when guards pass', async () => {
+    const { report, client } = await singleChunkRun({
+      summary: 'Adds a three-line helper module',
+      verdict: 'approve',
+      findings: [
+        { file: 'src/a.ts', line: 3, severity: 'nit', category: 'convention', message: 'L3: nit' },
+      ],
+    })
+    expect(client.calls).toHaveLength(1) // no extra model call
+    expect(report.summary).toBe('Adds a three-line helper module')
+    expect(report.walkthrough).toBe('Adds a three-line helper module')
+  })
+
+  it('keeps the deterministic summary when the chunk verdict disagrees', async () => {
+    const { report } = await singleChunkRun({
+      summary: 'model prose that must not win',
+      verdict: 'needs_changes',
+      findings: [
+        { file: 'src/a.ts', line: 3, severity: 'nit', category: 'convention', message: 'L3: nit' },
+      ],
+    })
+    expect(report.summary).toContain('low-severity finding')
+    expect(report.modelVerdict).toBe('needs_changes')
+    expect(report.walkthrough).toBeUndefined()
+  })
+
+  it('keeps the deterministic summary when chunk findings were dropped', async () => {
+    const { report } = await singleChunkRun({
+      summary: 'model prose citing a dropped finding',
+      verdict: 'approve',
+      findings: [
+        { file: 'src/a.ts', line: 3, severity: 'nit', category: 'convention', message: 'L3: nit' },
+        { file: 'src/a.ts', line: 9999, severity: 'bug', category: 'correctness', message: 'outside diff' },
+      ],
+    })
+    expect(report.summary).toContain('low-severity finding')
+    expect(report.walkthrough).toBeUndefined()
+  })
+
+  it('keeps the deterministic summary when the chunk summary is empty or absent', async () => {
+    for (const summary of ['', undefined]) {
+      const { report } = await singleChunkRun({
+        summary,
+        verdict: 'approve',
+        findings: [
+          { file: 'src/a.ts', line: 3, severity: 'nit', category: 'convention', message: 'L3: nit' },
+        ],
+      })
+      expect(report.summary).toContain('low-severity finding')
+      expect(report.walkthrough).toBeUndefined()
+    }
+  })
+
+  it('multi-chunk reviews keep synthesis prose and ignore chunk summaries', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'argus-fix-'))
+    const big = (v: string) =>
+      Array.from({ length: 1200 }, (_, i) => `export const ${v}${i} = ${i}`).join('\n') + '\n'
+    materializeFixture(repo, {}, { 'src/a.ts': big('a'), 'src/b.ts': big('b') })
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-fix-cwd-'))
+    const reportDir = join(cwd, 'report')
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({ decisionModel: '', reportDir }),
+    )
+    const client = new StubClient([
+      {
+        content: JSON.stringify({
+          summary: 'chunk-one prose',
+          verdict: 'approve',
+          findings: [
+            { file: 'src/a.ts', line: 5, severity: 'nit', category: 'convention', message: 'L5: nit' },
+          ],
+        }),
+      },
+      {
+        content: JSON.stringify({
+          summary: 'chunk-two prose',
+          verdict: 'approve',
+          findings: [
+            { file: 'src/b.ts', line: 5, severity: 'nit', category: 'convention', message: 'L5: nit' },
+          ],
+        }),
+      },
+      {
+        content: JSON.stringify({
+          summary: 'synthesis walkthrough prose',
+          verdict: 'approve',
+          findings: [
+            { file: 'src/a.ts', line: 5, severity: 'nit', category: 'convention', message: 'L5: nit' },
+            { file: 'src/b.ts', line: 5, severity: 'nit', category: 'convention', message: 'L5: nit' },
+          ],
+        }),
+      },
+    ])
+    const code = await main(['code-review', '--fixture', repo, '--report-dir', reportDir], {
+      cwd,
+      env: { ...MIN_ENV, OPENROUTER_API_KEY: 'test-key' },
+      out: () => {},
+      err: () => {},
+      createClient: () => client,
+    })
+    expect(code).toBe(0)
+    expect(client.calls).toHaveLength(3)
+    const report = JSON.parse(await readFile(join(reportDir, 'code-review.json'), 'utf8'))
+    expect(report.summary).toContain('synthesis walkthrough prose')
+    expect(report.summary).not.toContain('chunk-one prose')
+    expect(report.summary).not.toContain('chunk-two prose')
+    expect(report.walkthrough).toBe('synthesis walkthrough prose')
+  })
+
+  it('suppresses synthesis prose when synthesis emits no findings but chunk findings carry forward', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'argus-fix-'))
+    const big = (v: string) =>
+      Array.from({ length: 1200 }, (_, i) => `export const ${v}${i} = ${i}`).join('\n') + '\n'
+    materializeFixture(repo, {}, { 'src/a.ts': big('a'), 'src/b.ts': big('b') })
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-fix-cwd-'))
+    const reportDir = join(cwd, 'report')
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({ decisionModel: '', reportDir }),
+    )
+    const nit = (f: string) => ({
+      file: f,
+      line: 5,
+      severity: 'nit',
+      category: 'convention',
+      message: 'L5: nit',
+    })
+    const client = new StubClient([
+      { content: JSON.stringify({ summary: 'one', verdict: 'approve', findings: [nit('src/a.ts')] }) },
+      { content: JSON.stringify({ summary: 'two', verdict: 'approve', findings: [nit('src/b.ts')] }) },
+      // Synthesis reports zero findings; the two chunk nits carry forward,
+      // so its prose describes a set the emitted review does not contain.
+      {
+        content: JSON.stringify({
+          summary: 'a clean PR with nothing to report',
+          verdict: 'approve',
+          findings: [],
+        }),
+      },
+    ])
+    const code = await main(['code-review', '--fixture', repo, '--report-dir', reportDir], {
+      cwd,
+      env: { ...MIN_ENV, OPENROUTER_API_KEY: 'test-key' },
+      out: () => {},
+      err: () => {},
+      createClient: () => client,
+    })
+    expect(code).toBe(0)
+    const report = JSON.parse(await readFile(join(reportDir, 'code-review.json'), 'utf8'))
+    expect(report.walkthrough).toBeUndefined()
+  })
+
   it('fixture diff produces deterministic secret candidates', async () => {
     const repo = await mkdtemp(join(tmpdir(), 'argus-fix-'))
     materializeFixture(repo, {}, { 'cfg.env': `${SECRET_LITERAL}\n` })

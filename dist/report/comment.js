@@ -258,8 +258,19 @@ function footer(meta) {
     bits.push('self-hosted, BYOK');
     return `<sub>${bits.join(' · ')}</sub>`;
 }
-function head(status, verdict, rows, summary) {
-    return [SENTINEL, `### Argus: ${status}`, '', verdict, '', ...laneTable(rows), '', summary, ''];
+/** The walkthrough head line: model prose, mention/link-safe, one line. */
+function walkthroughLine(cr) {
+    const w = cr?.walkthrough;
+    return typeof w === 'string' && w.trim() !== ''
+        ? cell(sanitizeCommentText(w), 400)
+        : undefined;
+}
+function head(status, verdict, rows, summary, walkthrough) {
+    const lines = [SENTINEL, `### Argus: ${status}`, '', verdict, '', ...laneTable(rows), ''];
+    if (walkthrough !== undefined)
+        lines.push(walkthrough, '');
+    lines.push(summary, '');
+    return lines;
 }
 function fold(lines, title, body) {
     if (body.length === 0)
@@ -295,7 +306,7 @@ function headLines(input) {
                 binding: m.lanes.review.headBinding,
                 costUsd: m.aggregate.costUsd,
                 durationMs: manifestDuration(m),
-            }), rows, findingsLine(cr, NO_REVIEW_ATTACHED));
+            }), rows, findingsLine(cr, NO_REVIEW_ATTACHED), walkthroughLine(cr));
         }
         case 'full':
         case 'review-only': {
@@ -317,7 +328,7 @@ function headLines(input) {
                 binding: manifest?.lanes.review.headBinding ?? (reviewed ? cr.headBinding : undefined),
                 costUsd,
                 durationMs,
-            }), rows, findingsLine(cr));
+            }), rows, findingsLine(cr), walkthroughLine(cr));
         }
     }
 }

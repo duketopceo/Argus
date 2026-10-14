@@ -143,6 +143,12 @@ export interface CodeReviewReport {
     droppedFindings?: DroppedFinding[];
     /** Synthesis verdict when it diverges from the post-filter derived verdict. */
     modelVerdict?: 'pass' | 'needs_changes' | 'approve';
+    /**
+     * Model-authored walkthrough prose, set only when the adoption guards
+     * pass (verdict match, nothing the prose described was dropped, no
+     * budget stop). Rendered as a dedicated head line in the sticky.
+     */
+    walkthrough?: string;
     /** How much of the PR the review covered, and what was left out. */
     scope?: ReviewScope;
     /** Repo-index staleness over the reviewed files — present only when an
@@ -259,7 +265,9 @@ export declare function buildPatchChunks(files: PrFile[], contexts?: Record<stri
 export declare function buildCodeReviewMessages(repo: string, pr: string, patchText: string, chunkIndex?: number, totalChunks?: number, profiles?: readonly string[], instructions?: readonly string[]): Message[];
 export declare function buildSynthesisMessages(repo: string, pr: string, files: string[], findings: CodeReviewReport['findings']): Message[];
 export declare function parseCodeReview(content: string): {
-    summary: string;
+    /** Raw model-emitted summary; undefined when absent or unparseable so
+     *  callers can tell real prose from a display fallback. */
+    summary: string | undefined;
     verdict: 'pass' | 'needs_changes' | 'approve';
     findings: CodeReviewReport['findings'];
 };

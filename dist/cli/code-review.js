@@ -530,6 +530,13 @@ export async function cmdCodeReview(args, ctx, deps) {
         }
         const reviewedChunks = new Set();
         let chunkSpend = 0;
+        let modelVerdict;
+        let modelSummary;
+        // Model-finding count at the moment the prose was written; adoption
+        // later requires the same count to survive validation, reflection,
+        // and adjudication so the summary cannot cite a dropped finding.
+        let describedFindings;
+        let walkthrough;
         for (let i = 0; i < chunks.length; i++) {
             const fromBatch = batched.get(i);
             // Batch results are already paid for: always take them. Only
@@ -572,14 +579,22 @@ export async function cmdCodeReview(args, ctx, deps) {
                 debug('code-review', `chunk ${i + 1}: dropped ${anchored.dropped.length} outside-diff, ${vetted.dropped.length} revert-nit finding(s)`);
             }
             allFindings.push(...vetted.kept);
+            // A lone chunk's own summary and verdict describe the whole PR, so
+            // adopt them under the synthesis guards: the prose is kept only when
+            // the emitted verdict matches and the emitted finding count still
+            // matches what survives, both checked where the summary is built.
+            if (chunks.length === 1) {
+                modelVerdict = parsed.verdict;
+                describedFindings = parsed.findings.length;
+                if ((parsed.summary ?? '').trim() !== '')
+                    modelSummary = parsed.summary;
+            }
             stage(`chunk ${i + 1}/${chunks.length} — ${parsed.findings.length} finding(s)`);
             if (ledger.budgetExceeded && fromBatch === undefined) {
                 ctx.err(`code-review: budget exceeded after chunk ${i + 1}; stopping early`);
             }
         }
         const chunksReviewed = reviewedChunks.size;
-        let modelVerdict;
-        let modelSummary;
         let finalFindings = allFindings;
         // Synthesis is paid too: project it at the mean chunk cost.
         const synthAllowed = !ledger.budgetExceeded &&
@@ -611,11 +626,11 @@ export async function cmdCodeReview(args, ctx, deps) {
                 droppedReverted += vetted.dropped.length;
                 recordDrops(vetted.dropped, 'revert-nit');
                 finalFindings = vetted.kept;
-                // The model's summary describes the set it emitted — reuse it only
-                // when this pass dropped nothing, else its prose can cite findings
-                // that were filtered out.
-                if (anchored.dropped.length + vetted.dropped.length > 0)
-                    modelSummary = undefined;
+                // The model's summary accounts for exactly the findings it emitted:
+                // when synthesis returns none and chunk findings carry forward, the
+                // prose was written under a zero-finding view and cannot describe the
+                // retained set. Any later drop then fails count containment.
+                describedFindings = parsed.findings.length;
                 if (ledger.budgetExceeded) {
                     ctx.err('code-review: budget exceeded after synthesis; stopping early');
                 }
@@ -835,8 +850,17 @@ export async function cmdCodeReview(args, ctx, deps) {
             summary = `${finalFindings.length} low-severity finding(s)`;
             verdict = 'approve';
         }
-        if (modelVerdict === verdict && modelSummary !== undefined)
+        // Adopted prose must still describe the emitted set: a verdict
+        // mismatch, a post-write drop (validation, reflection, adjudication),
+        // or a pending budget stop all leave the deterministic summary in
+        // place. `walkthrough` carries the same prose for the sticky head.
+        if (modelVerdict === verdict &&
+            modelSummary !== undefined &&
+            describedFindings === finalFindings.length - rulesFindings.length &&
+            !ledger.budgetExceeded) {
             summary = modelSummary;
+            walkthrough = modelSummary;
+        }
         // A budget stop leaves the tail of the plan unreviewed; the scope and
         // summary must say so. Decorations preserve pre-U8 ordering: coverage,
         // exclusions, validation drops, budget, head binding.
@@ -1016,6 +1040,10 @@ export async function cmdCodeReview(args, ctx, deps) {
         if (hasBlocker && verdict !== 'needs_changes') {
             verdict = 'needs_changes';
             summary = `Proven or high-confidence blocker(s) found. ${summary}`;
+            // The flip proves the emitted verdict diverges from the model's, so
+            // adopted prose may describe a state the verdict no longer holds.
+            if (modelVerdict !== verdict)
+                walkthrough = undefined;
         }
         // computed post-probe on linkedFindings — a probe can promote a
         // below-floor finding to gating, so a pre-link count would leave the
@@ -1053,6 +1081,7 @@ export async function cmdCodeReview(args, ctx, deps) {
             ...(droppedReverted > 0 ? { droppedReverted } : {}),
             ...(droppedFindings.length > 0 ? { droppedFindings } : {}),
             ...(modelVerdict !== undefined && modelVerdict !== verdict ? { modelVerdict } : {}),
+            ...(walkthrough !== undefined ? { walkthrough } : {}),
             scope,
             ...(idxStale !== undefined ? { indexStaleness: idxStale } : {}),
             ...(batchRecord !== undefined ? { batch: batchRecord } : {}),

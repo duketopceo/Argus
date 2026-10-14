@@ -323,16 +323,24 @@ function collapsedFold(title, keep) {
   ]
 }
 
+/** The walkthrough head line: model prose, mention/link-safe, one line. */
+function walkthroughLine(codeReview) {
+  const w = codeReview && codeReview.walkthrough
+  return typeof w === 'string' && w.trim() !== '' ? cell(sanitizeCommentText(w), 400) : undefined
+}
+
 /** The shared layout. `folds` is a list of [title, bodyLines, {key, keep}].
  *  Notices (one quoted line each) sit between the findings summary and the
  *  folds. Length is measured after the full render; while over budget, folds
  *  collapse to a pointer in COLLAPSE_ORDER. */
-function layout({ status, verdict, rows, summary, folds, meta, runUrl }) {
+function layout({ status, verdict, rows, summary, folds, meta, runUrl, walkthrough }) {
   const budget = typeof meta.budgetBytes === 'number' ? meta.budgetBytes : COMMENT_BUDGET_BYTES
   const notices = Array.isArray(meta.notices) ? meta.notices : []
   const collapsed = new Set()
   const render = () => {
-    const lines = [SENTINEL, `### Argus: ${status}`, '', verdict, '', ...laneTable(rows), '', summary, '']
+    const lines = [SENTINEL, `### Argus: ${status}`, '', verdict, '', ...laneTable(rows), '']
+    if (walkthrough !== undefined) lines.push(walkthrough, '')
+    lines.push(summary, '')
     for (const n of notices) lines.push(`> ${n}`, '')
     for (const [title, body, opts = {}] of folds) {
       if (body.length === 0) continue
@@ -374,8 +382,8 @@ function findingsFold(codeReview, inlinePlan) {
   if (!codeReview || codeReview.skipped) return []
   const body = []
   const findings = findingsOf(codeReview)
-  if (codeReview.summary) {
-    body.push(cell(codeReview.summary, 1000))
+  if (typeof codeReview.summary === 'string' && codeReview.summary.trim() !== '') {
+    body.push(cell(sanitizeCommentText(codeReview.summary), 1000))
     body.push('')
   }
   if (findings.length > 0) {
@@ -814,6 +822,7 @@ function renderManifestBody(manifest, codeReview, runUrl, meta = {}) {
     }),
     rows,
     summary: findingsLine(codeReview, NO_REVIEW_ATTACHED),
+    walkthrough: walkthroughLine(codeReview),
     folds: [
       findingsEntry(codeReview, undefined),
       nitsEntry(codeReview),
@@ -846,6 +855,7 @@ function renderBody(report, codeReview, runUrl, ok, inlinePlan, manifest, meta =
     }),
     rows,
     summary: findingsLine(codeReview),
+    walkthrough: walkthroughLine(codeReview),
     folds: [
       findingsEntry(codeReview, inlinePlan),
       nitsEntry(codeReview),
@@ -879,6 +889,7 @@ function renderReviewOnlyBody(codeReview, runUrl, ok, inlinePlan, manifest, meta
     }),
     rows,
     summary: findingsLine(codeReview),
+    walkthrough: walkthroughLine(codeReview),
     folds: [
       findingsEntry(codeReview, inlinePlan),
       nitsEntry(codeReview),

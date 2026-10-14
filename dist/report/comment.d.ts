@@ -37,6 +37,8 @@ export interface CodeReviewInput {
     skipped?: boolean;
     verdict?: string;
     summary?: string;
+    /** Model-authored walkthrough prose (post-guard); rendered as a head line. */
+    walkthrough?: string;
     visionCostUsd?: number;
     provenBlockers?: number;
     highConfidenceBlockers?: number;

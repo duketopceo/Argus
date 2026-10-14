@@ -57,6 +57,8 @@ export interface CodeReviewInput {
   skipped?: boolean
   verdict?: string
   summary?: string
+  /** Model-authored walkthrough prose (post-guard); rendered as a head line. */
+  walkthrough?: string
   visionCostUsd?: number
   provenBlockers?: number
   highConfidenceBlockers?: number
@@ -391,8 +393,25 @@ function footer(meta: CommentMeta): string {
   return `<sub>${bits.join(' · ')}</sub>`
 }
 
-function head(status: string, verdict: string, rows: LaneRow[], summary: string): string[] {
-  return [SENTINEL, `### Argus: ${status}`, '', verdict, '', ...laneTable(rows), '', summary, '']
+/** The walkthrough head line: model prose, mention/link-safe, one line. */
+function walkthroughLine(cr: CodeReviewInput | undefined): string | undefined {
+  const w = cr?.walkthrough
+  return typeof w === 'string' && w.trim() !== ''
+    ? cell(sanitizeCommentText(w), 400)
+    : undefined
+}
+
+function head(
+  status: string,
+  verdict: string,
+  rows: LaneRow[],
+  summary: string,
+  walkthrough?: string,
+): string[] {
+  const lines = [SENTINEL, `### Argus: ${status}`, '', verdict, '', ...laneTable(rows), '']
+  if (walkthrough !== undefined) lines.push(walkthrough, '')
+  lines.push(summary, '')
+  return lines
 }
 
 function fold(lines: string[], title: string, body: string[]): void {
@@ -444,6 +463,7 @@ function headLines(input: CommentInput): string[] {
         }),
         rows,
         findingsLine(cr, NO_REVIEW_ATTACHED),
+        walkthroughLine(cr),
       )
     }
     case 'full':
@@ -474,6 +494,7 @@ function headLines(input: CommentInput): string[] {
         }),
         rows,
         findingsLine(cr),
+        walkthroughLine(cr),
       )
     }
   }
