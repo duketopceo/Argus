@@ -674,19 +674,13 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
       }
       allFindings.push(...vetted.kept)
       // A lone chunk's own summary and verdict describe the whole PR, so
-      // adopt them under the synthesis guards: keep the prose only when
-      // this pass dropped nothing and the model emitted text; the verdict
-      // match and the survival of the described set are checked where the
-      // final summary is built.
+      // adopt them under the synthesis guards: the prose is kept only when
+      // the emitted verdict matches and the emitted finding count still
+      // matches what survives, both checked where the summary is built.
       if (chunks.length === 1) {
         modelVerdict = parsed.verdict
-        if (
-          anchored.dropped.length + vetted.dropped.length === 0 &&
-          (parsed.summary ?? '').trim() !== ''
-        ) {
-          modelSummary = parsed.summary
-          describedFindings = vetted.kept.length
-        }
+        describedFindings = parsed.findings.length
+        if ((parsed.summary ?? '').trim() !== '') modelSummary = parsed.summary
       }
       stage(`chunk ${i + 1}/${chunks.length} — ${parsed.findings.length} finding(s)`)
       if (ledger.budgetExceeded && fromBatch === undefined) {
@@ -733,14 +727,11 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
         droppedReverted += vetted.dropped.length
         recordDrops(vetted.dropped, 'revert-nit')
         finalFindings = vetted.kept
-        // The model's summary describes the set it emitted — reuse it only
-        // when this pass dropped nothing, else its prose can cite findings
-        // that were filtered out.
-        if (anchored.dropped.length + vetted.dropped.length > 0) {
-          modelSummary = undefined
-        } else {
-          describedFindings = finalFindings.length
-        }
+        // The model's summary accounts for exactly the findings it emitted:
+        // when synthesis returns none and chunk findings carry forward, the
+        // prose was written under a zero-finding view and cannot describe the
+        // retained set. Any later drop then fails count containment.
+        describedFindings = parsed.findings.length
         if (ledger.budgetExceeded) {
           ctx.err('code-review: budget exceeded after synthesis; stopping early')
         }
@@ -1194,6 +1185,9 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
     if (hasBlocker && verdict !== 'needs_changes') {
       verdict = 'needs_changes'
       summary = `Proven or high-confidence blocker(s) found. ${summary}`
+      // The flip proves the emitted verdict diverges from the model's, so
+      // adopted prose may describe a state the verdict no longer holds.
+      if (modelVerdict !== verdict) walkthrough = undefined
     }
     // computed post-probe on linkedFindings — a probe can promote a
     // below-floor finding to gating, so a pre-link count would leave the

@@ -483,7 +483,10 @@ describe('code-review --fixture', () => {
         content: JSON.stringify({
           summary: 'synthesis walkthrough prose',
           verdict: 'approve',
-          findings: [],
+          findings: [
+            { file: 'src/a.ts', line: 5, severity: 'nit', category: 'convention', message: 'L5: nit' },
+            { file: 'src/b.ts', line: 5, severity: 'nit', category: 'convention', message: 'L5: nit' },
+          ],
         }),
       },
     ])
@@ -501,6 +504,49 @@ describe('code-review --fixture', () => {
     expect(report.summary).not.toContain('chunk-one prose')
     expect(report.summary).not.toContain('chunk-two prose')
     expect(report.walkthrough).toBe('synthesis walkthrough prose')
+  })
+
+  it('suppresses synthesis prose when synthesis emits no findings but chunk findings carry forward', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'argus-fix-'))
+    const big = (v: string) =>
+      Array.from({ length: 1200 }, (_, i) => `export const ${v}${i} = ${i}`).join('\n') + '\n'
+    materializeFixture(repo, {}, { 'src/a.ts': big('a'), 'src/b.ts': big('b') })
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-fix-cwd-'))
+    const reportDir = join(cwd, 'report')
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({ decisionModel: '', reportDir }),
+    )
+    const nit = (f: string) => ({
+      file: f,
+      line: 5,
+      severity: 'nit',
+      category: 'convention',
+      message: 'L5: nit',
+    })
+    const client = new StubClient([
+      { content: JSON.stringify({ summary: 'one', verdict: 'approve', findings: [nit('src/a.ts')] }) },
+      { content: JSON.stringify({ summary: 'two', verdict: 'approve', findings: [nit('src/b.ts')] }) },
+      // Synthesis reports zero findings; the two chunk nits carry forward,
+      // so its prose describes a set the emitted review does not contain.
+      {
+        content: JSON.stringify({
+          summary: 'a clean PR with nothing to report',
+          verdict: 'approve',
+          findings: [],
+        }),
+      },
+    ])
+    const code = await main(['code-review', '--fixture', repo, '--report-dir', reportDir], {
+      cwd,
+      env: { ...MIN_ENV, OPENROUTER_API_KEY: 'test-key' },
+      out: () => {},
+      err: () => {},
+      createClient: () => client,
+    })
+    expect(code).toBe(0)
+    const report = JSON.parse(await readFile(join(reportDir, 'code-review.json'), 'utf8'))
+    expect(report.walkthrough).toBeUndefined()
   })
 
   it('fixture diff produces deterministic secret candidates', async () => {

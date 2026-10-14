@@ -382,7 +382,7 @@ function findingsFold(codeReview, inlinePlan) {
   if (!codeReview || codeReview.skipped) return []
   const body = []
   const findings = findingsOf(codeReview)
-  if (codeReview.summary) {
+  if (typeof codeReview.summary === 'string' && codeReview.summary.trim() !== '') {
     body.push(cell(sanitizeCommentText(codeReview.summary), 1000))
     body.push('')
   }
