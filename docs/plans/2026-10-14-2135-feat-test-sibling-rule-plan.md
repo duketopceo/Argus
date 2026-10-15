@@ -65,6 +65,8 @@ itself rather than infer a convention from any test file at all.
   without one the rule is silent regardless of how many test files or
   uncovered sources exist.
 - R2. With a witness present, the rule emits exactly one `nit`/`testing`
+  finding — the severity is always `nit`, never varies with churn or
+  witness strength
   finding on the highest-churn eligible source file whose group holds no
   changed test member.
 - R3. The rule emits zero findings when `addedLines` shows no genuine-test
@@ -259,7 +261,9 @@ condition until the gate resolves).
 - `scripts/review-eval.mjs` — export the repo-resolve/diff machinery the
   gate script reuses (see Approach), if not already importable
 - one synthetic corpus row proving the trigger shape, committed under the
-  eval-fixtures convention used by `eval-fixtures/large-clean`
+  eval-fixtures convention used by `eval-fixtures/large-clean`: row
+  `synthetic-test-sibling` in `scripts/eval-corpus.test-sibling.json`,
+  backed by the `eval-fixtures/test-sibling` branch
 
 **Approach:**
 1. Deterministic, zero model spend: a small script materializes each
