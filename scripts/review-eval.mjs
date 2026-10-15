@@ -140,7 +140,7 @@ export function metricsFromReport(report, labels, clean) {
   return m
 }
 
-const git = (cwd, args) =>
+export const git = (cwd, args) =>
   execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8' }).trim()
 
 // ensureSha: fetch a single commit at depth 1. GitHub serves
@@ -161,7 +161,7 @@ function ensureSha(repo, sha) {
 }
 
 // mergeBase: '' when the shallow boundary hides the shared ancestor.
-function mergeBase(repo, a, b) {
+export function mergeBase(repo, a, b) {
   try {
     return git(repo, ['merge-base', a, b])
   } catch {
@@ -197,7 +197,7 @@ function ensureSharedHistory(repo, base, head) {
   }
 }
 
-function resolveRepo(entry, cacheDir) {
+export function resolveRepo(entry, cacheDir) {
   const repo = entry.repo
   // A leading '-' injects options into git argv (fetch/worktree add),
   // remote or local (CWE-88).

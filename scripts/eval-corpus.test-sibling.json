@@ -1,0 +1,9 @@
+[
+  {
+    "name": "synthetic-test-sibling",
+    "repo": ".",
+    "base": "5a49bcc9ba7919f799e9602a0eb0beaf8931c56d",
+    "head": "779715e302434a83a20310f0e354651a3e7fc6fc",
+    "note": "eval-fixtures/test-sibling: foo pair = witness, bar = legit gap (sibling in tree), other.go = no-sibling"
+  }
+]
