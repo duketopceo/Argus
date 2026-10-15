@@ -1,6 +1,6 @@
 import { addedLines, diffLines } from './difftext.js';
 import { scanSecrets, } from './secrets.js';
-import { isTestPath } from './testfiles.js';
+import { isTestPath, testSiblingKey } from './testfiles.js';
 /**
  * Post-runRules report assembly — shared by `code-review` and `scan` so
  * the secretsScan skipped-reason chain can't diverge between lanes:
@@ -337,6 +337,16 @@ const depDiffRule = {
 const CODE_FILE_RE = /\.(?:c|cc|cpp|cs|cts|go|h|hpp|java|jsx|kt|mjs|mts|php|py|rb|rs|scala|swift|ts|tsx)$/;
 const GENERATED_FILE_RE = /(^|\/)dist\/|\.min\.|\.map$|\.generated\./i;
 /**
+ * Shared source-shape eligibility for the coverage rules — code
+ * extension, not data/generated/script path (KTD5). missing-test's
+ * semantics stay byte-identical; test-sibling layers its own exclusions
+ * on top rather than widening this list.
+ */
+const isEligibleSourcePath = (file) => CODE_FILE_RE.test(file) &&
+    !DATA_PATH_RE.test(file) &&
+    !GENERATED_FILE_RE.test(file) &&
+    !SCRIPT_PATH_RE.test(file);
+/**
  * missing-test (U5): a diff that changes source files but touches no test
  * file gets one file-level nit on its highest-churn source file. Precision
  * stays high because the event is factual (zero test paths in the diff);
@@ -359,11 +369,7 @@ const missingTestRule = {
                 // spending per-line regex work on the rest.
                 if (isTestPath(file))
                     return { findings: [], records: [] };
-                eligible =
-                    CODE_FILE_RE.test(file) &&
-                        !DATA_PATH_RE.test(file) &&
-                        !GENERATED_FILE_RE.test(file) &&
-                        !SCRIPT_PATH_RE.test(file);
+                eligible = isEligibleSourcePath(file);
             }
             if (eligible)
                 addsPerFile.set(file, (addsPerFile.get(file) ?? 0) + 1);
@@ -393,6 +399,79 @@ const missingTestRule = {
         };
     },
 };
+/**
+ * test-sibling (U5): when a diff's own files prove colocated test
+ * pairing — an eligible source sharing a stem key with a changed test —
+ * one file-level nit names the highest-churn eligible source whose stem
+ * gained no test edit. The in-diff witness keeps the rule unreachable on
+ * mirror-tree layouts it cannot pair (no witness, no finding), and the
+ * added-line file surface keeps it disjoint from missing-test: a
+ * deleted, rename-only, or mode-only test file neither covers nor gates.
+ * Churn counts added+removed lines so deletion-heavy refactors compete
+ * fairly. One finding max — a signal, not a per-file nag.
+ */
+const TEST_COVER_EXCLUDE_RE = /(^|\/)(__mocks__|fixtures)\//;
+const SIBLING_MATE_RE = /\.(?:gen|generated|stories|e2e|test-d)\.|\.d\.ts$/;
+const isTestCoverPath = (file) => isTestPath(file) && !file.endsWith('.snap') && !TEST_COVER_EXCLUDE_RE.test(file);
+export const testSiblingRule = {
+    id: 'test-sibling',
+    description: 'sources whose test sibling stayed untouched beside a paired-test change get one file-level nit',
+    run(diff) {
+        const coveredKeys = new Set();
+        // Candidacy needs an add (the added-line surface both coverage rules
+        // share — a del-only file is invisible); churn counts every add+del
+        // per file regardless of interleave order.
+        const churn = new Map();
+        const candidates = new Map();
+        for (const l of diffLines(diff)) {
+            if (l.kind === 'ctx')
+                continue;
+            churn.set(l.file, (churn.get(l.file) ?? 0) + 1);
+            if (l.kind !== 'add')
+                continue;
+            if (isTestCoverPath(l.file)) {
+                coveredKeys.add(testSiblingKey(l.file));
+            }
+            else if (isEligibleSourcePath(l.file) &&
+                !isTestPath(l.file) &&
+                !SIBLING_MATE_RE.test(l.file)) {
+                candidates.set(l.file, testSiblingKey(l.file));
+            }
+        }
+        const uncovered = [];
+        let witness = false;
+        for (const [file, key] of candidates) {
+            if (coveredKeys.has(key))
+                witness = true;
+            else
+                uncovered.push(file);
+        }
+        if (!witness || uncovered.length === 0)
+            return { findings: [], records: [] };
+        const detail = `${uncovered.length} source file(s) untested alongside a paired-test change`;
+        let topFile = '';
+        let topChurn = 0;
+        for (const file of uncovered) {
+            const c = churn.get(file) ?? 0;
+            if (c > topChurn) {
+                topChurn = c;
+                topFile = file;
+            }
+        }
+        return {
+            findings: [
+                {
+                    file: topFile,
+                    severity: 'nit',
+                    category: 'testing',
+                    message: `nit: \`${topFile}\` changed while its test sibling was untouched - ` +
+                        `${detail}; if the change is behavior-bearing, point at the coverage that exercises it.`,
+                },
+            ],
+            records: uncovered.map((file) => ({ file, detail })),
+        };
+    },
+};
 /** The rule registry — curated, not a plugin surface. */
 export const REVIEW_RULES = [
     secretsRule,
@@ -401,6 +480,7 @@ export const REVIEW_RULES = [
     syncInAsyncRule,
     depDiffRule,
     missingTestRule,
+    testSiblingRule,
 ];
 /** All registered rule ids — the default `review.rules` enabled set. */
 export const REVIEW_RULE_IDS = REVIEW_RULES.map((r) => r.id);

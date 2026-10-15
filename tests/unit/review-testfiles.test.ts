@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { buildCodeReviewMessages } from '../../src/cli.js'
-import { capTestFindings, isTestPath } from '../../src/review/testfiles.js'
+import { capTestFindings, isTestPath, testSiblingKey } from '../../src/review/testfiles.js'
 
 describe('isTestPath', () => {
   it('recognizes common test locations and names', () => {
@@ -59,6 +59,37 @@ describe('capTestFindings', () => {
       diffFiles,
     )
     expect(r.findings.map((x) => x.severity)).toEqual(['bug', 'bug'])
+  })
+})
+
+describe('testSiblingKey', () => {
+  it('pairs source files with their colocated test siblings', () => {
+    expect(testSiblingKey('src/foo.test.ts')).toBe('src/foo.ts')
+    expect(testSiblingKey('src/foo.spec.js')).toBe('src/foo.js')
+    expect(testSiblingKey('src/__tests__/foo.ts')).toBe('src/foo.ts')
+    expect(testSiblingKey('src/__snapshots__/foo.test.ts.snap')).toBe('src/foo.ts')
+    expect(testSiblingKey('pkg/foo_test.go')).toBe('pkg/foo.go')
+    expect(testSiblingKey('pkg/test_foo.py')).toBe('pkg/foo.py')
+  })
+
+  it('joins stem-mate affixes to the same group', () => {
+    for (const p of [
+      'src/foo.stories.ts',
+      'src/foo.e2e.ts',
+      'src/foo.gen.ts',
+      'src/foo.generated.ts',
+      'src/foo.test-d.ts',
+    ]) {
+      expect(testSiblingKey(p), p).toBe('src/foo.ts')
+    }
+    expect(testSiblingKey('src/foo.spec.test.ts')).toBe('src/foo.ts')
+  })
+
+  it('preserves the directory — mirror-tree tests never pair', () => {
+    expect(testSiblingKey('src/b/__tests__/foo.ts')).toBe('src/b/foo.ts')
+    expect(testSiblingKey('tests/test_foo.py')).toBe('tests/foo.py')
+    expect(testSiblingKey('e2e/foo.spec.ts')).toBe('e2e/foo.ts')
+    expect(testSiblingKey('src/foo.ts')).not.toBe(testSiblingKey('tests/test_foo.py'))
   })
 })
 

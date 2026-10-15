@@ -204,8 +204,10 @@ Alongside the model, a registry of deterministic rules scans the same
 materialized diff for secret-shaped literals (the secrets lane, now one rule
 in the set), hardcoded endpoint URLs/IP literals, leftover `TODO`-style
 markers, synchronous fs/process calls added in code paths, new
-dependencies and major version jumps in `package.json` (`dep-diff`), and
-source-only diffs that touch no test file (`missing-test`). Every hit —
+dependencies and major version jumps in `package.json` (`dep-diff`),
+source-only diffs that touch no test file (`missing-test`), and — on
+diffs whose own files prove colocated test pairing — a changed source
+file whose test sibling stayed untouched (`test-sibling`). Every hit —
 surfaced or suppressed — is an audit entry in `code-review.json`'s
 `rulesScan`; the sticky comment summarizes it. Rules union after synthesis
 so nothing the model writes can erase a hit, and no rule may claim `bug`

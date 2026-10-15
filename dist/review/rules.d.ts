@@ -94,6 +94,7 @@ export declare const RULE_HITS_CAP = 200;
  * report payload.
  */
 export declare const RULE_RECORDS_CAP = 2000;
+export declare const testSiblingRule: ReviewRule;
 /** The rule registry — curated, not a plugin surface. */
 export declare const REVIEW_RULES: readonly ReviewRule[];
 /** All registered rule ids — the default `review.rules` enabled set. */

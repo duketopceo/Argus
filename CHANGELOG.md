@@ -6,6 +6,14 @@ pre-1.0; breaking changes may ship without a major bump until `1.0.0`.
 ## [Unreleased]
 
 ### Added
+- **`test-sibling` rules-lane signal** — when a diff's own files prove
+  colocated test pairing (a source file whose stem-matched test also
+  changed), the rule emits one file-level `nit` naming the highest-churn
+  source whose test sibling stayed untouched. The in-diff witness keeps
+  it silent on mirror-tree layouts and diffs with no paired change; it is
+  disjoint from `missing-test`, which still covers the zero-test diff.
+  Eval-gated before registration: one real firing (ollama#8938, legitimate
+  gap), zero false-positive findings across the corpus.
 - **Walkthrough line in the sticky head** — the chunk review call already
   returned a `summary`; single-chunk reviews parsed and discarded it.
   When the adoption guards pass (verdict match, non-empty model text,
