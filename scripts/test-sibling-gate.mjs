@@ -5,11 +5,15 @@
 // For each corpus row, materializes the merge-base diff the review
 // actually ran (same -c flags as the lane's diff producers), runs the
 // rules lane with testSiblingRule injected via the `rules` seam, and
-// records every firing with a repo-tree legitimacy classification:
+// records every firing with a repo-tree structural classification:
 // `sibling-exists` (the named file's stem group holds a genuine test in
 // the head tree — the uncovered-sibling claim is literally true) or
-// `no-sibling` (no such test exists — the premise is wrong even though
-// the diff signal is real). Zero model calls.
+// `no-sibling` (no such test exists). Structural class is evidence, not
+// legitimacy — a surfaced finding is counted `legit` or `fp` only via a
+// human-authored `expect` block on the corpus row, because whether the
+// edit actually needed a test update is not decidable from the tree.
+// Rows firing without an `expect` annotation land as `unadjudicated`
+// and the verdict reports `needs-adjudication`. Zero model calls.
 //
 // usage: node scripts/test-sibling-gate.mjs --corpus a.json [--corpus b.json ...]
 //            [--out docs/audits/eval/test-sibling.json] [--cache dir]
@@ -101,6 +105,7 @@ async function gateRow(entry, cacheDir) {
   const row = {
     name: entry.name,
     note: entry.note,
+    synthetic: entry.synthetic === true,
     mergeBase: mb,
     filesChanged: filesChanged.length,
     testFilesInDiff,
@@ -116,6 +121,23 @@ async function gateRow(entry, cacheDir) {
       entry.head,
       records.map((r) => r.file).filter((f) => f !== '-'),
     )
+    const surfaced = findings[0].file
+    row.surfaced = {
+      file: surfaced,
+      structuralClass: row.classification.find((c) => c.file === surfaced)?.class,
+    }
+    // Legitimacy comes only from the corpus row's human adjudication —
+    // sibling-exists proves the claim is true, not that the edit needed
+    // a test update.
+    if (entry.expect === undefined) {
+      row.adjudication = 'unadjudicated'
+    } else if (entry.expect.file !== surfaced) {
+      row.adjudication = 'expect-mismatch'
+      row.expectFile = entry.expect.file
+    } else {
+      row.adjudication = entry.expect.adjudication
+      row.adjudicationReason = entry.expect.reason
+    }
   }
   return row
 }
@@ -139,9 +161,21 @@ const cacheDir = arg('cache', join(tmpdir(), 'argus-eval-repos'))
 const out = resolve(arg('out', join(REPO_ROOT, 'docs', 'audits', 'eval', 'test-sibling.json')))
 
 // Flush per row — a bad corpus path or stalled fetch must not discard
-// rows that already paid their resolve/fetch cost.
+// rows that already paid their resolve/fetch cost. The verdict is
+// computed and written on every flush; human-authored keys a previous
+// artifact carried (`coverage`, `notes`) are merged back through.
 const rows = []
-const writeArtifact = () =>
+const HUMAN_VERDICT_KEYS = ['coverage', 'notes']
+const writeArtifact = (complete) => {
+  let preserved = {}
+  try {
+    const prior = JSON.parse(readFileSync(out, 'utf8')).verdict ?? {}
+    for (const k of HUMAN_VERDICT_KEYS) {
+      if (prior[k] !== undefined) preserved[k] = prior[k]
+    }
+  } catch {
+    // first write or unreadable prior artifact — nothing to preserve
+  }
   writeFileSync(
     out,
     JSON.stringify(
@@ -149,12 +183,14 @@ const writeArtifact = () =>
         at: new Date().toISOString(),
         corpora: corpora.map((c) => resolve(c)),
         tally: tallyRows(rows),
+        verdict: { ...verdictFor(rows, complete), ...preserved },
         rows,
       },
       null,
       2,
-    ),
+    ) + '\n',
   )
+}
 mkdirSync(dirname(out), { recursive: true })
 for (const c of corpora) {
   let entries
@@ -163,7 +199,7 @@ for (const c of corpora) {
   } catch (e) {
     rows.push({ name: resolve(c), error: `corpus load: ${String(e?.message ?? e).slice(0, 160)}` })
     console.error(`${c}: corpus load failed - ${String(e?.message ?? e).slice(0, 120)}`)
-    writeArtifact()
+    writeArtifact(false)
     continue
   }
   for (const entry of entries) {
@@ -177,25 +213,80 @@ for (const c of corpora) {
       rows.push({ name: entry.name, error: String(e?.message ?? e).slice(0, 200) })
       console.error(`${entry.name}: stalled - ${String(e?.message ?? e).slice(0, 120)}`)
     }
-    writeArtifact()
+    writeArtifact(false)
   }
 }
+writeArtifact(true)
 
-console.log(`wrote ${out}: ${JSON.stringify(tallyRows(rows))}`)
+const finalTally = tallyRows(rows)
+console.log(`wrote ${out}: ${JSON.stringify(finalTally)}`)
 
-// Tally legitimacy per surfaced finding: a row emits at most one
-// finding, so the keep verdict reads the class of the file the finding
-// names — counting all record classes would over-report legitGap on
-// rows whose surfaced file is no-sibling.
+// Tally the surfaced finding only: a row emits at most one finding, so
+// legitimacy reads the file the finding names — counting all record
+// classes would over-report on rows whose surfaced file is no-sibling.
+// Structural class (sibling-exists/no-sibling) stays a separate axis
+// from the corpus-row adjudication (legit/fp): the first says the
+// claim is true, the second that the gap mattered.
 function tallyRows(rows) {
   const fired = rows.filter((r) => r.fired)
-  const surfacedClass = (r) =>
-    r.classification?.find((c) => c.file === r.findings[0]?.file)?.class
+  const adjudicated = (a) => fired.filter((r) => r.adjudication === a).length
   return {
     rows: rows.length,
     fired: fired.length,
     errors: rows.filter((r) => r.error).length,
-    legitGap: fired.filter((r) => surfacedClass(r) === 'sibling-exists').length,
-    noSibling: fired.filter((r) => surfacedClass(r) === 'no-sibling').length,
+    siblingExists: fired.filter((r) => r.surfaced?.structuralClass === 'sibling-exists').length,
+    noSibling: fired.filter((r) => r.surfaced?.structuralClass === 'no-sibling').length,
+    legit: adjudicated('legit'),
+    fp: adjudicated('fp'),
+    unadjudicated: fired.filter(
+      (r) => r.adjudication !== 'legit' && r.adjudication !== 'fp',
+    ).length,
   }
+}
+
+// Plan U2's keep-or-remove mapping, computed from completed rows so a
+// rerun can't silently drop the verdict the adoption cited.
+function verdictFor(rows, complete) {
+  const fired = rows.filter((r) => r.fired)
+  const errors = rows.filter((r) => r.error).length
+  const errorNote = errors > 0 ? `; ${errors} row(s) errored - coverage incomplete` : ''
+  const pending = fired.filter(
+    (r) => r.adjudication !== 'legit' && r.adjudication !== 'fp',
+  )
+  let v
+  if (fired.length === 0) {
+    v = {
+      decision: 'stay-unregistered',
+      basis: 'no firing exercised the trigger' + errorNote,
+    }
+  } else if (pending.length > 0) {
+    v = {
+      decision: 'needs-adjudication',
+      basis:
+        `add an expect block for the surfaced file on: ${pending.map((r) => r.name).join(', ')}` +
+        errorNote,
+    }
+  } else {
+    const legit = fired.filter((r) => r.adjudication === 'legit').length
+    const fp = fired.filter((r) => r.adjudication === 'fp').length
+    if (fp > legit) {
+      v = {
+        decision: 'reject',
+        basis: `${fp} FP firings outweigh ${legit} legitimate` + errorNote,
+      }
+    } else {
+      v = {
+        decision: 'keep',
+        basis:
+          `${legit} legitimate firings vs ${fp} FP across ${fired.length} firing row(s)` +
+          errorNote,
+      }
+      if (fired.every((r) => r.synthetic)) {
+        v.caveat = 'unmeasured on real PRs - only the synthetic row fired'
+      }
+    }
+  }
+  v.recordedAt = new Date().toISOString()
+  if (!complete) v.partial = true
+  return v
 }

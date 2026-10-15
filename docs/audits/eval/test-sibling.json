@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-15T18:13:34.126Z",
+  "at": "2026-10-15T18:27:12.403Z",
   "corpora": [
     "/home/lukekimball/Documents/github/personal/Argus/scripts/eval-corpus.test-sibling.json",
     "/home/lukekimball/Documents/github/personal/Argus/scripts/eval-corpus.dogfood.json",
@@ -11,13 +11,23 @@
     "rows": 27,
     "fired": 2,
     "errors": 0,
-    "legitGap": 2,
-    "noSibling": 0
+    "siblingExists": 2,
+    "noSibling": 0,
+    "legit": 2,
+    "fp": 0,
+    "unadjudicated": 0
+  },
+  "verdict": {
+    "decision": "keep",
+    "basis": "2 legitimate firings vs 0 FP across 2 firing row(s)",
+    "recordedAt": "2026-10-15T18:27:12.403Z",
+    "coverage": "real colocate-convention surface partially measured: mirror-tree silence proven on dogfood/argus/clean corpora; legit-but-unneeded and cross-subsystem-bleed FP classes have evidence only from the synthetic row. Structural class (sibling-exists) is evidence, not legitimacy - legit/fp counts come from per-row expect adjudications in the corpus; the verdict is computed by the script on every write so a rerun cannot drop it"
   },
   "rows": [
     {
       "name": "synthetic-test-sibling",
       "note": "eval-fixtures/test-sibling: foo pair = witness, bar = legit gap (sibling in tree), other.go = no-sibling",
+      "synthetic": true,
       "mergeBase": "5a49bcc9ba7919f799e9602a0eb0beaf8931c56d",
       "filesChanged": 6,
       "testFilesInDiff": [
@@ -59,11 +69,18 @@
             "src/bar.ts"
           ]
         }
-      ]
+      ],
+      "surfaced": {
+        "file": "src/bar.ts",
+        "structuralClass": "sibling-exists"
+      },
+      "adjudication": "legit",
+      "adjudicationReason": "behavioral edit by construction; sibling src/bar.test.ts untouched"
     },
     {
       "name": "dogfood-orchestral-171",
       "note": "fix(planners): fault on trailing JSON - real merged PR",
+      "synthetic": false,
       "mergeBase": "193837409244156d88801c3b30d044fd56a877a0",
       "filesChanged": 3,
       "testFilesInDiff": [
@@ -77,6 +94,7 @@
     {
       "name": "dogfood-wisp-106",
       "note": "feat: act-efficiency wave - larger feature diff",
+      "synthetic": false,
       "mergeBase": "67b520c409633bd17a900bb5bc801aecc45f7e21",
       "filesChanged": 16,
       "testFilesInDiff": [
@@ -92,6 +110,7 @@
     {
       "name": "dogfood-kurultai-421",
       "note": "feat(deploy): shared_write containment - deploy code path",
+      "synthetic": false,
       "mergeBase": "27bac7afca0ef2f1f8406aaed8fbf19586a5d012",
       "filesChanged": 7,
       "testFilesInDiff": [],
@@ -102,6 +121,7 @@
     {
       "name": "dogfood-omaseal-43",
       "note": "fix(engine): lazy-load wrapped identity - secrets-adjacent code",
+      "synthetic": false,
       "mergeBase": "fc9a7e9f9a5bf0608745fb404f6c7fd078b64714",
       "filesChanged": 2,
       "testFilesInDiff": [
@@ -114,6 +134,7 @@
     {
       "name": "dogfood-dayflow-63",
       "note": "chore(ui): restore classic QML - non-TS language coverage",
+      "synthetic": false,
       "mergeBase": "c1cf3d5393b8ca120a6548d128e0adb323289e4b",
       "filesChanged": 21,
       "testFilesInDiff": [
@@ -130,6 +151,7 @@
     {
       "name": "dogfood-omarchyplugins-27",
       "note": "feat: retire connections/ticker/agents - plugin-estate refactor",
+      "synthetic": false,
       "mergeBase": "4e56a35ba99b9d37902f40f524955125d544737d",
       "filesChanged": 46,
       "testFilesInDiff": [
@@ -148,6 +170,7 @@
     {
       "name": "pr173-scan-mode",
       "note": "U7 scan - 14 argus comments, 11 nit, 4 on dist/; the noisy outlier",
+      "synthetic": false,
       "mergeBase": "0caf9fe0fca3eb2ff53f982807c0ce72d494cb5a",
       "filesChanged": 12,
       "testFilesInDiff": [
@@ -161,6 +184,7 @@
     {
       "name": "pr131-webhook-worker",
       "note": "18 comments, all nit - big diff (3.4k adds)",
+      "synthetic": false,
       "mergeBase": "b9c19a458760872d1f9421f8ed1164b65c917212",
       "filesChanged": 15,
       "testFilesInDiff": [
@@ -174,6 +198,7 @@
     {
       "name": "pr126-onboarding-docs",
       "note": "docs-only PR, 4 comments",
+      "synthetic": false,
       "mergeBase": "e5076ecde4e7c1f411df990525448914b1008eb9",
       "filesChanged": 3,
       "testFilesInDiff": [],
@@ -184,6 +209,7 @@
     {
       "name": "pr59-probe-lane",
       "note": "worst offender: 52 comments",
+      "synthetic": false,
       "mergeBase": "ac875d1b681fef0baf9a8c76a5d8a6218bf1050e",
       "filesChanged": 43,
       "testFilesInDiff": [
@@ -200,6 +226,7 @@
     {
       "name": "u5-dep-bump",
       "note": "U5 probe - esbuild dep add in package.json + src/ changes, no test file",
+      "synthetic": false,
       "mergeBase": "eeabd417b0f2685e081f548475a7322f064c00de",
       "filesChanged": 13,
       "testFilesInDiff": [],
@@ -210,6 +237,7 @@
     {
       "name": "clean-170-setup-node-bump",
       "note": "dependabot setup-node v6->v7 single workflow - 1 floored blocker seen (p=.52 cross-workflow consistency); floor held",
+      "synthetic": false,
       "mergeBase": "a3f8864d3f5fa2fafeade484254c650b545c610a",
       "filesChanged": 4,
       "testFilesInDiff": [],
@@ -220,6 +248,7 @@
     {
       "name": "clean-176-action-pin",
       "note": "action pin -> v0.5.0, +19/-16 in 9 docs/onboarding files - nothing to find",
+      "synthetic": false,
       "mergeBase": "27887be6438ad284566073835939210edc4cdeb8",
       "filesChanged": 9,
       "testFilesInDiff": [
@@ -232,6 +261,7 @@
     {
       "name": "clean-175-release-prep",
       "note": "v0.5.0 release prep - v2 run produced 5 blocking changelog cross-ref FPs (p .66-.78, 1 floored), v3 run silent; nondeterministic meta-diff FP class",
+      "synthetic": false,
       "mergeBase": "a3f8864d3f5fa2fafeade484254c650b545c610a",
       "filesChanged": 3,
       "testFilesInDiff": [],
@@ -242,6 +272,7 @@
     {
       "name": "clean-wisp-101-docs",
       "note": "docs+renders README wave, 28f - stalled 2x on provider timeout (possible large-binary-diff perf gap, unconfirmed)",
+      "synthetic": false,
       "mergeBase": "33e6be0b1f22339249e284bd29a535b9b10ee0ea",
       "filesChanged": 28,
       "testFilesInDiff": [
@@ -255,6 +286,7 @@
     {
       "name": "clean-large-rename-synthetic",
       "note": "synthetic mechanical rename src/{index,report}->src/{repoindex,reporter}, 54f tsc-verified - 2 runs 0 blockers; 6 p~.3 verify-move nits (correct uncertainty shape)",
+      "synthetic": false,
       "mergeBase": "3ed703ee57b505177d193ffa2cb26f12a43f10dc",
       "filesChanged": 54,
       "testFilesInDiff": [
@@ -287,6 +319,7 @@
     {
       "name": "aacr-cline-cline-1808",
       "note": "AACR-Bench TypeScript PR, 11 changed lines, 3 verified issues",
+      "synthetic": false,
       "mergeBase": "9cb6cf52fc13a2339d97b9a90afecad7c1820da7",
       "filesChanged": 2,
       "testFilesInDiff": [],
@@ -297,6 +330,7 @@
     {
       "name": "aacr-infiniflow-ragflow-6691",
       "note": "AACR-Bench Python PR, 11 changed lines, 6 verified issues",
+      "synthetic": false,
       "mergeBase": "0a42e5777eb966b26aaf8f2a7d593ae99a4aa87a",
       "filesChanged": 3,
       "testFilesInDiff": [],
@@ -307,6 +341,7 @@
     {
       "name": "aacr-vllm-project-vllm-24425",
       "note": "AACR-Bench Python PR, 12 changed lines, 1 verified issues",
+      "synthetic": false,
       "mergeBase": "f4962a6d55a340ebb569d377c842deff7611d8f7",
       "filesChanged": 1,
       "testFilesInDiff": [],
@@ -317,6 +352,7 @@
     {
       "name": "aacr-comfyanonymous-comfyui-6542",
       "note": "AACR-Bench Python PR, 15 changed lines, 2 verified issues",
+      "synthetic": false,
       "mergeBase": "832e3f5ca3c357e527fdf811502357bd2798425e",
       "filesChanged": 3,
       "testFilesInDiff": [],
@@ -327,6 +363,7 @@
     {
       "name": "aacr-keycloak-keycloak-41672",
       "note": "AACR-Bench Java PR, 19 changed lines, 1 verified issues",
+      "synthetic": false,
       "mergeBase": "725f1e40f0f8195833a4c1ecade693aa3a0d6ed0",
       "filesChanged": 3,
       "testFilesInDiff": [],
@@ -337,6 +374,7 @@
     {
       "name": "aacr-dbeaver-dbeaver-37564",
       "note": "AACR-Bench Java PR, 22 changed lines, 4 verified issues",
+      "synthetic": false,
       "mergeBase": "24ad3c4030412df3d9c843c405e90a0b1e2ad5dd",
       "filesChanged": 2,
       "testFilesInDiff": [],
@@ -347,6 +385,7 @@
     {
       "name": "aacr-langflow-ai-langflow-5388",
       "note": "AACR-Bench Python PR, 22 changed lines, 3 verified issues",
+      "synthetic": false,
       "mergeBase": "4b0c42e52076fb7cdca084a1ab06d46f87fecff1",
       "filesChanged": 1,
       "testFilesInDiff": [],
@@ -357,6 +396,7 @@
     {
       "name": "aacr-elastic-elasticsearch-133945",
       "note": "AACR-Bench Java PR, 23 changed lines, 4 verified issues",
+      "synthetic": false,
       "mergeBase": "3c264cff967750ff7cb581defa42b0d69bb31fc6",
       "filesChanged": 2,
       "testFilesInDiff": [],
@@ -367,6 +407,7 @@
     {
       "name": "aacr-ollama-ollama-8938",
       "note": "AACR-Bench Go PR, 24 changed lines, 2 verified issues",
+      "synthetic": false,
       "mergeBase": "ed443a03930a10bec6182c55091f0880baa1e620",
       "filesChanged": 4,
       "testFilesInDiff": [
@@ -396,11 +437,18 @@
             "api/types_test.go"
           ]
         }
-      ]
+      ],
+      "surfaced": {
+        "file": "api/types.go",
+        "structuralClass": "sibling-exists"
+      },
+      "adjudication": "legit",
+      "adjudicationReason": "behavior-bearing: DefaultOptions().NumCtx now reads envconfig.ContextLength(); api/types_test.go untouched"
     },
     {
       "name": "aacr-elastic-elasticsearch-123744",
       "note": "AACR-Bench Java PR, 29 changed lines, 4 verified issues",
+      "synthetic": false,
       "mergeBase": "ba5a9c83310ce6fbe27ff251aba00e37fad1d205",
       "filesChanged": 3,
       "testFilesInDiff": [],
@@ -408,11 +456,5 @@
       "findings": [],
       "records": []
     }
-  ],
-  "verdict": {
-    "decision": "keep - registered in REVIEW_RULES (src/review/rules.ts)",
-    "basis": "gate exercises the trigger (synthetic row fires + classifies); 1 real firing on aacr-ollama-ollama-8938 classified sibling-exists; 0 surfaced FP findings across 27 rows; 11 real test-touching diffs stayed silent (witness never materialized in mirror-tree repos)",
-    "coverage": "real colocate-convention surface partially measured: mirror-tree silence proven on dogfood/argus/clean corpora; legit-but-unneeded and cross-subsystem-bleed FP classes have evidence only from the synthetic row; artifact regenerated under the post-review gate fixes (unscoped ls-tree, core.quotePath=false, --no-ext-diff, failures channel, per-surfaced-finding legitimacy tally, per-row flush) with the verdict unchanged",
-    "recordedAt": "2026-10-15"
-  }
+  ]
 }
