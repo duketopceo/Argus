@@ -70,6 +70,13 @@ describe('testSiblingKey', () => {
     expect(testSiblingKey('src/__snapshots__/foo.test.ts.snap')).toBe('src/foo.ts')
     expect(testSiblingKey('pkg/foo_test.go')).toBe('pkg/foo.go')
     expect(testSiblingKey('pkg/test_foo.py')).toBe('pkg/foo.py')
+    // Affix strips are scoped to the languages isTestPath assigns them —
+    // a non-test source carrying one keeps its own stem group instead of
+    // colliding with a same-stem sibling's.
+    expect(testSiblingKey('pkg/test_helpers.go')).toBe('pkg/test_helpers.go')
+    expect(testSiblingKey('pkg/test_helpers_test.go')).toBe('pkg/test_helpers.go')
+    expect(testSiblingKey('src/foo_test.ts')).toBe('src/foo_test.ts')
+    expect(testSiblingKey('pkg/test_foo.go')).toBe('pkg/test_foo.go')
   })
 
   it('joins stem-mate affixes to the same group', () => {

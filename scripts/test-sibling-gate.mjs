@@ -32,7 +32,7 @@ const { GIT_DIFF_PATH_FLAGS } = await import(
   new URL('../dist/review/difftext.js', import.meta.url).href
 )
 const { filesFromUnifiedDiff } = await import(
-  new URL('../dist/cli.js', import.meta.url).href
+  new URL('../dist/cli/review-shared.js', import.meta.url).href
 )
 
 // Inject the rule only when the checked-out registry predates
@@ -43,14 +43,22 @@ const REGISTRY = REVIEW_RULES.some((r) => r.id === 'test-sibling')
   : [...REVIEW_RULES, testSiblingRule]
 
 // Classify uncovered sources against the head tree: sibling-exists when
-// a genuine test member shares the stem key, no-sibling otherwise. Stem
-// groups are same-directory modulo the sibling dirs, so every group
-// member lives under the candidate's own dir — the ls-tree pathspec
-// scopes the read to exactly those dirs ('.' = repo root).
+// a genuine test member shares the stem key, no-sibling otherwise. The
+// read is unscoped — testSiblingKey strips the sibling dirs at any
+// depth, so a covering test like `src/__tests__/a/foo.test.ts` lives
+// outside the candidate's own dir and a dir pathspec would miss it.
+// core.quotePath=false matches the diff side's pin (GIT_DIFF_PATH_FLAGS):
+// without it git C-quotes non-ASCII paths and keyed groups never match.
 function classifyUncovered(repo, head, uncovered) {
-  const dirs = [...new Set(uncovered.map((f) => dirname(f)))]
   const groups = new Map()
-  for (const p of git(repo, ['ls-tree', '-r', '--name-only', head, '--', ...dirs]).split('\n')) {
+  for (const p of git(repo, [
+    '-c',
+    'core.quotePath=false',
+    'ls-tree',
+    '-r',
+    '--name-only',
+    head,
+  ]).split('\n')) {
     if (p === '') continue
     const key = testSiblingKey(p)
     const g = groups.get(key) ?? []
@@ -71,8 +79,21 @@ async function gateRow(entry, cacheDir) {
   const repo = resolveRepo(entry, cacheDir)
   const mb = mergeBase(repo, entry.base, entry.head)
   if (mb === '') throw new Error(`no merge-base for ${entry.name}`)
-  const diff = git(repo, [...GIT_DIFF_PATH_FLAGS, 'diff', `${mb}..${entry.head}`])
+  // --no-ext-diff mirrors the lane producer (loadLocalDiff): an ambient
+  // diff.external otherwise hijacks the measurement into non-unified
+  // output and every row records fired=false.
+  const diff = git(repo, [
+    ...GIT_DIFF_PATH_FLAGS,
+    'diff',
+    '--no-ext-diff',
+    `${mb}..${entry.head}`,
+  ])
   const result = await runRules(diff, { rules: REGISTRY, enabled: ['test-sibling'] })
+  // A crashing rule degrades open into result.failures with empty
+  // findings — record it as an error row, never as silence.
+  if (result.failures.length > 0) {
+    throw new Error(`rule failures: ${JSON.stringify(result.failures).slice(0, 160)}`)
+  }
   const records = result.records
   const findings = result.findings
   const filesChanged = [...new Set(filesFromUnifiedDiff(diff).map((f) => f.filename))]
@@ -88,10 +109,12 @@ async function gateRow(entry, cacheDir) {
     records,
   }
   if (findings.length > 0) {
+    // '-' is the record-cap aggregate, not a path — exclude it before
+    // the tree read.
     row.classification = classifyUncovered(
       repo,
       entry.head,
-      records.map((r) => r.file),
+      records.map((r) => r.file).filter((f) => f !== '-'),
     )
   }
   return row
@@ -103,7 +126,11 @@ const arg = (name, dflt) => {
   const v = i >= 0 ? rest[i + 1] : undefined
   return v !== undefined && !v.startsWith('--') ? v : dflt
 }
-const corpora = rest.flatMap((a, i) => (a === '--corpus' ? [rest[i + 1]] : []))
+const corpora = rest.flatMap((a, i) =>
+  a === '--corpus' && rest[i + 1] !== undefined && !rest[i + 1].startsWith('--')
+    ? [rest[i + 1]]
+    : [],
+)
 if (corpora.length === 0) {
   console.error('usage: --corpus <file> [--corpus <file> ...] [--out path] [--cache dir]')
   process.exit(2)
@@ -111,9 +138,35 @@ if (corpora.length === 0) {
 const cacheDir = arg('cache', join(tmpdir(), 'argus-eval-repos'))
 const out = resolve(arg('out', join(REPO_ROOT, 'docs', 'audits', 'eval', 'test-sibling.json')))
 
+// Flush per row — a bad corpus path or stalled fetch must not discard
+// rows that already paid their resolve/fetch cost.
 const rows = []
+const writeArtifact = () =>
+  writeFileSync(
+    out,
+    JSON.stringify(
+      {
+        at: new Date().toISOString(),
+        corpora: corpora.map((c) => resolve(c)),
+        tally: tallyRows(rows),
+        rows,
+      },
+      null,
+      2,
+    ),
+  )
+mkdirSync(dirname(out), { recursive: true })
 for (const c of corpora) {
-  for (const entry of JSON.parse(readFileSync(resolve(c), 'utf8'))) {
+  let entries
+  try {
+    entries = JSON.parse(readFileSync(resolve(c), 'utf8'))
+  } catch (e) {
+    rows.push({ name: resolve(c), error: `corpus load: ${String(e?.message ?? e).slice(0, 160)}` })
+    console.error(`${c}: corpus load failed - ${String(e?.message ?? e).slice(0, 120)}`)
+    writeArtifact()
+    continue
+  }
+  for (const entry of entries) {
     try {
       rows.push(await gateRow(entry, cacheDir))
       const r = rows[rows.length - 1]
@@ -124,30 +177,25 @@ for (const c of corpora) {
       rows.push({ name: entry.name, error: String(e?.message ?? e).slice(0, 200) })
       console.error(`${entry.name}: stalled - ${String(e?.message ?? e).slice(0, 120)}`)
     }
+    writeArtifact()
   }
 }
 
-const fired = rows.filter((r) => r.fired)
-const tally = {
-  rows: rows.length,
-  fired: fired.length,
-  legitGap: fired.flatMap((r) => r.classification ?? []).filter((c) => c.class === 'sibling-exists')
-    .length,
-  noSibling: fired.flatMap((r) => r.classification ?? []).filter((c) => c.class === 'no-sibling')
-    .length,
+console.log(`wrote ${out}: ${JSON.stringify(tallyRows(rows))}`)
+
+// Tally legitimacy per surfaced finding: a row emits at most one
+// finding, so the keep verdict reads the class of the file the finding
+// names — counting all record classes would over-report legitGap on
+// rows whose surfaced file is no-sibling.
+function tallyRows(rows) {
+  const fired = rows.filter((r) => r.fired)
+  const surfacedClass = (r) =>
+    r.classification?.find((c) => c.file === r.findings[0]?.file)?.class
+  return {
+    rows: rows.length,
+    fired: fired.length,
+    errors: rows.filter((r) => r.error).length,
+    legitGap: fired.filter((r) => surfacedClass(r) === 'sibling-exists').length,
+    noSibling: fired.filter((r) => surfacedClass(r) === 'no-sibling').length,
+  }
 }
-mkdirSync(dirname(out), { recursive: true })
-writeFileSync(
-  out,
-  JSON.stringify(
-    {
-      at: new Date().toISOString(),
-      corpora: corpora.map((c) => resolve(c)),
-      tally,
-      rows,
-    },
-    null,
-    2,
-  ),
-)
-console.log(`wrote ${out}: ${JSON.stringify(tally)}`)

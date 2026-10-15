@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-15T17:17:44.737Z",
+  "at": "2026-10-15T18:13:34.126Z",
   "corpora": [
     "/home/lukekimball/Documents/github/personal/Argus/scripts/eval-corpus.test-sibling.json",
     "/home/lukekimball/Documents/github/personal/Argus/scripts/eval-corpus.dogfood.json",
@@ -10,8 +10,9 @@
   "tally": {
     "rows": 27,
     "fired": 2,
+    "errors": 0,
     "legitGap": 2,
-    "noSibling": 1
+    "noSibling": 0
   },
   "rows": [
     {
@@ -27,7 +28,7 @@
       "findings": [
         {
           "file": "src/bar.ts",
-          "message": "nit: `src/bar.ts` changed while its test sibling was untouched - 2 source file(s) untested alongside a paired-test change; if the change is behavior-bearing, point at the coverage that exercises it."
+          "message": "nit: `src/bar.ts` changed while no test file in its stem group gained an edit - 2 source file(s) untested alongside a paired-test change; if the change is behavior-bearing, point at the coverage that exercises it."
         }
       ],
       "records": [
@@ -376,7 +377,7 @@
       "findings": [
         {
           "file": "api/types.go",
-          "message": "nit: `api/types.go` changed while its test sibling was untouched - 1 source file(s) untested alongside a paired-test change; if the change is behavior-bearing, point at the coverage that exercises it."
+          "message": "nit: `api/types.go` changed while no test file in its stem group gained an edit - 1 source file(s) untested alongside a paired-test change; if the change is behavior-bearing, point at the coverage that exercises it."
         }
       ],
       "records": [
@@ -409,16 +410,9 @@
     }
   ],
   "verdict": {
-    "decision": "keep - registered in REVIEW_RULES",
-    "mapping": "plan U2 step 4: at least one firing (real or synthetic) exercises the trigger AND legitimate firings >= FP firings",
-    "realFirings": 1,
-    "legitimateFindings": 2,
-    "fpFindings": 0,
-    "note": "synthetic row + aacr-ollama-8938 both fired on sibling-exists sources whose surfaced claim is literally true; the only no-sibling class appears as an audit record on the synthetic row (pkg/other.go), never as a surfaced finding"
-  },
-  "coverage": {
-    "testTouchingRows": 13,
-    "mirrorTreeSilence": "real test-touching diffs that produced no witness and no firing (all dogfood + argus rows, plus clean-wisp-101 and clean-large-rename) - every consumer repo in the corpus uses mirror-tree tests, so the designed FP-avoidance is measured, not assumed",
-    "unmeasured": "colocate-convention repos other than ollama; FP classes (legit-but-unneeded, cross-subsystem bleed) have corpus evidence only from the synthetic row"
+    "decision": "keep - registered in REVIEW_RULES (src/review/rules.ts)",
+    "basis": "gate exercises the trigger (synthetic row fires + classifies); 1 real firing on aacr-ollama-ollama-8938 classified sibling-exists; 0 surfaced FP findings across 27 rows; 11 real test-touching diffs stayed silent (witness never materialized in mirror-tree repos)",
+    "coverage": "real colocate-convention surface partially measured: mirror-tree silence proven on dogfood/argus/clean corpora; legit-but-unneeded and cross-subsystem-bleed FP classes have evidence only from the synthetic row; artifact regenerated under the post-review gate fixes (unscoped ls-tree, core.quotePath=false, --no-ext-diff, failures channel, per-surfaced-finding legitimacy tally, per-row flush) with the verdict unchanged",
+    "recordedAt": "2026-10-15"
   }
 }

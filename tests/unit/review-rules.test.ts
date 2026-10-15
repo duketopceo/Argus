@@ -547,9 +547,8 @@ describe('missing-test', () => {
   )
 })
 
-// test-sibling ships unregistered until the U2 eval gate resolves, so its
-// tests inject the rule via the `rules` seam instead of relying on
-// REVIEW_RULES default enablement.
+// test-sibling's cases run through the `rules` seam so they exercise one
+// rule in isolation — the U2 gate measured it through the same seam.
 const siblingRules = (diff: string) => runRules(diff, { rules: [testSiblingRule] })
 const siblingFindings = (r: Awaited<ReturnType<typeof runRules>>) =>
   r.findings.filter((f) => f.rule === 'test-sibling')
@@ -721,5 +720,67 @@ describe('test-sibling', () => {
     const off = await runRules(diff, { rules: [testSiblingRule], enabled: [] })
     expect(off.ran).toEqual([])
     expect(off.findings).toHaveLength(0)
+  })
+
+  it('a non-test source carrying a test affix cannot forge the witness', async () => {
+    // test_helpers.go is not a test file (isTestPath) and must keep its
+    // own stem — stripping test_ unconditionally would pair it with
+    // helpers_test.go and manufacture a witness out of nothing.
+    const r = await siblingRules(
+      diffOf('pkg/test_helpers.go', ['func h() {}']) +
+        diffOf('pkg/helpers_test.go', ['func TestH(t) {}']) +
+        diffOf('pkg/api.go', ['func a() {}']),
+    )
+    expect(siblingFindings(r)).toHaveLength(0)
+  })
+
+  it('a non-test affix source still pairs with its genuine test sibling', async () => {
+    const r = await siblingRules(
+      diffOf('pkg/test_helpers.go', ['func h() {}']) +
+        diffOf('pkg/test_helpers_test.go', ['func TestTH(t) {}']) +
+        diffOf('pkg/api.go', ['func a() {}']),
+    )
+    const hits = siblingFindings(r)
+    expect(hits).toHaveLength(1)
+    expect(hits[0]?.file).toBe('pkg/api.go')
+  })
+
+  it('.mock. and .fixture. infix files are stem-mates, never flagged', async () => {
+    for (const mate of ['src/api.mock.ts', 'src/api.fixture.ts']) {
+      const r = await siblingRules(
+        diffOf('src/w.ts', ['const w = 1']) +
+          diffOf('src/w.test.ts', ['test(w)']) +
+          diffOf(mate, Array.from({ length: 20 }, (_, i) => `const m${i} = ${i}`)) +
+          diffOf('src/other.ts', ['const o = 1']),
+      )
+      const hits = siblingFindings(r)
+      expect(hits, mate).toHaveLength(1)
+      expect(hits[0]?.file, mate).toBe('src/other.ts')
+    }
+  })
+
+  it('extension-mismatched siblings do not pair; the nit claim stays true', async () => {
+    // comp.test.ts keys as comp.ts — it does not cover comp.tsx. The
+    // surfaced claim is scoped to the stem group so it holds whether or
+    // not a differently-named sibling changed elsewhere in the diff.
+    const r = await siblingRules(
+      diffOf('src/w.ts', ['const w = 1']) +
+        diffOf('src/w.test.ts', ['test(w)']) +
+        diffOf('src/comp.test.ts', ['test(c)']) +
+        diffOf('src/comp.tsx', ['export const C = 1']),
+    )
+    const hits = siblingFindings(r)
+    expect(hits).toHaveLength(1)
+    expect(hits[0]?.file).toBe('src/comp.tsx')
+    expect(hits[0]?.message).toContain('no test file in its stem group gained an edit')
+  })
+
+  it('stays disjoint from missing-test under the default registry', async () => {
+    const r = await runRules(
+      diffOf('src/foo.ts', ['const f = 1']) + diffOf('src/bar.ts', ['const b = 1']),
+    )
+    expect(r.ran).toEqual(expect.arrayContaining(['missing-test', 'test-sibling']))
+    expect(r.findings.some((f) => f.rule === 'missing-test')).toBe(true)
+    expect(siblingFindings(r)).toHaveLength(0)
   })
 })

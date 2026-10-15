@@ -29,9 +29,14 @@ export function testSiblingKey(path) {
     let prev = '';
     while (prev !== stem) {
         prev = stem;
-        stem = stem.replace(/\.(test|spec|test-d|stories|e2e|gen|generated)\./g, '.');
+        stem = stem.replace(/\.(test|spec|test-d|stories|e2e|gen|generated|mock|fixture|fake|stub)\./g, '.');
     }
-    stem = stem.replace(/_test(?=\.[^.]+$)/, '').replace(/^test_/, '');
+    // The suffix/prefix strips mirror isTestPath's language scoping:
+    // `_test` is a test convention in go/py/rb and `test_` only in .py —
+    // stripping them unconditionally would drop a non-test source like
+    // `pkg/test_helpers.go` into `pkg/helpers.go`'s group and forge a
+    // pairing witness for it.
+    stem = stem.replace(/_test(?=\.(?:go|py|rb)$)/, '').replace(/^test_(?=[^/]*\.py$)/, '');
     return segs.length === 0 ? stem : `${segs.join('/')}/${stem}`;
 }
 const CAPPED = new Set(['bug', 'risk']);

@@ -411,7 +411,7 @@ const missingTestRule = {
  * fairly. One finding max — a signal, not a per-file nag.
  */
 const TEST_COVER_EXCLUDE_RE = /(^|\/)(__mocks__|fixtures)\//;
-const SIBLING_MATE_RE = /\.(?:gen|generated|stories|e2e|test-d)\.|\.d\.ts$/;
+const SIBLING_MATE_RE = /\.(?:gen|generated|stories|e2e|test-d|mock|fixture|fake|stub)\.|\.d\.ts$/;
 /** R5 coverage predicate — exported so the eval gate's tree classifier
  *  reads the same semantics the rule applies to the diff. */
 export const isTestCoverPath = (file) => isTestPath(file) && !file.endsWith('.snap') && !TEST_COVER_EXCLUDE_RE.test(file);
@@ -475,7 +475,7 @@ export const testSiblingRule = {
                     file: topFile,
                     severity: 'nit',
                     category: 'testing',
-                    message: `nit: \`${topFile}\` changed while its test sibling was untouched - ` +
+                    message: `nit: \`${topFile}\` changed while no test file in its stem group gained an edit - ` +
                         `${detail}; if the change is behavior-bearing, point at the coverage that exercises it.`,
                 },
             ],
