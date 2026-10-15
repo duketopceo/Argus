@@ -7,16 +7,20 @@ import {
   RULE_HITS_CAP,
   RULE_RECORDS_CAP,
   runRules,
+  testSiblingRule,
   type ReviewRule,
 } from '../../src/review/rules.js'
 
 /** Unified diff adding `added` lines to `file` (post-change line numbering). */
-function diffOf(file: string, added: string[]): string {
-  const body = added.map((l) => `+${l}`).join('\n')
+function diffOf(file: string, added: string[], removed: string[] = []): string {
+  const body =
+    removed.map((l) => `-${l}`).join('\n') +
+    (removed.length > 0 && added.length > 0 ? '\n' : '') +
+    added.map((l) => `+${l}`).join('\n')
   return (
     `diff --git a/${file} b/${file}\n` +
     `--- a/${file}\n+++ b/${file}\n` +
-    `@@ -0,0 +1,${added.length} @@\n${body}\n`
+    `@@ -0,${removed.length} +1,${Math.max(added.length, 1)} @@\n${body}\n`
   )
 }
 
@@ -541,4 +545,242 @@ describe('missing-test', () => {
       expect(r.findings.filter((f) => f.category === 'testing')).toHaveLength(0)
     },
   )
+})
+
+// test-sibling's cases run through the `rules` seam so they exercise one
+// rule in isolation — the U2 gate measured it through the same seam.
+const siblingRules = (diff: string) => runRules(diff, { rules: [testSiblingRule] })
+const siblingFindings = (r: Awaited<ReturnType<typeof runRules>>) =>
+  r.findings.filter((f) => f.rule === 'test-sibling')
+
+describe('test-sibling', () => {
+  it('witness + uncovered: one nit names the uncovered sibling', async () => {
+    const r = await siblingRules(
+      diffOf('src/foo.ts', ['const f = 1']) +
+        diffOf('src/foo.test.ts', ['test(f)']) +
+        diffOf('src/bar.ts', ['const b = 1']),
+    )
+    const hits = siblingFindings(r)
+    expect(hits).toHaveLength(1)
+    expect(hits[0]?.file).toBe('src/bar.ts')
+    expect(hits[0]?.severity).toBe('nit')
+    expect(hits[0]?.category).toBe('testing')
+    expect(hits[0]?.line).toBeUndefined()
+    expect(hits[0]?.message).toContain('nit:')
+    expect(hits[0]?.message).toContain('1 source file(s)')
+    expect(r.records).toContainEqual(
+      expect.objectContaining({ rule: 'test-sibling', file: 'src/bar.ts' }),
+    )
+  })
+
+  it('all siblings covered is silent', async () => {
+    const r = await siblingRules(
+      diffOf('src/foo.ts', ['const f = 1']) + diffOf('src/foo.test.ts', ['test(f)']),
+    )
+    expect(siblingFindings(r)).toHaveLength(0)
+  })
+
+  it('tests changed but none paired stays silent (no witness)', async () => {
+    const r = await siblingRules(
+      diffOf('src/foo.ts', ['const f = 1']) + diffOf('src/bar.test.ts', ['test(b)']),
+    )
+    expect(siblingFindings(r)).toHaveLength(0)
+    expect(r.records.filter((x) => x.rule === 'test-sibling')).toHaveLength(0)
+  })
+
+  it('a diff with no test files is silent — missing-test owns that trigger', async () => {
+    const r = await siblingRules(
+      diffOf('src/foo.ts', ['const f = 1']) + diffOf('docs/x.md', ['# hi']),
+    )
+    expect(siblingFindings(r)).toHaveLength(0)
+  })
+
+  it('__tests__ dirs pair within the same directory only', async () => {
+    const paired = await siblingRules(
+      diffOf('src/a/foo.ts', ['const f = 1']) +
+        diffOf('src/a/__tests__/foo.ts', ['test(f)']) +
+        diffOf('src/a/baz.ts', ['const b = 1']),
+    )
+    expect(siblingFindings(paired)[0]?.file).toBe('src/a/baz.ts')
+
+    const crossDir = await siblingRules(
+      diffOf('src/a/foo.ts', ['const f = 1']) +
+        diffOf('src/b/__tests__/foo.ts', ['test(f)']) +
+        diffOf('src/a/baz.ts', ['const b = 1']),
+    )
+    expect(siblingFindings(crossDir)).toHaveLength(0)
+  })
+
+  it('Go and Python test affixes pair in the same directory', async () => {
+    const r = await siblingRules(
+      diffOf('pkg/foo.go', ['func f() {}']) +
+        diffOf('pkg/foo_test.go', ['func TestF(t) {}']) +
+        diffOf('pkg/bar.go', ['func b() {}']),
+    )
+    expect(siblingFindings(r)[0]?.file).toBe('pkg/bar.go')
+
+    const py = await siblingRules(
+      diffOf('pkg/foo.py', ['def f(): pass']) +
+        diffOf('pkg/test_foo.py', ['def test_f(): pass']) +
+        diffOf('pkg/bar.py', ['def b(): pass']),
+    )
+    expect(siblingFindings(py)[0]?.file).toBe('pkg/bar.py')
+  })
+
+  it('cross-dir tests/ mirror is neither a pair nor a witness', async () => {
+    const r = await siblingRules(
+      diffOf('pkg/foo.go', ['func f() {}']) +
+        diffOf('tests/test_foo.py', ['def test_f(): pass']) +
+        diffOf('pkg/bar.go', ['func b() {}']),
+    )
+    expect(siblingFindings(r)).toHaveLength(0)
+  })
+
+  it('stem-mates group with the source but never get flagged or witness', async () => {
+    for (const mate of [
+      'src/foo.gen.ts',
+      'src/foo.stories.ts',
+      'src/foo.e2e.ts',
+      'src/foo.test-d.ts',
+      'src/foo.d.ts',
+    ]) {
+      const r = await siblingRules(
+        diffOf('src/foo.ts', ['const f = 1']) + diffOf('src/foo.test.ts', ['test(f)']) + diffOf(mate, ['x']),
+      )
+      expect(siblingFindings(r), mate).toHaveLength(0)
+    }
+  })
+
+  it('.snap regeneration never covers its stem', async () => {
+    const r = await siblingRules(
+      diffOf('src/foo.ts', ['const f = 1']) +
+        diffOf('src/foo.test.ts', ['test(f)']) +
+        diffOf('src/bar.ts', ['const b = 1']) +
+        diffOf('src/bar.test.ts.snap', ['exports[`x`] = 1']),
+    )
+    expect(siblingFindings(r)[0]?.file).toBe('src/bar.ts')
+  })
+
+  it('__mocks__ and fixtures paths never cover or witness', async () => {
+    const mock = await siblingRules(
+      diffOf('src/foo.ts', ['const f = 1']) +
+        diffOf('src/__mocks__/foo.ts', ['export default {}']) +
+        diffOf('src/baz.ts', ['const b = 1']),
+    )
+    expect(siblingFindings(mock)).toHaveLength(0)
+
+    const fixture = await siblingRules(
+      diffOf('src/foo.ts', ['const f = 1']) +
+        diffOf('tests/fixtures/foo.test.ts', ['const fx = {}']) +
+        diffOf('src/baz.ts', ['const b = 1']),
+    )
+    expect(siblingFindings(fixture)).toHaveLength(0)
+  })
+
+  it('one finding names the highest added+removed-churn uncovered file', async () => {
+    const r = await siblingRules(
+      diffOf('src/w.ts', ['const w = 1']) +
+        diffOf('src/w.test.ts', ['test(w)']) +
+        diffOf('src/bulk.ts', Array.from({ length: 20 }, (_, i) => `const b${i} = ${i}`)) +
+        diffOf('src/refactor.ts', ['const r = 1'], Array.from({ length: 30 }, (_, i) => `const old${i} = ${i}`)),
+    )
+    const hits = siblingFindings(r)
+    expect(hits).toHaveLength(1)
+    expect(hits[0]?.file).toBe('src/refactor.ts')
+    expect(hits[0]?.message).toContain('2 source file(s)')
+    expect(r.records.filter((x) => x.rule === 'test-sibling')).toHaveLength(2)
+  })
+
+  it('a deleted test sibling does not cover its stem', async () => {
+    const deleted =
+      'diff --git a/src/foo.test.ts b/src/foo.test.ts\n' +
+      '--- a/src/foo.test.ts\n+++ /dev/null\n' +
+      '@@ -1,2 +0,0 @@\n-const a = 1\n-const b = 2\n'
+    const r = await siblingRules(
+      diffOf('src/foo.ts', ['const f = 1']) +
+        deleted +
+        diffOf('src/x.ts', ['const x = 1']) +
+        diffOf('src/x.test.ts', ['test(x)']),
+    )
+    expect(siblingFindings(r)[0]?.file).toBe('src/foo.ts')
+  })
+
+  it('a rename-only test section is invisible, same as missing-test', async () => {
+    const rename =
+      'diff --git a/src/foo.test.ts b/src/foo.test.ts\n' +
+      'similarity index 100%\nrename from src/foo.test.ts\nrename to src/foo.test.ts\n'
+    const r = await siblingRules(diffOf('src/foo.ts', ['const f = 1']) + rename)
+    expect(siblingFindings(r)).toHaveLength(0)
+  })
+
+  it('reports ran and honors the enabled filter', async () => {
+    const diff = diffOf('src/foo.ts', ['const f = 1'])
+    const on = await siblingRules(diff)
+    expect(on.ran).toEqual(['test-sibling'])
+    const off = await runRules(diff, { rules: [testSiblingRule], enabled: [] })
+    expect(off.ran).toEqual([])
+    expect(off.findings).toHaveLength(0)
+  })
+
+  it('a non-test source carrying a test affix cannot forge the witness', async () => {
+    // test_helpers.go is not a test file (isTestPath) and must keep its
+    // own stem — stripping test_ unconditionally would pair it with
+    // helpers_test.go and manufacture a witness out of nothing.
+    const r = await siblingRules(
+      diffOf('pkg/test_helpers.go', ['func h() {}']) +
+        diffOf('pkg/helpers_test.go', ['func TestH(t) {}']) +
+        diffOf('pkg/api.go', ['func a() {}']),
+    )
+    expect(siblingFindings(r)).toHaveLength(0)
+  })
+
+  it('a non-test affix source still pairs with its genuine test sibling', async () => {
+    const r = await siblingRules(
+      diffOf('pkg/test_helpers.go', ['func h() {}']) +
+        diffOf('pkg/test_helpers_test.go', ['func TestTH(t) {}']) +
+        diffOf('pkg/api.go', ['func a() {}']),
+    )
+    const hits = siblingFindings(r)
+    expect(hits).toHaveLength(1)
+    expect(hits[0]?.file).toBe('pkg/api.go')
+  })
+
+  it('.mock. and .fixture. infix files are stem-mates, never flagged', async () => {
+    for (const mate of ['src/api.mock.ts', 'src/api.fixture.ts']) {
+      const r = await siblingRules(
+        diffOf('src/w.ts', ['const w = 1']) +
+          diffOf('src/w.test.ts', ['test(w)']) +
+          diffOf(mate, Array.from({ length: 20 }, (_, i) => `const m${i} = ${i}`)) +
+          diffOf('src/other.ts', ['const o = 1']),
+      )
+      const hits = siblingFindings(r)
+      expect(hits, mate).toHaveLength(1)
+      expect(hits[0]?.file, mate).toBe('src/other.ts')
+    }
+  })
+
+  it('extension-mismatched siblings do not pair; the nit claim stays true', async () => {
+    // comp.test.ts keys as comp.ts — it does not cover comp.tsx. The
+    // surfaced claim is scoped to the stem group so it holds whether or
+    // not a differently-named sibling changed elsewhere in the diff.
+    const r = await siblingRules(
+      diffOf('src/w.ts', ['const w = 1']) +
+        diffOf('src/w.test.ts', ['test(w)']) +
+        diffOf('src/comp.test.ts', ['test(c)']) +
+        diffOf('src/comp.tsx', ['export const C = 1']),
+    )
+    const hits = siblingFindings(r)
+    expect(hits).toHaveLength(1)
+    expect(hits[0]?.file).toBe('src/comp.tsx')
+    expect(hits[0]?.message).toContain('no test file in its stem group gained an edit')
+  })
+
+  it('stays disjoint from missing-test under the default registry', async () => {
+    const r = await runRules(
+      diffOf('src/foo.ts', ['const f = 1']) + diffOf('src/bar.ts', ['const b = 1']),
+    )
+    expect(r.ran).toEqual(expect.arrayContaining(['missing-test', 'test-sibling']))
+    expect(r.findings.some((f) => f.rule === 'missing-test')).toBe(true)
+    expect(siblingFindings(r)).toHaveLength(0)
+  })
 })

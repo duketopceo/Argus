@@ -286,7 +286,12 @@
         "category": "Maintainability and Readability"
       }
     ],
-    "note": "AACR-Bench Go PR, 24 changed lines, 2 verified issues"
+    "note": "AACR-Bench Go PR, 24 changed lines, 2 verified issues",
+    "expect": {
+      "file": "api/types.go",
+      "adjudication": "legit",
+      "reason": "behavior-bearing: DefaultOptions().NumCtx now reads envconfig.ContextLength(); api/types_test.go untouched"
+    }
   },
   {
     "name": "aacr-elastic-elasticsearch-123744",

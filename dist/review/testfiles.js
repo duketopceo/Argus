@@ -8,6 +8,37 @@ const TEST_PATH = /(^|\/)(tests?|__tests__|__mocks__|spec|e2e)\/|\.(test|spec)\.
 export function isTestPath(path) {
     return TEST_PATH.test(path.replace(/^\.\//, ''));
 }
+/** Dirs whose files share the parent dir's namespace for sibling pairing. */
+const SIBLING_DIRS = new Set(['__tests__', '__snapshots__', '__mocks__']);
+/**
+ * testSiblingKey (U5): the stem-group key the test-sibling rule pairs
+ * on — `src/foo.test.ts`, `src/__tests__/foo.ts`, `pkg/foo_test.go`, and
+ * `src/foo.stories.ts` all share their source's key. The directory is
+ * preserved: `tests/test_foo.py` never pairs with `pkg/foo.go`, so
+ * mirror-tree layouts stay out of reach by design.
+ */
+export function testSiblingKey(path) {
+    const p = path.replace(/^\.\//, '');
+    const slash = p.lastIndexOf('/');
+    const dir = slash < 0 ? '' : p.slice(0, slash);
+    const base = slash < 0 ? p : p.slice(slash + 1);
+    const segs = dir === '' ? [] : dir.split('/').filter((s) => !SIBLING_DIRS.has(s));
+    let stem = base.replace(/\.snap$/, '');
+    // Chained affixes share the separator dot (`foo.spec.test.ts`) — one
+    // /g pass can't see the second affix, so strip to a fixpoint.
+    let prev = '';
+    while (prev !== stem) {
+        prev = stem;
+        stem = stem.replace(/\.(test|spec|test-d|stories|e2e|gen|generated|mock|fixture|fake|stub)\./g, '.');
+    }
+    // The suffix/prefix strips mirror isTestPath's language scoping:
+    // `_test` is a test convention in go/py/rb and `test_` only in .py —
+    // stripping them unconditionally would drop a non-test source like
+    // `pkg/test_helpers.go` into `pkg/helpers.go`'s group and forge a
+    // pairing witness for it.
+    stem = stem.replace(/_test(?=\.(?:go|py|rb)$)/, '').replace(/^test_(?=[^/]*\.py$)/, '');
+    return segs.length === 0 ? stem : `${segs.join('/')}/${stem}`;
+}
 const CAPPED = new Set(['bug', 'risk']);
 export function capTestFindings(findings, diffFiles) {
     const sourceFiles = diffFiles.filter((p) => !isTestPath(p));

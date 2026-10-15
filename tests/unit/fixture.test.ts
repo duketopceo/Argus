@@ -166,6 +166,56 @@ describe('code-review --fixture', () => {
     expect(client.calls).toHaveLength(1)
   })
 
+  it('unions the test-sibling nit when the diff proves colocated pairing', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'argus-fix-'))
+    // foo.ts + foo.test.ts change together (witness); bar.ts changes
+    // without bar.test.ts (uncovered) — the rule names bar.ts.
+    materializeFixture(
+      repo,
+      {
+        'src/foo.ts': 'export const foo = 1\n',
+        'src/foo.test.ts': 'import { foo } from "./foo"\nit("foo", () => {})\n',
+        'src/bar.ts': 'export const bar = 1\n',
+      },
+      {
+        'src/foo.ts': 'export const foo = 2\n',
+        'src/foo.test.ts': 'import { foo } from "./foo"\nit("foo", () => { expect(foo).toBe(2) })\n',
+        'src/bar.ts': 'export const bar = 2\nexport const baz = 3\n',
+      },
+    )
+    const cwd = await mkdtemp(join(tmpdir(), 'argus-fix-cwd-'))
+    const reportDir = join(cwd, 'report')
+    await writeFile(
+      join(cwd, 'argus-reviewer.config.json'),
+      JSON.stringify({ decisionModel: '', reportDir }),
+    )
+    const client = new StubClient([
+      {
+        content: JSON.stringify({ summary: 'clean', verdict: 'approve', findings: [] }),
+      },
+    ])
+    const code = await main(['code-review', '--fixture', repo, '--report-dir', reportDir], {
+      cwd,
+      env: { ...MIN_ENV, OPENROUTER_API_KEY: 'test-key' },
+      out: () => {},
+      err: () => {},
+      createClient: () => client,
+    })
+    expect(code).toBe(0)
+    const report = JSON.parse(await readFile(join(reportDir, 'code-review.json'), 'utf8'))
+    expect(report.rulesScan.ran).toContain('test-sibling')
+    expect(report.rulesScan.records).toContainEqual(
+      expect.objectContaining({ rule: 'test-sibling', file: 'src/bar.ts' }),
+    )
+    // The file-level nit unions into finalFindings — the model emitted none.
+    const nit = report.findings.find(
+      (f: { file?: string; category?: string }) =>
+        f.file === 'src/bar.ts' && f.category === 'testing',
+    )
+    expect(nit).toBeDefined()
+    expect(nit.line).toBeUndefined()
+  })
+
   it('round-trips suggestion + startLine into code-review.json', async () => {
     const repo = await mkdtemp(join(tmpdir(), 'argus-fix-'))
     materializeFixture(
