@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-15T16:59:39.827Z",
+  "at": "2026-10-15T17:17:44.737Z",
   "corpora": [
     "/home/lukekimball/Documents/github/personal/Argus/scripts/eval-corpus.test-sibling.json",
     "/home/lukekimball/Documents/github/personal/Argus/scripts/eval-corpus.dogfood.json",
@@ -20,8 +20,8 @@
       "mergeBase": "5a49bcc9ba7919f799e9602a0eb0beaf8931c56d",
       "filesChanged": 6,
       "testFilesInDiff": [
-        "g/mod_test.go",
-        "c/foo.test.ts"
+        "pkg/mod_test.go",
+        "src/foo.test.ts"
       ],
       "fired": true,
       "findings": [
@@ -66,8 +66,8 @@
       "mergeBase": "193837409244156d88801c3b30d044fd56a877a0",
       "filesChanged": 3,
       "testFilesInDiff": [
-        "sts/test_extract_json.py",
-        "sts/test_plan_parse_fault.py"
+        "tests/test_extract_json.py",
+        "tests/test_plan_parse_fault.py"
       ],
       "fired": false,
       "findings": [],
@@ -79,10 +79,10 @@
       "mergeBase": "67b520c409633bd17a900bb5bc801aecc45f7e21",
       "filesChanged": 16,
       "testFilesInDiff": [
-        "sts/test_act.py",
-        "sts/test_arena.py",
-        "sts/test_cube.py",
-        "sts/test_train.py"
+        "tests/test_act.py",
+        "tests/test_arena.py",
+        "tests/test_cube.py",
+        "tests/test_train.py"
       ],
       "fired": false,
       "findings": [],
@@ -104,7 +104,7 @@
       "mergeBase": "fc9a7e9f9a5bf0608745fb404f6c7fd078b64714",
       "filesChanged": 2,
       "testFilesInDiff": [
-        "gine/nativestore_test.go"
+        "engine/nativestore_test.go"
       ],
       "fired": false,
       "findings": [],
@@ -116,7 +116,11 @@
       "mergeBase": "c1cf3d5393b8ca120a6548d128e0adb323289e4b",
       "filesChanged": 21,
       "testFilesInDiff": [
-        "gine/panel_carry_test.go"
+        "engine/panel_carry_test.go",
+        "tests/ui/fit-completions.qml",
+        "tests/ui/fit.qml",
+        "tests/ui/verify-completions.py",
+        "tests/ui/verify-fit.py"
       ],
       "fired": false,
       "findings": [],
@@ -128,13 +132,13 @@
       "mergeBase": "4e56a35ba99b9d37902f40f524955125d544737d",
       "filesChanged": 46,
       "testFilesInDiff": [
-        "sts/test_agents.py",
-        "sts/test_apply_surface_migration.py",
-        "sts/test_connections.py",
-        "sts/test_manifests.py",
-        "sts/test_release_readiness.py",
-        "sts/test_retirement.py",
-        "sts/test_ticker_stats.py"
+        "tests/test_agents.py",
+        "tests/test_apply_surface_migration.py",
+        "tests/test_connections.py",
+        "tests/test_manifests.py",
+        "tests/test_release_readiness.py",
+        "tests/test_retirement.py",
+        "tests/test_ticker_stats.py"
       ],
       "fired": false,
       "findings": [],
@@ -146,8 +150,8 @@
       "mergeBase": "0caf9fe0fca3eb2ff53f982807c0ce72d494cb5a",
       "filesChanged": 12,
       "testFilesInDiff": [
-        "sts/unit/no-emoji.test.ts",
-        "sts/unit/scan.test.ts"
+        "tests/unit/no-emoji.test.ts",
+        "tests/unit/scan.test.ts"
       ],
       "fired": false,
       "findings": [],
@@ -159,8 +163,8 @@
       "mergeBase": "b9c19a458760872d1f9421f8ed1164b65c917212",
       "filesChanged": 15,
       "testFilesInDiff": [
-        "p/worker/test/auth.test.ts",
-        "p/worker/test/webhook.test.ts"
+        "app/worker/test/auth.test.ts",
+        "app/worker/test/webhook.test.ts"
       ],
       "fired": false,
       "findings": [],
@@ -182,11 +186,11 @@
       "mergeBase": "ac875d1b681fef0baf9a8c76a5d8a6218bf1050e",
       "filesChanged": 43,
       "testFilesInDiff": [
-        "sts/unit/config.test.ts",
-        "sts/unit/evidence.test.ts",
-        "sts/unit/probe-author.test.ts",
-        "sts/unit/probe-queue.test.ts",
-        "sts/unit/sandbox.test.ts"
+        "tests/unit/config.test.ts",
+        "tests/unit/evidence.test.ts",
+        "tests/unit/probe-author.test.ts",
+        "tests/unit/probe-queue.test.ts",
+        "tests/unit/sandbox.test.ts"
       ],
       "fired": false,
       "findings": [],
@@ -218,7 +222,7 @@
       "mergeBase": "27887be6438ad284566073835939210edc4cdeb8",
       "filesChanged": 9,
       "testFilesInDiff": [
-        "sts/unit/cli.test.ts"
+        "tests/unit/cli.test.ts"
       ],
       "fired": false,
       "findings": [],
@@ -240,8 +244,8 @@
       "mergeBase": "33e6be0b1f22339249e284bd29a535b9b10ee0ea",
       "filesChanged": 28,
       "testFilesInDiff": [
-        "sts/test_docs_lint.py",
-        "sts/test_readme_media.py"
+        "tests/test_docs_lint.py",
+        "tests/test_readme_media.py"
       ],
       "fired": false,
       "findings": [],
@@ -253,27 +257,27 @@
       "mergeBase": "3ed703ee57b505177d193ffa2cb26f12a43f10dc",
       "filesChanged": 54,
       "testFilesInDiff": [
-        "sts/unit/action-contract.test.ts",
-        "sts/unit/brand-assets.test.ts",
-        "sts/unit/cli-errors.test.ts",
-        "sts/unit/cli-style.test.ts",
-        "sts/unit/collect.test.ts",
-        "sts/unit/comment-golden.test.ts",
-        "sts/unit/comment.test.ts",
-        "sts/unit/dashboard-view-model.test.ts",
-        "sts/unit/evidence.test.ts",
-        "sts/unit/glyph-vocabulary.test.ts",
-        "sts/unit/head-binding.test.ts",
-        "sts/unit/index-context.test.ts",
-        "sts/unit/indexer.test.ts",
-        "sts/unit/invalidate.test.ts",
-        "sts/unit/junit.test.ts",
-        "sts/unit/pipeline.test.ts",
-        "sts/unit/probe-generate.test.ts",
-        "sts/unit/probe-queue.test.ts",
-        "sts/unit/report-html.test.ts",
-        "sts/unit/scan.test.ts",
-        "sts/unit/tui-render.test.ts"
+        "tests/unit/action-contract.test.ts",
+        "tests/unit/brand-assets.test.ts",
+        "tests/unit/cli-errors.test.ts",
+        "tests/unit/cli-style.test.ts",
+        "tests/unit/collect.test.ts",
+        "tests/unit/comment-golden.test.ts",
+        "tests/unit/comment.test.ts",
+        "tests/unit/dashboard-view-model.test.ts",
+        "tests/unit/evidence.test.ts",
+        "tests/unit/glyph-vocabulary.test.ts",
+        "tests/unit/head-binding.test.ts",
+        "tests/unit/index-context.test.ts",
+        "tests/unit/indexer.test.ts",
+        "tests/unit/invalidate.test.ts",
+        "tests/unit/junit.test.ts",
+        "tests/unit/pipeline.test.ts",
+        "tests/unit/probe-generate.test.ts",
+        "tests/unit/probe-queue.test.ts",
+        "tests/unit/report-html.test.ts",
+        "tests/unit/scan.test.ts",
+        "tests/unit/tui-render.test.ts"
       ],
       "fired": false,
       "findings": [],
@@ -365,8 +369,8 @@
       "mergeBase": "ed443a03930a10bec6182c55091f0880baa1e620",
       "filesChanged": 4,
       "testFilesInDiff": [
-        "vconfig/config_test.go",
-        "m/memory_test.go"
+        "envconfig/config_test.go",
+        "llm/memory_test.go"
       ],
       "fired": true,
       "findings": [
@@ -413,8 +417,8 @@
     "note": "synthetic row + aacr-ollama-8938 both fired on sibling-exists sources whose surfaced claim is literally true; the only no-sibling class appears as an audit record on the synthetic row (pkg/other.go), never as a surfaced finding"
   },
   "coverage": {
-    "testTouchingRows": 10,
-    "mirrorTreeSilence": "8 of 10 real test-touching diffs (all dogfood + argus rows, plus clean-wisp-101 and clean-large-rename) produced no witness and no firing - every consumer repo in the corpus uses mirror-tree tests, so the designed FP-avoidance is measured, not assumed",
+    "testTouchingRows": 13,
+    "mirrorTreeSilence": "real test-touching diffs that produced no witness and no firing (all dogfood + argus rows, plus clean-wisp-101 and clean-large-rename) - every consumer repo in the corpus uses mirror-tree tests, so the designed FP-avoidance is measured, not assumed",
     "unmeasured": "colocate-convention repos other than ollama; FP classes (legit-but-unneeded, cross-subsystem bleed) have corpus evidence only from the synthetic row"
   }
 }

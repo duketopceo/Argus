@@ -412,7 +412,9 @@ const missingTestRule = {
  */
 const TEST_COVER_EXCLUDE_RE = /(^|\/)(__mocks__|fixtures)\//;
 const SIBLING_MATE_RE = /\.(?:gen|generated|stories|e2e|test-d)\.|\.d\.ts$/;
-const isTestCoverPath = (file) => isTestPath(file) && !file.endsWith('.snap') && !TEST_COVER_EXCLUDE_RE.test(file);
+/** R5 coverage predicate — exported so the eval gate's tree classifier
+ *  reads the same semantics the rule applies to the diff. */
+export const isTestCoverPath = (file) => isTestPath(file) && !file.endsWith('.snap') && !TEST_COVER_EXCLUDE_RE.test(file);
 export const testSiblingRule = {
     id: 'test-sibling',
     description: 'sources whose test sibling stayed untouched beside a paired-test change get one file-level nit',
@@ -420,23 +422,32 @@ export const testSiblingRule = {
         const coveredKeys = new Set();
         // Candidacy needs an add (the added-line surface both coverage rules
         // share — a del-only file is invisible); churn counts every add+del
-        // per file regardless of interleave order.
+        // per file regardless of interleave order. Classification is a pure
+        // function of the path, so it memoizes per file rather than per line.
         const churn = new Map();
         const candidates = new Map();
+        const meta = new Map();
+        const metaFor = (file) => {
+            let m = meta.get(file);
+            if (m === undefined) {
+                const cover = isTestCoverPath(file);
+                const cand = isEligibleSourcePath(file) && !isTestPath(file) && !SIBLING_MATE_RE.test(file);
+                m = { key: cover || cand ? testSiblingKey(file) : '', cover, cand };
+                meta.set(file, m);
+            }
+            return m;
+        };
         for (const l of diffLines(diff)) {
             if (l.kind === 'ctx')
                 continue;
             churn.set(l.file, (churn.get(l.file) ?? 0) + 1);
             if (l.kind !== 'add')
                 continue;
-            if (isTestCoverPath(l.file)) {
-                coveredKeys.add(testSiblingKey(l.file));
-            }
-            else if (isEligibleSourcePath(l.file) &&
-                !isTestPath(l.file) &&
-                !SIBLING_MATE_RE.test(l.file)) {
-                candidates.set(l.file, testSiblingKey(l.file));
-            }
+            const m = metaFor(l.file);
+            if (m.cover)
+                coveredKeys.add(m.key);
+            else if (m.cand)
+                candidates.set(l.file, m.key);
         }
         const uncovered = [];
         let witness = false;

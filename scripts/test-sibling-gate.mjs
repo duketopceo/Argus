@@ -16,32 +16,41 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { git, mergeBase, resolveRepo } from './review-eval.mjs'
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
 
-const { REVIEW_RULES, runRules, testSiblingRule } = await import(
+const { REVIEW_RULES, isTestCoverPath, runRules, testSiblingRule } = await import(
   new URL('../dist/review/rules.js', import.meta.url).href
 )
-const { isTestPath, testSiblingKey } = await import(
+const { testSiblingKey } = await import(
   new URL('../dist/review/testfiles.js', import.meta.url).href
 )
 const { GIT_DIFF_PATH_FLAGS } = await import(
   new URL('../dist/review/difftext.js', import.meta.url).href
 )
+const { filesFromUnifiedDiff } = await import(
+  new URL('../dist/cli.js', import.meta.url).href
+)
 
-// R5's coverage predicate, mirrored — a snapshot/mocks/fixtures path is
-// not a genuine test member in the tree either.
-const coverPath = (p) =>
-  isTestPath(p) && !p.endsWith('.snap') && !/(^|\/)(__mocks__|fixtures)\//.test(p)
+// Inject the rule only when the checked-out registry predates
+// registration — a duplicate entry would double-fire and corrupt the
+// artifact. The gate measures only the rule, so `enabled` scopes the run.
+const REGISTRY = REVIEW_RULES.some((r) => r.id === 'test-sibling')
+  ? REVIEW_RULES
+  : [...REVIEW_RULES, testSiblingRule]
 
-// Classify one uncovered source against the head tree: legit-gap when a
-// genuine test member shares its stem key, no-sibling otherwise.
+// Classify uncovered sources against the head tree: sibling-exists when
+// a genuine test member shares the stem key, no-sibling otherwise. Stem
+// groups are same-directory modulo the sibling dirs, so every group
+// member lives under the candidate's own dir — the ls-tree pathspec
+// scopes the read to exactly those dirs ('.' = repo root).
 function classifyUncovered(repo, head, uncovered) {
+  const dirs = [...new Set(uncovered.map((f) => dirname(f)))]
   const groups = new Map()
-  for (const p of git(repo, ['ls-tree', '-r', '--name-only', head]).split('\n')) {
+  for (const p of git(repo, ['ls-tree', '-r', '--name-only', head, '--', ...dirs]).split('\n')) {
     if (p === '') continue
     const key = testSiblingKey(p)
     const g = groups.get(key) ?? []
@@ -52,7 +61,7 @@ function classifyUncovered(repo, head, uncovered) {
     const members = groups.get(testSiblingKey(file)) ?? []
     return {
       file,
-      class: members.some(coverPath) ? 'sibling-exists' : 'no-sibling',
+      class: members.some(isTestCoverPath) ? 'sibling-exists' : 'no-sibling',
       groupMembers: members,
     }
   })
@@ -63,16 +72,11 @@ async function gateRow(entry, cacheDir) {
   const mb = mergeBase(repo, entry.base, entry.head)
   if (mb === '') throw new Error(`no merge-base for ${entry.name}`)
   const diff = git(repo, [...GIT_DIFF_PATH_FLAGS, 'diff', `${mb}..${entry.head}`])
-  // Inject the rule only when it predates registration — a duplicate
-  // registry entry would double-fire and corrupt the artifact.
-  const registry = REVIEW_RULES.some((r) => r.id === 'test-sibling')
-    ? REVIEW_RULES
-    : [...REVIEW_RULES, testSiblingRule]
-  const result = await runRules(diff, { rules: [...registry] })
-  const records = result.records.filter((r) => r.rule === 'test-sibling')
-  const findings = result.findings.filter((f) => f.rule === 'test-sibling')
-  const filesChanged = [...new Set(diff.match(/^diff --git a\/(\S+)/gm)?.map((l) => l.slice(15)) ?? [])]
-  const testFilesInDiff = filesChanged.filter((f) => coverPath(f))
+  const result = await runRules(diff, { rules: REGISTRY, enabled: ['test-sibling'] })
+  const records = result.records
+  const findings = result.findings
+  const filesChanged = [...new Set(filesFromUnifiedDiff(diff).map((f) => f.filename))]
+  const testFilesInDiff = filesChanged.filter(isTestCoverPath)
   const row = {
     name: entry.name,
     note: entry.note,
@@ -132,7 +136,7 @@ const tally = {
   noSibling: fired.flatMap((r) => r.classification ?? []).filter((c) => c.class === 'no-sibling')
     .length,
 }
-mkdirSync(join(out, '..'), { recursive: true })
+mkdirSync(dirname(out), { recursive: true })
 writeFileSync(
   out,
   JSON.stringify(
