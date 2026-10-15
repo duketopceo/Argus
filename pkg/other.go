@@ -1,0 +1,2 @@
+package pkg
+func Other() int { return 1 }
