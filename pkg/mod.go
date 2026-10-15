@@ -1,2 +1,2 @@
 package pkg
-func Mod() int { return 1 }
+func Mod() int { return 2 }

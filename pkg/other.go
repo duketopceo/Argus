@@ -1,2 +1,2 @@
 package pkg
-func Other() int { return 1 }
+func Other() int { return 2 }
