@@ -1,7 +1,7 @@
 # Brand asset licensing
 
 The files under `assets/brand/src/` and `assets/brand/export/` are drawn for
-this project and released under the repository's MIT license (`LICENSE`).
+this project and released under the repository's license (`LICENSE`, AGPL-3.0-only).
 
 The wordmark is "argus" set in Martian Mono (wdth 87.5, wght 560, tracking
 -1%), outlined to paths, with the `g` counter moved by hand. Martian Mono is
