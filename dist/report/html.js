@@ -439,12 +439,12 @@ function ledgerSection(c) {
     const models = byModel(c);
     const over = rows.filter((r) => r.exceeded);
     return `<section id="ledger" aria-labelledby="ledger-h">${h}
-<div class="scroll"><table class="ledger"><thead><tr><th scope="col">Lane</th><th scope="col">Model</th><th scope="col" class="num">Calls</th><th scope="col" class="num">Tokens</th><th scope="col" class="num">Spend</th><th scope="col">Budget</th></tr></thead>
+<div class="scroll" tabindex="0" role="region" aria-label="Spend ledger by lane"><table class="ledger"><thead><tr><th scope="col">Lane</th><th scope="col">Model</th><th scope="col" class="num">Calls</th><th scope="col" class="num">Tokens</th><th scope="col" class="num">Spend</th><th scope="col">Budget</th></tr></thead>
 <tbody>${body}</tbody>
 <tfoot><tr><th scope="row">Total</th><td></td><td class="num">${m.aggregate.calls}</td><td class="num">${m.aggregate.tokens.toLocaleString('en-US')}</td><td class="num">${usdTotal(m.aggregate.costUsd)}</td><td></td></tr></tfoot></table></div>
 ${over.length > 0 ? `<p class="banner t-failed">${glyph('status-failed')}<span>Budget exceeded: ${over.map((r) => r.lane).join(', ')}</span></p>` : ''}
 ${models.length > 0
-        ? `<h3>By model</h3><div class="scroll"><table class="ledger"><thead><tr><th scope="col">Model</th><th scope="col" class="num">Calls</th><th scope="col" class="num">Spend</th></tr></thead><tbody>${models
+        ? `<h3>By model</h3><div class="scroll" tabindex="0" role="region" aria-label="Spend by model"><table class="ledger"><thead><tr><th scope="col">Model</th><th scope="col" class="num">Calls</th><th scope="col" class="num">Spend</th></tr></thead><tbody>${models
             .map(([k, n, cost]) => `<tr><td><code>${esc(k)}</code></td><td class="num">${n}</td><td class="num">${formatUsd(cost)}</td></tr>`)
             .join('')}</tbody></table></div>`
         : ''}
@@ -669,6 +669,7 @@ h3 { font: 600 13px/19px var(--sans); color: var(--ink-2); margin: 24px 0 8px; }
 .cmd { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; background: var(--sunk); border-radius: var(--argus-radius-sm); }
 
 .scroll { overflow-x: auto; }
+.scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ledger { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 19px; }
 .ledger th, .ledger td { text-align: left; padding: 6px 12px 6px 0; border-bottom: 1px solid var(--hairline); white-space: nowrap; vertical-align: middle; }
 .ledger thead th { font: 500 12px/16px var(--sans); color: var(--ink-3); }
@@ -678,7 +679,7 @@ h3 { font: 600 13px/19px var(--sans); color: var(--ink-2); margin: 24px 0 8px; }
 .ledger code { font-size: 12px; line-height: 16px; }
 .tally { display: inline-flex; align-items: center; gap: 8px; }
 .ticks { display: inline-flex; gap: 2px; }
-.ticks i { width: 3px; height: 10px; border-radius: 1px; box-shadow: inset 0 0 0 1px var(--hairline); }
+.ticks i { width: 3px; height: 10px; border-radius: 1px; box-shadow: inset 0 0 0 1px var(--control); }
 .ticks i.on { background: currentColor; box-shadow: none; }
 .tally .data { color: var(--ink-2); font-size: 12px; line-height: 16px; }
 
