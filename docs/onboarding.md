@@ -15,7 +15,7 @@ Plain `argus-reviewer init` (writes the files into your working tree) remains th
 Run from a checkout of the repository you want to onboard. You need `git` and the GitHub CLI, authenticated (`gh auth login`).
 
 ```bash
-npx argus-reviewer init --pr
+npx -p argus-reviewer-e2e argus-reviewer init --pr
 ```
 
 Options:
