@@ -77,8 +77,10 @@ settings page.
    ```
 
    Print the JSON instead by leaving out `--html`. It contains the name, the
-   webhook URL `<worker>/webhook`, `default_events` of `installation` and
-   `installation_repositories`, and the four permissions above.
+   webhook URL `<worker>/webhook`, and the four permissions above. The manifest
+   declares no `default_events` — `installation` and
+   `installation_repositories` are implicit App events that GitHub delivers to
+   every App and rejects if listed in the manifest.
 2. Open `register.html` in your browser, continue to GitHub, and click
    **Create GitHub App**. GitHub then redirects to
    `http://localhost:3000/argus-registered?code=...`. Nothing needs to listen

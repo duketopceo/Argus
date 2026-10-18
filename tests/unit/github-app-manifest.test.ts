@@ -11,8 +11,8 @@ const ROOT = join(import.meta.dirname, '../..')
 describe('GitHub App manifest (U7)', () => {
   const m = buildManifest({ workerUrl: 'https://argus.example.com/' })
 
-  it('subscribes only to installation events and points at <worker>/webhook', () => {
-    expect(m.default_events).toEqual(['installation', 'installation_repositories'])
+  it('declares no default_events (installation events are implicit) and points at <worker>/webhook', () => {
+    expect(m.default_events).toEqual([])
     expect(m.hook_attributes).toEqual({ url: 'https://argus.example.com/webhook', active: true })
     expect(m.public).toBe(false)
   })
