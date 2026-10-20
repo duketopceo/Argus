@@ -143,6 +143,8 @@ describe('code-review org caps', () => {
       head: { 'src/a.ts': 'a\n' },
       client,
       config: { spendJournalDir: journalDir, budgetCaps: { dailyUsd: 0.5 } },
+      // '' clears the suite-wide MIN_ENV journal dir so the config path is exercised.
+      env: { ARGUS_SPEND_JOURNAL_DIR: '' },
     })
     expect(result.code).toBe(0)
     expect(result.report.skipped).toBe(true)
@@ -171,6 +173,7 @@ describe('code-review org caps', () => {
       head: { 'src/a.ts': 'a\n' },
       client,
       config: { spendJournalDir: journalDir, budgetCaps: { dailyUsd: 0.05 } },
+      env: { ARGUS_SPEND_JOURNAL_DIR: '' },
     })
     expect(result.report.skipped).not.toBe(true)
     expect(result.err.some((l) => l.includes('org daily spend'))).toBe(true)
@@ -184,6 +187,7 @@ describe('code-review org caps', () => {
       head: { 'src/a.ts': 'a\n' },
       client,
       config: { spendJournalDir: journalDir },
+      env: { ARGUS_SPEND_JOURNAL_DIR: '' },
     })
     expect(result.code).toBe(0)
     expect(existsSync(spendJournalPath(journalDir))).toBe(true)

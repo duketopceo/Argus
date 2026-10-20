@@ -11,7 +11,7 @@ import { colorEnabled, createStyler, ROLE_SGR, STATUS_SGR } from '../../src/ui/s
 import { renderSummary, verifySummary } from '../../src/ui/summary.js'
 import { fixtureManifest } from '../fixtures/manifest.js'
 
-const MIN_ENV = { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' }
+const MIN_ENV = { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ARGUS_SPEND_JOURNAL_DIR: join(tmpdir(), 'argus-test-spend-journal') }
 const ESC = '\x1b['
 
 function capture(): { lines: string[]; fn: (line: string) => void } {
