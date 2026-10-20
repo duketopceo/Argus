@@ -33,22 +33,27 @@ verdict can count as an approving review. Keep them separate.
 
 ## 1. Choose the Worker URL
 
-`wrangler.toml` ships with `workers_dev = false` and no route, so a plain
-deploy has no public URL. Pick one of these before you register the App:
+`wrangler.toml` ships with `workers_dev = false` and a `routes` entry that binds
+the hosted App's own host, `api-argus.shippedit.dev`. A plain deploy of an
+unmodified copy therefore fails on the route, because your token cannot manage
+that zone — that is deliberate. Replace the route before you deploy:
 
-- **Route on your own zone (recommended).** Add this to
-  `app/worker/wrangler.toml`, with a hostname on a zone in your Cloudflare
-  account:
+- **Route on your own zone (recommended).** Change the `routes` entry to a
+  hostname on a zone in your Cloudflare account:
 
   ```toml
   routes = [{ pattern = "argus.example.com/webhook", zone_name = "example.com" }]
   ```
 
   The webhook URL is then `https://argus.example.com/webhook`.
-- **`workers.dev`.** Set `workers_dev = true`. The URL is
-  `https://argus-app-worker.<your-subdomain>.workers.dev`. Do this only if you
-  accept a public, guessable hostname. Forged requests still get a 401, but you
-  lose the zone's WAF rate rules.
+- **`workers.dev`.** Delete the `routes` entry and set `workers_dev = true`. The
+  URL is `https://argus-app-worker.<your-subdomain>.workers.dev`. Do this only if
+  you accept a public, guessable hostname. Forged requests still get a 401, but
+  you lose the zone's WAF rate rules.
+
+The hosted deployment does not use `workers.dev` at all: the App posts to
+`https://api-argus.shippedit.dev/webhook`, and the workers.dev origin is
+disabled in config so a redeploy cannot re-publish it.
 
 Requests to any path other than `/webhook` get a 404.
 
