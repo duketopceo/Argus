@@ -134,6 +134,7 @@ const defaults = {
         batchModel: undefined,
         requestTimeoutMs: DEFAULT_REQUEST_TIMEOUT_MS,
         generateTests: { enabled: false, maxSpecs: 3, budgetUsd: undefined },
+        repoTools: false,
     },
 };
 export function defineConfig(input) {
@@ -321,6 +322,7 @@ export function resolveConfig(input = {}) {
     // else (mis-typed values included) keeps the default-true posture.
     review.requestChanges = review.requestChanges !== false;
     review.nitsInline = review.nitsInline === true;
+    review.repoTools = review.repoTools === true;
     // Unknown profile names are rejected at config load — a typo silently
     // disabling a lens is worse than dropping it. Non-array input means the
     // field was mis-typed entirely and also drops to the empty default.

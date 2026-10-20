@@ -10,13 +10,53 @@ interface ImageContentPart {
 }
 type ContentPart = TextContentPart | ImageContentPart;
 export interface Message {
-    role: 'user' | 'system' | 'assistant';
+    role: 'user' | 'system' | 'assistant' | 'tool';
     content: ContentPart[];
+    /** Assistant-outbound tool calls (U9 repo-context tools). */
+    toolCalls?: {
+        id: string;
+        name: string;
+        arguments: string;
+    }[];
+    /** Tool-response messages carry the call id they answer. */
+    toolCallId?: string;
 }
 export interface JsonSchema {
     name: string;
     schema: Record<string, unknown>;
     strict?: boolean;
+}
+/**
+ * A read-only tool the model may call mid-completion (U9). `run` executes
+ * the call and returns the text the model sees — implementers gate and
+ * bound the read; this client only routes.
+ */
+export interface ToolSpec {
+    name: string;
+    description: string;
+    /** JSON-schema object describing the arguments. */
+    parameters: Record<string, unknown>;
+}
+/** One executed tool call, recorded for the report's `toolUse` transcript. */
+export interface ToolCallRecord {
+    name: string;
+    /** Parsed arguments as sent (already masked by the caller's executor). */
+    args: Record<string, unknown>;
+    ok: boolean;
+    /** Result text the model saw (executor-masked, excerpt-safe). */
+    result: string;
+    round: number;
+}
+export interface ToolLoopResult {
+    id: string;
+    content: string;
+    /** Every round's CallCost, in order — the caller ledgers each. */
+    costs: CallCost[];
+    model: string;
+    toolCalls: ToolCallRecord[];
+    rounds: number;
+    /** Why the loop stopped asking: 'budget' or 'rounds' (undefined = answered). */
+    abortReason?: 'budget' | 'rounds';
 }
 /** One request inside an async batch; `customId` maps the result back. */
 export interface BatchRequest {
@@ -83,6 +123,27 @@ export declare class OpenRouterClient {
         cost: CallCost;
         model: string;
     }>;
+    /**
+     * Opt-in tool-call loop (U9): like `complete` — same candidate escalation,
+     * per-request timeout and onCall tap — but when the model answers with
+     * `tool_calls` the caller's `execute` runs them and the results feed back
+     * as `role: 'tool'` messages. Bounded by `maxRounds`; `canSpend` is checked
+     * between rounds — false forces a final tool-free answer (degrade to
+     * gathered context) instead of burning budget on more reads. Tool results
+     * that error are returned to the model as text, never thrown.
+     */
+    completeWithTools(opts: {
+        model: string;
+        messages: Message[];
+        schema?: JsonSchema;
+        escalationModels?: string[];
+        provider?: ProviderRules;
+        kind?: CallKind;
+        tools: ToolSpec[];
+        execute: (name: string, args: Record<string, unknown>) => Promise<string>;
+        maxRounds?: number;
+        canSpend?: (spentUsd: number) => boolean;
+    }): Promise<ToolLoopResult>;
     /**
      * Async Batch API: submit every request in one POST, poll until a terminal
      * status, and map the inline results back by `custom_id`. Throws when the

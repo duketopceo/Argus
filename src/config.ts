@@ -388,6 +388,14 @@ export interface Config {
       maxSpecs: number
       budgetUsd: number | undefined
     }
+    /**
+     * U9 — let the review model call read-only, index-gated repo-context
+     * tools (`read_file`, `search_index`, `find_tests_for`) mid-review.
+     * Default false — opt-in; needs a `argus.index.json` to gate reads
+     * against and is trusted-only in effect (`review` is not on the
+     * untrusted-config allowlist).
+     */
+    repoTools: boolean
   }
 }
 
@@ -547,6 +555,7 @@ const defaults: Config = {
     batchModel: undefined,
     requestTimeoutMs: DEFAULT_REQUEST_TIMEOUT_MS,
     generateTests: { enabled: false, maxSpecs: 3, budgetUsd: undefined },
+    repoTools: false,
   },
 }
 
@@ -749,6 +758,7 @@ export function resolveConfig(input: ConfigInput = {}): Config {
   // else (mis-typed values included) keeps the default-true posture.
   review.requestChanges = review.requestChanges !== false
   review.nitsInline = review.nitsInline === true
+  review.repoTools = review.repoTools === true
   // Unknown profile names are rejected at config load — a typo silently
   // disabling a lens is worse than dropping it. Non-array input means the
   // field was mis-typed entirely and also drops to the empty default.

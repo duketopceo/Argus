@@ -385,6 +385,14 @@ export interface Config {
             maxSpecs: number;
             budgetUsd: number | undefined;
         };
+        /**
+         * U9 — let the review model call read-only, index-gated repo-context
+         * tools (`read_file`, `search_index`, `find_tests_for`) mid-review.
+         * Default false — opt-in; needs a `argus.index.json` to gate reads
+         * against and is trusted-only in effect (`review` is not on the
+         * untrusted-config allowlist).
+         */
+        repoTools: boolean;
     };
 }
 export declare const DEFAULT_REQUEST_TIMEOUT_MS = 120000;

@@ -7,6 +7,20 @@ import { describeDecisionError, isNoulAnswer, MAX_CANDIDATES, } from '../vision/
 // paths (tests, lanes) keep resolving.
 export { MAX_CANDIDATES } from '../vision/decisions.js';
 const DEFAULT_SECRETS_THRESHOLD = 0.3;
+/**
+ * Mask every secret-shaped literal in `text` with `***` — the secrets-lane
+ * contract applied to arbitrary tool/model-bound content (tool transcripts,
+ * R9). Conservative: any pattern's matched literal is replaced wherever it
+ * appears, so a credential in a fetched file never reaches a report field.
+ */
+export function maskSecretLiterals(text) {
+    let out = text;
+    for (const { re, group } of PATTERNS) {
+        const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : `g${re.flags}`);
+        out = out.replace(g, (m, ...args) => m.replace(group !== undefined ? String(args[group - 1] ?? m) : m, '***'));
+    }
+    return out;
+}
 const PATTERNS = [
     {
         cls: 'private-key',
