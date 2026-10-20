@@ -227,15 +227,19 @@ async function resolveReportDir(root) {
   if (cached !== undefined && cached.key === key) return cached.dir
   let dir
   let budgetUsd
+  let budgetCaps
+  let spendJournalDir
   try {
     const { loadConfig } = await import(new URL('../dist/config.js', import.meta.url).href)
     const cfg = await loadConfig(root, { trust: 'trusted' })
     dir = cfg.reportDir ? resolve(root, cfg.reportDir) : join(root, 'argus-reviewer-report')
     budgetUsd = Number.isFinite(cfg.budgetUsd) ? cfg.budgetUsd : undefined
+    budgetCaps = cfg.budgetCaps
+    spendJournalDir = cfg.spendJournalDir
   } catch {
     dir = join(root, 'argus-reviewer-report')
   }
-  _reportDir.set(root, { key, dir, budgetUsd })
+  _reportDir.set(root, { key, dir, budgetUsd, budgetCaps, spendJournalDir })
   return dir
 }
 
@@ -402,10 +406,13 @@ async function collectNow(root) {
     },
     // Typed per-source state: `gh` can be ok, missing, unauthenticated or
     // error, so an empty PR list is never mistaken for "none open".
-    sources: { gh: { state: 'ok' }, journal: { state: 'ok' }, runners: { state: 'ok' } },
+    sources: { gh: { state: 'ok' }, journal: { state: 'ok' }, runners: { state: 'ok' }, spendOrg: { state: 'ok' } },
     // Self-hosted runner inventory + queue depth for the desk Runners panel
     // (issue #21). Repo scope only — org-level runners are not visible here.
     runners: { runners: [], queued: 0, inProgress: 0 },
+    // Host-shared spend journal totals vs org period caps (issue #22).
+    // Scope is this host, not this repo — the desk labels it that way.
+    spendOrg: undefined,
     // Healed steps from recent journals, newest first (desk Heals view).
     heals: [],
     // Whether a model key is set (never its value): the desk shows the
@@ -470,6 +477,37 @@ async function collectNow(root) {
       }
     } catch (e) {
       state.sources.runners = ghSourceState(e)
+    }
+  }
+
+  const spendOrgSection = async () => {
+    // Reads <home>/.argus/spend.ndjson (or the configured/env override) via
+    // the same dist module the CLI writes through — one format, one math.
+    try {
+      await resolveReportDir(root)
+      const entry = _reportDir.get(root)
+      const { periodSpend, resolveJournalDir, resolveBudgetCaps, evaluateCaps } = await import(
+        new URL('../dist/spend.js', import.meta.url).href
+      )
+      const dir = resolveJournalDir(entry?.spendJournalDir, process.env)
+      const caps = resolveBudgetCaps(entry?.budgetCaps, process.env, () => {})
+      const spend = periodSpend(dir)
+      const verdict = caps !== undefined ? evaluateCaps(caps, spend) : undefined
+      state.spendOrg = {
+        dayUsd: spend.dayUsd,
+        monthUsd: spend.monthUsd,
+        corrupt: spend.corrupt,
+        readError: spend.readError,
+        ...(caps !== undefined
+          ? {
+              caps: { dailyUsd: caps.dailyUsd, monthlyUsd: caps.monthlyUsd, alertAtPct: caps.alertAtPct },
+              stop: verdict?.stop,
+              alerts: verdict?.alerts ?? [],
+            }
+          : {}),
+      }
+    } catch (e) {
+      state.sources.spendOrg = { state: 'error', detail: safe(e?.message ?? 'spend read failed') }
     }
   }
 
@@ -585,7 +623,7 @@ async function collectNow(root) {
     state.budgetUsd = await configBudget(root)
   }
 
-  await Promise.all([ghSection(), runnersSection(), fileSections(), reviewSection(), budgetSection()])
+  await Promise.all([ghSection(), runnersSection(), spendOrgSection(), fileSections(), reviewSection(), budgetSection()])
   state.workspace = await workspaceP
   return state
 }
