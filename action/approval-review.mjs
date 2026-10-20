@@ -26,7 +26,19 @@ import sticky from './sticky-comment.cjs'
 
 const { STATUS_GLYPH, VERDICT_STATUS, VERDICT_LABEL } = sticky
 
-const GH_API = 'https://api.github.com'
+// GitHub host — github.com by default, GHE via the runner-provided env
+// (GITHUB_API_URL/GITHUB_SERVER_URL). `gh` needs GH_HOST to reach GHE.
+const GH_API = process.env.GITHUB_API_URL || 'https://api.github.com'
+const GH_SERVER = process.env.GITHUB_SERVER_URL || 'https://github.com'
+const GH_HOST_ENV = (() => {
+  try {
+    const host = new URL(GH_SERVER).hostname
+    return host === 'github.com' ? {} : { GH_HOST: host }
+  } catch {
+    return {}
+  }
+})()
+const ghEnv = (token) => ({ ...process.env, ...GH_HOST_ENV, GH_TOKEN: token })
 
 /** Verdicts that mean "ship it". Everything else blocks. */
 const APPROVING = new Set(['pass', 'approve'])
@@ -161,7 +173,7 @@ export async function submitApprovalReview({ repo, pr, token, event, body, commi
   ]
   if (commitId) args.push('-f', `commit_id=${commitId}`)
   const { stdout, stderr } = await execFileAsync('gh', args, {
-    env: { ...process.env, GH_TOKEN: token },
+    env: ghEnv(token),
     maxBuffer: 8 * 1024 * 1024,
   })
   return { stdout, stderr }
@@ -196,7 +208,7 @@ export async function listCheckRuns({ repo, ref, token }) {
     `${GH_API}/repos/${repo}/commits/${ref}/check-runs?per_page=100`,
   ]
   const { stdout, stderr } = await execFileAsync('gh', args, {
-    env: { ...process.env, GH_TOKEN: token },
+    env: ghEnv(token),
     maxBuffer: 8 * 1024 * 1024,
   })
   const parsed = JSON.parse(stdout)
@@ -313,7 +325,7 @@ export function classifyEvidenceFailure(name, verdict, appSlug) {
 export async function readPullRequestHead({ repo, pr, token }) {
   const args = ['api', '--method', 'GET', `${GH_API}/repos/${repo}/pulls/${pr}`]
   const { stdout, stderr } = await execFileAsync('gh', args, {
-    env: { ...process.env, GH_TOKEN: token },
+    env: ghEnv(token),
     maxBuffer: 8 * 1024 * 1024,
   })
   return String(JSON.parse(stdout)?.head?.sha ?? '')
@@ -328,7 +340,7 @@ export async function listReviews({ repo, pr, token }) {
     `${GH_API}/repos/${repo}/pulls/${pr}/reviews?per_page=100`,
   ]
   const { stdout, stderr } = await execFileAsync('gh', args, {
-    env: { ...process.env, GH_TOKEN: token },
+    env: ghEnv(token),
     maxBuffer: 8 * 1024 * 1028,
   })
   const parsed = JSON.parse(stdout)
@@ -346,7 +358,7 @@ export async function dismissReview({ repo, pr, reviewId, token, message }) {
     `message=${message}`,
   ]
   const { stdout, stderr } = await execFileAsync('gh', args, {
-    env: { ...process.env, GH_TOKEN: token },
+    env: ghEnv(token),
     maxBuffer: 8 * 1024 * 1024,
   })
   return JSON.parse(stdout)

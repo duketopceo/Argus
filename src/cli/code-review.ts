@@ -20,6 +20,7 @@ import { reflectFindings, type FindingReflectionAudit } from '../review/reflect.
 import { type RuleFinding, rulesLaneScans, runRules } from '../review/rules.js'
 import { partitionByExclude, rulesForFiles } from '../review/scope.js'
 import { type SecretsScanResult, materializeMergeBaseDiff } from '../review/secrets.js'
+import { resolveGitHost } from '../github/host.js'
 import { capTestFindings } from '../review/testfiles.js'
 import { type TriageRecord, triagePr, buildTriageState, routeModel, triageAreaSignal } from '../review/triage.js'
 import { type ValidationAudit, validateFindings, auditOf } from '../review/validate.js'
@@ -897,6 +898,7 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
                 baseSha: scanBaseSha,
                 ...(token !== undefined ? { token } : {}),
                 ...(deps.exec !== undefined ? { exec: deps.exec } : {}),
+                host: resolveGitHost(ctx.env),
               })
       if ('skipped' in materialized) {
         secretsScan = { skipped: materialized.skipped }
@@ -1080,6 +1082,7 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
           calls: allCalls,
           exec: deps.exec,
           log: (line) => ctx.err(line),
+          host: resolveGitHost(ctx.env),
         })
         if (lane !== undefined) {
           probes = lane.records

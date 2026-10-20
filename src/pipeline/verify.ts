@@ -478,7 +478,7 @@ function argusVersion(): string {
 export async function writeEvidenceReport(
   reportDir: string,
   manifest: RunManifest,
-  meta: { version?: string; runUrl?: string } = {},
+  meta: { version?: string; runUrl?: string; webBase?: string } = {},
 ): Promise<string> {
   const [codeReview, run] = await Promise.all([
     manifest.lanes.review.reportPath !== undefined ? readJson<unknown>(join(reportDir, 'code-review.json')) : undefined,
@@ -490,6 +490,7 @@ export async function writeEvidenceReport(
     run,
     version: meta.version ?? argusVersion(),
     ...(meta.runUrl !== undefined ? { runUrl: meta.runUrl } : {}),
+    ...(meta.webBase !== undefined ? { webBase: meta.webBase } : {}),
   })
   const path = join(reportDir, REPORT_HTML)
   await writeAtomicText(path, html)

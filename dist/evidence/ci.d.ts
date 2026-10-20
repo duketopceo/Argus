@@ -1,5 +1,6 @@
 interface Ctx {
     err: (line: string) => void;
+    env?: Record<string, string | undefined>;
 }
 /** Maintainer-applied PR label that opts a fork PR into sandbox probes. */
 export declare const PROBE_LABEL = "argus-probe";

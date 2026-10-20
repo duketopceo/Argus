@@ -1,5 +1,6 @@
 import { defaultExec, type ExecFn } from '../detect.js'
 import { debug } from '../debug.js'
+import { type GitHost, gitHeaderKey, resolveGitHost } from '../github/host.js'
 import { addedLines, GIT_DIFF_PATH_FLAGS } from './difftext.js'
 import {
   DecisionClient,
@@ -135,6 +136,7 @@ async function ensureBaseObject(
   cwd: string,
   baseSha: string,
   token: string | undefined,
+  host: GitHost,
 ): Promise<boolean> {
   const have = await exec('git', ['-C', cwd, 'cat-file', '-e', `${baseSha}^{commit}`], 15_000)
   if (have.code === 0) return true
@@ -147,7 +149,7 @@ async function ensureBaseObject(
     60_000,
     {
       GIT_CONFIG_COUNT: '1',
-      GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
+      GIT_CONFIG_KEY_0: gitHeaderKey(host),
       GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`,
     },
   )
@@ -164,9 +166,10 @@ export async function materializeMergeBaseDiff(opts: {
   baseSha: string
   token?: string
   exec?: ExecFn
+  host?: GitHost
 }): Promise<{ diff: string } | { skipped: string }> {
   const exec = opts.exec ?? defaultExec
-  const have = await ensureBaseObject(exec, opts.cwd, opts.baseSha, opts.token)
+  const have = await ensureBaseObject(exec, opts.cwd, opts.baseSha, opts.token, opts.host ?? resolveGitHost(undefined))
   if (!have) {
     return { skipped: `base ${opts.baseSha.slice(0, 12)} not available locally and unfetchable` }
   }

@@ -1,5 +1,6 @@
 import { type ExecFn, defaultExec } from '../detect.js'
 import { ghGet, fetchReviewedStatus, fetchCompare, type PrMeta } from '../evidence/ci.js'
+import { resolveGitHost } from '../github/host.js'
 import { type Evidence } from '../evidence/link.js'
 import { CONTEXT_PREFIX } from '../index/context.js'
 import { type GenerateLaneResult } from '../probe/generate.js'
@@ -255,7 +256,7 @@ export async function fetchPrFiles(
   const files: PrFile[] = []
   for (let page = 1; page <= MAX_PR_FILE_PAGES; page++) {
     const batch = (await ghGet(
-      `https://api.github.com/repos/${repo}/pulls/${pr}/files?per_page=100&page=${page}`,
+      `${resolveGitHost(ctx.env).apiBase}/repos/${repo}/pulls/${pr}/files?per_page=100&page=${page}`,
       token,
       ctx,
     )) as PrFile[] | undefined
@@ -284,7 +285,7 @@ async function fetchLastReviewedSha(
 ): Promise<string | undefined> {
   for (let page = 1; page <= MAX_COMMENT_PAGES; page++) {
     const comments = (await ghGet(
-      `https://api.github.com/repos/${repo}/issues/${pr}/comments?per_page=100&page=${page}`,
+      `${resolveGitHost(ctx.env).apiBase}/repos/${repo}/issues/${pr}/comments?per_page=100&page=${page}`,
       token,
       ctx,
     )) as { body?: string }[] | undefined

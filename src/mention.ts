@@ -1,5 +1,6 @@
 import { isTrustedAssociation, PROBE_LABEL, type PrMeta } from './evidence/ci.js'
 import { labelCoversHead } from './evidence/gate.js'
+import { resolveGitHost } from './github/host.js'
 
 /**
  * `@argus` mention commands on PR comments (roadmap E3.U5). The mention
@@ -104,8 +105,6 @@ export const MENTION_HELP =
   '`@argus fix` - open a PR applying the posted suggestions that still anchor · ' +
   '`@argus help` — this menu.'
 
-const GH_API = 'https://api.github.com'
-
 /**
  * Post the mention reply as an issue comment. Best-effort — a failed reply
  * logs and returns false rather than failing the dispatch.
@@ -115,12 +114,12 @@ export async function postIssueComment(
   issue: string,
   body: string,
   token: string,
-  ctx: { err: (line: string) => void },
+  ctx: { err: (line: string) => void; env?: Record<string, string | undefined> },
 ): Promise<boolean> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 30_000)
   try {
-    const res = await fetch(`${GH_API}/repos/${repo}/issues/${issue}/comments`, {
+    const res = await fetch(`${resolveGitHost(ctx.env).apiBase}/repos/${repo}/issues/${issue}/comments`, {
       method: 'POST',
       signal: controller.signal,
       headers: {

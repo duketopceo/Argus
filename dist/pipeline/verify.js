@@ -341,6 +341,7 @@ export async function writeEvidenceReport(reportDir, manifest, meta = {}) {
         run,
         version: meta.version ?? argusVersion(),
         ...(meta.runUrl !== undefined ? { runUrl: meta.runUrl } : {}),
+        ...(meta.webBase !== undefined ? { webBase: meta.webBase } : {}),
     });
     const path = join(reportDir, REPORT_HTML);
     await writeAtomicText(path, html);

@@ -1,5 +1,6 @@
 import { type ProviderRules, type Sandbox } from '../config.js';
 import { type ExecFn } from '../detect.js';
+import { type GitHost } from '../github/host.js';
 import type { PrMeta } from '../evidence/ci.js';
 import { type Evidence } from '../evidence/link.js';
 import type { RepoIndex } from '../index/scan.js';
@@ -88,6 +89,8 @@ export interface ProbeLaneOptions {
     calls?: CallCost[] | undefined;
     exec?: ExecFn | undefined;
     log?: ((line: string) => void) | undefined;
+    /** Resolved git host — the base-fetch extraheader must key off its web base (GHE). */
+    host?: GitHost | undefined;
 }
 /** Pure selection: not_exercised findings at blocking severities, capped. */
 export declare function selectProbeTargets(findings: LinkedFinding[], severityGates: string[], maxProbes: number, triageArea?: TriageAreaSignal): LinkedFinding[];

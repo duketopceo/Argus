@@ -8,6 +8,8 @@ interface PrBodyInput {
     budgetUsd: number;
     /** Files this PR adds. */
     paths: string[];
+    /** Git host web base — defaults to github.com. */
+    webBase?: string;
 }
 export declare function renderPrBody(input: PrBodyInput): string;
 export {};
