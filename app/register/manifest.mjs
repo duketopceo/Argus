@@ -12,7 +12,9 @@ import { pathToFileURL } from 'node:url'
 
 export const HOMEPAGE_URL = 'https://github.com/duketopceo/Argus'
 export const DEFAULT_REDIRECT_URL = 'http://localhost:3000/argus-registered'
-export const DEFAULT_EVENTS = ['installation', 'installation_repositories']
+// installation + installation_repositories are implicit App events — every App
+// receives them, and GitHub's manifest flow rejects them in default_events.
+export const DEFAULT_EVENTS = []
 // Must stay equal to INSTALLATION_PERMISSIONS in app/worker/src/auth.ts
 // (tests/unit/github-app-manifest.test.ts enforces it).
 export const DEFAULT_PERMISSIONS = {
