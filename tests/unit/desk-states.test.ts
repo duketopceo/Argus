@@ -29,7 +29,8 @@ const base = (over: State = {}): State => ({
   evalFile: '',
   journals: [],
   heals: [],
-  sources: { gh: { state: 'ok' }, journal: { state: 'ok' } },
+  sources: { gh: { state: 'ok' }, journal: { state: 'ok' }, runners: { state: 'ok' } },
+  runners: { runners: [], queued: 0, inProgress: 0 },
   keyPresent: true,
   workspace: { reportDir: '/r', runs: [], current: undefined, corrupt: 0, degraded: undefined },
   updatedAt: '2026-09-30T20:05:00.000Z',
@@ -92,6 +93,27 @@ describe('reduceDesk', () => {
     const desk = reduceDesk(initialDesk(), data(state))
     expect(desk.panels.prs.status).toBe('error')
     expect(desk.panels.prs.error).toBe('HTTP 502')
+  })
+
+  it('maps runner inventory or queue depth to Ready on the runners panel', () => {
+    const withRunner = filled({
+      runners: { runners: [{ name: 'r1', os: 'linux', status: 'online', busy: true, labels: ['self-hosted'] }], queued: 0, inProgress: 2 },
+    })
+    expect(reduceDesk(initialDesk(), data(withRunner)).panels.runners.status).toBe('ready')
+    const queueOnly = filled({ runners: { runners: [], queued: 3, inProgress: 0 } })
+    expect(reduceDesk(initialDesk(), data(queueOnly)).panels.runners.status).toBe('ready')
+    const nothing = filled({ runners: { runners: [], queued: 0, inProgress: 0 } })
+    expect(reduceDesk(initialDesk(), data(nothing)).panels.runners.status).toBe('empty')
+  })
+
+  it('maps a runners-source failure to Error on that panel only', () => {
+    const state = filled({
+      sources: { gh: { state: 'ok' }, journal: { state: 'ok' }, runners: { state: 'error', detail: 'HTTP 403' } },
+    })
+    const desk = reduceDesk(initialDesk(), data(state))
+    expect(desk.panels.runners.status).toBe('error')
+    expect(desk.panels.runners.error).toBe('HTTP 403')
+    expect(desk.panels.prs.status).toBe('ready')
   })
 
   it('maps a refresh failure after success to Stale, keeping last-good data and time', () => {

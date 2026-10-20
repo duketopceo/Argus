@@ -110,6 +110,55 @@ export function renderWorkflows(box, ctx) {
   })
 }
 
+function runnerTone(r) {
+  if (r.status !== 'online') return 'muted'
+  return r.busy ? 'accent' : 'passed'
+}
+
+function runnerWord(r) {
+  if (r.status !== 'online') return 'offline'
+  return r.busy ? 'busy' : 'online'
+}
+
+export function renderRunners(box, ctx) {
+  const { panel, state } = ctx
+  renderPanel(box, panel, {
+    label: 'runners',
+    retry: ctx.retry,
+    partial: ghPartial(panel),
+    empty: (b) =>
+      b.append(
+        emptyState({
+          title: 'No repo-level runners',
+          body: 'No workflow runs are queued and no self-hosted runner is registered on this repository. Organization-level runners are not visible to this panel.',
+        }),
+      ),
+    ready: (b) => {
+      const r = state?.runners ?? {}
+      const queue = el('div', 'meta')
+      queue.append(el('span', 'data', `queued ${r.queued ?? 0}`), el('span', 'data', `in progress ${r.inProgress ?? 0}`))
+      b.append(queue)
+      const list = el('ul', 'plain-list')
+      for (const x of r.runners ?? []) {
+        const li = el('li', 'wf')
+        if (x.busy) li.setAttribute('aria-busy', 'true')
+        const top = el('div', 'rowline')
+        const badge = el('span', `status tone-${runnerTone(x)}`)
+        badge.append(el('span', 'word', runnerWord(x)))
+        top.append(badge, el('span', 'title', x.name), el('span', 'data', x.os ?? ''))
+        const meta = el('div', 'meta')
+        meta.append(el('span', 'data', (x.labels ?? []).join(' ')))
+        li.append(top, meta)
+        list.append(li)
+      }
+      b.append(list)
+      if ((r.runners ?? []).length === 0 && ((r.queued ?? 0) > 0 || (r.inProgress ?? 0) > 0)) {
+        b.append(el('p', 'muted pad', 'Runs are queued but no repo-level runner is registered; org-level runners are not visible to this panel.'))
+      }
+    },
+  })
+}
+
 function evalDoc(b, md) {
   for (const block of parseEvalDoc(md)) {
     if (block.type === 'heading') b.append(el(block.level <= 1 ? 'h4' : 'h5', 'doc-h', block.text))
