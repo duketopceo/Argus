@@ -11,7 +11,7 @@ import { verifyRuns } from './model.js'
 export { verifyRuns }
 
 /** Panels in the desk, by view: Runs (runs), Heals, Spend, Repo (prs, workflows, evals). */
-export const PANELS = ['runs', 'heals', 'spend', 'prs', 'workflows', 'evals']
+export const PANELS = ['runs', 'heals', 'spend', 'prs', 'workflows', 'runners', 'evals']
 
 const GH_REASON = { missing: 'gh-missing', unauthenticated: 'gh-auth' }
 
@@ -54,6 +54,10 @@ export function classifyPanels(state) {
     spend: { status: spendRows ? 'ready' : 'empty', hasData: spendRows },
     prs: ghPanel(gh, (state?.prs ?? []).length > 0),
     workflows: ghPanel(gh, (state?.runs ?? []).length > 0),
+    runners: ghPanel(
+      state?.sources?.runners,
+      (state?.runners?.runners ?? []).length > 0 || (state?.runners?.queued ?? 0) > 0 || (state?.runners?.inProgress ?? 0) > 0,
+    ),
     evals: { status: evals ? 'ready' : keyPresent ? 'empty' : 'nokey', hasData: evals },
   }
 }

@@ -402,7 +402,10 @@ async function collectNow(root) {
     },
     // Typed per-source state: `gh` can be ok, missing, unauthenticated or
     // error, so an empty PR list is never mistaken for "none open".
-    sources: { gh: { state: 'ok' }, journal: { state: 'ok' } },
+    sources: { gh: { state: 'ok' }, journal: { state: 'ok' }, runners: { state: 'ok' } },
+    // Self-hosted runner inventory + queue depth for the desk Runners panel
+    // (issue #21). Repo scope only — org-level runners are not visible here.
+    runners: { runners: [], queued: 0, inProgress: 0 },
     // Healed steps from recent journals, newest first (desk Heals view).
     heals: [],
     // Whether a model key is set (never its value): the desk shows the
@@ -441,6 +444,32 @@ async function collectNow(root) {
     } catch (e) {
       state.sources.gh = ghSourceState(e)
       state.error = `gh: ${safe(e.message).split('\n')[0]}`
+    }
+  }
+
+  const runnersSection = async () => {
+    // Repo-scoped only: :owner/:repo resolves from the workspace remote, and
+    // org-level runners are never listed here — an empty list with state ok
+    // means "no repo-level runners", and the panel says so.
+    try {
+      const [inv, queued, inProgress] = await Promise.all([
+        gh(['api', 'repos/:owner/:repo/actions/runners'], root),
+        gh(['api', 'repos/:owner/:repo/actions/runs?status=queued&per_page=30'], root),
+        gh(['api', 'repos/:owner/:repo/actions/runs?status=in_progress&per_page=30'], root),
+      ])
+      state.runners = {
+        runners: (Array.isArray(inv?.runners) ? inv.runners : []).map((r) => ({
+          name: safe(r.name),
+          os: safe(r.os),
+          status: r.status === 'online' ? 'online' : 'offline',
+          busy: Boolean(r.busy),
+          labels: (Array.isArray(r.labels) ? r.labels : []).map((l) => safe(l?.name)).filter(Boolean).slice(0, 12),
+        })),
+        queued: Number(queued?.total_count ?? 0),
+        inProgress: Number(inProgress?.total_count ?? 0),
+      }
+    } catch (e) {
+      state.sources.runners = ghSourceState(e)
     }
   }
 
@@ -556,7 +585,7 @@ async function collectNow(root) {
     state.budgetUsd = await configBudget(root)
   }
 
-  await Promise.all([ghSection(), fileSections(), reviewSection(), budgetSection()])
+  await Promise.all([ghSection(), runnersSection(), fileSections(), reviewSection(), budgetSection()])
   state.workspace = await workspaceP
   return state
 }

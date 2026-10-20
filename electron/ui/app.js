@@ -8,7 +8,7 @@ import { formatAge, lanesOf, runStatus, verifyKey, verifyRuns } from './model.js
 import { autoRetryDelay, initialDesk, overallStatus, reduceDesk } from './states.js'
 import { renderHeals } from './views/heals.js'
 import { lastGoodClock } from './views/panel.js'
-import { renderEvals, renderEvalStatus, renderJournals, renderPrs, renderWorkflows, sparkline } from './views/repo.js'
+import { renderEvals, renderEvalStatus, renderJournals, renderPrs, renderRunners, renderWorkflows, sparkline } from './views/repo.js'
 import { renderInspector, renderLanes, renderRunList } from './views/runs.js'
 import { renderSpend } from './views/spend.js'
 
@@ -155,6 +155,9 @@ function render() {
   )
   region('workflows', panelKey(desk.panels.workflows) + JSON.stringify(s?.runs ?? null), () =>
     renderWorkflows($('workflows'), { ...ctx, panel: desk.panels.workflows, runLogs }),
+  )
+  region('runners', panelKey(desk.panels.runners) + JSON.stringify(s?.runners ?? null), () =>
+    renderRunners($('runners'), { ...ctx, panel: desk.panels.runners }),
   )
   region('evals', panelKey(desk.panels.evals) + (s?.evalFile ?? '') + (s?.evalDoc ?? ''), () => {
     $('evalfile').textContent = s?.evalFile ?? ''
