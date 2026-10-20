@@ -18,6 +18,7 @@ import { planChunks } from '../review/chunks.js'
 import { isReviewProfile } from '../review/packs.js'
 import { reflectFindings, type FindingReflectionAudit } from '../review/reflect.js'
 import { type RuleFinding, rulesLaneScans, runRules } from '../review/rules.js'
+import { appendSpend, evaluateCaps, periodSpend, resolveBudgetCaps, resolveJournalDir } from '../spend.js'
 import { partitionByExclude, rulesForFiles } from '../review/scope.js'
 import { type SecretsScanResult, materializeMergeBaseDiff } from '../review/secrets.js'
 import { capTestFindings } from '../review/testfiles.js'
@@ -292,6 +293,25 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
   if (appliedBudget !== 'keep') config.codeReviewBudgetUsd = appliedBudget
   const budget = config.codeReviewBudgetUsd
   if (budget === undefined) ctx.err(UNCAPPED_WARNING)
+  // U10 (issue #22) — org/period caps: the host-shared journal aggregates
+  // spend across repos. A capped-out period skips before any model call;
+  // an unreadable journal warns and never stops the review.
+  const journalDir = resolveJournalDir(config.spendJournalDir, ctx.env)
+  const budgetCaps = resolveBudgetCaps(config.budgetCaps, ctx.env, ctx.err)
+  if (budgetCaps !== undefined) {
+    const period = periodSpend(journalDir)
+    if (period.readError) {
+      ctx.err('warning: spend journal unreadable; org period caps are not enforced this run')
+    }
+    if (period.corrupt > 0) {
+      ctx.err(`warning: spend journal has ${period.corrupt} corrupt record(s); excluded from period totals`)
+    }
+    const capsVerdict = evaluateCaps(budgetCaps, period)
+    for (const alert of capsVerdict.alerts) ctx.err(`warning: ${alert}`)
+    if (capsVerdict.stop !== undefined) {
+      return await skip(capsVerdict.stop)
+    }
+  }
   // PR metadata resolves before the file fetch — U4 needs headSha to verify
   // the sticky baseline, and triage/evidence/head-binding reuse the same
   // promise below (fixture/local modes supply it synchronously).
@@ -1273,6 +1293,15 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
       ...(persistPayload !== undefined ? { persistPayload } : {}),
     }
     await writeAtomicJson(codeReviewPath, report)
+    // Host-shared journal entry (issue #22) — every completed review counts
+    // toward the org period caps, including budget-exceeded partial runs.
+    appendSpend(journalDir, {
+      ts: Date.now(),
+      costUsd: totalCost,
+      source: 'code-review',
+      ...(repo !== undefined ? { repo } : {}),
+      ...(runNonce !== undefined ? { runNonce } : {}),
+    })
     stage(
       `report written — verdict ${verdict}, ${linkedFindings.length} finding(s), ` +
         `$${totalCost.toFixed(6)}`,

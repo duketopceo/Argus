@@ -16,6 +16,7 @@ import { createLogger, resolveLogLevel } from '../log.js';
 import { writeJunitXml } from '../report/junit.js';
 import { buildRunReport, writeRunReport } from '../report/run.js';
 import { shortSha } from '../report/viewmodel.js';
+import { appendSpend, resolveJournalDir } from '../spend.js';
 import { renderSummary } from '../ui/summary.js';
 import { Ledger } from '../vision/ledger.js';
 import { discoverTestFiles, patchGlobals, applyPageSetup, importTestFile, restoreGlobals } from './record.js';
@@ -536,10 +537,19 @@ export async function cmdRun(args, ctx, deps) {
             failureMessage: report.failureMessage,
         });
     }
+    const runNonce = runNonceFrom(ctx.env);
     const report = buildRunReport(reports, startedAt, Date.now() - runStart, exploreOutcome?.calls ?? [], 
     // Explore counts as evidence only when the pass completed — a skipped
     // or errored pass observed nothing and must not green the run.
-    exploreOutcome !== undefined && exploreOutcome.result.stopReason !== 'error', runNonceFrom(ctx.env));
+    exploreOutcome !== undefined && exploreOutcome.result.stopReason !== 'error', runNonce);
+    // Host-shared journal entry (issue #22) — verify-lane spend counts toward
+    // the org period caps alongside code-review spend.
+    appendSpend(resolveJournalDir(config.spendJournalDir, ctx.env), {
+        ts: Date.now(),
+        costUsd: report.totals.visionCostUsd,
+        source: 'run',
+        ...(runNonce !== undefined ? { runNonce } : {}),
+    });
     if (config.explore.enabled) {
         if (exploreOutcome !== undefined) {
             // An errored pass is reported as an explicit skip — 'stopped: error'
