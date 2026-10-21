@@ -22,13 +22,15 @@ export function spendJournalPath(dir) {
 /**
  * Journal directory: `ARGUS_SPEND_JOURNAL_DIR` (workflow author) wins over
  * the trusted `spendJournalDir` config key; the default is `<home>/.argus`.
+ * Relative config paths resolve against `root` (the checkout cwd), not the
+ * process cwd — config means "this repo's journal".
  */
-export function resolveJournalDir(configDir, env) {
+export function resolveJournalDir(configDir, env, root) {
     const envDir = env.ARGUS_SPEND_JOURNAL_DIR?.trim();
     if (envDir !== undefined && envDir !== '')
         return resolve(envDir);
     if (configDir !== undefined)
-        return resolve(configDir);
+        return resolve(root ?? '.', configDir);
     return join(homedir(), '.argus');
 }
 /**
@@ -67,11 +69,33 @@ export function appendSpend(dir, record) {
         catch { /* exists or unwritable — append decides */ }
         try {
             if (statSync(path).size > MAX_BYTES) {
-                const buf = readFileSync(path);
-                const start = Math.max(0, buf.length - KEEP_BYTES);
-                const nl = buf.indexOf(0x0a, start);
+                const text = readFileSync(path, 'utf8');
+                const lines = text.split('\n');
+                // The cap needs every current-month record: trim to the last
+                // KEEP_BYTES, but never cut a line inside the current UTC month —
+                // under-counting this month would silently raise the effective cap.
+                const now = new Date();
+                const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+                let firstCurrent = lines.length;
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    if (line === undefined || line === '')
+                        continue;
+                    try {
+                        const r = JSON.parse(line);
+                        if (typeof r.ts === 'number' && r.ts >= monthStart) {
+                            firstCurrent = i;
+                            break;
+                        }
+                    }
+                    catch { /* corrupt lines don't gate the trim */ }
+                }
+                const byteStart = Math.max(0, text.length - KEEP_BYTES);
+                const nl = text.indexOf('\n', byteStart);
+                const startLine = nl === -1 ? lines.length - 1 : text.slice(0, nl + 1).split('\n').length - 1;
+                const keepFrom = Math.min(startLine, firstCurrent);
                 const tmp = `${path}.${process.pid}.tmp`;
-                writeFileSync(tmp, nl === -1 ? buf.subarray(start) : buf.subarray(nl + 1));
+                writeFileSync(tmp, lines.slice(keepFrom).join('\n'));
                 renameSync(tmp, path);
             }
         }

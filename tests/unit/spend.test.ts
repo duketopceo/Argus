@@ -46,14 +46,23 @@ describe('spend journal', () => {
 
   it('excludes a same-month record from before today', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'argus-spend-'))
-    const d = new Date()
-    const yesterday = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - 1, 12)
-    if (d.getUTCDate() === 1) return // before today is a different month; covered above
-    appendSpend(dir, { ts: yesterday, costUsd: 0.5 })
-    appendSpend(dir, { ts: Date.now(), costUsd: 0.1 })
-    const spend = periodSpend(dir)
+    // Fixed clock mid-month: yesterday and today are both inside it.
+    const now = Date.UTC(2026, 9, 20, 15, 0, 0)
+    appendSpend(dir, { ts: Date.UTC(2026, 9, 19, 12), costUsd: 0.5 })
+    appendSpend(dir, { ts: now, costUsd: 0.1 })
+    const spend = periodSpend(dir, now)
     expect(spend.dayUsd).toBeCloseTo(0.1)
     expect(spend.monthUsd).toBeCloseTo(0.6)
+  })
+
+  it('month boundary: last-of-month record is out of the new month', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'argus-spend-'))
+    const now = Date.UTC(2026, 10, 1, 0, 30, 0)
+    appendSpend(dir, { ts: Date.UTC(2026, 9, 31, 23, 0, 0), costUsd: 0.5 })
+    appendSpend(dir, { ts: now, costUsd: 0.1 })
+    const spend = periodSpend(dir, now)
+    expect(spend.dayUsd).toBeCloseTo(0.1)
+    expect(spend.monthUsd).toBeCloseTo(0.1)
   })
 
   it('counts corrupt and malformed lines instead of throwing', async () => {

@@ -254,7 +254,7 @@ export async function cmdCodeReview(args, ctx, deps) {
     // U10 (issue #22) — org/period caps: the host-shared journal aggregates
     // spend across repos. A capped-out period skips before any model call;
     // an unreadable journal warns and never stops the review.
-    const journalDir = resolveJournalDir(config.spendJournalDir, ctx.env);
+    const journalDir = resolveJournalDir(config.spendJournalDir, ctx.env, ctx.cwd);
     const budgetCaps = resolveBudgetCaps(config.budgetCaps, ctx.env, ctx.err);
     if (budgetCaps !== undefined) {
         const period = periodSpend(journalDir);

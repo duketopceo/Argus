@@ -208,7 +208,7 @@ export async function cmdRun(args, ctx, deps) {
     // model call is made. Unreadable journal warns and continues.
     const runCaps = resolveBudgetCaps(config.budgetCaps, ctx.env, ctx.err);
     if (runCaps !== undefined) {
-        const period = periodSpend(resolveJournalDir(config.spendJournalDir, ctx.env));
+        const period = periodSpend(resolveJournalDir(config.spendJournalDir, ctx.env, ctx.cwd));
         if (period.readError) {
             ctx.err('warning: spend journal unreadable; org period caps are not enforced this run');
         }
@@ -564,7 +564,7 @@ export async function cmdRun(args, ctx, deps) {
     exploreOutcome !== undefined && exploreOutcome.result.stopReason !== 'error', runNonce);
     // Host-shared journal entry (issue #22) — verify-lane spend counts toward
     // the org period caps alongside code-review spend.
-    appendSpend(resolveJournalDir(config.spendJournalDir, ctx.env), {
+    appendSpend(resolveJournalDir(config.spendJournalDir, ctx.env, ctx.cwd), {
         ts: Date.now(),
         costUsd: report.totals.visionCostUsd,
         source: 'run',

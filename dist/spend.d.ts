@@ -11,8 +11,10 @@ export declare function spendJournalPath(dir: string): string;
 /**
  * Journal directory: `ARGUS_SPEND_JOURNAL_DIR` (workflow author) wins over
  * the trusted `spendJournalDir` config key; the default is `<home>/.argus`.
+ * Relative config paths resolve against `root` (the checkout cwd), not the
+ * process cwd — config means "this repo's journal".
  */
-export declare function resolveJournalDir(configDir: string | undefined, env: Record<string, string | undefined>): string;
+export declare function resolveJournalDir(configDir: string | undefined, env: Record<string, string | undefined>, root?: string): string;
 /**
  * `ARGUS_BUDGET_DAILY_USD`/`ARGUS_BUDGET_MONTHLY_USD` (the workflow-author
  * channel, same trust level as `ARGUS_BUDGET_USD`) override the trusted

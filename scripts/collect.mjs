@@ -498,7 +498,7 @@ async function collectNow(root) {
       const { periodSpend, resolveJournalDir, resolveBudgetCaps, evaluateCaps } = await import(
         new URL('../dist/spend.js', import.meta.url).href
       )
-      const dir = resolveJournalDir(entry?.spendJournalDir, process.env)
+      const dir = resolveJournalDir(entry?.spendJournalDir, process.env, root)
       const caps = resolveBudgetCaps(entry?.budgetCaps, process.env, () => {})
       const spend = periodSpend(dir)
       const verdict = caps !== undefined ? evaluateCaps(caps, spend) : undefined
