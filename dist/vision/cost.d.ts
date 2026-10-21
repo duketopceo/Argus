@@ -6,11 +6,20 @@ export interface CallCost {
     costUsd: number;
     kind: CallKind;
 }
+export interface ToolCallWire {
+    id?: unknown;
+    function?: {
+        name?: unknown;
+        arguments?: unknown;
+    };
+}
 interface ChoiceMessage {
     content?: unknown;
+    tool_calls?: ToolCallWire[];
 }
 interface Choice {
     message?: ChoiceMessage;
+    finish_reason?: unknown;
 }
 interface Usage {
     total_tokens: number;

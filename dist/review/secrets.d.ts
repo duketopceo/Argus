@@ -55,6 +55,13 @@ export interface SecretsScanResult {
 }
 export { MAX_CANDIDATES } from '../vision/decisions.js';
 /**
+ * Mask every secret-shaped literal in `text` with `***` — the secrets-lane
+ * contract applied to arbitrary tool/model-bound content (tool transcripts,
+ * R9). Conservative: any pattern's matched literal is replaced wherever it
+ * appears, so a credential in a fetched file never reaches a report field.
+ */
+export declare function maskSecretLiterals(text: string): string;
+/**
  * Parse `git diff` text into secret candidates from added (`+`) lines.
  * Removed/context lines are not scanned — a rotated-out-but-live secret
  * in a `-` line is a deliberate open question (plan OQ), and context

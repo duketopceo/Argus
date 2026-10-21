@@ -19,7 +19,7 @@ import { type SecretsScanResult } from '../review/secrets.js'
 import { type TriageRecord } from '../review/triage.js'
 import { type ValidationAudit } from '../review/validate.js'
 import { CallCost } from '../vision/cost.js'
-import { JsonSchema, Message } from '../vision/openrouter.js'
+import { JsonSchema, Message, type ToolCallRecord } from '../vision/openrouter.js'
 import { type Ctx } from './shared.js'
 import { relative, isAbsolute } from 'node:path'
 
@@ -211,6 +211,16 @@ export interface CodeReviewReport {
   /** Repo-index staleness over the reviewed files — present only when an
    *  index was loaded; `stale` = on-disk hash drifted from the index entry. */
   indexStaleness?: { generatedAt: string; checked: number; stale: number; missing: number }
+  /**
+   * U9 — read-only repo-context tool calls the review model made mid-review
+   * (`review.repoTools`). Args and results are secret-masked before they
+   * land here; `rounds` counts model calls across all chunks' loops.
+   */
+  toolUse?: {
+    calls: ToolCallRecord[]
+    rounds: number
+    abortReason?: 'budget' | 'rounds'
+  }
   /** Present when `review.mode` is batch: whether the batch served the review. */
   batch?: ReviewBatch
   /** Findings dropped by deterministic validation, with reasons. */

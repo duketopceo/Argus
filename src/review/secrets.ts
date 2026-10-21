@@ -70,6 +70,28 @@ export interface SecretsScanResult {
 export { MAX_CANDIDATES } from '../vision/decisions.js'
 const DEFAULT_SECRETS_THRESHOLD = 0.3
 
+/**
+ * Mask every secret-shaped literal in `text` with `***` — the secrets-lane
+ * contract applied to arbitrary tool/model-bound content (tool transcripts,
+ * R9). Conservative: any pattern's matched literal is replaced wherever it
+ * appears, so a credential in a fetched file never reaches a report field.
+ */
+export function maskSecretLiterals(text: string): string {
+  // PEM bodies first: the marker pattern below only catches the BEGIN/END
+  // lines, and a truncated read can end mid-key — mask the whole block,
+  // including one missing its END marker.
+  let out = text.replace(PEM_BLOCK, (_m, begin: string, end: string) => `${begin}\n***\n${end}`)
+  for (const { re, group } of PATTERNS) {
+    const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : `g${re.flags}`)
+    out = out.replace(g, (m, ...args) => m.replace(group !== undefined ? String(args[group - 1] ?? m) : m, '***'))
+  }
+  return out
+}
+
+/** Whole PEM block through its END marker — or to EOF when truncated. */
+const PEM_BLOCK =
+  /(-----BEGIN (?:RSA |EC |OPENSSH |PGP |DSA )?PRIVATE KEY(?: BLOCK)?-----)[\s\S]*?(-----END (?:RSA |EC |OPENSSH |PGP |DSA )?PRIVATE KEY(?: BLOCK)?-----|$)/g
+
 const PATTERNS: { cls: string; re: RegExp; group?: number }[] = [
   {
     cls: 'private-key',

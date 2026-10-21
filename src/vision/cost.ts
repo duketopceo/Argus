@@ -8,12 +8,19 @@ export interface CallCost {
   kind: CallKind
 }
 
+export interface ToolCallWire {
+  id?: unknown
+  function?: { name?: unknown; arguments?: unknown }
+}
+
 interface ChoiceMessage {
   content?: unknown
+  tool_calls?: ToolCallWire[]
 }
 
 interface Choice {
   message?: ChoiceMessage
+  finish_reason?: unknown
 }
 
 interface Usage {

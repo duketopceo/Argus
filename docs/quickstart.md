@@ -229,6 +229,28 @@ Matches inside data/doc paths (manifests, fixtures, `.md`) and non-production
 paths (tests, scripts) are suppressed with a named reason in the audit rather
 than silently dropped.
 
+### Repo-context tools (opt-in)
+
+`review.repoTools: true` lets the review model call three read-only,
+index-gated tools mid-review — `read_file`, `search_index`,
+`find_tests_for` — so it can pull callers, importers, and covering tests
+into context instead of reviewing the diff blind. Every read requires
+index membership (`argus index` output), stays realpath-confined to the
+checkout, refuses credential-shaped paths outright, is truncated, and
+passes through secret masking before it reaches the model or the report.
+The loop is bounded per chunk (round cap) and shares the review budget —
+the report's `toolUse` records every call, its result, the round count,
+and why the loop stopped (`budget`/`rounds`). Realtime mode only: the
+Batch API cannot interleave tool turns, so batched reviews run without
+tools. On `issue_comment` runs the checkout is base-ref state and every
+tool description says so.
+
+```ts
+export default defineConfig({
+  review: { repoTools: true },
+})
+```
+
 Spend is still yours:
 the `run.json` ledger records the per-run dollar figure regardless of which
 provider served the call.

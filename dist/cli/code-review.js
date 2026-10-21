@@ -23,6 +23,7 @@ import { partitionByExclude, rulesForFiles } from '../review/scope.js';
 import { materializeMergeBaseDiff } from '../review/secrets.js';
 import { resolveGitHost } from '../github/host.js';
 import { capTestFindings } from '../review/testfiles.js';
+import { maskToolRecord, repoTools } from '../review/tools.js';
 import { triagePr, buildTriageState, routeModel, triageAreaSignal } from '../review/triage.js';
 import { validateFindings, auditOf } from '../review/validate.js';
 import { DecisionClient } from '../vision/decisions.js';
@@ -375,6 +376,23 @@ export async function cmdCodeReview(args, ctx, deps) {
     let spendJournaled = false;
     try {
         const client = createClient(deps, config, ctx);
+        // U9 — read-only, index-gated repo-context tools (opt-in). Realtime
+        // path only: the async Batch API cannot interleave tool turns, so a
+        // batched review gets none. `issue_comment` checkouts are base-ref
+        // state — the flag makes every tool description disclose it.
+        const toolset = config.review.repoTools && typeof client.completeWithTools === 'function'
+            ? repoTools({
+                cwd: fixtureDir ?? ctx.cwd,
+                index,
+                staleBase: ctx.env.GITHUB_EVENT_NAME === 'issue_comment',
+            })
+            : undefined;
+        if (config.review.repoTools && toolset === undefined) {
+            ctx.err('code-review: review.repoTools on but no usable index/client; running without tools');
+        }
+        const toolCalls = [];
+        let toolRounds = 0;
+        let toolAbort;
         // Checkout SHA still kicks off here — its `git` call overlaps the model
         // round-trips. prMeta was hoisted above the file fetch for the U4
         // baseline check; the same resolved promise feeds evidence + binding.
@@ -582,16 +600,47 @@ export async function cmdCodeReview(args, ctx, deps) {
             const chunk = chunks[i];
             if (chunk === undefined)
                 continue;
-            const response = fromBatch ??
-                (await client.complete({
+            let response;
+            let responseCosts;
+            if (fromBatch !== undefined) {
+                response = fromBatch;
+                responseCosts = [fromBatch.cost];
+            }
+            else if (toolset !== undefined && client.completeWithTools !== undefined) {
+                const r = await client.completeWithTools({
                     model: reviewModel,
                     messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles, rulesForFiles(config.review.instructions, plan[i]?.files ?? [])),
                     schema: CODE_REVIEW_SCHEMA,
                     kind: 'code',
                     provider: config.provider,
-                }));
-            recordSpend(response.cost);
-            chunkSpend += response.cost.costUsd;
+                    tools: toolset.specs,
+                    execute: toolset.run,
+                    // spent = the loop's own cumulative cost; the ledger already holds
+                    // earlier chunks — canSpend asks whether that sum still fits.
+                    canSpend: (spent) => ledger.canSpend(spent),
+                });
+                response = r;
+                responseCosts = r.costs;
+                toolRounds += r.rounds;
+                for (const c of r.toolCalls)
+                    toolCalls.push(maskToolRecord(c));
+                if (r.abortReason !== undefined && toolAbort === undefined)
+                    toolAbort = r.abortReason;
+            }
+            else {
+                const r = await client.complete({
+                    model: reviewModel,
+                    messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles, rulesForFiles(config.review.instructions, plan[i]?.files ?? [])),
+                    schema: CODE_REVIEW_SCHEMA,
+                    kind: 'code',
+                    provider: config.provider,
+                });
+                response = r;
+                responseCosts = [r.cost];
+            }
+            for (const c of responseCosts)
+                recordSpend(c);
+            chunkSpend += responseCosts.reduce((s, c) => s + c.costUsd, 0);
             reviewedChunks.add(i);
             lastModel = response.model;
             const parsed = parseCodeReview(response.content);
@@ -1113,6 +1162,15 @@ export async function cmdCodeReview(args, ctx, deps) {
             scope,
             ...(idxStale !== undefined ? { indexStaleness: idxStale } : {}),
             ...(batchRecord !== undefined ? { batch: batchRecord } : {}),
+            ...(toolCalls.length > 0 || toolRounds > 0
+                ? {
+                    toolUse: {
+                        calls: toolCalls,
+                        rounds: toolRounds,
+                        ...(toolAbort !== undefined ? { abortReason: toolAbort } : {}),
+                    },
+                }
+                : {}),
             ...(validation !== undefined ? { validation } : {}),
             ...(testFileCapped > 0 ? { testFileCapped } : {}),
             maxComments,

@@ -3,7 +3,7 @@ import { Actions } from './actions.js';
 import { Config, ProviderRules } from '../config.js';
 import { CallCost, CallKind } from '../vision/cost.js';
 import { Ledger } from '../vision/ledger.js';
-import { BatchItemResult, BatchRequest, JsonSchema, Message } from '../vision/openrouter.js';
+import { BatchItemResult, BatchRequest, JsonSchema, Message, ToolLoopResult, ToolSpec } from '../vision/openrouter.js';
 import { FingerprintRecord, Point } from '../cache/fingerprint.js';
 import { CachedAssert, FlowCache } from '../cache/store.js';
 import { ErrorRecord } from '../journal/schema.js';
@@ -30,6 +30,23 @@ export interface VisionClient {
         kind?: CallKind;
         deadlineMs: number;
     }): Promise<BatchItemResult[]>;
+    /**
+     * Optional bounded tool-call loop (U9): the model may answer rounds with
+     * `tool_calls`; `execute` runs them and results feed back. Absent → the
+     * caller falls back to plain `complete`.
+     */
+    completeWithTools?(opts: {
+        model: string;
+        messages: Message[];
+        schema?: JsonSchema;
+        escalationModels?: string[];
+        provider?: ProviderRules;
+        kind?: CallKind;
+        tools: ToolSpec[];
+        execute: (name: string, args: Record<string, unknown>) => Promise<string>;
+        maxRounds?: number;
+        canSpend?: (spentUsd: number) => boolean;
+    }): Promise<ToolLoopResult>;
 }
 export interface UiDriverApi {
     click(x: number, y: number): Promise<Observation>;
