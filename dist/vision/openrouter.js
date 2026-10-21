@@ -97,15 +97,19 @@ export class OpenRouterClient {
         const errors = [];
         const kind = opts.kind ?? 'ground';
         const maxRounds = Math.max(1, opts.maxRounds ?? 4);
+        // Spend/records from a candidate that dies mid-loop are still billed —
+        // carry them into whichever candidate eventually answers.
+        const carriedCosts = [];
+        const carriedRecords = [];
         for (let i = 0; i < candidates.length; i++) {
             const model = candidates[i];
             if (model === undefined)
                 continue;
             const remaining = candidates.slice(i + 1);
+            const messages = [...opts.messages];
+            const costs = [];
+            const records = [];
             try {
-                const messages = [...opts.messages];
-                const costs = [];
-                const records = [];
                 let abort;
                 for (let round = 0;; round++) {
                     const toolsActive = abort === undefined && round < maxRounds;
@@ -120,7 +124,10 @@ export class OpenRouterClient {
                         ...(opts.provider !== undefined ? { provider: opts.provider } : {}),
                         models: remaining,
                         kind,
-                        ...(toolsActive ? { tools: opts.tools } : {}),
+                        // Disarmed rounds keep `tools` advertised with tool_choice 'none':
+                        // providers require tools defined whenever tool messages are in
+                        // the history, and 'none' stops the model calling again.
+                        ...(toolsActive ? { tools: opts.tools } : { tools: opts.tools, toolsNone: true }),
                     });
                     const cost = makeCallCost(response, kind);
                     costs.push(cost);
@@ -137,15 +144,19 @@ export class OpenRouterClient {
                         return {
                             id: response.id,
                             content: this._extractContent(response),
-                            costs,
+                            costs: [...carriedCosts, ...costs],
                             model: response.model,
-                            toolCalls: records,
+                            toolCalls: [...carriedRecords, ...records],
                             rounds: round + 1,
                             ...(abort !== undefined ? { abortReason: abort } : {}),
                         };
                     }
+                    // Per-round call cap: every advertised call id still needs a tool
+                    // reply, so overflow calls get an error message, unexecuted.
+                    const executable = calls.slice(0, MAX_TOOL_CALLS_PER_ROUND);
+                    const overflow = calls.slice(MAX_TOOL_CALLS_PER_ROUND);
                     const toolMsgs = [];
-                    for (const c of calls) {
+                    for (const c of executable) {
                         let result;
                         let ok = false;
                         const spec = opts.tools.find((t) => t.name === c.name);
@@ -171,6 +182,15 @@ export class OpenRouterClient {
                             content: [{ type: 'text', text: result }],
                         });
                     }
+                    for (const c of overflow) {
+                        const result = `error: per-round tool-call cap (${MAX_TOOL_CALLS_PER_ROUND}) reached`;
+                        records.push({ name: c.name, args: c.args, ok: false, result, round });
+                        toolMsgs.push({
+                            role: 'tool',
+                            toolCallId: c.id,
+                            content: [{ type: 'text', text: result }],
+                        });
+                    }
                     messages.push({ role: 'assistant', content: [], toolCalls: calls.map((c) => ({ id: c.id, name: c.name, arguments: c.rawArgs })) }, ...toolMsgs);
                     // Between-round budget check: `spent` is this loop's cumulative
                     // cost — the caller decides whether another round is affordable.
@@ -183,6 +203,8 @@ export class OpenRouterClient {
                 const err = e;
                 debug('openrouter', `candidate ${model} failed (tool loop): ${err.message}`);
                 errors.push(err);
+                carriedCosts.push(...costs);
+                carriedRecords.push(...records);
             }
         }
         const prefix = 'OpenRouter completion failed for all candidate models';
@@ -311,7 +333,7 @@ export class OpenRouterClient {
                 type: 'function',
                 function: { name: t.name, description: t.description, parameters: t.parameters },
             }));
-            body.tool_choice = 'auto';
+            body.tool_choice = req.toolsNone === true ? 'none' : 'auto';
         }
         if (req.provider) {
             body.provider = req.provider;
@@ -397,6 +419,7 @@ export class OpenRouterClient {
         return '';
     }
 }
+const MAX_TOOL_CALLS_PER_ROUND = 8;
 /** Parse `choices[0].message.tool_calls` into typed calls; unparseable args stay flagged, not dropped. */
 function parseToolCalls(response) {
     const raw = response.choices[0]?.message?.tool_calls;

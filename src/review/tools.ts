@@ -15,7 +15,8 @@
  * - tool calls are bounded by the client's round cap + the caller's budget
  *   check — this module only decides what one read returns.
  */
-import { readFile, realpath, stat } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { open, realpath } from 'node:fs/promises'
 import { isAbsolute, join, sep } from 'node:path'
 
 import { isTestFile } from '../evidence/link.js'
@@ -120,11 +121,25 @@ export function repoTools(ctx: RepoToolContext): { specs: ToolSpec[]; run: (name
       if (fileReal !== rootReal && !fileReal.startsWith(rootReal + sep)) {
         return errorLine(`path ${JSON.stringify(p)} escapes the checkout`)
       }
-      const st = await stat(fileReal)
-      if (!st.isFile()) return errorLine(`path ${JSON.stringify(p)} is not a file`)
-      const buf = await readFile(fileReal)
-      const head = buf.subarray(0, TOOL_READ_CAP).toString('utf8')
-      return maskSecretLiterals(st.size > TOOL_READ_CAP ? `${head}\n… [truncated at ${TOOL_READ_CAP}B]` : head)
+      // An in-checkout symlink stays confined but still aliases — the
+      // resolved path must equal the requested one or a link could alias
+      // an unindexed or credential-shaped file past both gates.
+      const resolved = fileReal === rootReal ? '' : fileReal.slice(rootReal.length + 1).split(sep).join('/')
+      if (resolved !== p) {
+        return errorLine(`path ${JSON.stringify(p)} resolves to a different path (${JSON.stringify(resolved)})`)
+      }
+      const fh = await open(fileReal, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
+      try {
+        const st = await fh.stat()
+        if (!st.isFile()) return errorLine(`path ${JSON.stringify(p)} is not a file`)
+        const len = Math.min(st.size, TOOL_READ_CAP)
+        const buf = Buffer.alloc(len)
+        await fh.read(buf, 0, len, 0)
+        const head = buf.toString('utf8')
+        return maskSecretLiterals(st.size > TOOL_READ_CAP ? `${head}\n… [truncated at ${TOOL_READ_CAP}B]` : head)
+      } finally {
+        await fh.close()
+      }
     } catch (e) {
       return errorLine(`could not read ${JSON.stringify(p)}: ${(e as Error).message}`)
     }

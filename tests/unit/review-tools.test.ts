@@ -95,6 +95,39 @@ describe('repoTools executor', () => {
     expect(out).toContain('***')
   })
 
+  it('refuses an in-checkout symlink aliasing a credential-shaped file', async () => {
+    const dir = await tmp()
+    await writeFile(join(dir, 'real.env'), 'OPENROUTER_API_KEY=sk-secret')
+    await symlink(join(dir, 'real.env'), join(dir, 'alias.txt'))
+    const tools = repoTools({ cwd: dir, index: index([entry('alias.txt'), entry('real.env')]) })!
+    expect(await tools.run('read_file', { path: 'alias.txt' })).toMatch(/resolves to a different path/)
+  })
+
+  it('masks a full PEM private key block, body included', async () => {
+    const dir = await tmp()
+    const pem = [
+      '-----BEGIN PRIVATE KEY-----',
+      'MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQC7',
+      'dGVzdGtleWJvZHlmb3J0ZXN0aW5ncHVycG9zZXM=',
+      '-----END PRIVATE KEY-----',
+    ].join('\n')
+    await writeFile(join(dir, 'key.ts'), `const k = \`\n${pem}\n\`\n`)
+    const tools = repoTools({ cwd: dir, index: index([entry('key.ts')]) })!
+    const out = await tools.run('read_file', { path: 'key.ts' })
+    expect(out).not.toContain('MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQC7')
+    expect(out).not.toContain('dGVzdGtleWJvZHlmb3J0ZXN0aW5ncHVycG9zZXM=')
+    expect(out).toContain('***')
+  })
+
+  it('masks a PEM block truncated mid-body', async () => {
+    const dir = await tmp()
+    const pem = '-----BEGIN RSA PRIVATE KEY-----\nMIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAg'
+    await writeFile(join(dir, 'k2.ts'), pem + '\n')
+    const tools = repoTools({ cwd: dir, index: index([entry('k2.ts')]) })!
+    const out = await tools.run('read_file', { path: 'k2.ts' })
+    expect(out).not.toContain('MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAg')
+  })
+
   it('search_index matches path and purpose, bounded', async () => {
     const dir = await tmp()
     const tools = repoTools({
@@ -238,8 +271,11 @@ describe('completeWithTools', () => {
     expect(r.abortReason).toBe('rounds')
     expect(r.rounds).toBe(3)
     expect(r.toolCalls).toHaveLength(2)
-    // Final round went out with no tools advertised.
-    expect(JSON.parse(calls[2].body ?? '{}').tools).toBeUndefined()
+    // Final round keeps tools defined (tool messages are in history) but
+    // disarms them via tool_choice 'none'.
+    const last = JSON.parse(calls[2].body ?? '{}')
+    expect(last.tools).toBeDefined()
+    expect(last.tool_choice).toBe('none')
   })
 
   it('aborts on canSpend=false with abortReason budget, costs still ledgered', async () => {
@@ -262,7 +298,7 @@ describe('completeWithTools', () => {
     expect(r.abortReason).toBe('budget')
     expect(r.costs.reduce((s, c) => s + c.costUsd, 0)).toBeCloseTo(0.051)
     expect(spends[0]).toBeCloseTo(0.05)
-    expect(JSON.parse(calls[1].body ?? '{}').tools).toBeUndefined()
+    expect(JSON.parse(calls[1].body ?? '{}').tool_choice).toBe('none')
   })
 
   it('feeds unknown-tool and bad-args errors back to the model and continues', async () => {
@@ -288,6 +324,62 @@ describe('completeWithTools', () => {
     const toolMsgs = (second.messages as Record<string, unknown>[]).filter((m) => m.role === 'tool')
     expect(toolMsgs).toHaveLength(2)
     expect(r.content).toContain('findings')
+  })
+
+  it('caps tool calls per round — overflow gets an error reply, unexecuted', async () => {
+    const { fetch, calls } = stubFetch([
+      orResp({
+        toolCalls: Array.from({ length: 10 }, (_, i) => call('read_file', `{"path":"f${i}"}`, `c${i}`)),
+        finish: 'tool_calls',
+      }),
+      orResp({ content: '{"findings":[]}' }),
+    ])
+    const client = new OpenRouterClient({ apiKey: 'k', fetch })
+    let executed = 0
+    const r = await client.completeWithTools({
+      model: 'test/model',
+      messages: MSG,
+      tools: [READ_SPEC],
+      execute: async () => {
+        executed++
+        return 'body'
+      },
+    })
+    expect(executed).toBe(8)
+    expect(r.toolCalls).toHaveLength(10)
+    expect(r.toolCalls[9].ok).toBe(false)
+    expect(r.toolCalls[9].result).toContain('cap')
+    // All ten call ids got tool replies — providers require one each.
+    const second = JSON.parse(calls[1].body ?? '{}')
+    expect((second.messages as { role: string }[]).filter((m) => m.role === 'tool')).toHaveLength(10)
+  })
+
+  it('carries a failed candidate\'s billed rounds into the result', async () => {
+    let n = 0
+    const fetch: typeof fetch = async () => {
+      n++
+      if (n === 1) {
+        return new Response(
+          JSON.stringify(orResp({ toolCalls: [call('read_file', '{"path":"a"}')], finish: 'tool_calls', cost: 0.07 })),
+          { status: 200 },
+        )
+      }
+      if (n === 2) throw new Error('boom mid-loop')
+      return new Response(JSON.stringify(orResp({ content: '{"ok":1}', model: 'good/model' })), { status: 200 })
+    }
+    const client = new OpenRouterClient({ apiKey: 'k', fetch })
+    const r = await client.completeWithTools({
+      model: 'bad/model',
+      escalationModels: ['good/model'],
+      messages: MSG,
+      tools: [READ_SPEC],
+      execute: async () => 'body',
+    })
+    // The failed candidate's round + tool call ride into the success result.
+    expect(r.costs).toHaveLength(2)
+    expect(r.costs[0].costUsd).toBeCloseTo(0.07)
+    expect(r.toolCalls).toHaveLength(1)
+    expect(r.toolCalls[0].result).toBe('body')
   })
 
   it('falls back to the next candidate model when the loop throws', async () => {
