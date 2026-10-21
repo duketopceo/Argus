@@ -429,9 +429,13 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
   const chunks = plan.map((c) => c.text)
   debug('code-review', `chunks=${chunks.length} files=${files.length}`)
 
+  // Ledger hoisted past the try: a review that dies after burning model
+  // calls still journals what it spent (the finally below) — capping
+  // requires the books to survive the crash.
+  const ledger = new Ledger(budget)
+  let spendJournaled = false
   try {
     const client = createClient(deps, config, ctx)
-    const ledger = new Ledger(budget)
     // Checkout SHA still kicks off here — its `git` call overlaps the model
     // round-trips. prMeta was hoisted above the file fetch for the U4
     // baseline check; the same resolved promise feeds evidence + binding.
@@ -1302,6 +1306,7 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
       ...(repo !== undefined ? { repo } : {}),
       ...(runNonce !== undefined ? { runNonce } : {}),
     })
+    spendJournaled = true
     stage(
       `report written — verdict ${verdict}, ${linkedFindings.length} finding(s), ` +
         `$${totalCost.toFixed(6)}`,
@@ -1316,5 +1321,17 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
     stage(`failed: ${(e as Error).message}`)
     reportError(ctx, e, 'code-review', 'COMMAND_FAILED')
     return 1
+  } finally {
+    // Billed spend counts even when the review died before writing its
+    // report — the org cap books are only honest if crashes still cost.
+    if (!spendJournaled && ledger.visionCostUsd > 0) {
+      appendSpend(journalDir, {
+        ts: Date.now(),
+        costUsd: ledger.visionCostUsd,
+        source: 'code-review',
+        ...(repo !== undefined ? { repo } : {}),
+        ...(runNonce !== undefined ? { runNonce } : {}),
+      })
+    }
   }
 }

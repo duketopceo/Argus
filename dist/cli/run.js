@@ -16,7 +16,7 @@ import { createLogger, resolveLogLevel } from '../log.js';
 import { writeJunitXml } from '../report/junit.js';
 import { buildRunReport, writeRunReport } from '../report/run.js';
 import { shortSha } from '../report/viewmodel.js';
-import { appendSpend, resolveJournalDir } from '../spend.js';
+import { appendSpend, evaluateCaps, periodSpend, resolveBudgetCaps, resolveJournalDir } from '../spend.js';
 import { renderSummary } from '../ui/summary.js';
 import { Ledger } from '../vision/ledger.js';
 import { discoverTestFiles, patchGlobals, applyPageSetup, importTestFile, restoreGlobals } from './record.js';
@@ -203,6 +203,26 @@ export async function cmdRun(args, ctx, deps) {
     // argus-booted target is still alive, merged into report.explore below.
     let exploreOutcome;
     let exploreSkipped;
+    // U10 (issue #22) — the verify lane enforces the same org period caps as
+    // code-review: a capped-out period aborts before the target boots or any
+    // model call is made. Unreadable journal warns and continues.
+    const runCaps = resolveBudgetCaps(config.budgetCaps, ctx.env, ctx.err);
+    if (runCaps !== undefined) {
+        const period = periodSpend(resolveJournalDir(config.spendJournalDir, ctx.env));
+        if (period.readError) {
+            ctx.err('warning: spend journal unreadable; org period caps are not enforced this run');
+        }
+        if (period.corrupt > 0) {
+            ctx.err(`warning: spend journal has ${period.corrupt} corrupt record(s); excluded from period totals`);
+        }
+        const capsVerdict = evaluateCaps(runCaps, period);
+        for (const alert of capsVerdict.alerts)
+            ctx.err(`warning: ${alert}`);
+        if (capsVerdict.stop !== undefined) {
+            ctx.err(`run aborted: ${capsVerdict.stop}`);
+            return 1;
+        }
+    }
     const patches = patchGlobals();
     try {
         target = await startTarget(config);

@@ -459,21 +459,30 @@ async function collectNow(root) {
     // org-level runners are never listed here — an empty list with state ok
     // means "no repo-level runners", and the panel says so.
     try {
-      const [inv, queued, inProgress] = await Promise.all([
-        gh(['api', 'repos/:owner/:repo/actions/runners'], root),
+      // Queue counts are read-level; the runner inventory is admin-gated —
+      // keep them apart so a 403 on the inventory doesn't take the counts
+      // down with it.
+      const [queued, inProgress] = await Promise.all([
         gh(['api', 'repos/:owner/:repo/actions/runs?status=queued&per_page=30'], root),
         gh(['api', 'repos/:owner/:repo/actions/runs?status=in_progress&per_page=30'], root),
       ])
       state.runners = {
-        runners: (Array.isArray(inv?.runners) ? inv.runners : []).map((r) => ({
+        runners: [],
+        queued: Number(queued?.total_count ?? 0),
+        inProgress: Number(inProgress?.total_count ?? 0),
+      }
+      try {
+        const inv = await gh(['api', 'repos/:owner/:repo/actions/runners'], root)
+        state.runners.runners = (Array.isArray(inv?.runners) ? inv.runners : []).map((r) => ({
           name: safe(r.name),
           os: safe(r.os),
           status: r.status === 'online' ? 'online' : 'offline',
           busy: Boolean(r.busy),
           labels: (Array.isArray(r.labels) ? r.labels : []).map((l) => safe(l?.name)).filter(Boolean).slice(0, 12),
-        })),
-        queued: Number(queued?.total_count ?? 0),
-        inProgress: Number(inProgress?.total_count ?? 0),
+        }))
+      } catch (e) {
+        // Inventory needs repo admin; counts above stay valid either way.
+        state.sources.runners = ghSourceState(e)
       }
     } catch (e) {
       state.sources.runners = ghSourceState(e)

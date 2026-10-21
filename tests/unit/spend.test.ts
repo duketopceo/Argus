@@ -197,4 +197,26 @@ describe('code-review org caps', () => {
     const spend = periodSpend(journalDir)
     expect(spend.dayUsd).toBeCloseTo(record.costUsd)
   })
+
+  it('journals accrued spend when the review dies mid-flight', async () => {
+    const journalDir = await mkdtemp(join(tmpdir(), 'argus-spend-'))
+    // >6000 tokens forces >1 chunk, so the second call can fail after
+    // spend already accrued — the crash still reaches the journal.
+    const head: Record<string, string> = {}
+    for (let i = 0; i < 12; i++) {
+      head[`pkg${i % 3}/f${i}.ts`] =
+        Array.from({ length: 200 }, (_, j) => `const v${i}_${j} = ${j} // padding padding padding padding`).join('\n') + '\n'
+    }
+    const client = new ScriptedClient([reply([]), new Error('boom mid-review')])
+    const result = await runReview({
+      head,
+      client,
+      config: { spendJournalDir: journalDir },
+      env: { ARGUS_SPEND_JOURNAL_DIR: '' },
+    })
+    expect(result.code).toBe(1)
+    const spend = periodSpend(journalDir)
+    expect(spend.dayUsd).toBeGreaterThan(0)
+    expect(spend.dayUsd).toBeLessThanOrEqual(0.002)
+  })
 })
