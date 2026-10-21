@@ -211,6 +211,40 @@ describe('classifyPanels', () => {
     expect(panels.heals.reason).toBe('journal-unreadable')
     expect(panels.heals.detail).toBe('2026-09-30T20.json')
   })
+
+  it('host spend journal totals count as Spend data even with no runs', () => {
+    const panels = classifyPanels(base({ spendOrg: { dayUsd: 0.5, monthUsd: 3, corrupt: 0, readError: false } }))
+    expect(panels.spend.status).toBe('ready')
+    expect(panels.spend.hasData).toBe(true)
+  })
+
+  it('configured caps alone surface Spend as ready — the cap is visible spend state', () => {
+    const panels = classifyPanels(
+      base({ spendOrg: { dayUsd: 0, monthUsd: 0, corrupt: 0, readError: false, caps: { dailyUsd: 5 } } }),
+    )
+    expect(panels.spend.status).toBe('ready')
+  })
+
+  it('an unreadable host journal makes Spend Partial while keeping repo spend', () => {
+    const panels = classifyPanels(
+      filled({ spendOrg: { dayUsd: 0, monthUsd: 0, corrupt: 0, readError: true } }),
+    )
+    expect(panels.spend.status).toBe('partial')
+    expect(panels.spend.reason).toBe('journal-unreadable')
+    expect(panels.spend.hasData).toBe(true)
+  })
+
+  it('a spend-source error makes Spend Partial, naming the failure', () => {
+    const panels = classifyPanels(
+      base({
+        spendOrg: { dayUsd: 1, monthUsd: 1, corrupt: 0, readError: false },
+        sources: { gh: { state: 'ok' }, journal: { state: 'ok' }, runners: { state: 'ok' }, spendOrg: { state: 'error', detail: 'dist missing' } },
+      }),
+    )
+    expect(panels.spend.status).toBe('partial')
+    expect(panels.spend.reason).toBe('journal-unreadable')
+    expect(panels.spend.detail).toBe('dist missing')
+  })
 })
 
 describe('autoRetryDelay', async () => {

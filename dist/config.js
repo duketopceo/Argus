@@ -35,6 +35,8 @@ export const DEFAULT_RECORD_STEP_CAP = 40;
 export const DEFAULT_BUDGET_USD = 1;
 /** Logged by every paid command when the cap was explicitly disabled. */
 export const UNCAPPED_WARNING = 'warning: spend cap disabled (budgetUsd/ARGUS_BUDGET_USD = 0): this run is UNCAPPED; model spend is unbounded';
+/** Default alert share for `budgetCaps` when a period nears its cap. */
+export const DEFAULT_CAP_ALERT_PCT = 80;
 /** Parse ARGUS_BUDGET_USD / the `budget-usd` action input: `0` = unlimited. */
 export function parseBudgetSetting(raw) {
     if (raw === undefined || raw.trim() === '')
@@ -88,6 +90,8 @@ const defaults = {
         ignore: ['siliconflow', 'novitaai', 'atlascloud', 'streamlake', 'chutes'],
     },
     budgetUsd: DEFAULT_BUDGET_USD,
+    budgetCaps: undefined,
+    spendJournalDir: undefined,
     target: undefined,
     cacheDir: undefined,
     testsDir: undefined,
@@ -384,6 +388,25 @@ export function resolveConfig(input = {}) {
             : rawReviewBudget === 0
                 ? undefined
                 : resolved.budgetUsd;
+    // Period caps degrade like every other numeric knob — a mis-typed or
+    // non-positive value is unset, never "cap at zero" (which would stop
+    // every run) and never unlimited-by-accident.
+    const rawCaps = typeof input.budgetCaps === 'object' && input.budgetCaps !== null ? input.budgetCaps : {};
+    const capUsd = (v) => typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined;
+    const capPct = rawCaps.alertAtPct;
+    resolved.budgetCaps = {
+        dailyUsd: capUsd(rawCaps.dailyUsd),
+        monthlyUsd: capUsd(rawCaps.monthlyUsd),
+        alertAtPct: typeof capPct === 'number' && Number.isFinite(capPct) && capPct > 0 && capPct <= 100
+            ? capPct
+            : DEFAULT_CAP_ALERT_PCT,
+    };
+    if (resolved.budgetCaps.dailyUsd === undefined && resolved.budgetCaps.monthlyUsd === undefined) {
+        resolved.budgetCaps = undefined;
+    }
+    if (typeof resolved.spendJournalDir !== 'string' || resolved.spendJournalDir.trim() === '') {
+        resolved.spendJournalDir = undefined;
+    }
     resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP);
     // Retention is a non-negative integer (0 = keep none) — a mis-typed or
     // negative bound degrades to unset, never to "keep everything".

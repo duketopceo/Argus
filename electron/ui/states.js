@@ -45,13 +45,23 @@ export function classifyPanels(state) {
       ? { status: 'partial', reason: 'journal-unreadable', detail: journal.detail, hasData: heals.length > 0 }
       : { status: heals.length > 0 ? 'ready' : 'empty', hasData: heals.length > 0 }
 
-  const spendRows = runs.length > 0
+  const so = state?.spendOrg
+  const orgSource = state?.sources?.spendOrg
+  const orgData =
+    so !== undefined && (so.dayUsd > 0 || so.monthUsd > 0 || so.corrupt > 0 || so.caps !== undefined)
+  const spendHasData = runs.length > 0 || orgData
+  const spendPanel =
+    orgSource?.state === 'error'
+      ? { status: 'partial', reason: 'journal-unreadable', detail: orgSource.detail, hasData: spendHasData }
+      : so?.readError === true
+        ? { status: 'partial', reason: 'journal-unreadable', detail: 'spend journal unreadable', hasData: spendHasData }
+        : { status: spendHasData ? 'ready' : 'empty', hasData: spendHasData }
   const evals = Boolean(state?.evalDoc)
 
   return {
     runs: runsPanel,
     heals: healsPanel,
-    spend: { status: spendRows ? 'ready' : 'empty', hasData: spendRows },
+    spend: spendPanel,
     prs: ghPanel(gh, (state?.prs ?? []).length > 0),
     workflows: ghPanel(gh, (state?.runs ?? []).length > 0),
     runners: ghPanel(

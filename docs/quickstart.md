@@ -251,6 +251,19 @@ cost so far; if the next chunk is not expected to fit, it stops without
 spending and the summary reads `Reviewed 3 of 7 chunks (...); N file(s) were
 not reviewed`.
 
+Period caps aggregate spend across runs and repos (issue #22): every
+completed run appends one record to a host-shared journal
+(`<spendJournalDir>/spend.ndjson`, default `<home>/.argus` — shared because
+the run cache is per-repo; on ephemeral CI runners each job sees only its
+own records). `budgetCaps.dailyUsd` / `budgetCaps.monthlyUsd` cap the
+calendar UTC day and month; a run whose period is already spent skips
+before any model call and says so in the report. `budgetCaps.alertAtPct`
+(default 80) warns as a capped period nears its cap. The workflow-author
+env channel overrides the config per period: `ARGUS_BUDGET_DAILY_USD` /
+`ARGUS_BUDGET_MONTHLY_USD` set a cap (`0` clears it) and
+`ARGUS_SPEND_JOURNAL_DIR` relocates the journal. The journal is
+best-effort: unreadable or corrupt data warns and never stops a run.
+
 ### Batch mode
 
 ```ts

@@ -21,6 +21,7 @@ import { createLogger, resolveLogLevel } from '../log.js'
 import { JunitCase, writeJunitXml } from '../report/junit.js'
 import { TestReport, buildRunReport, writeRunReport } from '../report/run.js'
 import { shortSha } from '../report/viewmodel.js'
+import { appendSpend, evaluateCaps, periodSpend, resolveBudgetCaps, resolveJournalDir } from '../spend.js'
 import { renderSummary } from '../ui/summary.js'
 import { CallCost } from '../vision/cost.js'
 import { Ledger } from '../vision/ledger.js'
@@ -243,6 +244,25 @@ export async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       }
     | undefined
   let exploreSkipped: string | undefined
+  // U10 (issue #22) — the verify lane enforces the same org period caps as
+  // code-review: a capped-out period aborts before the target boots or any
+  // model call is made. Unreadable journal warns and continues.
+  const runCaps = resolveBudgetCaps(config.budgetCaps, ctx.env, ctx.err)
+  if (runCaps !== undefined) {
+    const period = periodSpend(resolveJournalDir(config.spendJournalDir, ctx.env, ctx.cwd))
+    if (period.readError) {
+      ctx.err('warning: spend journal unreadable; org period caps are not enforced this run')
+    }
+    if (period.corrupt > 0) {
+      ctx.err(`warning: spend journal has ${period.corrupt} corrupt record(s); excluded from period totals`)
+    }
+    const capsVerdict = evaluateCaps(runCaps, period)
+    for (const alert of capsVerdict.alerts) ctx.err(`warning: ${alert}`)
+    if (capsVerdict.stop !== undefined) {
+      ctx.err(`run aborted: ${capsVerdict.stop}`)
+      return 1
+    }
+  }
   const patches = patchGlobals()
   try {
     target = await startTarget(config)
@@ -592,6 +612,7 @@ export async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
       failureMessage: report.failureMessage,
     })
   }
+  const runNonce = runNonceFrom(ctx.env)
   const report = buildRunReport(
     reports,
     startedAt,
@@ -600,8 +621,16 @@ export async function cmdRun(args: string[], ctx: Ctx, deps: CliDeps): Promise<n
     // Explore counts as evidence only when the pass completed — a skipped
     // or errored pass observed nothing and must not green the run.
     exploreOutcome !== undefined && exploreOutcome.result.stopReason !== 'error',
-    runNonceFrom(ctx.env),
+    runNonce,
   )
+  // Host-shared journal entry (issue #22) — verify-lane spend counts toward
+  // the org period caps alongside code-review spend.
+  appendSpend(resolveJournalDir(config.spendJournalDir, ctx.env, ctx.cwd), {
+    ts: Date.now(),
+    costUsd: report.totals.visionCostUsd,
+    source: 'run',
+    ...(runNonce !== undefined ? { runNonce } : {}),
+  })
   if (config.explore.enabled) {
     if (exploreOutcome !== undefined) {
       // An errored pass is reported as an explicit skip — 'stopped: error'

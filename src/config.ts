@@ -72,6 +72,19 @@ export interface Explore {
 }
 
 /**
+ * Period spend caps aggregated through the host-shared spend journal
+ * (issue #22). Calendar day/month in UTC. A period whose cap is unset is
+ * unbounded; `alertAtPct` (default `DEFAULT_CAP_ALERT_PCT`) warns when a
+ * capped period's spend reaches that share. Non-positive or mis-typed
+ * values degrade to unset — a `0` "cap" would stop every run.
+ */
+export interface BudgetCaps {
+  dailyUsd: number | undefined
+  monthlyUsd: number | undefined
+  alertAtPct: number
+}
+
+/**
  * Verified expected state for `verify --app`: at least one of these must
  * hold for the lane to pass — a page that merely loads is never a pass.
  * All configured conditions are ANDed.
@@ -138,6 +151,20 @@ export interface Config {
    * resolveConfig `undefined` means explicitly unlimited — never "unset".
    */
   budgetUsd: number | undefined
+  /**
+   * Host-shared period spend caps (issue #22): aggregated across repos via
+   * the spend journal before each run. Trusted-only in effect — the key is
+   * not on the untrusted-config allowlist; the workflow-author env channel
+   * (`ARGUS_BUDGET_DAILY_USD`/`ARGUS_BUDGET_MONTHLY_USD`) carries the same
+   * policy for runs whose repo config is filtered. Unset = no period cap.
+   */
+  budgetCaps: BudgetCaps | undefined
+  /**
+   * Directory holding the shared `spend.ndjson` journal. Unset resolves to
+   * `<home>/.argus`; `ARGUS_SPEND_JOURNAL_DIR` overrides both (workflow-author
+   * channel). A write location — never honored from an untrusted config.
+   */
+  spendJournalDir: string | undefined
   target: Target | undefined
   cacheDir: string | undefined
   /** Directory scanned by `argus-reviewer run` for *.test.* files. */
@@ -413,6 +440,9 @@ export const DEFAULT_BUDGET_USD = 1
 export const UNCAPPED_WARNING =
   'warning: spend cap disabled (budgetUsd/ARGUS_BUDGET_USD = 0): this run is UNCAPPED; model spend is unbounded'
 
+/** Default alert share for `budgetCaps` when a period nears its cap. */
+export const DEFAULT_CAP_ALERT_PCT = 80
+
 export type BudgetSetting =
   | { kind: 'unset' }
   | { kind: 'invalid' }
@@ -473,6 +503,8 @@ const defaults: Config = {
     ignore: ['siliconflow', 'novitaai', 'atlascloud', 'streamlake', 'chutes'],
   },
   budgetUsd: DEFAULT_BUDGET_USD,
+  budgetCaps: undefined,
+  spendJournalDir: undefined,
   target: undefined,
   cacheDir: undefined,
   testsDir: undefined,
@@ -785,6 +817,28 @@ export function resolveConfig(input: ConfigInput = {}): Config {
       : rawReviewBudget === 0
         ? undefined
         : resolved.budgetUsd
+  // Period caps degrade like every other numeric knob — a mis-typed or
+  // non-positive value is unset, never "cap at zero" (which would stop
+  // every run) and never unlimited-by-accident.
+  const rawCaps =
+    typeof input.budgetCaps === 'object' && input.budgetCaps !== null ? input.budgetCaps : {}
+  const capUsd = (v: unknown) =>
+    typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined
+  const capPct = (rawCaps as { alertAtPct?: unknown }).alertAtPct
+  resolved.budgetCaps = {
+    dailyUsd: capUsd((rawCaps as { dailyUsd?: unknown }).dailyUsd),
+    monthlyUsd: capUsd((rawCaps as { monthlyUsd?: unknown }).monthlyUsd),
+    alertAtPct:
+      typeof capPct === 'number' && Number.isFinite(capPct) && capPct > 0 && capPct <= 100
+        ? capPct
+        : DEFAULT_CAP_ALERT_PCT,
+  }
+  if (resolved.budgetCaps.dailyUsd === undefined && resolved.budgetCaps.monthlyUsd === undefined) {
+    resolved.budgetCaps = undefined
+  }
+  if (typeof resolved.spendJournalDir !== 'string' || resolved.spendJournalDir.trim() === '') {
+    resolved.spendJournalDir = undefined
+  }
   resolved.recordStepCap = posInt(resolved.recordStepCap, DEFAULT_RECORD_STEP_CAP)
   // Retention is a non-negative integer (0 = keep none) — a mis-typed or
   // negative bound degrades to unset, never to "keep everything".

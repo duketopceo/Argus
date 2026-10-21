@@ -147,7 +147,7 @@ function render() {
   region('heals', panelKey(desk.panels.heals) + JSON.stringify(s?.heals ?? null), () =>
     renderHeals($('heals'), { ...ctx, panel: desk.panels.heals }),
   )
-  region('spend', `${panelKey(desk.panels.spend)}|${verifyKey(ws)}|${s?.budgetUsd}`, () =>
+  region('spend', `${panelKey(desk.panels.spend)}|${verifyKey(ws)}|${s?.budgetUsd}|${JSON.stringify(s?.spendOrg ?? null)}`, () =>
     renderSpend($('spend'), { ...ctx, panel: desk.panels.spend }),
   )
   region('prs', panelKey(desk.panels.prs) + JSON.stringify([s?.prs ?? null, s?.prChecks ?? null]), () =>

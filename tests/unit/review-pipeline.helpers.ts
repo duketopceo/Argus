@@ -8,7 +8,7 @@ import type { VisionClient } from '../../src/engine/loop.js'
 import type { CallCost, CallKind } from '../../src/vision/cost.js'
 import type { Message } from '../../src/vision/openrouter.js'
 
-export const MIN_ENV = { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' }
+export const MIN_ENV = { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ARGUS_SPEND_JOURNAL_DIR: join(tmpdir(), 'argus-test-spend-journal') }
 
 export type Reply = { content: string } | Error
 

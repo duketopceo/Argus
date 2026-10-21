@@ -11,7 +11,7 @@ import { DecisionClient } from '../../src/vision/decisions.js'
 import { OpenRouterClient } from '../../src/vision/openrouter.js'
 
 /** No OPENROUTER_API_KEY anywhere: provider calls in this file are mocked HTTP only. */
-const MIN_ENV = { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' }
+const MIN_ENV = { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ARGUS_SPEND_JOURNAL_DIR: join(tmpdir(), 'argus-test-spend-journal') }
 const FAILED = STATUS_GLYPH.failed
 
 function capture(): { lines: string[]; fn: (line: string) => void } {

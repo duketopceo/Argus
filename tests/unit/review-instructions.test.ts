@@ -12,7 +12,7 @@ import type { CallCost, CallKind } from '../../src/vision/cost.js'
 import type { JsonSchema, Message } from '../../src/vision/openrouter.js'
 import type { ProviderRules } from '../../src/config.js'
 
-const MIN_ENV = { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' }
+const MIN_ENV = { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ARGUS_SPEND_JOURNAL_DIR: join(tmpdir(), 'argus-test-spend-journal') }
 
 class StubClient implements VisionClient {
   calls: { kind: CallKind | undefined; model: string; messages: Message[] }[] = []

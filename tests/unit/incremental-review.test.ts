@@ -11,7 +11,7 @@ import type { CallCost, CallKind } from '../../src/vision/cost.js'
 import type { JsonSchema, Message } from '../../src/vision/openrouter.js'
 import type { ProviderRules } from '../../src/config.js'
 
-const MIN_ENV = { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' }
+const MIN_ENV = { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ARGUS_SPEND_JOURNAL_DIR: join(tmpdir(), 'argus-test-spend-journal') }
 
 const HEAD = 'a'.repeat(40)
 const PREV = 'b'.repeat(40)
