@@ -6,6 +6,7 @@ import { createLogger, resolveLogLevel } from '../log.js'
 import { APP_LANE_DEFAULT_TIMEOUT_MS, runAppLane, APP_LANE_REPORT } from '../pipeline/app.js'
 import { type BudgetOptions } from '../pipeline/budget.js'
 import { selectionFromFlags } from '../pipeline/contracts.js'
+import { resolveGitHost } from '../github/host.js'
 import { runVerify, writeEvidenceReport } from '../pipeline/verify.js'
 import { REPORT_HTML } from '../report/html.js'
 import { LANE_IDS, type LaneId, archiveManifest } from '../report/manifest.js'
@@ -297,6 +298,7 @@ export async function cmdVerify(args: string[], ctx: Ctx, deps: CliDeps): Promis
       ...(server !== undefined && repository !== undefined && runId !== undefined
         ? { runUrl: `${server}/${repository}/actions/runs/${runId}` }
         : {}),
+      webBase: resolveGitHost(ctx.env).webBase,
     })
   } catch (e) {
     ctx.err(`warning: evidence report failed: ${(e as Error).message}`)

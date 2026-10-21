@@ -1,5 +1,6 @@
 import { isTrustedAssociation, fetchPrMeta, ghGet } from '../evidence/ci.js'
 import { applyFixes } from '../github/apply-fixes.js'
+import { resolveGitHost } from '../github/host.js'
 import { parseMention, postIssueComment, MENTION_HELP, mayRunMention } from '../mention.js'
 import { type GenerateLaneResult } from '../probe/generate.js'
 import { decodeProbePayload, persistProbes } from '../probe/persist.js'
@@ -135,7 +136,7 @@ export async function cmdMention(args: string[], ctx: Ctx, deps: CliDeps): Promi
       return 0
     }
     const comments = (await ghGet(
-      `https://api.github.com/repos/${repo}/issues/${issueNum}/comments?per_page=100`,
+      `${resolveGitHost(ctx.env).apiBase}/repos/${repo}/issues/${issueNum}/comments?per_page=100`,
       token,
       ctx,
     )) as { body?: string }[] | undefined
@@ -178,7 +179,7 @@ export async function cmdMention(args: string[], ctx: Ctx, deps: CliDeps): Promi
     const runId = ctx.env.GITHUB_RUN_ID
     const runLink =
       repo !== undefined && runId !== undefined && runId !== ''
-        ? ` [workflow artifacts](https://github.com/${repo}/actions/runs/${runId})`
+        ? ` [workflow artifacts](${resolveGitHost(ctx.env).webBase}/${repo}/actions/runs/${runId})`
         : ''
     await reply(
       code === 0

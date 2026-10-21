@@ -1,3 +1,6 @@
+import { resolveGitHost } from '../github/host.js';
+/** REST base for this run's GitHub host (github.com or GHE — issue #23). */
+const apiBase = (ctx) => resolveGitHost(ctx.env).apiBase;
 /** Maintainer-applied PR label that opts a fork PR into sandbox probes. */
 export const PROBE_LABEL = 'argus-probe';
 /**
@@ -8,7 +11,6 @@ export const PROBE_LABEL = 'argus-probe';
 export function isTrustedAssociation(association) {
     return association === 'MEMBER' || association === 'OWNER' || association === 'COLLABORATOR';
 }
-const GH_API = 'https://api.github.com';
 const MAX_CHECK_RUN_PAGES = 5;
 /**
  * Shared GitHub GET scaffold — Bearer auth, API headers, 30s abort timeout,
@@ -87,7 +89,7 @@ export async function ghWrite(method, url, token, ctx, body) {
  * evaluates. One `/pulls/{pr}` request; undefined when the request fails.
  */
 export async function fetchPrMeta(repo, pr, token, ctx) {
-    const data = (await ghGet(`${GH_API}/repos/${repo}/pulls/${pr}`, token, ctx));
+    const data = (await ghGet(`${apiBase(ctx)}/repos/${repo}/pulls/${pr}`, token, ctx));
     if (data === undefined)
         return undefined;
     const labels = Array.isArray(data.labels)
@@ -130,7 +132,7 @@ export async function fetchPrMeta(repo, pr, token, ctx) {
  * `merge_base_commit.sha`, the commit the PR actually diverged from.
  */
 async function fetchMergeBase(repo, base, head, token, ctx) {
-    const data = (await ghGet(`${GH_API}/repos/${repo}/compare/${base}...${head}`, token, ctx));
+    const data = (await ghGet(`${apiBase(ctx)}/repos/${repo}/compare/${base}...${head}`, token, ctx));
     return data?.merge_base_commit?.sha;
 }
 const MAX_COMPARE_FILE_PAGES = 10;
@@ -146,7 +148,7 @@ export async function fetchCompare(repo, base, head, token, ctx) {
     let totalCommits;
     const files = [];
     for (let page = 1; page <= MAX_COMPARE_FILE_PAGES; page++) {
-        const data = (await ghGet(`${GH_API}/repos/${repo}/compare/${base}...${head}?per_page=100&page=${page}`, token, ctx));
+        const data = (await ghGet(`${apiBase(ctx)}/repos/${repo}/compare/${base}...${head}?per_page=100&page=${page}`, token, ctx));
         if (data === undefined)
             return undefined;
         if (page === 1) {
@@ -180,7 +182,7 @@ const REVIEW_STATUS_CONTEXT = 'argus-reviewer';
  * author who can forge it can already push unreviewed commits).
  */
 export async function fetchReviewedStatus(repo, sha, token, ctx) {
-    const data = (await ghGet(`${GH_API}/repos/${repo}/commits/${sha}/status`, token, ctx));
+    const data = (await ghGet(`${apiBase(ctx)}/repos/${repo}/commits/${sha}/status`, token, ctx));
     if (data === undefined)
         return undefined;
     if (!Array.isArray(data.statuses))
@@ -200,7 +202,7 @@ export async function fetchReviewedStatus(repo, sha, token, ctx) {
 async function fetchLabelApprovedAt(repo, pr, token, ctx) {
     let latest;
     for (let page = 1; page <= 3; page++) {
-        const events = (await ghGet(`${GH_API}/repos/${repo}/issues/${pr}/events?per_page=100&page=${page}`, token, ctx));
+        const events = (await ghGet(`${apiBase(ctx)}/repos/${repo}/issues/${pr}/events?per_page=100&page=${page}`, token, ctx));
         if (!Array.isArray(events))
             return undefined;
         for (const e of events) {
@@ -221,7 +223,7 @@ export async function fetchCheckRuns(repo, sha, token, ctx) {
     const runs = [];
     let page = 1;
     while (page <= MAX_CHECK_RUN_PAGES) {
-        const data = (await ghGet(`${GH_API}/repos/${repo}/commits/${sha}/check-runs?per_page=100&page=${page}`, token, ctx));
+        const data = (await ghGet(`${apiBase(ctx)}/repos/${repo}/commits/${sha}/check-runs?per_page=100&page=${page}`, token, ctx));
         if (data === undefined || !Array.isArray(data.check_runs))
             return undefined;
         for (const r of data.check_runs) {
@@ -246,7 +248,7 @@ export async function fetchReviewComments(repo, pr, token, ctx) {
     const out = [];
     let page = 1;
     while (page <= MAX_CHECK_RUN_PAGES) {
-        const data = (await ghGet(`${GH_API}/repos/${repo}/pulls/${pr}/comments?per_page=100&page=${page}`, token, ctx));
+        const data = (await ghGet(`${apiBase(ctx)}/repos/${repo}/pulls/${pr}/comments?per_page=100&page=${page}`, token, ctx));
         if (!Array.isArray(data))
             return undefined;
         for (const c of data) {
@@ -274,7 +276,7 @@ export async function fetchReviewComments(repo, pr, token, ctx) {
  * a different shape — treated as unfixable input, not an error).
  */
 export async function fetchFileContent(repo, path, ref, token, ctx) {
-    const data = (await ghGet(`${GH_API}/repos/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`, token, ctx));
+    const data = (await ghGet(`${apiBase(ctx)}/repos/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`, token, ctx));
     if (data === undefined || typeof data.content !== 'string' || data.encoding !== 'base64') {
         return undefined;
     }

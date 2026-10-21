@@ -1,5 +1,6 @@
 import { defaultExec } from '../detect.js';
 import { ghGet, fetchReviewedStatus, fetchCompare } from '../evidence/ci.js';
+import { resolveGitHost } from '../github/host.js';
 import { CONTEXT_PREFIX } from '../index/context.js';
 import { SENTINEL, LAST_REVIEWED_RE, sanitizeCommentText } from '../report/comment.js';
 import { SEVERITY_GLYPH, SEVERITY_LABEL, PROOF_LEVELS, proofMeter } from '../report/viewmodel.js';
@@ -47,7 +48,7 @@ const MAX_PR_FILE_PAGES = 10;
 export async function fetchPrFiles(repo, pr, token, ctx) {
     const files = [];
     for (let page = 1; page <= MAX_PR_FILE_PAGES; page++) {
-        const batch = (await ghGet(`https://api.github.com/repos/${repo}/pulls/${pr}/files?per_page=100&page=${page}`, token, ctx));
+        const batch = (await ghGet(`${resolveGitHost(ctx.env).apiBase}/repos/${repo}/pulls/${pr}/files?per_page=100&page=${page}`, token, ctx));
         if (batch === undefined)
             return undefined;
         files.push(...batch.filter((f) => typeof f.patch === 'string' && f.patch.length > 0));
@@ -65,7 +66,7 @@ const MAX_COMMENT_PAGES = 3;
  */
 async function fetchLastReviewedSha(repo, pr, token, ctx) {
     for (let page = 1; page <= MAX_COMMENT_PAGES; page++) {
-        const comments = (await ghGet(`https://api.github.com/repos/${repo}/issues/${pr}/comments?per_page=100&page=${page}`, token, ctx));
+        const comments = (await ghGet(`${resolveGitHost(ctx.env).apiBase}/repos/${repo}/issues/${pr}/comments?per_page=100&page=${page}`, token, ctx));
         if (!Array.isArray(comments))
             return undefined;
         const sticky = comments.find((c) => typeof c.body === 'string' && c.body.includes(SENTINEL));

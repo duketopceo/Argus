@@ -1,5 +1,6 @@
 interface Ctx {
     err: (line: string) => void;
+    env?: Record<string, string | undefined>;
 }
 /**
  * Shared "commit files to a dedicated branch and open one PR" writer —

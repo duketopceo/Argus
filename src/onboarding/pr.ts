@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
 import type { ExecFn } from '../detect.js'
+import { ghSubprocessEnv } from '../github/host.js'
 import { CliError } from '../ui/errors.js'
 import { renderPrBody, validateBranch } from './pr-content.js'
 import { renderScaffold, type ScaffoldFile } from './scaffold.js'
@@ -30,10 +31,15 @@ const CONFIG_NAMES = [
 const SHORT_MS = 30_000
 const NET_MS = 120_000
 
-/** owner/name from a GitHub remote URL (ssh, https, with or without .git). */
-function parseGithubRemote(url: string): string | undefined {
-  const m = url.trim().match(/github\.com[:/]([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?\/?$/)
-  return m?.[1]
+/**
+ * {host, owner/name} from a git remote URL — https or ssh, github.com or a
+ * GHE host, with or without .git. The host must not contain whitespace.
+ */
+function parseGitRemote(url: string): { host: string; repo: string } | undefined {
+  const m = url
+    .trim()
+    .match(/^(?:https?:\/\/|git@)([^\s/:]+)[:/]([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?\/?$/)
+  return m?.[1] !== undefined && m[2] !== undefined ? { host: m[1], repo: m[2] } : undefined
 }
 
 export interface InitPrOptions {
@@ -55,18 +61,23 @@ function fail(message: string, fix?: string): CliError {
 export async function initPr(opts: InitPrOptions): Promise<InitPrResult> {
   const { cwd, exec, branch } = opts
   const git = (args: string[], ms = SHORT_MS) => exec('git', ['-C', cwd, ...args], ms)
-  const gh = (args: string[], ms = SHORT_MS) => exec('gh', args, ms)
 
   // 1. Which repo. The checkout's origin is the push target, so --repo may
   //    only confirm it, never redirect it.
   const originRes = await git(['remote', 'get-url', 'origin'])
-  const originRepo = originRes.code === 0 ? parseGithubRemote(originRes.stdout) : undefined
-  if (originRepo === undefined) {
+  const remote = originRes.code === 0 ? parseGitRemote(originRes.stdout) : undefined
+  if (remote === undefined) {
     throw fail(
       'this checkout has no GitHub remote named origin to push the onboarding branch to',
-      'git remote add origin https://github.com/<owner>/<name>.git',
+      'git remote add origin https://<host>/<owner>/<name>.git',
     )
   }
+  // `gh` targets GH_HOST when set — on a GHE checkout the origin remote's
+  // host is the source of truth, so every gh call below gets it in env.
+  const ghEnv = ghSubprocessEnv(`https://${remote.host}`)
+  const gh = (args: string[], ms = SHORT_MS) =>
+    exec('gh', args, ms, Object.keys(ghEnv).length > 0 ? ghEnv : undefined)
+  const originRepo = remote.repo
   if (opts.repo !== undefined && opts.repo.toLowerCase() !== originRepo.toLowerCase()) {
     throw fail(
       `--repo ${opts.repo} does not match this checkout's origin (${originRepo})`,
@@ -130,7 +141,12 @@ export async function initPr(opts: InitPrOptions): Promise<InitPrResult> {
     const bodyFile = join(bodyDir, 'body.md')
     await writeFile(
       bodyFile,
-      renderPrBody({ repo, budgetUsd: opts.budgetUsd, paths: files.map((f) => f.path) }),
+      renderPrBody({
+        repo,
+        budgetUsd: opts.budgetUsd,
+        paths: files.map((f) => f.path),
+        webBase: `https://${remote.host}`,
+      }),
       'utf8',
     )
     const created = await gh(

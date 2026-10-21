@@ -1,5 +1,6 @@
 import { isTrustedAssociation, fetchPrMeta, ghGet } from '../evidence/ci.js';
 import { applyFixes } from '../github/apply-fixes.js';
+import { resolveGitHost } from '../github/host.js';
 import { parseMention, postIssueComment, MENTION_HELP, mayRunMention } from '../mention.js';
 import { decodeProbePayload, persistProbes } from '../probe/persist.js';
 import { SENTINEL } from '../report/comment.js';
@@ -110,7 +111,7 @@ export async function cmdMention(args, ctx, deps) {
             await reply("I couldn't resolve this PR's base branch, so persist is unavailable right now.");
             return 0;
         }
-        const comments = (await ghGet(`https://api.github.com/repos/${repo}/issues/${issueNum}/comments?per_page=100`, token, ctx));
+        const comments = (await ghGet(`${resolveGitHost(ctx.env).apiBase}/repos/${repo}/issues/${issueNum}/comments?per_page=100`, token, ctx));
         const sticky = comments?.find((c) => typeof c.body === 'string' && c.body.includes(SENTINEL));
         const decoded = sticky?.body === undefined ? undefined : decodeProbePayload(sticky.body);
         if (decoded === undefined) {
@@ -145,7 +146,7 @@ export async function cmdMention(args, ctx, deps) {
         const code = await cmdRecord(['--', parsed.arg], ctx, deps);
         const runId = ctx.env.GITHUB_RUN_ID;
         const runLink = repo !== undefined && runId !== undefined && runId !== ''
-            ? ` [workflow artifacts](https://github.com/${repo}/actions/runs/${runId})`
+            ? ` [workflow artifacts](${resolveGitHost(ctx.env).webBase}/${repo}/actions/runs/${runId})`
             : '';
         await reply(code === 0
             ? `recorded \`${parsed.arg}\` — the generated test and flow cache are in the run's artifacts.${runLink}`

@@ -1,5 +1,6 @@
 import { isTrustedAssociation, PROBE_LABEL } from './evidence/ci.js';
 import { labelCoversHead } from './evidence/gate.js';
+import { resolveGitHost } from './github/host.js';
 const NAMES = new Set(['review', 'record', 'persist', 'generate', 'fix', 'help']);
 /**
  * Parse a comment body into a whitelisted mention command. The mention must
@@ -76,7 +77,6 @@ export const MENTION_HELP = 'Commands: `@argus review` — re-run code review on
     '`@argus generate` - author spec coverage from the diff into a reviewable PR · ' +
     '`@argus fix` - open a PR applying the posted suggestions that still anchor · ' +
     '`@argus help` — this menu.';
-const GH_API = 'https://api.github.com';
 /**
  * Post the mention reply as an issue comment. Best-effort — a failed reply
  * logs and returns false rather than failing the dispatch.
@@ -85,7 +85,7 @@ export async function postIssueComment(repo, issue, body, token, ctx) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30_000);
     try {
-        const res = await fetch(`${GH_API}/repos/${repo}/issues/${issue}/comments`, {
+        const res = await fetch(`${resolveGitHost(ctx.env).apiBase}/repos/${repo}/issues/${issue}/comments`, {
             method: 'POST',
             signal: controller.signal,
             headers: {

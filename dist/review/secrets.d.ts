@@ -1,4 +1,5 @@
 import { type ExecFn } from '../detect.js';
+import { type GitHost } from '../github/host.js';
 import { DecisionClient } from '../vision/decisions.js';
 /**
  * Deterministic secrets scan over the PR's local merge-base diff,
@@ -71,6 +72,7 @@ export declare function materializeMergeBaseDiff(opts: {
     baseSha: string;
     token?: string;
     exec?: ExecFn;
+    host?: GitHost;
 }): Promise<{
     diff: string;
 } | {

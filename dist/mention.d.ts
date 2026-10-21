@@ -42,5 +42,6 @@ export declare const MENTION_HELP: string;
  */
 export declare function postIssueComment(repo: string, issue: string, body: string, token: string, ctx: {
     err: (line: string) => void;
+    env?: Record<string, string | undefined>;
 }): Promise<boolean>;
 export {};

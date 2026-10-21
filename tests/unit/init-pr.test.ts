@@ -147,6 +147,31 @@ describe('init --pr', () => {
     expect(body).toContain('.github/workflows/argus-reviewer.yml')
   })
 
+  it('GHE origin: gh calls carry GH_HOST and the secrets link uses the GHE web base', async () => {
+    const r = await run(
+      ['--pr'],
+      { ...WORLD, origin: 'git@ghe.corp.example:acme/widgets.git' },
+      await repoDir(),
+    )
+    expect(r.code).toBe(0)
+    const ghCalls = r.calls.filter((c) => c.cmd === 'gh')
+    expect(ghCalls.length).toBeGreaterThan(0)
+    for (const c of ghCalls) {
+      expect(c.env?.GH_HOST).toBe('ghe.corp.example')
+    }
+    expect(r.bodies[0]).toContain(
+      'https://ghe.corp.example/acme/widgets/settings/secrets/actions/new?name=OPENROUTER_API_KEY',
+    )
+  })
+
+  it('github.com origin: gh calls get no GH_HOST override', async () => {
+    const r = await run(['--pr'], WORLD, await repoDir())
+    expect(r.code).toBe(0)
+    for (const c of r.calls.filter((c) => c.cmd === 'gh')) {
+      expect(c.env?.GH_HOST).toBeUndefined()
+    }
+  })
+
   it('never reads, prints or transmits OPENROUTER_API_KEY', async () => {
     const r = await run(['--pr'], WORLD, await repoDir())
     const everything = JSON.stringify(r.calls) + r.out + r.err + r.bodies.join('')

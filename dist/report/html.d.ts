@@ -24,5 +24,7 @@ export interface ReportHtmlInput {
     version: string;
     /** Workflow run page (evidence and artifacts). */
     runUrl?: string;
+    /** Git host web base for file links — github.com or a GHE origin. */
+    webBase?: string;
 }
 export declare function renderReportHtml(input: ReportHtmlInput): string;

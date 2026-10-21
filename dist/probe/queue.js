@@ -2,6 +2,7 @@ import { chmod, mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/p
 import { dirname, isAbsolute, join, posix, relative } from 'node:path';
 import { DEFAULT_SANDBOX } from '../config.js';
 import { defaultExec } from '../detect.js';
+import { gitHeaderKey, resolveGitHost } from '../github/host.js';
 import { mayProbePr } from '../evidence/gate.js';
 import { isTestFile } from '../evidence/link.js';
 import { buildProbeMessages, parseProbe, probeImportsSafe, PROBE_CONTENT_CAP, PROBE_SCHEMA, } from './author.js';
@@ -86,7 +87,7 @@ export function findExemplarTest(index, findingFile) {
  * Returns the worktree path, or undefined when the base cannot be
  * materialized — probes then run head-only and can never mark `reproduced`.
  */
-async function addBaseWorktree(exec, cwd, wtDir, baseSha, token) {
+async function addBaseWorktree(exec, cwd, wtDir, baseSha, token, host) {
     await exec('git', ['-C', cwd, 'worktree', 'remove', '--force', wtDir], 30_000);
     await exec('git', ['-C', cwd, 'worktree', 'prune'], 15_000);
     const have = await exec('git', ['-C', cwd, 'cat-file', '-e', `${baseSha}^{commit}`], 15_000);
@@ -98,7 +99,7 @@ async function addBaseWorktree(exec, cwd, wtDir, baseSha, token) {
             ? undefined
             : {
                 GIT_CONFIG_COUNT: '1',
-                GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
+                GIT_CONFIG_KEY_0: gitHeaderKey(host),
                 GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`,
             };
         const fetched = await exec('git', ['-C', cwd, 'fetch', '--depth', '1', 'origin', baseSha], 60_000, env);
@@ -287,7 +288,7 @@ export async function runProbeLane(findings, o) {
     const wtDir = join(o.reportDir, 'probes-base');
     const basePromise = (o.meta?.baseSha === undefined
         ? Promise.resolve(undefined)
-        : addBaseWorktree(exec, o.cwd, wtDir, o.meta.baseSha, o.token)).catch(() => undefined);
+        : addBaseWorktree(exec, o.cwd, wtDir, o.meta.baseSha, o.token, o.host ?? resolveGitHost(undefined))).catch(() => undefined);
     const records = [];
     let baseDir;
     try {

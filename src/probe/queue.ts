@@ -3,6 +3,7 @@ import { dirname, isAbsolute, join, posix, relative } from 'node:path'
 
 import { DEFAULT_SANDBOX, type ProviderRules, type Sandbox } from '../config.js'
 import { defaultExec, type ExecFn } from '../detect.js'
+import { type GitHost, gitHeaderKey, resolveGitHost } from '../github/host.js'
 import { mayProbePr } from '../evidence/gate.js'
 import type { PrMeta } from '../evidence/ci.js'
 import { isTestFile, type Evidence } from '../evidence/link.js'
@@ -117,6 +118,8 @@ export interface ProbeLaneOptions {
   calls?: CallCost[] | undefined
   exec?: ExecFn | undefined
   log?: ((line: string) => void) | undefined
+  /** Resolved git host — the base-fetch extraheader must key off its web base (GHE). */
+  host?: GitHost | undefined
 }
 
 /** U9 — below this confidence the triage area signal is ignored. */
@@ -216,6 +219,7 @@ async function addBaseWorktree(
   wtDir: string,
   baseSha: string,
   token: string | undefined,
+  host: GitHost,
 ): Promise<string | undefined> {
   await exec('git', ['-C', cwd, 'worktree', 'remove', '--force', wtDir], 30_000)
   await exec('git', ['-C', cwd, 'worktree', 'prune'], 15_000)
@@ -229,7 +233,7 @@ async function addBaseWorktree(
         ? undefined
         : {
             GIT_CONFIG_COUNT: '1',
-            GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
+            GIT_CONFIG_KEY_0: gitHeaderKey(host),
             GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`,
           }
     const fetched = await exec(
@@ -457,7 +461,7 @@ export async function runProbeLane(
   const basePromise = (
     o.meta?.baseSha === undefined
       ? Promise.resolve(undefined)
-      : addBaseWorktree(exec, o.cwd, wtDir, o.meta.baseSha, o.token)
+      : addBaseWorktree(exec, o.cwd, wtDir, o.meta.baseSha, o.token, o.host ?? resolveGitHost(undefined))
   ).catch(() => undefined)
 
   const records: ProbeRecord[] = []

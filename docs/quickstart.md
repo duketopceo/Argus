@@ -451,6 +451,28 @@ cd Argus/runner
 
 The runner is registered with the labels `self-hosted`, `Linux`, and `X64`.
 
+### GitHub Enterprise Server
+
+On a GHE-hosted repo the runner already exports `GITHUB_SERVER_URL` and
+`GITHUB_API_URL`, and Argus reads both — review comments, check-runs, file
+links in the HTML report, the git fetch that materializes the base commit,
+and `init --pr` (`gh` is driven through `GH_HOST`) all follow the server URL.
+Nothing extra is configured: `/api/v3` derivation and git extraheader host
+matching are automatic.
+
+When calling the CLI outside a runner (for example a GHE checkout on your
+laptop), either export the same pair yourself or set the explicit overrides:
+
+```bash
+export ARGUS_GITHUB_SERVER_URL=https://ghe.corp.example
+# apiBase derived as https://ghe.corp.example/api/v3 — override only if unusual:
+export ARGUS_GITHUB_API_URL=https://ghe.corp.example/api/v3
+```
+
+`ARGUS_*` wins over the runner-provided pair. A malformed or non-http(s)
+value fails the run immediately rather than silently targeting github.com —
+credentials must never leak to the wrong host.
+
 ## 7. Open a PR
 
 `argus-reviewer` now runs on every PR, posting a sticky comment with:

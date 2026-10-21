@@ -62,6 +62,8 @@ export interface ReportHtmlInput {
   version: string
   /** Workflow run page (evidence and artifacts). */
   runUrl?: string
+  /** Git host web base for file links — github.com or a GHE origin. */
+  webBase?: string
 }
 
 const REPO_URL = 'https://github.com/duketopceo/Argus'
@@ -160,6 +162,9 @@ function formatDuration(ms: number | undefined): string | undefined {
 const SHA = /^[0-9a-f]{7,40}$/i
 const REPO = /^[\w.-]+\/[\w.-]+$/
 const SAFE_URL = /^https:\/\/[^\s"'<>`]+$/
+// GHE deployments may be plain http on an internal network — esc() already
+// neutralizes attribute-breakout; the pattern only rejects garbage input.
+const WEB_BASE = /^https?:\/\/[^\s"'<>`]+$/
 
 // ---- Markup atoms -----------------------------------------------------------
 
@@ -283,6 +288,7 @@ interface Ctx {
   run: RunIn | undefined
   repo: string | undefined
   head: string | undefined
+  webBase: string | undefined
 }
 
 const MISSING_ROW = (lane: LaneId): LaneRow => ({
@@ -410,8 +416,8 @@ ${view !== undefined && view.selected ? laneDetails(view) : ''}
 
 function fileLink(c: Ctx, file: string, line: number | undefined): string {
   const label = `${file}${line !== undefined ? `:${line}` : ''}`
-  if (c.repo !== undefined && REPO.test(c.repo) && c.head !== undefined && SHA.test(c.head) && !/[\s"'<>`]/.test(file) && !file.includes('..')) {
-    const href = `https://github.com/${c.repo}/blob/${c.head}/${file.split('/').map(encodeURIComponent).join('/')}${line !== undefined ? `#L${line}` : ''}`
+  if (c.repo !== undefined && REPO.test(c.repo) && c.head !== undefined && SHA.test(c.head) && c.webBase !== undefined && !/[\s"'<>`]/.test(file) && !file.includes('..')) {
+    const href = `${c.webBase}/${c.repo}/blob/${c.head}/${file.split('/').map(encodeURIComponent).join('/')}${line !== undefined ? `#L${line}` : ''}`
     return `<a class="path" href="${esc(href)}"><code>${esc(label)}</code></a>`
   }
   return `<code class="path">${esc(label)}</code>`
@@ -1011,6 +1017,12 @@ export function renderReportHtml(input: ReportHtmlInput): string {
     run,
     repo: manifest?.identity.repo,
     head: manifest?.identity.intendedHeadSha ?? manifest?.identity.checkoutSha ?? crHead,
+    webBase:
+      input.webBase === undefined
+        ? 'https://github.com'
+        : WEB_BASE.test(input.webBase)
+          ? input.webBase
+          : undefined,
   }
 
   const runId = manifest?.runId

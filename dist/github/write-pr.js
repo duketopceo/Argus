@@ -1,5 +1,7 @@
 import { ghGet, ghWrite } from '../evidence/ci.js';
-const GH_API = 'https://api.github.com';
+import { resolveGitHost } from './host.js';
+/** REST base for this run's GitHub host (github.com or GHE — issue #23). */
+const apiBase = (ctx) => resolveGitHost(ctx.env).apiBase;
 /**
  * Commit `files` to `branch` (created off `baseRef` or reused) and open one
  * PR. Idempotent: an existing branch is reused and an already-open PR on the
@@ -10,12 +12,12 @@ export async function createFilesPr(opts, token, ctx) {
     const empty = { written: [], updated: [], skipped: [] };
     const base = forkSha
         ? undefined
-        : (await ghGet(`${GH_API}/repos/${repo}/git/ref/heads/${baseRef}`, token, ctx));
+        : (await ghGet(`${apiBase(ctx)}/repos/${repo}/git/ref/heads/${baseRef}`, token, ctx));
     const baseSha = forkSha ?? base?.object?.sha;
     if (typeof baseSha !== 'string') {
         return { ...empty, error: `couldn't resolve base ref ${baseRef}` };
     }
-    const created = await ghWrite('POST', `${GH_API}/repos/${repo}/git/refs`, token, ctx, {
+    const created = await ghWrite('POST', `${apiBase(ctx)}/repos/${repo}/git/refs`, token, ctx, {
         ref: `refs/heads/${branch}`,
         sha: baseSha,
     });
@@ -29,10 +31,10 @@ export async function createFilesPr(opts, token, ctx) {
     for (const file of files) {
         let sha;
         if (exists === 'upsert') {
-            const current = (await ghGet(`${GH_API}/repos/${repo}/contents/${encodeURIComponent(file.path)}?ref=${encodeURIComponent(branch)}`, token, ctx));
+            const current = (await ghGet(`${apiBase(ctx)}/repos/${repo}/contents/${encodeURIComponent(file.path)}?ref=${encodeURIComponent(branch)}`, token, ctx));
             sha = typeof current?.sha === 'string' ? current.sha : undefined;
         }
-        const put = await ghWrite('PUT', `${GH_API}/repos/${repo}/contents/${encodeURIComponent(file.path)}`, token, ctx, {
+        const put = await ghWrite('PUT', `${apiBase(ctx)}/repos/${repo}/contents/${encodeURIComponent(file.path)}`, token, ctx, {
             message: `${title}: ${file.path}`,
             content: Buffer.from(file.content, 'utf8').toString('base64'),
             branch,
@@ -63,12 +65,12 @@ export async function createFilesPr(opts, token, ctx) {
         }
     }
     const owner = repo.split('/')[0] ?? repo;
-    const open = (await ghGet(`${GH_API}/repos/${repo}/pulls?head=${encodeURIComponent(`${owner}:${branch}`)}&state=open`, token, ctx));
+    const open = (await ghGet(`${apiBase(ctx)}/repos/${repo}/pulls?head=${encodeURIComponent(`${owner}:${branch}`)}&state=open`, token, ctx));
     const existing = Array.isArray(open) ? open[0]?.html_url : undefined;
     if (typeof existing === 'string') {
         return { prUrl: existing, existing: true, written, updated, skipped };
     }
-    const createdPr = await ghWrite('POST', `${GH_API}/repos/${repo}/pulls`, token, ctx, {
+    const createdPr = await ghWrite('POST', `${apiBase(ctx)}/repos/${repo}/pulls`, token, ctx, {
         title,
         head: branch,
         base: baseRef,

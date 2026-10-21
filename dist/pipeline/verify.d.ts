@@ -39,5 +39,6 @@ export declare function runVerify(input: VerifyInput): Promise<VerifyResult>;
 export declare function writeEvidenceReport(reportDir: string, manifest: RunManifest, meta?: {
     version?: string;
     runUrl?: string;
+    webBase?: string;
 }): Promise<string>;
 export {};

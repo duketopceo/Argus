@@ -1,5 +1,6 @@
 import { defaultExec } from '../detect.js';
 import { debug } from '../debug.js';
+import { gitHeaderKey, resolveGitHost } from '../github/host.js';
 import { addedLines, GIT_DIFF_PATH_FLAGS } from './difftext.js';
 import { describeDecisionError, isNoulAnswer, MAX_CANDIDATES, } from '../vision/decisions.js';
 // Owned by vision/decisions.ts — re-exported here so existing import
@@ -63,7 +64,7 @@ function maskFindingMessage(c, adjudicated) {
         `Rotate it and purge it from history.`);
 }
 /** `git cat-file -e` + shallow-fetch fallback — mirrors probe/queue.ts. */
-async function ensureBaseObject(exec, cwd, baseSha, token) {
+async function ensureBaseObject(exec, cwd, baseSha, token, host) {
     const have = await exec('git', ['-C', cwd, 'cat-file', '-e', `${baseSha}^{commit}`], 15_000);
     if (have.code === 0)
         return true;
@@ -73,7 +74,7 @@ async function ensureBaseObject(exec, cwd, baseSha, token) {
     // token out of process argv where co-tenant jobs could scrape /proc.
     const fetched = await exec('git', ['-C', cwd, 'fetch', '--depth', '1', 'origin', baseSha], 60_000, {
         GIT_CONFIG_COUNT: '1',
-        GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
+        GIT_CONFIG_KEY_0: gitHeaderKey(host),
         GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`,
     });
     return fetched.code === 0;
@@ -85,7 +86,7 @@ async function ensureBaseObject(exec, cwd, baseSha, token) {
  */
 export async function materializeMergeBaseDiff(opts) {
     const exec = opts.exec ?? defaultExec;
-    const have = await ensureBaseObject(exec, opts.cwd, opts.baseSha, opts.token);
+    const have = await ensureBaseObject(exec, opts.cwd, opts.baseSha, opts.token, opts.host ?? resolveGitHost(undefined));
     if (!have) {
         return { skipped: `base ${opts.baseSha.slice(0, 12)} not available locally and unfetchable` };
     }

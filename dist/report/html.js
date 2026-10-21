@@ -52,6 +52,9 @@ function formatDuration(ms) {
 const SHA = /^[0-9a-f]{7,40}$/i;
 const REPO = /^[\w.-]+\/[\w.-]+$/;
 const SAFE_URL = /^https:\/\/[^\s"'<>`]+$/;
+// GHE deployments may be plain http on an internal network — esc() already
+// neutralizes attribute-breakout; the pattern only rejects garbage input.
+const WEB_BASE = /^https?:\/\/[^\s"'<>`]+$/;
 // ---- Markup atoms -----------------------------------------------------------
 function glyph(id, cls = '') {
     return `<svg class="g${cls ? ` ${cls}` : ''}" aria-hidden="true" focusable="false"><use href="#${id}"/></svg>`;
@@ -251,8 +254,8 @@ ${view !== undefined && view.selected ? laneDetails(view) : ''}
 }
 function fileLink(c, file, line) {
     const label = `${file}${line !== undefined ? `:${line}` : ''}`;
-    if (c.repo !== undefined && REPO.test(c.repo) && c.head !== undefined && SHA.test(c.head) && !/[\s"'<>`]/.test(file) && !file.includes('..')) {
-        const href = `https://github.com/${c.repo}/blob/${c.head}/${file.split('/').map(encodeURIComponent).join('/')}${line !== undefined ? `#L${line}` : ''}`;
+    if (c.repo !== undefined && REPO.test(c.repo) && c.head !== undefined && SHA.test(c.head) && c.webBase !== undefined && !/[\s"'<>`]/.test(file) && !file.includes('..')) {
+        const href = `${c.webBase}/${c.repo}/blob/${c.head}/${file.split('/').map(encodeURIComponent).join('/')}${line !== undefined ? `#L${line}` : ''}`;
         return `<a class="path" href="${esc(href)}"><code>${esc(label)}</code></a>`;
     }
     return `<code class="path">${esc(label)}</code>`;
@@ -823,6 +826,11 @@ export function renderReportHtml(input) {
         run,
         repo: manifest?.identity.repo,
         head: manifest?.identity.intendedHeadSha ?? manifest?.identity.checkoutSha ?? crHead,
+        webBase: input.webBase === undefined
+            ? 'https://github.com'
+            : WEB_BASE.test(input.webBase)
+                ? input.webBase
+                : undefined,
     };
     const runId = manifest?.runId;
     const titleBits = ['Argus evidence report'];

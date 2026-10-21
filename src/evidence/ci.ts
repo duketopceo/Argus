@@ -1,6 +1,12 @@
+import { resolveGitHost } from '../github/host.js'
+
 interface Ctx {
   err: (line: string) => void
+  env?: Record<string, string | undefined>
 }
+
+/** REST base for this run's GitHub host (github.com or GHE — issue #23). */
+const apiBase = (ctx: Ctx) => resolveGitHost(ctx.env).apiBase
 
 /** Maintainer-applied PR label that opts a fork PR into sandbox probes. */
 export const PROBE_LABEL = 'argus-probe'
@@ -57,7 +63,6 @@ export interface PrMeta {
   body: string | undefined
 }
 
-const GH_API = 'https://api.github.com'
 const MAX_CHECK_RUN_PAGES = 5
 
 /**
@@ -148,7 +153,7 @@ export async function fetchPrMeta(
   token: string,
   ctx: Ctx,
 ): Promise<PrMeta | undefined> {
-  const data = (await ghGet(`${GH_API}/repos/${repo}/pulls/${pr}`, token, ctx)) as
+  const data = (await ghGet(`${apiBase(ctx)}/repos/${repo}/pulls/${pr}`, token, ctx)) as
     | {
         head?: { sha?: string; ref?: string; repo?: { fork?: boolean; pushed_at?: string } | null }
         base?: { sha?: string; ref?: string }
@@ -209,7 +214,7 @@ async function fetchMergeBase(
   token: string,
   ctx: Ctx,
 ): Promise<string | undefined> {
-  const data = (await ghGet(`${GH_API}/repos/${repo}/compare/${base}...${head}`, token, ctx)) as
+  const data = (await ghGet(`${apiBase(ctx)}/repos/${repo}/compare/${base}...${head}`, token, ctx)) as
     { merge_base_commit?: { sha?: string } } | undefined
   return data?.merge_base_commit?.sha
 }
@@ -244,7 +249,7 @@ export async function fetchCompare(
   const files: CompareFilesResult['files'] = []
   for (let page = 1; page <= MAX_COMPARE_FILE_PAGES; page++) {
     const data = (await ghGet(
-      `${GH_API}/repos/${repo}/compare/${base}...${head}?per_page=100&page=${page}`,
+      `${apiBase(ctx)}/repos/${repo}/compare/${base}...${head}?per_page=100&page=${page}`,
       token,
       ctx,
     )) as
@@ -291,7 +296,7 @@ export async function fetchReviewedStatus(
   token: string,
   ctx: Ctx,
 ): Promise<boolean | undefined> {
-  const data = (await ghGet(`${GH_API}/repos/${repo}/commits/${sha}/status`, token, ctx)) as
+  const data = (await ghGet(`${apiBase(ctx)}/repos/${repo}/commits/${sha}/status`, token, ctx)) as
     | { statuses?: { context?: string }[] | null }
     | undefined
   if (data === undefined) return undefined
@@ -318,7 +323,7 @@ async function fetchLabelApprovedAt(
   let latest: string | undefined
   for (let page = 1; page <= 3; page++) {
     const events = (await ghGet(
-      `${GH_API}/repos/${repo}/issues/${pr}/events?per_page=100&page=${page}`,
+      `${apiBase(ctx)}/repos/${repo}/issues/${pr}/events?per_page=100&page=${page}`,
       token,
       ctx,
     )) as { event?: string; created_at?: string; label?: { name?: string } | null }[] | undefined
@@ -348,7 +353,7 @@ export async function fetchCheckRuns(
   let page = 1
   while (page <= MAX_CHECK_RUN_PAGES) {
     const data = (await ghGet(
-      `${GH_API}/repos/${repo}/commits/${sha}/check-runs?per_page=100&page=${page}`,
+      `${apiBase(ctx)}/repos/${repo}/commits/${sha}/check-runs?per_page=100&page=${page}`,
       token,
       ctx,
     )) as { check_runs?: unknown[] } | undefined
@@ -400,7 +405,7 @@ export async function fetchReviewComments(
   let page = 1
   while (page <= MAX_CHECK_RUN_PAGES) {
     const data = (await ghGet(
-      `${GH_API}/repos/${repo}/pulls/${pr}/comments?per_page=100&page=${page}`,
+      `${apiBase(ctx)}/repos/${repo}/pulls/${pr}/comments?per_page=100&page=${page}`,
       token,
       ctx,
     )) as
@@ -449,7 +454,7 @@ export async function fetchFileContent(
   ctx: Ctx,
 ): Promise<string | undefined> {
   const data = (await ghGet(
-    `${GH_API}/repos/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`,
+    `${apiBase(ctx)}/repos/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`,
     token,
     ctx,
   )) as { content?: string; encoding?: string } | undefined

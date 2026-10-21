@@ -5,6 +5,7 @@ import { newRunId } from '../journal/store.js';
 import { createLogger, resolveLogLevel } from '../log.js';
 import { APP_LANE_DEFAULT_TIMEOUT_MS, runAppLane, APP_LANE_REPORT } from '../pipeline/app.js';
 import { selectionFromFlags } from '../pipeline/contracts.js';
+import { resolveGitHost } from '../github/host.js';
 import { runVerify, writeEvidenceReport } from '../pipeline/verify.js';
 import { REPORT_HTML } from '../report/html.js';
 import { LANE_IDS, archiveManifest } from '../report/manifest.js';
@@ -276,6 +277,7 @@ export async function cmdVerify(args, ctx, deps) {
             ...(server !== undefined && repository !== undefined && runId !== undefined
                 ? { runUrl: `${server}/${repository}/actions/runs/${runId}` }
                 : {}),
+            webBase: resolveGitHost(ctx.env).webBase,
         });
     }
     catch (e) {

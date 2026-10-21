@@ -24,7 +24,7 @@ export function validateBranch(branch) {
     return undefined;
 }
 export function renderPrBody(input) {
-    const { repo, budgetUsd, paths } = input;
+    const { repo, budgetUsd, paths, webBase = 'https://github.com' } = input;
     return `## Add Argus reviewer
 
 This PR adds a review-only [Argus](https://github.com/duketopceo/Argus) setup. Nothing runs until it is merged.
@@ -35,7 +35,7 @@ ${paths.map((p) => `- \`${p}\``).join('\n')}
 
 ### Before merging: add the secret
 
-- [ ] Add \`OPENROUTER_API_KEY\` as a repository secret: https://github.com/${repo}/settings/secrets/actions/new?name=OPENROUTER_API_KEY
+- [ ] Add \`OPENROUTER_API_KEY\` as a repository secret: ${webBase}/${repo}/settings/secrets/actions/new?name=OPENROUTER_API_KEY
   - Or from your own terminal: \`gh secret set OPENROUTER_API_KEY --repo ${repo}\`
 - [ ] Review the workflow files above. They use \`pull_request\` (never \`pull_request_target\`), \`persist-credentials: false\`, a pinned action SHA and least-privilege \`permissions\`.
 
