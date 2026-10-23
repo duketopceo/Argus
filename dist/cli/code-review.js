@@ -15,7 +15,7 @@ import { runProbeLane } from '../probe/queue.js';
 import { classifyHeadBinding, readCheckoutSha, isHeadBindingConclusive } from '../report/manifest.js';
 import { adjudicateFindings } from '../review/adjudicate.js';
 import { planChunks } from '../review/chunks.js';
-import { isReviewProfile } from '../review/packs.js';
+import { isReviewProfile, selectLangPacks } from '../review/packs.js';
 import { reflectFindings } from '../review/reflect.js';
 import { rulesLaneScans, runRules } from '../review/rules.js';
 import { appendSpend, evaluateCaps, periodSpend, resolveBudgetCaps, resolveJournalDir } from '../spend.js';
@@ -127,6 +127,17 @@ export async function cmdCodeReview(args, ctx, deps) {
             .split(',')
             .map((s) => s.trim())
             .filter(isReviewProfile);
+    }
+    // ARGUS_REVIEW_LANG_PACKS (1/0) — operator-env lever for U10 language
+    // rubrics; the only way to flip them in the untrusted lane.
+    const envLangPacks = ctx.env.ARGUS_REVIEW_LANG_PACKS?.trim().toLowerCase();
+    if (envLangPacks !== undefined && envLangPacks !== '') {
+        if (envLangPacks === '0' || envLangPacks === 'false' || envLangPacks === 'off') {
+            config.review.langPacks = false;
+        }
+        else if (envLangPacks === '1' || envLangPacks === 'true' || envLangPacks === 'on') {
+            config.review.langPacks = true;
+        }
     }
     // ARGUS_REVIEW_INSTRUCTIONS (JSON [{glob, rule}]) follows the same
     // operator-env pattern — the only lever in the untrusted lane. Invalid
@@ -368,6 +379,8 @@ export async function cmdCodeReview(args, ctx, deps) {
     }
     const plan = planChunks(files, contexts);
     const chunks = plan.map((c) => c.text);
+    // U10 — language rubrics from this chunk's paths (empty when disabled).
+    const langsForChunk = (i) => config.review.langPacks ? selectLangPacks(plan[i]?.files ?? []) : [];
     debug('code-review', `chunks=${chunks.length} files=${files.length}`);
     // Ledger hoisted past the try: a review that dies after burning model
     // calls still journals what it spent (the finally below) — capping
@@ -518,7 +531,7 @@ export async function cmdCodeReview(args, ctx, deps) {
             else {
                 const allRequests = chunks.map((chunk, i) => ({
                     customId: `chunk-${i}`,
-                    messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles, rulesForFiles(config.review.instructions, plan[i]?.files ?? [])),
+                    messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles, rulesForFiles(config.review.instructions, plan[i]?.files ?? []), langsForChunk(i)),
                     schema: CODE_REVIEW_SCHEMA,
                     provider: config.provider,
                 }));
@@ -609,7 +622,7 @@ export async function cmdCodeReview(args, ctx, deps) {
             else if (toolset !== undefined && client.completeWithTools !== undefined) {
                 const r = await client.completeWithTools({
                     model: reviewModel,
-                    messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles, rulesForFiles(config.review.instructions, plan[i]?.files ?? [])),
+                    messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles, rulesForFiles(config.review.instructions, plan[i]?.files ?? []), langsForChunk(i)),
                     schema: CODE_REVIEW_SCHEMA,
                     kind: 'code',
                     provider: config.provider,
@@ -630,7 +643,7 @@ export async function cmdCodeReview(args, ctx, deps) {
             else {
                 const r = await client.complete({
                     model: reviewModel,
-                    messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles, rulesForFiles(config.review.instructions, plan[i]?.files ?? [])),
+                    messages: buildCodeReviewMessages(repoName, prNum, chunk, i, chunks.length, config.review.profiles, rulesForFiles(config.review.instructions, plan[i]?.files ?? []), langsForChunk(i)),
                     schema: CODE_REVIEW_SCHEMA,
                     kind: 'code',
                     provider: config.provider,

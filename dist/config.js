@@ -126,6 +126,7 @@ const defaults = {
         requestChanges: true,
         nitsInline: false,
         profiles: [],
+        langPacks: true,
         instructions: [],
         rules: [...REVIEW_RULE_IDS],
         exclude: [...DEFAULT_REVIEW_EXCLUDE],
@@ -329,6 +330,8 @@ export function resolveConfig(input = {}) {
     review.profiles = Array.isArray(rawReview.profiles)
         ? [...new Set(rawReview.profiles.filter(isReviewProfile))]
         : [];
+    // Default-true: only literal `false` opts out (same posture as requestChanges).
+    review.langPacks = review.langPacks !== false;
     review.instructions = parseInstructions(rawReview.instructions);
     review.rules = parseRuleIds(rawReview.rules);
     review.exclude =

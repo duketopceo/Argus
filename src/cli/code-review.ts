@@ -15,7 +15,7 @@ import { type ProbeRecord, runProbeLane } from '../probe/queue.js'
 import { classifyHeadBinding, readCheckoutSha, isHeadBindingConclusive } from '../report/manifest.js'
 import { type FindingAdjudicationAudit, adjudicateFindings } from '../review/adjudicate.js'
 import { planChunks } from '../review/chunks.js'
-import { isReviewProfile } from '../review/packs.js'
+import { isReviewProfile, selectLangPacks } from '../review/packs.js'
 import { reflectFindings, type FindingReflectionAudit } from '../review/reflect.js'
 import { type RuleFinding, rulesLaneScans, runRules } from '../review/rules.js'
 import { appendSpend, evaluateCaps, periodSpend, resolveBudgetCaps, resolveJournalDir } from '../spend.js'
@@ -143,6 +143,16 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
       .split(',')
       .map((s) => s.trim())
       .filter(isReviewProfile)
+  }
+  // ARGUS_REVIEW_LANG_PACKS (1/0) — operator-env lever for U10 language
+  // rubrics; the only way to flip them in the untrusted lane.
+  const envLangPacks = ctx.env.ARGUS_REVIEW_LANG_PACKS?.trim().toLowerCase()
+  if (envLangPacks !== undefined && envLangPacks !== '') {
+    if (envLangPacks === '0' || envLangPacks === 'false' || envLangPacks === 'off') {
+      config.review.langPacks = false
+    } else if (envLangPacks === '1' || envLangPacks === 'true' || envLangPacks === 'on') {
+      config.review.langPacks = true
+    }
   }
   // ARGUS_REVIEW_INSTRUCTIONS (JSON [{glob, rule}]) follows the same
   // operator-env pattern — the only lever in the untrusted lane. Invalid
@@ -429,6 +439,9 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
 
   const plan = planChunks(files, contexts)
   const chunks = plan.map((c) => c.text)
+  // U10 — language rubrics from this chunk's paths (empty when disabled).
+  const langsForChunk = (i: number) =>
+    config.review.langPacks ? selectLangPacks(plan[i]?.files ?? []) : []
   debug('code-review', `chunks=${chunks.length} files=${files.length}`)
 
   // Ledger hoisted past the try: a review that dies after burning model
@@ -598,6 +611,7 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
             chunks.length,
             config.review.profiles,
             rulesForFiles(config.review.instructions, plan[i]?.files ?? []),
+            langsForChunk(i),
           ),
           schema: CODE_REVIEW_SCHEMA,
           provider: config.provider,
@@ -698,6 +712,7 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
             chunks.length,
             config.review.profiles,
             rulesForFiles(config.review.instructions, plan[i]?.files ?? []),
+            langsForChunk(i),
           ),
           schema: CODE_REVIEW_SCHEMA,
           kind: 'code',
@@ -724,6 +739,7 @@ export async function cmdCodeReview(args: string[], ctx: Ctx, deps: CliDeps): Pr
             chunks.length,
             config.review.profiles,
             rulesForFiles(config.review.instructions, plan[i]?.files ?? []),
+            langsForChunk(i),
           ),
           schema: CODE_REVIEW_SCHEMA,
           kind: 'code',
