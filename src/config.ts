@@ -314,6 +314,8 @@ export interface Config {
    * `profiles`: named review lenses appended to the review prompt
    * ('security'|'perf'|'debloat' — see src/review/packs.ts). Unknown names
    * are dropped at config load. Default [] — no extra rubric.
+   * `langPacks`: when true (default), each chunk also gets language rubrics
+   * auto-selected from its file extensions (competitive U10 / #154).
    */
   review: {
     secretsThreshold: number
@@ -332,6 +334,8 @@ export interface Config {
      */
     nitsInline: boolean
     profiles: ReviewProfile[]
+    /** Auto language rubrics from chunk file extensions. Default true. */
+    langPacks: boolean
     /**
      * Glob list of changed paths kept out of the review input. A configured
      * list replaces the defaults (generated, fixture, golden, vendored
@@ -547,6 +551,7 @@ const defaults: Config = {
     requestChanges: true,
     nitsInline: false,
     profiles: [],
+    langPacks: true,
     instructions: [],
     rules: [...REVIEW_RULE_IDS],
     exclude: [...DEFAULT_REVIEW_EXCLUDE],
@@ -765,6 +770,8 @@ export function resolveConfig(input: ConfigInput = {}): Config {
   review.profiles = Array.isArray(rawReview.profiles)
     ? [...new Set(rawReview.profiles.filter(isReviewProfile))]
     : []
+  // Default-true: only literal `false` opts out (same posture as requestChanges).
+  review.langPacks = review.langPacks !== false
   review.instructions = parseInstructions(rawReview.instructions)
   review.rules = parseRuleIds(rawReview.rules)
   review.exclude =
