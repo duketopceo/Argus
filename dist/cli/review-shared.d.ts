@@ -175,6 +175,8 @@ export interface CodeReviewReport {
     validation?: ValidationAudit;
     /** Test-file findings capped at nit (bug/risk with no non-test citation). */
     testFileCapped?: number;
+    /** Plan/spec-document findings capped at nit (bug/risk with no code citation). */
+    planDocCapped?: number;
     calls: CallCost[];
     visionCostUsd: number;
     tokens: number;

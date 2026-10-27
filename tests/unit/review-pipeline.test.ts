@@ -96,3 +96,21 @@ describe('test-file handling', () => {
     expect(client.prompts[0]).toContain('assertions describe expected behavior')
   })
 })
+
+describe('plan-doc handling', () => {
+  it('caps a plan-doc bug at nit and lets the verdict follow', async () => {
+    const client = new ScriptedClient([
+      reply([
+        { file: 'docs/plans/x-plan.md', line: 1, severity: 'bug', category: 'correctness', message: 'L1: R6 contradicts R4' },
+      ]),
+    ])
+    const r = await runReview({
+      head: { 'src/a.ts': 'x\n', 'docs/plans/x-plan.md': '# plan\n' },
+      client,
+    })
+    expect(r.report.findings[0].severity).toBe('nit')
+    expect(r.report.verdict).toBe('approve')
+    expect(r.report.planDocCapped).toBe(1)
+    expect(client.prompts[0]).toContain('Plans and specs describe intended state')
+  })
+})

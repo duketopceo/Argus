@@ -676,6 +676,9 @@ function diagnosticsFold(manifest, report, codeReview) {
     if (typeof codeReview.testFileCapped === 'number' && codeReview.testFileCapped > 0) {
       items.push(`Test-file findings capped at nit: ${codeReview.testFileCapped}`)
     }
+    if (typeof codeReview.planDocCapped === 'number' && codeReview.planDocCapped > 0) {
+      items.push(`Plan/spec-doc findings capped at nit: ${codeReview.planDocCapped}`)
+    }
     const ist = codeReview.indexStaleness
     if (ist && ist.stale > 0) {
       items.push(

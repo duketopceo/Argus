@@ -6,6 +6,16 @@ pre-1.0; breaking changes may ship without a major bump until `1.0.0`.
 ## [Unreleased]
 
 ### Added
+- **Plan/spec-doc severity cap** — findings anchored in a plan, spec, RFC,
+  ADR, brainstorm or design document (markdown under `plans/`, `specs/`,
+  `rfcs/`, `adrs/`, `brainstorms/`, `proposals/`, or named `*-plan.md`,
+  `*-spec.md`, `*-rfc.md`, `*-design.md`) are capped at `nit` unless they
+  carry reproduced evidence or cite a non-doc file from the diff, mirroring
+  the test-file cap. Plans describe intended state, so "R6 contradicts R4"
+  style findings no longer gate the commit status. Ordinary docs (README,
+  CHANGELOG, quickstart) are unaffected. The report gains `planDocCapped`,
+  shown in the sticky Diagnostics fold, and the review prompt tells the
+  model to flag only contradictions that would mislead an implementer.
 - **`test-sibling` rules-lane signal** — when a diff's own files prove
   colocated test pairing (a source file whose stem-matched test also
   changed), the rule emits one file-level `nit` naming the highest-churn
