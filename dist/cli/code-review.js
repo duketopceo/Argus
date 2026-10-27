@@ -22,6 +22,7 @@ import { appendSpend, evaluateCaps, periodSpend, resolveBudgetCaps, resolveJourn
 import { partitionByExclude, rulesForFiles } from '../review/scope.js';
 import { materializeMergeBaseDiff } from '../review/secrets.js';
 import { resolveGitHost } from '../github/host.js';
+import { capPlanDocFindings } from '../review/plandocs.js';
 import { capTestFindings } from '../review/testfiles.js';
 import { maskToolRecord, repoTools } from '../review/tools.js';
 import { triagePr, buildTriageState, routeModel, triageAreaSignal } from '../review/triage.js';
@@ -740,18 +741,24 @@ export async function cmdCodeReview(args, ctx, deps) {
         // dropped before any adjudication spend. Counted, never silent.
         let validation;
         let testFileCapped = 0;
+        let planDocCapped = 0;
         {
             const checked = validateFindings(finalFindings, files, new Set(excluded.map((f) => f.filename)));
             const capped = capTestFindings(checked.kept, files.map((f) => f.filename));
             testFileCapped = capped.capped;
-            if (checked.dropped.length > 0 || capped.capped > 0) {
-                finalFindings = capped.findings;
+            const planCapped = capPlanDocFindings(capped.findings, files.map((f) => f.filename));
+            planDocCapped = planCapped.capped;
+            if (checked.dropped.length > 0 || capped.capped > 0 || planCapped.capped > 0) {
+                finalFindings = planCapped.findings;
                 if (checked.dropped.length > 0) {
                     validation = auditOf(checked.dropped);
                     stage(`validation dropped ${checked.dropped.length} finding(s) outside the diff`);
                 }
                 if (capped.capped > 0) {
                     stage(`capped ${capped.capped} test-file finding(s) at nit`);
+                }
+                if (planCapped.capped > 0) {
+                    stage(`capped ${planCapped.capped} plan/spec-doc finding(s) at nit`);
                 }
             }
         }
@@ -1173,6 +1180,7 @@ export async function cmdCodeReview(args, ctx, deps) {
                 : {}),
             ...(validation !== undefined ? { validation } : {}),
             ...(testFileCapped > 0 ? { testFileCapped } : {}),
+            ...(planDocCapped > 0 ? { planDocCapped } : {}),
             maxComments,
             calls: allCalls,
             visionCostUsd: totalCost,
