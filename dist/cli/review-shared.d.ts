@@ -274,7 +274,7 @@ export declare function loadLocalDiff(cwd: string, baseRef: string, exec?: ExecF
     error: string;
 }>;
 export declare function buildPatchChunks(files: PrFile[], contexts?: Record<string, string>): string[];
-export declare function buildCodeReviewMessages(repo: string, pr: string, patchText: string, chunkIndex?: number, totalChunks?: number, profiles?: readonly string[], instructions?: readonly string[]): Message[];
+export declare function buildCodeReviewMessages(repo: string, pr: string, patchText: string, chunkIndex?: number, totalChunks?: number, profiles?: readonly string[], instructions?: readonly string[], langIds?: readonly string[]): Message[];
 export declare function buildSynthesisMessages(repo: string, pr: string, files: string[], findings: CodeReviewReport['findings']): Message[];
 export declare function parseCodeReview(content: string): {
     /** Raw model-emitted summary; undefined when absent or unparseable so

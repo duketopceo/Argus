@@ -178,6 +178,10 @@ secrets scan (on by default — `review.rules` controls it) — the rubric
 steers the model toward exploitability; the regex lane catches
 secret-shaped literals even when the model doesn't.
 
+Language lenses (TypeScript/JavaScript, Python, Go, SQL) auto-append from
+each chunk's file extensions — no config for the common case. Set
+`review.langPacks: false` or `ARGUS_REVIEW_LANG_PACKS=0` to disable.
+
 Per-path rules come from `review.instructions` — `{glob, rule}` entries
 resolved per chunk, so a rule lands only in chunks carrying matching files
 (migrations get migration rules, UI gets a11y rules):

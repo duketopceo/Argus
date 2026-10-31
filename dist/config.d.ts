@@ -308,6 +308,8 @@ export interface Config {
      * `profiles`: named review lenses appended to the review prompt
      * ('security'|'perf'|'debloat' — see src/review/packs.ts). Unknown names
      * are dropped at config load. Default [] — no extra rubric.
+     * `langPacks`: when true (default), each chunk also gets language rubrics
+     * auto-selected from its file extensions (competitive U10 / #154).
      */
     review: {
         secretsThreshold: number;
@@ -326,6 +328,8 @@ export interface Config {
          */
         nitsInline: boolean;
         profiles: ReviewProfile[];
+        /** Auto language rubrics from chunk file extensions. Default true. */
+        langPacks: boolean;
         /**
          * Glob list of changed paths kept out of the review input. A configured
          * list replaces the defaults (generated, fixture, golden, vendored

@@ -579,8 +579,9 @@ export function buildCodeReviewMessages(
   totalChunks = 1,
   profiles: readonly string[] = [],
   instructions: readonly string[] = [],
+  langIds: readonly string[] = [],
 ): Message[] {
-  const rubric = packRubric(profiles)
+  const rubric = packRubric(profiles, langIds)
   // Per-path rules (U6) join the profile rubric as a second rubric block —
   // same slot, same authority.
   const rulesBlock =

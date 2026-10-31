@@ -281,8 +281,8 @@ export async function loadLocalDiff(cwd, baseRef, exec = defaultExec, opts = {})
 export function buildPatchChunks(files, contexts = {}) {
     return planChunks(files, contexts).map((c) => c.text);
 }
-export function buildCodeReviewMessages(repo, pr, patchText, chunkIndex = 0, totalChunks = 1, profiles = [], instructions = []) {
-    const rubric = packRubric(profiles);
+export function buildCodeReviewMessages(repo, pr, patchText, chunkIndex = 0, totalChunks = 1, profiles = [], instructions = [], langIds = []) {
+    const rubric = packRubric(profiles, langIds);
     // Per-path rules (U6) join the profile rubric as a second rubric block —
     // same slot, same authority.
     const rulesBlock = instructions.length > 0
