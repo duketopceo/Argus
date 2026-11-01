@@ -1,23 +1,22 @@
-# Self-hosted runners on the cluster
+# Self-hosted runners
 
 `register-runner.sh` registers a repo-scoped GitHub Actions runner on a Linux node as a **user-level systemd service** — no root required.
 
 ```bash
-./register-runner.sh duketopceo/Pace-Server cluster2-argus
-./register-runner.sh owner/other-repo cluster2-other-repo
+./register-runner.sh owner/repo reviewer
+./register-runner.sh owner/other-repo other-reviewer
 ```
 
 Each repo gets its own runner dir (`~/actions-runner-<name>`) and unit (`actions-runner-<name>.service`).
 
-## Topology
+## Labels
 
-- **Primary node: cluster2** (Ubuntu 24.04, x86_64, Docker 29, ~14 GiB free). cluster1 hosts the stateful services stack; cluster3 is RAM-constrained.
 - Labels: `self-hosted, linux, x64, argus-reviewer`. Target jobs with `runs-on: [self-hosted, linux, x64, argus-reviewer]`.
 
 ## Cost model
 
 - An **idle runner** is an outbound HTTPS long-poll: ~40–60 MB RAM, no CPU. Many per-repo instances are fine.
-- **Concurrency is the constraint**: each Playwright run wants ~2–4 GB. On 14 GiB free, ~3–4 concurrent runs is the ceiling; GitHub queues per-repo anyway.
+- **Concurrency is the constraint**: each Playwright run wants ~2–4 GB. Size concurrency for the available memory; GitHub queues per-repo.
 
 ## Container jobs
 

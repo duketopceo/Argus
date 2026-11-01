@@ -31,7 +31,7 @@
         "droppedReverted": 0,
         "nitShare": 0.3333333333333333
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/pr173-scan-mode.json"
+      "reportPath": "docs/audits/eval/reports/pr173-scan-mode.json"
     },
     {
       "name": "pr131-webhook-worker",
@@ -59,7 +59,7 @@
         "droppedReverted": 0,
         "nitShare": 0.45454545454545453
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/pr131-webhook-worker.json"
+      "reportPath": "docs/audits/eval/reports/pr131-webhook-worker.json"
     },
     {
       "name": "pr126-onboarding-docs",
@@ -86,7 +86,7 @@
         "droppedReverted": 0,
         "nitShare": 0.3333333333333333
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/pr126-onboarding-docs.json"
+      "reportPath": "docs/audits/eval/reports/pr126-onboarding-docs.json"
     },
     {
       "name": "pr59-probe-lane",
@@ -112,7 +112,7 @@
         "droppedReverted": 0,
         "nitShare": 0
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/pr59-probe-lane.json"
+      "reportPath": "docs/audits/eval/reports/pr59-probe-lane.json"
     },
     {
       "name": "u5-dep-bump",
@@ -138,7 +138,7 @@
         "droppedReverted": 0,
         "nitShare": 0.5
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/u5-dep-bump.json"
+      "reportPath": "docs/audits/eval/reports/u5-dep-bump.json"
     }
   ]
 }

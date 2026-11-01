@@ -13,7 +13,7 @@
         "visionCostUsd": 0.037910100690000004,
         "healEvents": 0,
         "failures": [],
-        "stdout": "run complete: 3/3 passed, 9 vision calls, $0.037910 vision spend — reports in /home/lukekimball/Documents/github/personal/Argus/evals/work/google-gemini-2-5-flash-lite/report",
+        "stdout": "run complete: 3/3 passed, 9 vision calls, $0.037910 vision spend — reports in evals/work/google-gemini-2-5-flash-lite/report",
         "stderr": [
           "trust: trusted — local run — no CI event context"
         ],
@@ -26,7 +26,7 @@
         "visionCalls": 0,
         "visionCostUsd": 0,
         "failures": [],
-        "stdout": "run complete: 3/3 passed, 0 vision calls, $0.000000 vision spend — reports in /home/lukekimball/Documents/github/personal/Argus/evals/work/google-gemini-2-5-flash-lite/report",
+        "stdout": "run complete: 3/3 passed, 0 vision calls, $0.000000 vision spend — reports in evals/work/google-gemini-2-5-flash-lite/report",
         "exitCode": 0
       }
     },
@@ -40,7 +40,7 @@
         "visionCostUsd": 0.00988079895,
         "healEvents": 0,
         "failures": [],
-        "stdout": "run complete: 3/3 passed, 4 vision calls, $0.009881 vision spend — reports in /home/lukekimball/Documents/github/personal/Argus/evals/work/moonshotai-kimi-k2-5/report",
+        "stdout": "run complete: 3/3 passed, 4 vision calls, $0.009881 vision spend — reports in evals/work/moonshotai-kimi-k2-5/report",
         "stderr": [
           "trust: trusted — local run — no CI event context"
         ],
@@ -53,7 +53,7 @@
         "visionCalls": 0,
         "visionCostUsd": 0,
         "failures": [],
-        "stdout": "run complete: 3/3 passed, 0 vision calls, $0.000000 vision spend — reports in /home/lukekimball/Documents/github/personal/Argus/evals/work/moonshotai-kimi-k2-5/report",
+        "stdout": "run complete: 3/3 passed, 0 vision calls, $0.000000 vision spend — reports in evals/work/moonshotai-kimi-k2-5/report",
         "exitCode": 0
       }
     }

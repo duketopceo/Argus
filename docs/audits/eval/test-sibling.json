@@ -1,11 +1,11 @@
 {
   "at": "2026-10-15T18:27:12.403Z",
   "corpora": [
-    "/home/lukekimball/Documents/github/personal/Argus/scripts/eval-corpus.test-sibling.json",
-    "/home/lukekimball/Documents/github/personal/Argus/scripts/eval-corpus.dogfood.json",
-    "/home/lukekimball/Documents/github/personal/Argus/scripts/eval-corpus.argus.json",
-    "/home/lukekimball/Documents/github/personal/Argus/scripts/eval-corpus.clean.json",
-    "/home/lukekimball/Documents/github/personal/Argus/scripts/eval-corpus.aacr.json"
+    "scripts/eval-corpus.test-sibling.json",
+    "scripts/eval-corpus.dogfood.json",
+    "scripts/eval-corpus.argus.json",
+    "scripts/eval-corpus.clean.json",
+    "scripts/eval-corpus.aacr.json"
   ],
   "tally": {
     "rows": 27,

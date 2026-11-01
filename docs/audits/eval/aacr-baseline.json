@@ -31,7 +31,7 @@
         "tp": 0,
         "validLabels": 3
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/aacr-cline-cline-1808.json"
+      "reportPath": "docs/audits/eval/reports/aacr-cline-cline-1808.json"
     },
     {
       "name": "aacr-infiniflow-ragflow-6691",
@@ -60,7 +60,7 @@
         "tp": 4,
         "validLabels": 6
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/aacr-infiniflow-ragflow-6691.json"
+      "reportPath": "docs/audits/eval/reports/aacr-infiniflow-ragflow-6691.json"
     },
     {
       "name": "aacr-vllm-project-vllm-24425",
@@ -85,7 +85,7 @@
         "tp": 0,
         "validLabels": 1
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/aacr-vllm-project-vllm-24425.json"
+      "reportPath": "docs/audits/eval/reports/aacr-vllm-project-vllm-24425.json"
     },
     {
       "name": "aacr-comfyanonymous-comfyui-6542",
@@ -116,7 +116,7 @@
         "tp": 3,
         "validLabels": 2
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/aacr-comfyanonymous-comfyui-6542.json"
+      "reportPath": "docs/audits/eval/reports/aacr-comfyanonymous-comfyui-6542.json"
     },
     {
       "name": "aacr-keycloak-keycloak-41672",
@@ -145,7 +145,7 @@
         "tp": 1,
         "validLabels": 1
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/aacr-keycloak-keycloak-41672.json"
+      "reportPath": "docs/audits/eval/reports/aacr-keycloak-keycloak-41672.json"
     },
     {
       "name": "aacr-dbeaver-dbeaver-37564",
@@ -174,7 +174,7 @@
         "tp": 1,
         "validLabels": 4
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/aacr-dbeaver-dbeaver-37564.json"
+      "reportPath": "docs/audits/eval/reports/aacr-dbeaver-dbeaver-37564.json"
     },
     {
       "name": "aacr-langflow-ai-langflow-5388",
@@ -203,7 +203,7 @@
         "tp": 2,
         "validLabels": 3
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/aacr-langflow-ai-langflow-5388.json"
+      "reportPath": "docs/audits/eval/reports/aacr-langflow-ai-langflow-5388.json"
     },
     {
       "name": "aacr-elastic-elasticsearch-133945",
@@ -244,7 +244,7 @@
         "tp": 1,
         "validLabels": 2
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/aacr-ollama-ollama-8938.json"
+      "reportPath": "docs/audits/eval/reports/aacr-ollama-ollama-8938.json"
     },
     {
       "name": "aacr-elastic-elasticsearch-123744",
