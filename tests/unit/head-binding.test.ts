@@ -19,19 +19,51 @@ describe('head binding', () => {
   it('reads a checkout SHA through the injected git runner', async () => {
     const sha = await readCheckoutSha('/repo', async (cmd, args) => {
       expect(cmd).toBe('git')
-      expect(args).toEqual(['-C', '/repo', 'rev-parse', 'HEAD'])
+      // safe.directory is passed per-invocation so a container job running as a
+      // uid that does not own the checkout (dubious ownership, exit 128) can
+      // still resolve its own HEAD.
+      expect(args).toEqual(['-c', 'safe.directory=*', '-C', '/repo', 'rev-parse', 'HEAD'])
       return { code: 0, stdout: 'abc123\n', stderr: '' }
     })
     expect(sha).toBe('abc123')
   })
 
-  it('degrades to unknown when git identity cannot be read', async () => {
-    const sha = await readCheckoutSha('/repo', async () => ({
-      code: 1,
-      stdout: '',
-      stderr: 'no git',
-    }))
-    expect(sha).toBeUndefined()
+  it('degrades to unknown when git identity cannot be read, and says why', async () => {
+    const errors: string[] = []
+    const spy = vi.spyOn(console, 'error').mockImplementation((msg: unknown) => {
+      errors.push(String(msg))
+    })
+    try {
+      const sha = await readCheckoutSha('/repo', async () => ({
+        code: 128,
+        stdout: '',
+        stderr: 'fatal: detected dubious ownership in repository at /repo\n',
+      }))
+      expect(sha).toBeUndefined()
+      // The whole point: a bare `undefined` hid this failure for every PR.
+      expect(errors.join('\n')).toContain('dubious ownership')
+      expect(errors.join('\n')).toContain('exit 128')
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('degrades to unknown and reports when git succeeds with no output', async () => {
+    const errors: string[] = []
+    const spy = vi.spyOn(console, 'error').mockImplementation((msg: unknown) => {
+      errors.push(String(msg))
+    })
+    try {
+      const sha = await readCheckoutSha('/repo', async () => ({
+        code: 0,
+        stdout: '\n',
+        stderr: '',
+      }))
+      expect(sha).toBeUndefined()
+      expect(errors.join('\n')).toContain('returned no output')
+    } finally {
+      spy.mockRestore()
+    }
   })
 
   it('classifies matching, mismatching, and unavailable identities', () => {
