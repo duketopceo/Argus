@@ -14,11 +14,30 @@ export const LANE_STATUSES = [
 export const MANIFEST_SCHEMA_VERSION = 1;
 /** Read the checked-out commit without making git identity a hard dependency. */
 export async function readCheckoutSha(cwd, exec = defaultExec) {
-    const result = await exec('git', ['-C', cwd, 'rev-parse', 'HEAD'], 10_000);
-    if (result.code !== 0)
+    // `safe.directory=*` is scoped to this one invocation — git's `-c` does not
+    // persist. CI containers commonly run the job as a uid that does not own the
+    // checkout (`--user 1000:1000` against a runner-owned workdir), and git then
+    // refuses every command with "detected dubious ownership" and a 128 exit,
+    // which surfaced as an inconclusive head binding on every PR. `rev-parse` runs
+    // no hooks, so trusting the tree for this read is not the attack
+    // safe.directory guards against. Passing it through `-c` also survives an
+    // unset HOME, where the global config that holds checkout's safe.directory
+    // entry is unreadable.
+    const result = await exec('git', ['-c', 'safe.directory=*', '-C', cwd, 'rev-parse', 'HEAD'], 10_000);
+    if (result.code !== 0) {
+        // A bare `undefined` cannot be told apart from "git is missing" versus "git
+        // refused", and that ambiguity is exactly what made this undiagnosable from
+        // a CI log. Surface what git actually said.
+        console.error(`readCheckoutSha: git rev-parse HEAD failed in ${cwd} (exit ${result.code}): ` +
+            `${result.stderr.trim().slice(0, 300) || '<no stderr>'}`);
         return undefined;
+    }
     const sha = result.stdout.trim();
-    return sha === '' ? undefined : sha;
+    if (sha === '') {
+        console.error(`readCheckoutSha: git rev-parse HEAD returned no output in ${cwd} (exit 0)`);
+        return undefined;
+    }
+    return sha;
 }
 /** Classify the relationship between API/fixture head identity and the checkout. */
 export function classifyHeadBinding(intendedSha, checkoutSha, source) {
