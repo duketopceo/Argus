@@ -27,7 +27,7 @@
         "tp": 0,
         "validLabels": 4
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/aacr-elastic-elasticsearch-133945.json"
+      "reportPath": "docs/audits/eval/reports/aacr-elastic-elasticsearch-133945.json"
     },
     {
       "name": "aacr-elastic-elasticsearch-123744",
@@ -52,7 +52,7 @@
         "tp": 0,
         "validLabels": 4
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/aacr-elastic-elasticsearch-123744.json"
+      "reportPath": "docs/audits/eval/reports/aacr-elastic-elasticsearch-123744.json"
     }
   ]
 }

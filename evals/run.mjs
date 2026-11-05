@@ -14,9 +14,11 @@
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
+import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DEFAULT_EVAL_BUDGET_USD, DEFAULT_EVAL_MODELS } from '../scripts/eval-plan.mjs'
+import { redactEvalOutput } from '../scripts/eval-privacy.mjs'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const fixtureUrl = `file://${join(repo, 'tests/fixtures/index.html')}`
@@ -86,7 +88,10 @@ for (const model of models) {
   const failures = (report) =>
     report.tests
       .filter((t) => !t.ok)
-      .map((t) => ({ name: t.name, reason: t.failureMessage ?? 'unknown' }))
+      .map((t) => ({
+        name: redactEvalOutput(t.name, repo, homedir()),
+        reason: redactEvalOutput(t.failureMessage ?? 'unknown', repo, homedir()),
+      }))
 
   results.push({
     model,
@@ -98,8 +103,12 @@ for (const model of models) {
       visionCostUsd: coldReport.totals.visionCostUsd,
       healEvents: coldReport.tests.reduce((n, t) => n + t.healEvents.length, 0),
       failures: failures(coldReport),
-      stdout: (cold.stdout ?? '').trim().split('\n').pop(),
-      stderr: (cold.stderr ?? '').trim().split('\n').slice(-3),
+      stdout: redactEvalOutput((cold.stdout ?? '').trim().split('\n').pop(), repo, homedir()),
+      stderr: (cold.stderr ?? '')
+        .trim()
+        .split('\n')
+        .slice(-3)
+        .map((line) => redactEvalOutput(line, repo, homedir())),
       exitCode: cold.status,
     },
     warm: {
@@ -109,7 +118,7 @@ for (const model of models) {
       visionCalls: warmReport.totals.visionCalls,
       visionCostUsd: warmReport.totals.visionCostUsd,
       failures: failures(warmReport),
-      stdout: (warm.stdout ?? '').trim().split('\n').pop(),
+      stdout: redactEvalOutput((warm.stdout ?? '').trim().split('\n').pop(), repo, homedir()),
       exitCode: warm.status,
     },
   })

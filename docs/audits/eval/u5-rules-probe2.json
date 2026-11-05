@@ -28,7 +28,7 @@
         "droppedReverted": 0,
         "nitShare": 0.6666666666666666
       },
-      "reportPath": "/home/lukekimball/Documents/github/personal/Argus/docs/audits/eval/reports/u5-dep-bump.json"
+      "reportPath": "docs/audits/eval/reports/u5-dep-bump.json"
     }
   ]
 }

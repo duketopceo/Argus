@@ -23,6 +23,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { git, mergeBase, resolveRepo } from './review-eval.mjs'
+import { displayCorpusPath } from './eval-privacy.mjs'
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
 
@@ -181,7 +182,7 @@ const writeArtifact = (complete) => {
     JSON.stringify(
       {
         at: new Date().toISOString(),
-        corpora: corpora.map((c) => resolve(c)),
+        corpora: corpora.map((c) => displayCorpusPath(c, REPO_ROOT)),
         tally: tallyRows(rows),
         verdict: { ...verdictFor(rows, complete), ...preserved },
         rows,
@@ -197,7 +198,7 @@ for (const c of corpora) {
   try {
     entries = JSON.parse(readFileSync(resolve(c), 'utf8'))
   } catch (e) {
-    rows.push({ name: resolve(c), error: `corpus load: ${String(e?.message ?? e).slice(0, 160)}` })
+    rows.push({ name: displayCorpusPath(c, REPO_ROOT), error: `corpus load: ${e?.code ?? 'unreadable'}` })
     console.error(`${c}: corpus load failed - ${String(e?.message ?? e).slice(0, 120)}`)
     writeArtifact(false)
     continue

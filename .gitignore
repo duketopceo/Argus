@@ -12,6 +12,8 @@ vision-e2e-report/
 *.webm
 *.tgz
 evals/work/
+# New raw eval outputs are local by default; curated results can be force-added.
+evals/results/*.json
 # regenerable run artifacts — materialized diffs embed corpus secret literals
 evals/review-quality/results/*.diffs.json
 evals/review-quality/results/*.judge.json
