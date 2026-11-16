@@ -17,6 +17,8 @@
   section.s { order: 1; }
   section.n { order: 2; }
   section.d { order: 4; }
+  section.c { order: 5; }
+  section.contact { position: fixed; right: 16px; bottom: 16px; width: 250px; z-index: 5; }
   h2 { margin: 0 0 10px; font-size: 19px; }
   p { margin: 6px 0; }
   .state { color: #6b5a48; min-height: 22px; }
@@ -60,6 +62,15 @@
     <h2>Display</h2>
     <button id="theme" type="button">Dark mode</button>
     <p class="state" id="themestate">Theme: light</p>
+  </section>
+  <section class="c contact">
+    <h2>Contact</h2>
+    <label for="contact-name">Full name</label>
+    <input id="contact-name" type="text" autocomplete="off">
+    <label for="contact-phone">Phone</label>
+    <input id="contact-phone" type="text" autocomplete="off">
+    <button id="contact-send" type="button">Send message</button>
+    <p class="state" id="contactstate"></p>
   </section>
 </main>
 <script src="/shared.js"></script>

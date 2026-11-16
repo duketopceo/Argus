@@ -86,7 +86,7 @@ describe('explore prompt surface (U4b)', () => {
     const props = exploreActionSchema.schema.properties as Record<string, { enum?: string[] }>
     expect(props.action!.enum).toContain('navigate')
     expect(props.url).toBeDefined()
-    expect(exploreActionSchema.schema.required).toEqual(['action', 'reasoning'])
+    expect(exploreActionSchema.schema.required).toEqual(Object.keys(props))
     // `fail` is parse-accepted for transcript purposes but not proposed.
     expect(props.action!.enum).not.toContain('fail')
   })

@@ -145,6 +145,13 @@ export declare class Engine {
     private _parseAssertion;
     private _resolveAction;
     private _resolveNode;
+    /**
+     * The model pointed at a non-interactive container (a panel, a card
+     * background) whose text merely includes the label. Prefer the nearest
+     * interactive element inside that container whose accessible name matches
+     * the instruction, and return its center; null when there is none.
+     */
+    private _snapToInteractive;
     private _executeAction;
     private _buildFingerprint;
     private _regionScreenshot;

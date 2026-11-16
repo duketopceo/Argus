@@ -37,6 +37,7 @@ const flag = (n, d) => {
 }
 const models = flag('models', 'google/gemini-2.5-flash').split(',')
 const reps = Number(flag('reps', '3'))
+const repFrom = Number(flag('rep-from', '1')) // resume a part-finished run: replicates repFrom..reps
 const capUsd = Number(flag('cap', '3'))
 const concurrency = Number(flag('concurrency', '2'))
 const budgetRun = Number(flag('budget-run', '0.25'))
@@ -203,7 +204,7 @@ async function job(model, rep, port) {
 }
 
 const queue = []
-for (const model of models) for (let rep = 1; rep <= reps; rep++) queue.push([model, rep])
+for (const model of models) for (let rep = repFrom; rep <= reps; rep++) queue.push([model, rep])
 const workers = Array.from({ length: concurrency }, async (_, i) => {
   while (queue.length && !stop) {
     const [model, rep] = queue.shift()

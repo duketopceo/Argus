@@ -161,16 +161,113 @@ export class TdSession {
         }, result.healed ? { index, before: cached, after: result.fingerprint } : undefined);
         return result.point;
     }
+    /** Steps whose click had no observable effect (even after one retry); nothing was saved for them. */
+    noEffectSteps = [];
+    /**
+     * Cheap page-state signature: URL, focused element, a DOM mutation counter
+     * (child list, attributes, text, installed on first use) and the scroll
+     * offset. Two equal signatures around an action mean it did nothing.
+     */
+    async _stateSignature() {
+        return this.opts.driver.rawPage.evaluate(() => {
+            const g = globalThis;
+            // Our own coordinate overlay (observe({grid:true})) is not the page reacting.
+            const ours = (n) => (n.id ?? '').startsWith('__argus_');
+            if (g.__argusMutations === undefined || g.__argusMutations.root !== g.document.documentElement) {
+                const counter = { n: 0, root: g.document.documentElement };
+                new g.MutationObserver((records) => {
+                    for (const r of records) {
+                        const nodes = [...Array.from(r.addedNodes), ...Array.from(r.removedNodes)];
+                        if (ours(r.target) || (nodes.length > 0 && nodes.every(ours)))
+                            continue;
+                        counter.n += 1;
+                    }
+                }).observe(g.document.documentElement, {
+                    subtree: true,
+                    childList: true,
+                    attributes: true,
+                    characterData: true,
+                });
+                g.__argusMutations = counter;
+            }
+            const a = g.document.activeElement;
+            return JSON.stringify([
+                g.location.href,
+                // Focus only counts for fields: a click focuses any button, which says nothing.
+                /^(INPUT|TEXTAREA|SELECT)$/.test(a?.tagName ?? '') ? `${a?.tagName}#${a?.id ?? ''}` : '',
+                `${a?.checked ?? ''}|${a?.value ?? ''}`,
+                g.__argusMutations.n,
+                g.scrollX,
+                g.scrollY,
+            ]);
+        });
+    }
+    /** Scroll the element under (x, y) into view and return its center. */
+    async _actionableCenter(x, y) {
+        return this.opts.driver.rawPage.evaluate(([px, py]) => {
+            const doc = globalThis.document;
+            const hit = doc.elementFromPoint(px, py);
+            if (hit === null)
+                return { x: px, y: py };
+            const el = hit.closest('button,a[href],input,select,textarea,summary,label,[role=button],[role=checkbox],[role=switch],[role=link],[role=tab],[role=menuitem],[onclick]') ?? hit;
+            el.scrollIntoView({ block: 'center', inline: 'center' });
+            const r = el.getBoundingClientRect();
+            return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+        }, [x, y]);
+    }
+    /**
+     * Run the click for the step just located and confirm it took effect: the
+     * page-state signature must differ afterwards. If not, retry once the way a
+     * person would (scroll the element into view, let the page settle, click its
+     * center). If it still did nothing the step fails with a clear reason and
+     * nothing is persisted for it: a cold fingerprint is dropped, a heal is
+     * replaced by the previous record marked stale and its heal event withdrawn.
+     */
+    async _actVerified(point, kind) {
+        const run = (p) => kind === 'click' ? this.actions.click(p.x, p.y) : this.actions.doubleClick(p.x, p.y);
+        const last = this.steps[this.steps.length - 1];
+        const before = await this._stateSignature();
+        await run(point);
+        if ((await this._stateSignature()) !== before)
+            return;
+        const center = await this._actionableCenter(point.x, point.y);
+        await this.actions.wait(150);
+        const beforeRetry = await this._stateSignature();
+        await run(center);
+        if ((await this._stateSignature()) !== beforeRetry)
+            return;
+        const index = this.fingerprints.length - 1;
+        const previous = this.flow?.steps[index];
+        if (last?.healed === true && previous !== undefined) {
+            this.fingerprints[index] = { ...previous, stale: 'heal had no observable effect' };
+        }
+        else {
+            this.fingerprints.pop();
+        }
+        const healIdx = this.healEvents.findIndex((h) => h.index === index);
+        if (healIdx !== -1)
+            this.healEvents.splice(healIdx, 1);
+        const instruction = last?.instruction ?? '';
+        this.noEffectSteps.push(instruction);
+        const reason = `td.find("${instruction}") ${kind} had no observable effect (no URL, focus, DOM or scroll change), even after scrolling into view and clicking the element center; nothing was saved for this step`;
+        if (last !== undefined) {
+            last.ok = false;
+            last.reason = reason;
+        }
+        this._failed = true;
+        this._failureReason = reason;
+        throw new Error(reason);
+    }
     _makeTd() {
         return {
             find: (description) => ({
                 click: async () => {
                     const point = await this._locate(description);
-                    await this.actions.click(point.x, point.y);
+                    await this._actVerified(point, 'click');
                 },
                 doubleClick: async () => {
                     const point = await this._locate(description);
-                    await this.actions.doubleClick(point.x, point.y);
+                    await this._actVerified(point, 'doubleClick');
                 },
             }),
             type: async (text, options) => {

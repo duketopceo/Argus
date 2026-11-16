@@ -57,3 +57,17 @@ export declare class Fingerprint {
 }
 /** FNV-1a 32-bit hash - stable content hash for the a11y snapshot text. */
 export declare function fnv1a(text: string): string;
+/**
+ * Does the element found by a heal look like the element that was recorded?
+ * Compares accessible names, not pixels: the names must share most of their
+ * words, and a name far longer than the recorded one is rejected (that is a
+ * container whose text merely includes the label, such as a whole panel).
+ * An empty recorded name carries no identity, so it never blocks a heal.
+ */
+export declare function snippetsIdentityMatch(recorded: string, current: string): boolean;
+/**
+ * Is `snippet` the text of a container that merely includes `label`, rather
+ * than the element the label names? True when the snippet has far more words
+ * than the label (more than three times plus two).
+ */
+export declare function snippetLooksLikeContainer(label: string, snippet: string): boolean;

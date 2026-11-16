@@ -1,5 +1,5 @@
 import { DEFAULT_RECORD_STEP_CAP } from '../config.js';
-import { computeRegionHash, Fingerprint, fnv1a, } from '../cache/fingerprint.js';
+import { computeRegionHash, Fingerprint, fnv1a, snippetLooksLikeContainer, snippetsIdentityMatch, } from '../cache/fingerprint.js';
 import { saveFlow } from '../cache/store.js';
 import { actionSchema, assertionSchema, buildActionMessages, buildAssertMessages, } from './prompts.js';
 export class Engine {
@@ -229,7 +229,7 @@ export class Engine {
         // entries we already know are stale.
         const isStale = cached !== undefined && cached.stale !== undefined;
         const useHeal = cached !== undefined && !isStale;
-        const primary = await this._locateWithModel(instruction, observation, useHeal);
+        const primary = await this._locateWithModel(instruction, observation, useHeal, undefined, useHeal ? cached : undefined);
         if (primary.ok) {
             if (useHeal)
                 this._cacheStats.heals++;
@@ -249,7 +249,7 @@ export class Engine {
         }
         this._note('locate', 'escalating to fallback model', `failed=${failedModel} esc=${esc} reason=${(primary.reason ?? '').slice(0, 80)}`);
         const fresh = await this._opts.driver.observe({ grid: true });
-        const escalated = await this._locateWithModel(instruction, fresh, useHeal, esc);
+        const escalated = await this._locateWithModel(instruction, fresh, useHeal, esc, useHeal ? cached : undefined);
         if (escalated.ok && useHeal)
             this._cacheStats.heals++;
         return escalated;
@@ -260,7 +260,22 @@ export class Engine {
      * it keeps the action schema unless a specialist grounding model is in
      * play (native "(x,y)" format).
      */
-    async _locateWithModel(instruction, observation, useHeal, modelOverride) {
+    async _locateWithModel(instruction, observation, useHeal, modelOverride, recorded) {
+        // A heal must land on the element that was recorded, not merely on one
+        // whose label shares a word with the instruction: otherwise a container
+        // or neighbour is accepted, the click does nothing useful, and the wrong
+        // fingerprint is saved. A grounding (no recording) only has the instruction.
+        const recordedName = recorded?.a11ySnippet ?? '';
+        const identityOk = (snippet) => recorded === undefined || snippetsIdentityMatch(recordedName, snippet);
+        const quoted = instruction.match(/"([^"]+)"/)?.[1];
+        // A non-interactive element whose text is far longer than the quoted label
+        // is a container that merely includes it, never the step's element.
+        const containerOf = (n) => !n.interactive && quoted !== undefined && snippetLooksLikeContainer(quoted, n.a11ySnippet);
+        const nodeOk = (n) => instructionMatchesNode(instruction, n.a11ySnippet) &&
+            identityOk(n.a11ySnippet) &&
+            !containerOf(n);
+        // Bounded: the first answer plus up to two corrections for a heal.
+        const maxAttempts = recorded !== undefined ? 3 : 2;
         const specialist = this._opts.config.grounding_model !== undefined;
         const prompt = specialist
             ? // ui-tars-class models ignore JSON schemas and answer with bare
@@ -303,7 +318,7 @@ export class Engine {
         // check its label against the instruction's target words. A mismatch means
         // the model's pixel grounding drifted (small models are systematically
         // imprecise); re-ask once with the resolved element as feedback.
-        for (let attempt = 0; attempt < 2; attempt++) {
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
             if (action.action === 'fail') {
                 return {
                     ok: false,
@@ -319,17 +334,29 @@ export class Engine {
                 Number.isFinite(action.x) &&
                 typeof action.y === 'number' &&
                 Number.isFinite(action.y);
-            const probe = coordsOk ? await this._resolveNode(action.x, action.y) : null;
+            let probe = coordsOk ? await this._resolveNode(action.x, action.y) : null;
+            // Prefer the interactive element inside a container the model pointed at.
+            if (probe !== null && !probe.interactive && !nodeOk(probe)) {
+                const snap = await this._snapToInteractive(action.x, action.y, instruction);
+                if (snap !== null) {
+                    const snapped = await this._resolveNode(snap.x, snap.y);
+                    if (nodeOk(snapped)) {
+                        this._note('locate', 'snapped container hit to interactive element', `instruction=${instruction.slice(0, 80)}`);
+                        action = { ...action, x: snap.x, y: snap.y };
+                        probe = snapped;
+                    }
+                }
+            }
             // A point that resolves to no element at all is a mismatch too — it was
             // previously accepted and cached, which let clicks into empty space get
             // fingerprinted and replayed as "ok". Retry once with feedback; if the
             // second attempt still resolves to nothing we accept it (canvas/shadow
             // DOM and other unresolvable nodes are legitimate).
             if (action.action === 'click' && coordsOk && probe !== null &&
-                instructionMatchesNode(instruction, probe.a11ySnippet)) {
+                nodeOk(probe)) {
                 break;
             }
-            if (attempt === 1 || !this._opts.ledger.canSpend(0.001))
+            if (attempt === maxAttempts - 1 || !this._opts.ledger.canSpend(0.001))
                 break;
             this._note('locate', action.action !== 'click'
                 ? `locate steered after "${action.action}" response`
@@ -344,7 +371,7 @@ export class Engine {
                 : action.action !== 'click'
                     ? `A locate step must return the click point (x, y in CSS pixels) for: ${instruction}. You returned "${action.action}".`
                     : probe !== null
-                        ? `Your previous coordinates (${action.x},${action.y}) resolved to "${probe.a11ySnippet}", which does not match the target. Re-examine the grid labels and return corrected coordinates for: ${instruction}`
+                        ? `Your previous coordinates (${action.x},${action.y}) resolved to "${probe.a11ySnippet}", which does not match the target${recordedName !== '' ? ` (the element previously recorded for this step is named "${recordedName.slice(0, 80)}")` : ''}. Re-examine the grid labels and return corrected coordinates for: ${instruction}`
                         : coordsOk
                             ? `Your previous coordinates (${action.x},${action.y}) did not resolve to any element. Re-examine the grid labels and return corrected coordinates for: ${instruction}`
                             : `Your previous response was a "${action.action}" action with no usable coordinates. Return the click point (x, y in CSS pixels) for: ${instruction}`;
@@ -388,13 +415,15 @@ export class Engine {
         const resolved = await this._resolveNode(action.x, action.y);
         // Never commit a fingerprint for a node we can see is wrong — a false
         // cache entry would silently replay the mis-click forever.
-        if (resolved !== null &&
-            action.action === 'click' &&
-            !instructionMatchesNode(instruction, resolved.a11ySnippet)) {
+        if (resolved !== null && action.action === 'click' && !nodeOk(resolved)) {
             this._note('locate', 'grounding mismatch rejected', `resolved_hash=${fnv1a(resolved.a11ySnippet)}`);
             return {
                 ok: false,
-                reason: `model grounded to "${resolved.a11ySnippet}", which does not match the instruction`,
+                reason: containerOf(resolved)
+                    ? `model grounded to a container ("${resolved.a11ySnippet.slice(0, 60)}…"), not the element the instruction names`
+                    : instructionMatchesNode(instruction, resolved.a11ySnippet) && recorded !== undefined
+                        ? `heal grounded to "${resolved.a11ySnippet.slice(0, 80)}", which is not the element recorded for this step ("${recordedName.slice(0, 80)}"); the healed fingerprint was not saved`
+                        : `model grounded to "${resolved.a11ySnippet}", which does not match the instruction`,
                 healed: false,
                 point: undefined,
                 fingerprint: undefined,
@@ -578,20 +607,45 @@ export class Engine {
     async _resolveNode(x, y) {
         const info = await this._opts.driver.rawPage.evaluate(([cx, cy]) => {
             const doc = globalThis.document;
-            const el = doc.elementFromPoint(cx, cy);
-            if (!el) {
+            const hit = doc.elementFromPoint(cx, cy);
+            if (!hit) {
                 return null;
             }
+            // The click lands on whatever is topmost (often a text span); the
+            // element a person would name is its nearest interactive ancestor.
+            const interactiveAncestor = hit.closest('button,a[href],input,select,textarea,summary,label,[role=button],[role=checkbox],[role=switch],[role=link],[role=tab],[role=menuitem],[onclick]');
+            const el = interactiveAncestor ?? hit;
+            const cursor = globalThis.getComputedStyle(el).cursor;
+            const interactive = interactiveAncestor !== null || cursor === 'pointer';
             const rect = el.getBoundingClientRect();
-            const snippet = (el.getAttribute('aria-label') || el.textContent || '')
-                .trim()
-                .slice(0, 200);
+            const clean = (t) => (t ?? '').replace(/\s+/g, ' ').trim();
+            // Accessible name, in the order the platform computes it: aria-label,
+            // aria-labelledby, an associated <label>, placeholder, title, then text.
+            let name = clean(el.getAttribute('aria-label'));
+            if (name === '') {
+                const ids = (el.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean);
+                name = clean(ids.map((id) => el.ownerDocument.getElementById(id)?.textContent ?? '').join(' '));
+            }
+            if (name === '' && el.labels && el.labels.length > 0) {
+                name = clean(Array.from(el.labels).map((l) => l.textContent ?? '').join(' '));
+            }
+            if (name === '')
+                name = clean(el.placeholder ?? el.getAttribute('placeholder'));
+            if (name === '')
+                name = clean(el.title ?? el.getAttribute('title'));
+            if (name === '' && el.tagName === 'INPUT' && /^(button|submit|reset)$/i.test(el.type ?? '')) {
+                name = clean(el.value);
+            }
+            if (name === '')
+                name = clean(el.textContent);
+            const snippet = name.slice(0, 200);
             return {
                 x: Math.round(rect.x),
                 y: Math.round(rect.y),
                 width: Math.round(rect.width),
                 height: Math.round(rect.height),
                 snippet,
+                interactive,
             };
         }, [x, y]);
         if (!info) {
@@ -599,9 +653,61 @@ export class Engine {
                 bbox: { x, y, width: 0, height: 0 },
                 clickPoint: { x, y },
                 a11ySnippet: '',
+                interactive: false,
             };
         }
-        return { bbox: info, clickPoint: { x, y }, a11ySnippet: info.snippet };
+        const { snippet, interactive, ...bbox } = info;
+        return { bbox, clickPoint: { x, y }, a11ySnippet: snippet, interactive };
+    }
+    /**
+     * The model pointed at a non-interactive container (a panel, a card
+     * background) whose text merely includes the label. Prefer the nearest
+     * interactive element inside that container whose accessible name matches
+     * the instruction, and return its center; null when there is none.
+     */
+    async _snapToInteractive(x, y, instruction) {
+        const words = instructionWords(instruction);
+        if (words.length === 0)
+            return null;
+        return this._opts.driver.rawPage.evaluate(([cx, cy, ws]) => {
+            const doc = globalThis.document;
+            const hit = doc.elementFromPoint(cx, cy);
+            if (!hit)
+                return null;
+            const nameOf = (el) => [
+                el.getAttribute('aria-label'),
+                el.labels && el.labels.length > 0
+                    ? Array.from(el.labels).map((l) => l.textContent ?? '').join(' ')
+                    : null,
+                el.placeholder,
+                el.title,
+                el.value,
+                el.textContent,
+            ]
+                .filter((t) => typeof t === 'string' && t.trim() !== '')
+                .join(' ')
+                .toLowerCase();
+            // Prefer the name with the fewest words (closest to the bare label),
+            // then the one nearest the model's point.
+            let best = null;
+            const candidates = hit.querySelectorAll('button,a[href],input,select,textarea,summary,[role=button],[role=checkbox],[role=switch],[role=link],[role=tab],[role=menuitem],[onclick]');
+            for (const el of Array.from(candidates)) {
+                const name = nameOf(el);
+                if (!ws.some((w) => name.includes(w)))
+                    continue;
+                const r = el.getBoundingClientRect();
+                if (r.width === 0 || r.height === 0)
+                    continue;
+                const ex = r.x + r.width / 2;
+                const ey = r.y + r.height / 2;
+                const d = Math.hypot(ex - cx, ey - cy);
+                const w = name.split(/\s+/).length;
+                if (best === null || w < best.w || (w === best.w && d < best.d)) {
+                    best = { w, d, x: Math.round(ex), y: Math.round(ey) };
+                }
+            }
+            return best === null ? null : { x: best.x, y: best.y };
+        }, [x, y, words]);
     }
     async _executeAction(uiApi, action) {
         switch (action.action) {
@@ -684,13 +790,16 @@ const LOCATE_STOPWORDS = new Set([
     'item', 'button', 'link', 'field', 'input', 'section', 'area', 'panel',
     'that', 'this', 'into', 'onto', 'page', 'view', 'menu', 'click', 'find',
 ]);
-function instructionMatchesNode(instruction, nodeSnippet) {
-    const words = instruction
+function instructionWords(instruction) {
+    return instruction
         .replace(/^locate:\s*/i, '')
         .toLowerCase()
         .replace(/["'']/g, ' ')
         .split(/[^a-z0-9]+/)
         .filter((w) => w.length >= 4 && !LOCATE_STOPWORDS.has(w));
+}
+function instructionMatchesNode(instruction, nodeSnippet) {
+    const words = instructionWords(instruction);
     if (words.length === 0)
         return true;
     const haystack = nodeSnippet.toLowerCase();

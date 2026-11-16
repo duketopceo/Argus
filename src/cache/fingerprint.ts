@@ -117,3 +117,40 @@ export function fnv1a(text: string): string {
   }
   return (h >>> 0).toString(16).padStart(8, '0')
 }
+
+const IDENTITY_WORD = /[a-z0-9]+/g
+
+function identityWords(text: string): Set<string> {
+  const words = (text.toLowerCase().match(IDENTITY_WORD) ?? []).filter((w) => !/^\d+$/.test(w))
+  return new Set(words)
+}
+
+/**
+ * Does the element found by a heal look like the element that was recorded?
+ * Compares accessible names, not pixels: the names must share most of their
+ * words, and a name far longer than the recorded one is rejected (that is a
+ * container whose text merely includes the label, such as a whole panel).
+ * An empty recorded name carries no identity, so it never blocks a heal.
+ */
+export function snippetsIdentityMatch(recorded: string, current: string): boolean {
+  const a = identityWords(recorded)
+  if (a.size === 0) return true
+  const b = identityWords(current)
+  if (b.size === 0) return false
+  let shared = 0
+  for (const w of a) if (b.has(w)) shared++
+  const small = Math.min(a.size, b.size)
+  const large = Math.max(a.size, b.size)
+  return shared / small >= 0.6 && large <= small * 3 + 2
+}
+
+/**
+ * Is `snippet` the text of a container that merely includes `label`, rather
+ * than the element the label names? True when the snippet has far more words
+ * than the label (more than three times plus two).
+ */
+export function snippetLooksLikeContainer(label: string, snippet: string): boolean {
+  const l = identityWords(label).size
+  if (l === 0) return false
+  return identityWords(snippet).size > l * 3 + 2
+}

@@ -25,6 +25,8 @@ export interface AssertionResult {
     verdict: 'pass' | 'fail';
     reasoning: string;
 }
+/** Every property required; the ones named in `optional` become nullable. */
+export declare function strictObjectSchema(properties: Record<string, Record<string, unknown>>, optional: readonly string[]): Record<string, unknown>;
 export declare const actionSchema: JsonSchema;
 export declare const exploreActionSchema: JsonSchema;
 export declare const assertionSchema: JsonSchema;
