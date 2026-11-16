@@ -92,3 +92,14 @@ export function snippetsIdentityMatch(recorded, current) {
     const large = Math.max(a.size, b.size);
     return shared / small >= 0.6 && large <= small * 3 + 2;
 }
+/**
+ * Is `snippet` the text of a container that merely includes `label`, rather
+ * than the element the label names? True when the snippet has far more words
+ * than the label (more than three times plus two).
+ */
+export function snippetLooksLikeContainer(label, snippet) {
+    const l = identityWords(label).size;
+    if (l === 0)
+        return false;
+    return identityWords(snippet).size > l * 3 + 2;
+}

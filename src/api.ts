@@ -286,39 +286,137 @@ export class TdSession {
     return result.point
   }
 
-  /** Heals whose click had no observable effect; their fingerprints were not saved. */
-  readonly unverifiedHeals: string[] = []
+  /** Steps whose click had no observable effect (even after one retry); nothing was saved for them. */
+  readonly noEffectSteps: string[] = []
 
   /**
-   * Run the click for the step just located. When that step was a heal, watch
-   * whether the page responded: a click that changes neither the accessibility
-   * tree nor the pixels did not take effect, so the healed fingerprint is not
-   * trusted. It is swapped for the previous (now stale) record so the next run
-   * grounds again, and the heal event is withdrawn from write-back. The step is
-   * not failed here (a click that only focuses an input is legitimately quiet);
-   * if the click really was wrong, the step's own assertion fails and the bad
-   * fingerprint was never saved.
+   * Cheap page-state signature: URL, focused element, a DOM mutation counter
+   * (child list, attributes, text, installed on first use) and the scroll
+   * offset. Two equal signatures around an action mean it did nothing.
    */
-  private async _actVerified(act: () => Promise<unknown>): Promise<void> {
+  private async _stateSignature(): Promise<string> {
+    return this.opts.driver.rawPage.evaluate(() => {
+      type N = { id?: string }
+      type Rec = {
+        target: N
+        addedNodes: ArrayLike<N>
+        removedNodes: ArrayLike<N>
+      }
+      type G = {
+        location: { href: string }
+        document: {
+          activeElement: { tagName?: string; id?: string; checked?: boolean; value?: string } | null
+          documentElement: unknown
+        }
+        scrollX: number
+        scrollY: number
+        MutationObserver: new (cb: (m: Rec[]) => void) => {
+          observe: (n: unknown, o: Record<string, boolean>) => void
+        }
+        __argusMutations?: { n: number; root: unknown }
+      }
+      const g = globalThis as unknown as G
+      // Our own coordinate overlay (observe({grid:true})) is not the page reacting.
+      const ours = (n: N): boolean => (n.id ?? '').startsWith('__argus_')
+      if (g.__argusMutations === undefined || g.__argusMutations.root !== g.document.documentElement) {
+        const counter = { n: 0, root: g.document.documentElement }
+        new g.MutationObserver((records) => {
+          for (const r of records) {
+            const nodes = [...Array.from(r.addedNodes), ...Array.from(r.removedNodes)]
+            if (ours(r.target) || (nodes.length > 0 && nodes.every(ours))) continue
+            counter.n += 1
+          }
+        }).observe(g.document.documentElement, {
+          subtree: true,
+          childList: true,
+          attributes: true,
+          characterData: true,
+        })
+        g.__argusMutations = counter
+      }
+      const a = g.document.activeElement
+      return JSON.stringify([
+        g.location.href,
+        // Focus only counts for fields: a click focuses any button, which says nothing.
+        /^(INPUT|TEXTAREA|SELECT)$/.test(a?.tagName ?? '') ? `${a?.tagName}#${a?.id ?? ''}` : '',
+        `${a?.checked ?? ''}|${a?.value ?? ''}`,
+        g.__argusMutations.n,
+        g.scrollX,
+        g.scrollY,
+      ])
+    })
+  }
+
+  /** Scroll the element under (x, y) into view and return its center. */
+  private async _actionableCenter(x: number, y: number): Promise<{ x: number; y: number }> {
+    return this.opts.driver.rawPage.evaluate(
+      ([px, py]) => {
+        type El = {
+          closest: (s: string) => El | null
+          scrollIntoView: (o: Record<string, string>) => void
+          getBoundingClientRect: () => { x: number; y: number; width: number; height: number }
+        }
+        const doc = (
+          globalThis as unknown as { document: { elementFromPoint: (x: number, y: number) => El | null } }
+        ).document
+        const hit = doc.elementFromPoint(px as number, py as number)
+        if (hit === null) return { x: px as number, y: py as number }
+        const el =
+          hit.closest(
+            'button,a[href],input,select,textarea,summary,label,[role=button],[role=checkbox],[role=switch],[role=link],[role=tab],[role=menuitem],[onclick]',
+          ) ?? hit
+        el.scrollIntoView({ block: 'center', inline: 'center' })
+        const r = el.getBoundingClientRect()
+        return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
+      },
+      [x, y],
+    )
+  }
+
+  /**
+   * Run the click for the step just located and confirm it took effect: the
+   * page-state signature must differ afterwards. If not, retry once the way a
+   * person would (scroll the element into view, let the page settle, click its
+   * center). If it still did nothing the step fails with a clear reason and
+   * nothing is persisted for it: a cold fingerprint is dropped, a heal is
+   * replaced by the previous record marked stale and its heal event withdrawn.
+   */
+  private async _actVerified(
+    point: { x: number; y: number },
+    kind: 'click' | 'doubleClick',
+  ): Promise<void> {
+    const run = (p: { x: number; y: number }) =>
+      kind === 'click' ? this.actions.click(p.x, p.y) : this.actions.doubleClick(p.x, p.y)
     const last = this.steps[this.steps.length - 1]
-    if (last?.healed !== true) {
-      await act()
-      return
-    }
-    const before = await this.opts.driver.observe()
-    await act()
-    const after = await this.opts.driver.observe()
-    const changed =
-      before.a11yYaml !== after.a11yYaml || !before.screenshotJpeg.equals(after.screenshotJpeg)
-    if (changed) return
+    const before = await this._stateSignature()
+    await run(point)
+    if ((await this._stateSignature()) !== before) return
+
+    const center = await this._actionableCenter(point.x, point.y)
+    await this.actions.wait(150)
+    const beforeRetry = await this._stateSignature()
+    await run(center)
+    if ((await this._stateSignature()) !== beforeRetry) return
+
     const index = this.fingerprints.length - 1
     const previous = this.flow?.steps[index]
-    if (previous !== undefined) {
+    if (last?.healed === true && previous !== undefined) {
       this.fingerprints[index] = { ...previous, stale: 'heal had no observable effect' }
+    } else {
+      this.fingerprints.pop()
     }
-    const ev = this.healEvents.findIndex((h) => h.index === index)
-    if (ev !== -1) this.healEvents.splice(ev, 1)
-    this.unverifiedHeals.push(last.instruction)
+    const healIdx = this.healEvents.findIndex((h) => h.index === index)
+    if (healIdx !== -1) this.healEvents.splice(healIdx, 1)
+    const instruction = last?.instruction ?? ''
+    this.noEffectSteps.push(instruction)
+    const reason = `td.find("${instruction}") ${kind} had no observable effect (no URL, focus, DOM or scroll change), even after scrolling into view and clicking the element center; nothing was saved for this step`
+    if (last !== undefined) {
+      last.ok = false
+      last.reason = reason
+    }
+    this._failed = true
+    this._failureReason = reason
+    throw new Error(reason)
   }
 
   private _makeTd(): Td {
@@ -326,11 +424,11 @@ export class TdSession {
       find: (description: string): TdHandle => ({
         click: async () => {
           const point = await this._locate(description)
-          await this._actVerified(() => this.actions.click(point.x, point.y))
+          await this._actVerified(point, 'click')
         },
         doubleClick: async () => {
           const point = await this._locate(description)
-          await this._actVerified(() => this.actions.doubleClick(point.x, point.y))
+          await this._actVerified(point, 'doubleClick')
         },
       }),
 

@@ -119,17 +119,23 @@ export declare class TdSession {
     save(): Promise<void>;
     private _record;
     private _locate;
-    /** Heals whose click had no observable effect; their fingerprints were not saved. */
-    readonly unverifiedHeals: string[];
+    /** Steps whose click had no observable effect (even after one retry); nothing was saved for them. */
+    readonly noEffectSteps: string[];
     /**
-     * Run the click for the step just located. When that step was a heal, watch
-     * whether the page responded: a click that changes neither the accessibility
-     * tree nor the pixels did not take effect, so the healed fingerprint is not
-     * trusted. It is swapped for the previous (now stale) record so the next run
-     * grounds again, and the heal event is withdrawn from write-back. The step is
-     * not failed here (a click that only focuses an input is legitimately quiet);
-     * if the click really was wrong, the step's own assertion fails and the bad
-     * fingerprint was never saved.
+     * Cheap page-state signature: URL, focused element, a DOM mutation counter
+     * (child list, attributes, text, installed on first use) and the scroll
+     * offset. Two equal signatures around an action mean it did nothing.
+     */
+    private _stateSignature;
+    /** Scroll the element under (x, y) into view and return its center. */
+    private _actionableCenter;
+    /**
+     * Run the click for the step just located and confirm it took effect: the
+     * page-state signature must differ afterwards. If not, retry once the way a
+     * person would (scroll the element into view, let the page settle, click its
+     * center). If it still did nothing the step fails with a clear reason and
+     * nothing is persisted for it: a cold fingerprint is dropped, a heal is
+     * replaced by the previous record marked stale and its heal event withdrawn.
      */
     private _actVerified;
     private _makeTd;

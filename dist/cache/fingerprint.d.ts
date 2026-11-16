@@ -65,3 +65,9 @@ export declare function fnv1a(text: string): string;
  * An empty recorded name carries no identity, so it never blocks a heal.
  */
 export declare function snippetsIdentityMatch(recorded: string, current: string): boolean;
+/**
+ * Is `snippet` the text of a container that merely includes `label`, rather
+ * than the element the label names? True when the snippet has far more words
+ * than the label (more than three times plus two).
+ */
+export declare function snippetLooksLikeContainer(label: string, snippet: string): boolean;

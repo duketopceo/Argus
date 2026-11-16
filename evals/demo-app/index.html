@@ -12,6 +12,7 @@
   main { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; padding: 32px 40px; }
   section { background: #fff; border: 1px solid #d3d8df; border-radius: 8px; padding: 20px; }
   body.dark section { background: #1c2027; border-color: #2d333c; }
+  section.contact { position: fixed; right: 16px; bottom: 16px; width: 250px; z-index: 5; }
   h2 { margin: 0 0 12px; font-size: 18px; }
   p { margin: 8px 0; }
   .state { color: #3a414c; min-height: 22px; }
@@ -54,6 +55,15 @@
     <h2>Display</h2>
     <button id="theme" type="button">Dark mode</button>
     <p class="state" id="themestate">Theme: light</p>
+  </section>
+  <section class="contact">
+    <h2>Contact</h2>
+    <label for="contact-name">Full name</label>
+    <input id="contact-name" type="text" autocomplete="off">
+    <label for="contact-phone">Phone</label>
+    <input id="contact-phone" type="text" autocomplete="off">
+    <button id="contact-send" type="button">Send message</button>
+    <p class="state" id="contactstate"></p>
   </section>
 </main>
 <script src="/shared.js"></script>
