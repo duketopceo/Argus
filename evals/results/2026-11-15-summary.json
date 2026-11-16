@@ -1,0 +1,665 @@
+{
+  "source": "evals/results/2026-11-15-phases.json",
+  "excluded": [],
+  "spentUsd": 0.9691466597999999,
+  "models": {
+    "google/gemini-2.5-flash-lite": {
+      "reps": 5,
+      "phases": {
+        "cold": {
+          "k": 6,
+          "n": 35,
+          "callsPerSuiteRun": 19.6,
+          "costPerSuiteRun": 0.0016518526200000002,
+          "costTotal": 0.008259263099999997,
+          "callsTotal": 98,
+          "medianTaskMs": 2492,
+          "medianPassedTaskMs": 2783.5,
+          "failureKinds": {
+            "wrong-element": 15,
+            "assert-failed": 14
+          }
+        },
+        "warm": {
+          "k": 7,
+          "n": 35,
+          "callsPerSuiteRun": 15.2,
+          "costPerSuiteRun": 0.00145414566,
+          "costTotal": 0.007270728300000001,
+          "callsTotal": 76,
+          "medianTaskMs": 2354,
+          "medianPassedTaskMs": 175,
+          "failureKinds": {
+            "wrong-element": 13,
+            "assert-failed": 13,
+            "other": 2
+          }
+        },
+        "drift": {
+          "k": 5,
+          "n": 35,
+          "callsPerSuiteRun": 22,
+          "costPerSuiteRun": 0.00209381832,
+          "costTotal": 0.0104690916,
+          "callsTotal": 110,
+          "medianTaskMs": 2852,
+          "medianPassedTaskMs": 2363,
+          "failureKinds": {
+            "wrong-element": 14,
+            "assert-failed": 9,
+            "other": 7
+          }
+        },
+        "warm-heal": {
+          "k": 8,
+          "n": 35,
+          "callsPerSuiteRun": 16,
+          "costPerSuiteRun": 0.0014448356999999998,
+          "costTotal": 0.007224178500000001,
+          "callsTotal": 80,
+          "medianTaskMs": 2581,
+          "medianPassedTaskMs": 176.5,
+          "failureKinds": {
+            "assert-failed": 9,
+            "wrong-element": 16,
+            "other": 2
+          }
+        }
+      },
+      "heal": {
+        "eligible": 6,
+        "attempted": 1,
+        "succeeded": 0,
+        "replayedWithoutHeal": 5,
+        "replayedWithoutHealPassed": 4,
+        "driftPassGivenColdPass": "4/6",
+        "taskRunsWithHeal": 3,
+        "taskRunsWithHealPassed": 0,
+        "healSteps": 4,
+        "healStepsAccepted": 14
+      },
+      "warmGivenColdPass": "6/6",
+      "warmEligibleZeroCall": "6/6",
+      "warmHealGivenDriftPass": "5/5",
+      "warmHealEligibleZeroCall": "5/5",
+      "perTask": {
+        "01-click-add": {
+          "cold": "0/5",
+          "warm": "1/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "02-form-newsletter": {
+          "cold": "1/5",
+          "warm": "1/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "03-form-shipping": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "04-multistep-checkout": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "05-toggle-theme": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "1/5",
+          "warm-heal": "3/5"
+        },
+        "06-assert-only": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "4/5",
+          "warm-heal": "5/5"
+        },
+        "07b-empty-cart-message": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        }
+      },
+      "examples": {
+        "wrong-element": {
+          "task": "01-click-add",
+          "phase": "cold",
+          "message": "td.find(\"the \"Add to cart\" button\") failed: model grounded to \"Gift wrap: off\", which does not match the instruction"
+        },
+        "assert-failed": {
+          "task": "03-form-shipping",
+          "phase": "cold",
+          "message": "assert(\"the page says the address was saved for Ada Lovelace\") failed: The page does not contain any information about Ada Lovelace or a saved address for her. The shipping section allows the user to enter a name and add"
+        },
+        "other": {
+          "task": "03-form-shipping",
+          "phase": "warm",
+          "message": "td.find(\"the \"Name\" input\") failed: heal grounded to \"Product Field notebook, $12.00 Add to cart Cart: 0 items Gift wrap Gift wrap: of\", which is not the element recorded for this step (\"Shipping Name Address Save addres"
+        }
+      }
+    },
+    "openai/gpt-4.1-mini": {
+      "reps": 5,
+      "phases": {
+        "cold": {
+          "k": 14,
+          "n": 35,
+          "callsPerSuiteRun": 20.6,
+          "costPerSuiteRun": 0.013492749600000003,
+          "costTotal": 0.06746374800000002,
+          "callsTotal": 103,
+          "medianTaskMs": 5226,
+          "medianPassedTaskMs": 4459,
+          "failureKinds": {
+            "assert-failed": 18,
+            "wrong-element": 3
+          }
+        },
+        "warm": {
+          "k": 17,
+          "n": 35,
+          "callsPerSuiteRun": 6.6,
+          "costPerSuiteRun": 0.00461142,
+          "costTotal": 0.0230571,
+          "callsTotal": 33,
+          "medianTaskMs": 2400,
+          "medianPassedTaskMs": 202,
+          "failureKinds": {
+            "assert-failed": 16,
+            "other": 1,
+            "wrong-element": 1
+          }
+        },
+        "drift": {
+          "k": 24,
+          "n": 35,
+          "callsPerSuiteRun": 22.2,
+          "costPerSuiteRun": 0.0157097952,
+          "costTotal": 0.07854897599999999,
+          "callsTotal": 111,
+          "medianTaskMs": 5436,
+          "medianPassedTaskMs": 4743,
+          "failureKinds": {
+            "wrong-element": 3,
+            "assert-failed": 8
+          }
+        },
+        "warm-heal": {
+          "k": 28,
+          "n": 35,
+          "callsPerSuiteRun": 4.4,
+          "costPerSuiteRun": 0.0029713464,
+          "costTotal": 0.014856732,
+          "callsTotal": 22,
+          "medianTaskMs": 300,
+          "medianPassedTaskMs": 245,
+          "failureKinds": {
+            "wrong-element": 1,
+            "assert-failed": 6
+          }
+        }
+      },
+      "heal": {
+        "eligible": 14,
+        "attempted": 8,
+        "succeeded": 7,
+        "replayedWithoutHeal": 6,
+        "replayedWithoutHealPassed": 5,
+        "driftPassGivenColdPass": "12/14",
+        "taskRunsWithHeal": 20,
+        "taskRunsWithHealPassed": 11,
+        "healSteps": 32,
+        "healStepsAccepted": 38
+      },
+      "warmGivenColdPass": "14/14",
+      "warmEligibleZeroCall": "14/14",
+      "warmHealGivenDriftPass": "24/24",
+      "warmHealEligibleZeroCall": "24/24",
+      "perTask": {
+        "01-click-add": {
+          "cold": "1/5",
+          "warm": "1/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "02-form-newsletter": {
+          "cold": "1/5",
+          "warm": "2/5",
+          "drift": "3/5",
+          "warm-heal": "4/5"
+        },
+        "03-form-shipping": {
+          "cold": "1/5",
+          "warm": "3/5",
+          "drift": "0/5",
+          "warm-heal": "1/5"
+        },
+        "04-multistep-checkout": {
+          "cold": "1/5",
+          "warm": "1/5",
+          "drift": "2/5",
+          "warm-heal": "3/5"
+        },
+        "05-toggle-theme": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "06-assert-only": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "07b-empty-cart-message": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "4/5",
+          "warm-heal": "5/5"
+        }
+      },
+      "examples": {
+        "assert-failed": {
+          "task": "01-click-add",
+          "phase": "cold",
+          "message": "assert(\"the cart shows 1 item\") failed: The cart text in the accessibility tree and the visible screenshot both indicate 'Cart: 0 items', meaning the cart currently shows zero items, not one."
+        },
+        "wrong-element": {
+          "task": "05-toggle-theme",
+          "phase": "cold",
+          "message": "td.find(\"the \"Dark mode\" button\") failed: model grounded to \"Theme: light\", which does not match the instruction"
+        },
+        "other": {
+          "task": "04-multistep-checkout",
+          "phase": "warm",
+          "message": "td.find(\"the \"Add to cart\" button\") failed: heal grounded to \"Add to cart\", which is not the element recorded for this step (\"Product Field notebook, $12.00 Add to cart Cart: 0 items Gift wrap Gift wrap: of\"); the healed"
+        }
+      }
+    },
+    "google/gemini-2.5-flash": {
+      "reps": 5,
+      "phases": {
+        "cold": {
+          "k": 24,
+          "n": 35,
+          "callsPerSuiteRun": 22,
+          "costPerSuiteRun": 0.00610724862,
+          "costTotal": 0.030536243100000002,
+          "callsTotal": 110,
+          "medianTaskMs": 3812,
+          "medianPassedTaskMs": 3912.5,
+          "failureKinds": {
+            "assert-failed": 11
+          }
+        },
+        "warm": {
+          "k": 27,
+          "n": 35,
+          "callsPerSuiteRun": 5.2,
+          "costPerSuiteRun": 0.0017854392599999998,
+          "costTotal": 0.0089271963,
+          "callsTotal": 26,
+          "medianTaskMs": 467,
+          "medianPassedTaskMs": 357,
+          "failureKinds": {
+            "assert-failed": 5,
+            "other": 3
+          }
+        },
+        "drift": {
+          "k": 20,
+          "n": 35,
+          "callsPerSuiteRun": 26.6,
+          "costPerSuiteRun": 0.0079984377,
+          "costTotal": 0.039992188500000005,
+          "callsTotal": 133,
+          "medianTaskMs": 4311,
+          "medianPassedTaskMs": 4096,
+          "failureKinds": {
+            "assert-failed": 14,
+            "wrong-element": 1
+          }
+        },
+        "warm-heal": {
+          "k": 23,
+          "n": 35,
+          "callsPerSuiteRun": 4.2,
+          "costPerSuiteRun": 0.00131107086,
+          "costTotal": 0.0065553543,
+          "callsTotal": 21,
+          "medianTaskMs": 518,
+          "medianPassedTaskMs": 210,
+          "failureKinds": {
+            "assert-failed": 11,
+            "wrong-element": 1
+          }
+        }
+      },
+      "heal": {
+        "eligible": 24,
+        "attempted": 19,
+        "succeeded": 9,
+        "replayedWithoutHeal": 5,
+        "replayedWithoutHealPassed": 5,
+        "driftPassGivenColdPass": "14/24",
+        "taskRunsWithHeal": 20,
+        "taskRunsWithHealPassed": 11,
+        "healSteps": 39,
+        "healStepsAccepted": 46
+      },
+      "warmGivenColdPass": "24/24",
+      "warmEligibleZeroCall": "24/24",
+      "warmHealGivenDriftPass": "20/20",
+      "warmHealEligibleZeroCall": "20/20",
+      "perTask": {
+        "01-click-add": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "02-form-newsletter": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "0/5",
+          "warm-heal": "1/5"
+        },
+        "03-form-shipping": {
+          "cold": "4/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "04-multistep-checkout": {
+          "cold": "4/5",
+          "warm": "4/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "05-toggle-theme": {
+          "cold": "1/5",
+          "warm": "3/5",
+          "drift": "1/5",
+          "warm-heal": "3/5"
+        },
+        "06-assert-only": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "07b-empty-cart-message": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "4/5",
+          "warm-heal": "4/5"
+        }
+      },
+      "examples": {
+        "assert-failed": {
+          "task": "05-toggle-theme",
+          "phase": "cold",
+          "message": "assert(\"the page shows Theme: dark\") failed: The accessibility tree states \"Theme: light\", not \"Theme: dark\"."
+        },
+        "other": {
+          "task": "07b-empty-cart-message",
+          "phase": "warm",
+          "message": "td.find(\"the \"Place order\" button\") failed: heal grounded to \"Place order\", which is not the element recorded for this step (\"Product Field notebook, $12.00 Add to cart Cart: 0 items Gift wrap Gift wrap: of\"); the healed"
+        },
+        "wrong-element": {
+          "task": "02-form-newsletter",
+          "phase": "warm-heal",
+          "message": "td.find(\"the \"Subscribe\" button\") failed: model grounded to \"\", which does not match the instruction"
+        }
+      }
+    },
+    "qwen/qwen3-vl-235b-a22b-instruct": {
+      "reps": 5,
+      "phases": {
+        "cold": {
+          "k": 5,
+          "n": 35,
+          "callsPerSuiteRun": 17,
+          "costPerSuiteRun": 0.00725583078,
+          "costTotal": 0.03627915390000001,
+          "callsTotal": 85,
+          "medianTaskMs": 8750,
+          "medianPassedTaskMs": 8628,
+          "failureKinds": {
+            "wrong-element": 20,
+            "assert-failed": 10
+          }
+        },
+        "warm": {
+          "k": 5,
+          "n": 35,
+          "callsPerSuiteRun": 12,
+          "costPerSuiteRun": 0.00497515194,
+          "costTotal": 0.024875759699999996,
+          "callsTotal": 60,
+          "medianTaskMs": 7497,
+          "medianPassedTaskMs": 148,
+          "failureKinds": {
+            "wrong-element": 20,
+            "assert-failed": 10
+          }
+        },
+        "drift": {
+          "k": 5,
+          "n": 35,
+          "callsPerSuiteRun": 16,
+          "costPerSuiteRun": 0.006885160919999999,
+          "costTotal": 0.0344258046,
+          "callsTotal": 80,
+          "medianTaskMs": 8123,
+          "medianPassedTaskMs": 7609,
+          "failureKinds": {
+            "wrong-element": 30
+          }
+        },
+        "warm-heal": {
+          "k": 5,
+          "n": 35,
+          "callsPerSuiteRun": 13,
+          "costPerSuiteRun": 0.0057449323800000006,
+          "costTotal": 0.028724661900000004,
+          "callsTotal": 65,
+          "medianTaskMs": 8143,
+          "medianPassedTaskMs": 111,
+          "failureKinds": {
+            "wrong-element": 30
+          }
+        }
+      },
+      "heal": {
+        "eligible": 5,
+        "attempted": 0,
+        "succeeded": 0,
+        "replayedWithoutHeal": 5,
+        "replayedWithoutHealPassed": 5,
+        "driftPassGivenColdPass": "5/5",
+        "taskRunsWithHeal": 0,
+        "taskRunsWithHealPassed": 0,
+        "healSteps": 0,
+        "healStepsAccepted": 0
+      },
+      "warmGivenColdPass": "5/5",
+      "warmEligibleZeroCall": "5/5",
+      "warmHealGivenDriftPass": "5/5",
+      "warmHealEligibleZeroCall": "5/5",
+      "perTask": {
+        "01-click-add": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "02-form-newsletter": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "03-form-shipping": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "04-multistep-checkout": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "05-toggle-theme": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "06-assert-only": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "07b-empty-cart-message": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        }
+      },
+      "examples": {
+        "wrong-element": {
+          "task": "01-click-add",
+          "phase": "cold",
+          "message": "td.find(\"the \"Add to cart\" button\") failed: model grounded to \"Gift wrap\", which does not match the instruction"
+        },
+        "assert-failed": {
+          "task": "03-form-shipping",
+          "phase": "cold",
+          "message": "assert(\"the page says the address was saved for Ada Lovelace\") failed: The page does not display any confirmation or message indicating that the address was saved for Ada Lovelace. The shipping section contains empty tex"
+        }
+      }
+    },
+    "anthropic/claude-haiku-4.5": {
+      "reps": 5,
+      "phases": {
+        "cold": {
+          "k": 35,
+          "n": 35,
+          "callsPerSuiteRun": 23.2,
+          "costPerSuiteRun": 0.058633146000000004,
+          "costTotal": 0.29316573,
+          "callsTotal": 116,
+          "medianTaskMs": 7682,
+          "medianPassedTaskMs": 7682,
+          "failureKinds": {}
+        },
+        "warm": {
+          "k": 35,
+          "n": 35,
+          "callsPerSuiteRun": 0,
+          "costPerSuiteRun": 0,
+          "costTotal": 0,
+          "callsTotal": 0,
+          "medianTaskMs": 256,
+          "medianPassedTaskMs": 256,
+          "failureKinds": {}
+        },
+        "drift": {
+          "k": 35,
+          "n": 35,
+          "callsPerSuiteRun": 20,
+          "costPerSuiteRun": 0.04970295,
+          "costTotal": 0.24851474999999992,
+          "callsTotal": 100,
+          "medianTaskMs": 5885,
+          "medianPassedTaskMs": 5885,
+          "failureKinds": {}
+        },
+        "warm-heal": {
+          "k": 35,
+          "n": 35,
+          "callsPerSuiteRun": 0,
+          "costPerSuiteRun": 0,
+          "costTotal": 0,
+          "callsTotal": 0,
+          "medianTaskMs": 273,
+          "medianPassedTaskMs": 273,
+          "failureKinds": {}
+        }
+      },
+      "heal": {
+        "eligible": 35,
+        "attempted": 30,
+        "succeeded": 30,
+        "replayedWithoutHeal": 5,
+        "replayedWithoutHealPassed": 5,
+        "driftPassGivenColdPass": "35/35",
+        "taskRunsWithHeal": 30,
+        "taskRunsWithHealPassed": 30,
+        "healSteps": 55,
+        "healStepsAccepted": 55
+      },
+      "warmGivenColdPass": "35/35",
+      "warmEligibleZeroCall": "35/35",
+      "warmHealGivenDriftPass": "35/35",
+      "warmHealEligibleZeroCall": "35/35",
+      "perTask": {
+        "01-click-add": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "02-form-newsletter": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "03-form-shipping": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "04-multistep-checkout": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "05-toggle-theme": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "06-assert-only": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "07b-empty-cart-message": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        }
+      },
+      "examples": {}
+    }
+  }
+}
