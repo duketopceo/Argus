@@ -80,53 +80,77 @@ Rules:
 
 ${GRID_GUIDANCE}`
 
+/**
+ * OpenAI strict structured outputs (and Azure) reject any schema where a key
+ * in `properties` is missing from `required`, or where `additionalProperties`
+ * is not false. The schema below is valid in strict mode for every provider:
+ * every property is required, and the optional ones are nullable (the model
+ * answers `null` when a field does not apply). The parsers treat `null` like
+ * an absent field.
+ */
+const nullable = (schema: Record<string, unknown>): Record<string, unknown> => ({
+  ...schema,
+  type: [schema.type as string, 'null'],
+})
+
+/** Every property required; the ones named in `optional` become nullable. */
+export function strictObjectSchema(
+  properties: Record<string, Record<string, unknown>>,
+  optional: readonly string[],
+): Record<string, unknown> {
+  const props: Record<string, Record<string, unknown>> = {}
+  for (const [k, v] of Object.entries(properties)) {
+    props[k] = optional.includes(k) ? nullable(v) : v
+  }
+  return {
+    type: 'object',
+    properties: props,
+    required: Object.keys(props),
+    additionalProperties: false,
+  }
+}
+
+const ACTION_FIELDS = {
+  x: { type: 'number' },
+  y: { type: 'number' },
+  text: { type: 'string' },
+  keys: { type: 'array', items: { type: 'string' } },
+  dx: { type: 'number' },
+  dy: { type: 'number' },
+  ms: { type: 'number' },
+}
+
 export const actionSchema: JsonSchema = {
   name: 'action',
   strict: true,
-  schema: {
-    type: 'object',
-    properties: {
+  schema: strictObjectSchema(
+    {
       action: {
         type: 'string',
         enum: ['click', 'type', 'pressKeys', 'scroll', 'wait', 'done', 'fail'],
       },
-      x: { type: 'number' },
-      y: { type: 'number' },
-      text: { type: 'string' },
-      keys: { type: 'array', items: { type: 'string' } },
-      dx: { type: 'number' },
-      dy: { type: 'number' },
-      ms: { type: 'number' },
+      ...ACTION_FIELDS,
       reasoning: { type: 'string' },
     },
-    required: ['action', 'reasoning'],
-    additionalProperties: false,
-  },
+    Object.keys(ACTION_FIELDS),
+  ),
 }
 
 export const exploreActionSchema: JsonSchema = {
   name: 'explore-action',
   strict: true,
-  schema: {
-    type: 'object',
-    properties: {
+  schema: strictObjectSchema(
+    {
       action: {
         type: 'string',
         enum: ['click', 'type', 'pressKeys', 'scroll', 'wait', 'navigate', 'done'],
       },
-      x: { type: 'number' },
-      y: { type: 'number' },
-      text: { type: 'string' },
-      keys: { type: 'array', items: { type: 'string' } },
-      dx: { type: 'number' },
-      dy: { type: 'number' },
-      ms: { type: 'number' },
+      ...ACTION_FIELDS,
       url: { type: 'string' },
       reasoning: { type: 'string' },
     },
-    required: ['action', 'reasoning'],
-    additionalProperties: false,
-  },
+    [...Object.keys(ACTION_FIELDS), 'url'],
+  ),
 }
 
 export const assertionSchema: JsonSchema = {

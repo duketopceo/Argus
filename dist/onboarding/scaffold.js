@@ -64,8 +64,8 @@ export default defineConfig({
 `;
 }
 const INIT_TEST = `test('home renders', async (td) => {
-  const ok = await td.assert('the page rendered without obvious errors')
-  if (!ok) throw new Error('home did not render')
+  const result = await td.assert('the page rendered without obvious errors')
+  if (result.verdict !== 'pass') throw new Error('home did not render')
 })
 `;
 const INIT_WORKFLOW = `name: argus-reviewer

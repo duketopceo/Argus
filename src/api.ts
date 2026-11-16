@@ -286,16 +286,51 @@ export class TdSession {
     return result.point
   }
 
+  /** Heals whose click had no observable effect; their fingerprints were not saved. */
+  readonly unverifiedHeals: string[] = []
+
+  /**
+   * Run the click for the step just located. When that step was a heal, watch
+   * whether the page responded: a click that changes neither the accessibility
+   * tree nor the pixels did not take effect, so the healed fingerprint is not
+   * trusted. It is swapped for the previous (now stale) record so the next run
+   * grounds again, and the heal event is withdrawn from write-back. The step is
+   * not failed here (a click that only focuses an input is legitimately quiet);
+   * if the click really was wrong, the step's own assertion fails and the bad
+   * fingerprint was never saved.
+   */
+  private async _actVerified(act: () => Promise<unknown>): Promise<void> {
+    const last = this.steps[this.steps.length - 1]
+    if (last?.healed !== true) {
+      await act()
+      return
+    }
+    const before = await this.opts.driver.observe()
+    await act()
+    const after = await this.opts.driver.observe()
+    const changed =
+      before.a11yYaml !== after.a11yYaml || !before.screenshotJpeg.equals(after.screenshotJpeg)
+    if (changed) return
+    const index = this.fingerprints.length - 1
+    const previous = this.flow?.steps[index]
+    if (previous !== undefined) {
+      this.fingerprints[index] = { ...previous, stale: 'heal had no observable effect' }
+    }
+    const ev = this.healEvents.findIndex((h) => h.index === index)
+    if (ev !== -1) this.healEvents.splice(ev, 1)
+    this.unverifiedHeals.push(last.instruction)
+  }
+
   private _makeTd(): Td {
     return {
       find: (description: string): TdHandle => ({
         click: async () => {
           const point = await this._locate(description)
-          await this.actions.click(point.x, point.y)
+          await this._actVerified(() => this.actions.click(point.x, point.y))
         },
         doubleClick: async () => {
           const point = await this._locate(description)
-          await this.actions.doubleClick(point.x, point.y)
+          await this._actVerified(() => this.actions.doubleClick(point.x, point.y))
         },
       }),
 

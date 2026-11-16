@@ -57,3 +57,11 @@ export declare class Fingerprint {
 }
 /** FNV-1a 32-bit hash - stable content hash for the a11y snapshot text. */
 export declare function fnv1a(text: string): string;
+/**
+ * Does the element found by a heal look like the element that was recorded?
+ * Compares accessible names, not pixels: the names must share most of their
+ * words, and a name far longer than the recorded one is rejected (that is a
+ * container whose text merely includes the label, such as a whole panel).
+ * An empty recorded name carries no identity, so it never blocks a heal.
+ */
+export declare function snippetsIdentityMatch(recorded: string, current: string): boolean;

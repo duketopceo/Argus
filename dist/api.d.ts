@@ -119,6 +119,19 @@ export declare class TdSession {
     save(): Promise<void>;
     private _record;
     private _locate;
+    /** Heals whose click had no observable effect; their fingerprints were not saved. */
+    readonly unverifiedHeals: string[];
+    /**
+     * Run the click for the step just located. When that step was a heal, watch
+     * whether the page responded: a click that changes neither the accessibility
+     * tree nor the pixels did not take effect, so the healed fingerprint is not
+     * trusted. It is swapped for the previous (now stale) record so the next run
+     * grounds again, and the heal event is withdrawn from write-back. The step is
+     * not failed here (a click that only focuses an input is legitimately quiet);
+     * if the click really was wrong, the step's own assertion fails and the bad
+     * fingerprint was never saved.
+     */
+    private _actVerified;
     private _makeTd;
 }
 export interface RegisteredTest {
