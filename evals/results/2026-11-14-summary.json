@@ -1,0 +1,661 @@
+{
+  "source": "evals/results/2026-11-14-phases.json + evals/results/2026-11-14-phases-07b.json",
+  "excluded": [
+    "07-empty-cart-guard"
+  ],
+  "spentUsd": 0.8192822715000002,
+  "models": {
+    "google/gemini-2.5-flash": {
+      "reps": 5,
+      "phases": {
+        "cold": {
+          "k": 25,
+          "n": 35,
+          "callsPerSuiteRun": 25.4,
+          "costPerSuiteRun": 0.00643018464,
+          "costTotal": 0.032150923199999994,
+          "callsTotal": 127,
+          "medianTaskMs": 3484,
+          "medianPassedTaskMs": 3150,
+          "failureKinds": {
+            "wrong-element": 2,
+            "assert-failed": 8
+          }
+        },
+        "warm": {
+          "k": 32,
+          "n": 35,
+          "callsPerSuiteRun": 5.4,
+          "costPerSuiteRun": 0.00109850796,
+          "costTotal": 0.0054925398,
+          "callsTotal": 27,
+          "medianTaskMs": 349,
+          "medianPassedTaskMs": 332.5,
+          "failureKinds": {
+            "wrong-element": 2,
+            "assert-failed": 1
+          }
+        },
+        "drift": {
+          "k": 21,
+          "n": 35,
+          "callsPerSuiteRun": 25.6,
+          "costPerSuiteRun": 0.00643674438,
+          "costTotal": 0.032183721900000004,
+          "callsTotal": 128,
+          "medianTaskMs": 4692,
+          "medianPassedTaskMs": 2940,
+          "failureKinds": {
+            "wrong-element": 1,
+            "assert-failed": 13
+          }
+        },
+        "warm-heal": {
+          "k": 23,
+          "n": 35,
+          "callsPerSuiteRun": 2.6,
+          "costPerSuiteRun": 0.00065323962,
+          "costTotal": 0.0032661981000000006,
+          "callsTotal": 13,
+          "medianTaskMs": 265,
+          "medianPassedTaskMs": 202,
+          "failureKinds": {
+            "assert-failed": 12
+          }
+        }
+      },
+      "heal": {
+        "eligible": 25,
+        "attempted": 20,
+        "succeeded": 11,
+        "replayedWithoutHeal": 5,
+        "replayedWithoutHealPassed": 5,
+        "driftPassGivenColdPass": "16/25",
+        "taskRunsWithHeal": 30,
+        "taskRunsWithHealPassed": 16,
+        "healSteps": 52,
+        "healStepsAccepted": 52
+      },
+      "warmGivenColdPass": "25/25",
+      "warmEligibleZeroCall": "25/25",
+      "warmHealGivenDriftPass": "21/21",
+      "warmHealEligibleZeroCall": "21/21",
+      "perTask": {
+        "01-click-add": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "02-form-newsletter": {
+          "cold": "4/5",
+          "warm": "5/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "03-form-shipping": {
+          "cold": "2/5",
+          "warm": "3/5",
+          "drift": "4/5",
+          "warm-heal": "5/5"
+        },
+        "04-multistep-checkout": {
+          "cold": "2/5",
+          "warm": "4/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "05-toggle-theme": {
+          "cold": "3/5",
+          "warm": "5/5",
+          "drift": "4/5",
+          "warm-heal": "5/5"
+        },
+        "06-assert-only": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "07b-empty-cart-message": {
+          "cold": "4/5",
+          "warm": "5/5",
+          "drift": "3/5",
+          "warm-heal": "3/5"
+        }
+      },
+      "examples": {
+        "wrong-element": {
+          "task": "03-form-shipping",
+          "phase": "cold",
+          "message": "td.find(\"the \"Save address\" button\") failed: model grounded to \"\", which does not match the instruction"
+        },
+        "assert-failed": {
+          "task": "05-toggle-theme",
+          "phase": "cold",
+          "message": "assert(\"the page shows Theme: dark\") failed: The question asks if \"Theme: dark\" is shown, but the accessibility tree explicitly states \"Theme: light\" under the \"Display\" heading."
+        }
+      }
+    },
+    "google/gemini-2.5-flash-lite": {
+      "reps": 5,
+      "phases": {
+        "cold": {
+          "k": 5,
+          "n": 35,
+          "callsPerSuiteRun": 20.2,
+          "costPerSuiteRun": 0.0015068948399999998,
+          "costTotal": 0.007534474200000001,
+          "callsTotal": 101,
+          "medianTaskMs": 2544,
+          "medianPassedTaskMs": 2586,
+          "failureKinds": {
+            "wrong-element": 15,
+            "assert-failed": 15
+          }
+        },
+        "warm": {
+          "k": 6,
+          "n": 35,
+          "callsPerSuiteRun": 14.2,
+          "costPerSuiteRun": 0.0010572507,
+          "costTotal": 0.0052862535,
+          "callsTotal": 71,
+          "medianTaskMs": 2042,
+          "medianPassedTaskMs": 111.5,
+          "failureKinds": {
+            "assert-failed": 15,
+            "wrong-element": 14
+          }
+        },
+        "drift": {
+          "k": 14,
+          "n": 35,
+          "callsPerSuiteRun": 18.6,
+          "costPerSuiteRun": 0.0014174245799999999,
+          "costTotal": 0.0070871229,
+          "callsTotal": 93,
+          "medianTaskMs": 2160,
+          "medianPassedTaskMs": 2246.5,
+          "failureKinds": {
+            "wrong-element": 19,
+            "assert-failed": 2
+          }
+        },
+        "warm-heal": {
+          "k": 14,
+          "n": 35,
+          "callsPerSuiteRun": 11.8,
+          "costPerSuiteRun": 0.0009370983599999999,
+          "costTotal": 0.0046854918,
+          "callsTotal": 59,
+          "medianTaskMs": 1974,
+          "medianPassedTaskMs": 186,
+          "failureKinds": {
+            "wrong-element": 11,
+            "assert-failed": 9,
+            "no-coordinates": 1
+          }
+        }
+      },
+      "heal": {
+        "eligible": 5,
+        "attempted": 0,
+        "succeeded": 0,
+        "replayedWithoutHeal": 5,
+        "replayedWithoutHealPassed": 5,
+        "driftPassGivenColdPass": "5/5",
+        "taskRunsWithHeal": 13,
+        "taskRunsWithHealPassed": 6,
+        "healSteps": 17,
+        "healStepsAccepted": 17
+      },
+      "warmGivenColdPass": "5/5",
+      "warmEligibleZeroCall": "5/5",
+      "warmHealGivenDriftPass": "14/14",
+      "warmHealEligibleZeroCall": "13/14",
+      "perTask": {
+        "01-click-add": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "1/5",
+          "warm-heal": "1/5"
+        },
+        "02-form-newsletter": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "03-form-shipping": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "1/5",
+          "warm-heal": "1/5"
+        },
+        "04-multistep-checkout": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "05-toggle-theme": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "06-assert-only": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "07b-empty-cart-message": {
+          "cold": "0/5",
+          "warm": "1/5",
+          "drift": "2/5",
+          "warm-heal": "2/5"
+        }
+      },
+      "examples": {
+        "wrong-element": {
+          "task": "01-click-add",
+          "phase": "cold",
+          "message": "td.find(\"the \"Add to cart\" button\") failed: model grounded to \"Gift wrap\", which does not match the instruction"
+        },
+        "assert-failed": {
+          "task": "03-form-shipping",
+          "phase": "cold",
+          "message": "assert(\"the page says the address was saved for Ada Lovelace\") failed: The page does not state that the address was saved for Ada Lovelace. It only contains fields to enter a name and address and a button to save the add"
+        },
+        "no-coordinates": {
+          "task": "03-form-shipping",
+          "phase": "warm-heal",
+          "message": "td.find(\"the \"Save address\" button\") failed: model returned \"done\" without coordinates"
+        }
+      }
+    },
+    "anthropic/claude-haiku-4.5": {
+      "reps": 5,
+      "phases": {
+        "cold": {
+          "k": 35,
+          "n": 35,
+          "callsPerSuiteRun": 23.6,
+          "costPerSuiteRun": 0.056338325999999994,
+          "costTotal": 0.2816916299999999,
+          "callsTotal": 118,
+          "medianTaskMs": 6499,
+          "medianPassedTaskMs": 6499,
+          "failureKinds": {}
+        },
+        "warm": {
+          "k": 35,
+          "n": 35,
+          "callsPerSuiteRun": 0,
+          "costPerSuiteRun": 0,
+          "costTotal": 0,
+          "callsTotal": 0,
+          "medianTaskMs": 277,
+          "medianPassedTaskMs": 277,
+          "failureKinds": {}
+        },
+        "drift": {
+          "k": 35,
+          "n": 35,
+          "callsPerSuiteRun": 20,
+          "costPerSuiteRun": 0.04709331,
+          "costTotal": 0.23546655,
+          "callsTotal": 100,
+          "medianTaskMs": 5213,
+          "medianPassedTaskMs": 5213,
+          "failureKinds": {}
+        },
+        "warm-heal": {
+          "k": 35,
+          "n": 35,
+          "callsPerSuiteRun": 0,
+          "costPerSuiteRun": 0,
+          "costTotal": 0,
+          "callsTotal": 0,
+          "medianTaskMs": 239,
+          "medianPassedTaskMs": 239,
+          "failureKinds": {}
+        }
+      },
+      "heal": {
+        "eligible": 35,
+        "attempted": 30,
+        "succeeded": 30,
+        "replayedWithoutHeal": 5,
+        "replayedWithoutHealPassed": 5,
+        "driftPassGivenColdPass": "35/35",
+        "taskRunsWithHeal": 30,
+        "taskRunsWithHealPassed": 30,
+        "healSteps": 55,
+        "healStepsAccepted": 55
+      },
+      "warmGivenColdPass": "35/35",
+      "warmEligibleZeroCall": "35/35",
+      "warmHealGivenDriftPass": "35/35",
+      "warmHealEligibleZeroCall": "35/35",
+      "perTask": {
+        "01-click-add": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "02-form-newsletter": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "03-form-shipping": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "04-multistep-checkout": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "05-toggle-theme": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "06-assert-only": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "07b-empty-cart-message": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        }
+      },
+      "examples": {}
+    },
+    "qwen/qwen3-vl-235b-a22b-instruct": {
+      "reps": 5,
+      "phases": {
+        "cold": {
+          "k": 5,
+          "n": 35,
+          "callsPerSuiteRun": 18,
+          "costPerSuiteRun": 0.006323535899999999,
+          "costTotal": 0.031617679499999995,
+          "callsTotal": 90,
+          "medianTaskMs": 12053,
+          "medianPassedTaskMs": 13353,
+          "failureKinds": {
+            "wrong-element": 17,
+            "no-coordinates": 4,
+            "assert-failed": 8,
+            "timeout": 1
+          }
+        },
+        "warm": {
+          "k": 5,
+          "n": 35,
+          "callsPerSuiteRun": 12.8,
+          "costPerSuiteRun": 0.0047088459,
+          "costTotal": 0.023544229500000003,
+          "callsTotal": 64,
+          "medianTaskMs": 9327,
+          "medianPassedTaskMs": 142,
+          "failureKinds": {
+            "no-coordinates": 3,
+            "assert-failed": 9,
+            "wrong-element": 17,
+            "timeout": 1
+          }
+        },
+        "drift": {
+          "k": 5,
+          "n": 35,
+          "callsPerSuiteRun": 15.8,
+          "costPerSuiteRun": 0.005609712239999999,
+          "costTotal": 0.028048561199999995,
+          "callsTotal": 79,
+          "medianTaskMs": 13245,
+          "medianPassedTaskMs": 13796,
+          "failureKinds": {
+            "wrong-element": 21,
+            "no-coordinates": 9
+          }
+        },
+        "warm-heal": {
+          "k": 5,
+          "n": 35,
+          "callsPerSuiteRun": 12.8,
+          "costPerSuiteRun": 0.004848839820000001,
+          "costTotal": 0.024244199100000002,
+          "callsTotal": 64,
+          "medianTaskMs": 9648,
+          "medianPassedTaskMs": 156,
+          "failureKinds": {
+            "wrong-element": 23,
+            "no-coordinates": 7
+          }
+        }
+      },
+      "heal": {
+        "eligible": 5,
+        "attempted": 0,
+        "succeeded": 0,
+        "replayedWithoutHeal": 5,
+        "replayedWithoutHealPassed": 5,
+        "driftPassGivenColdPass": "5/5",
+        "taskRunsWithHeal": 0,
+        "taskRunsWithHealPassed": 0,
+        "healSteps": 0,
+        "healStepsAccepted": 0
+      },
+      "warmGivenColdPass": "5/5",
+      "warmEligibleZeroCall": "5/5",
+      "warmHealGivenDriftPass": "5/5",
+      "warmHealEligibleZeroCall": "5/5",
+      "perTask": {
+        "01-click-add": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "02-form-newsletter": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "03-form-shipping": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "04-multistep-checkout": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "05-toggle-theme": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "06-assert-only": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "07b-empty-cart-message": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        }
+      },
+      "examples": {
+        "wrong-element": {
+          "task": "01-click-add",
+          "phase": "cold",
+          "message": "td.find(\"the \"Add to cart\" button\") failed: model grounded to \"Gift wrap\", which does not match the instruction"
+        },
+        "no-coordinates": {
+          "task": "02-form-newsletter",
+          "phase": "cold",
+          "message": "td.find(\"the \"Email\" input\") failed: model returned \"click\" without coordinates"
+        },
+        "assert-failed": {
+          "task": "03-form-shipping",
+          "phase": "cold",
+          "message": "assert(\"the page says the address was saved for Ada Lovelace\") failed: The page does not contain any text or indication that an address was saved for Ada Lovelace. The 'Shipping' section shows empty fields for Name and A"
+        },
+        "timeout": {
+          "task": "05-toggle-theme",
+          "phase": "warm",
+          "message": "OpenRouter completion failed for all candidate models: The operation was aborted due to timeout"
+        }
+      }
+    },
+    "openai/gpt-4.1-mini": {
+      "reps": 5,
+      "phases": {
+        "cold": {
+          "k": 5,
+          "n": 35,
+          "callsPerSuiteRun": 3,
+          "costPerSuiteRun": 0.0016532208000000002,
+          "costTotal": 0.008266104000000002,
+          "callsTotal": 15,
+          "medianTaskMs": 875,
+          "medianPassedTaskMs": 4939,
+          "failureKinds": {
+            "api-error": 30
+          }
+        },
+        "warm": {
+          "k": 5,
+          "n": 35,
+          "callsPerSuiteRun": 0,
+          "costPerSuiteRun": 0,
+          "costTotal": 0,
+          "callsTotal": 0,
+          "medianTaskMs": 748,
+          "medianPassedTaskMs": 128,
+          "failureKinds": {
+            "api-error": 30
+          }
+        },
+        "drift": {
+          "k": 5,
+          "n": 35,
+          "callsPerSuiteRun": 3,
+          "costPerSuiteRun": 0.0016442711999999997,
+          "costTotal": 0.008221355999999999,
+          "callsTotal": 15,
+          "medianTaskMs": 793,
+          "medianPassedTaskMs": 4810,
+          "failureKinds": {
+            "api-error": 30
+          }
+        },
+        "warm-heal": {
+          "k": 5,
+          "n": 35,
+          "callsPerSuiteRun": 0,
+          "costPerSuiteRun": 0,
+          "costTotal": 0,
+          "callsTotal": 0,
+          "medianTaskMs": 739,
+          "medianPassedTaskMs": 110,
+          "failureKinds": {
+            "api-error": 30
+          }
+        }
+      },
+      "heal": {
+        "eligible": 5,
+        "attempted": 0,
+        "succeeded": 0,
+        "replayedWithoutHeal": 5,
+        "replayedWithoutHealPassed": 5,
+        "driftPassGivenColdPass": "5/5",
+        "taskRunsWithHeal": 0,
+        "taskRunsWithHealPassed": 0,
+        "healSteps": 0,
+        "healStepsAccepted": 0
+      },
+      "warmGivenColdPass": "5/5",
+      "warmEligibleZeroCall": "5/5",
+      "warmHealGivenDriftPass": "5/5",
+      "warmHealEligibleZeroCall": "5/5",
+      "perTask": {
+        "01-click-add": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "02-form-newsletter": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "03-form-shipping": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "04-multistep-checkout": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "05-toggle-theme": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        },
+        "06-assert-only": {
+          "cold": "5/5",
+          "warm": "5/5",
+          "drift": "5/5",
+          "warm-heal": "5/5"
+        },
+        "07b-empty-cart-message": {
+          "cold": "0/5",
+          "warm": "0/5",
+          "drift": "0/5",
+          "warm-heal": "0/5"
+        }
+      },
+      "examples": {
+        "api-error": {
+          "task": "01-click-add",
+          "phase": "cold",
+          "message": "OpenRouter completion failed for all candidate models: OpenRouter request failed: 400 "
+        }
+      }
+    }
+  }
+}

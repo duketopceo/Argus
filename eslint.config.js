@@ -27,14 +27,14 @@ export default tseslint.config(
   },
   {
     // td-DSL test files run with `test`/`td` patched in as globals by the runner.
-    files: ['evals/suite/**', 'e2e/**', 'examples/**/*.test.ts'],
+    files: ['evals/suite/**', 'evals/demo-suite/**', 'e2e/**', 'examples/**/*.test.ts'],
     languageOptions: {
       globals: { test: 'readonly', td: 'readonly' },
     },
   },
   {
     // The desk front end (electron/ui/) runs in a browser context.
-    files: ['electron/ui/**/*.js'],
+    files: ['electron/ui/**/*.js', 'evals/demo-app/shared.js'],
     languageOptions: {
       globals: globals.browser,
     },

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Field Notes Shop</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Georgia, serif; background: #fbf3e8; color: #2a1d12; }
+  body.dark { background: #14171c; color: #e8eaed; }
+  .promo { padding: 12px 40px; background: #c2410c; color: #fff; font-family: system-ui, sans-serif; }
+  header { padding: 14px 40px; background: #fff7ec; border-bottom: 2px solid #e4cfb3; font-weight: 700; font-size: 22px; }
+  body.dark header { background: #1c2027; border-color: #2d333c; }
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 24px 40px; }
+  section { background: #fff7ec; border: 1px solid #e4cfb3; border-radius: 16px; padding: 18px; }
+  body.dark section { background: #1c2027; border-color: #2d333c; }
+  section.p { order: 3; }
+  section.s { order: 1; }
+  section.n { order: 2; }
+  section.d { order: 4; }
+  h2 { margin: 0 0 10px; font-size: 19px; }
+  p { margin: 6px 0; }
+  .state { color: #6b5a48; min-height: 22px; }
+  body.dark .state { color: #aab1bc; }
+  button { padding: 14px 28px; font-size: 17px; background: #c2410c; color: #fff; border: 0; border-radius: 999px; cursor: pointer; margin-top: 6px; }
+  input[type=text], input[type=email] { padding: 12px 14px; font-size: 16px; width: 100%; max-width: 320px; margin: 4px 0 8px; border: 2px solid #c9a97d; border-radius: 10px; display: block; background: #fffdf9; }
+  label { display: block; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="promo">Winter sale: free shipping on every order</div>
+<header>Field Notes Shop</header>
+<main>
+  <section class="p">
+    <h2>Product</h2>
+    <p>Field notebook, $12.00</p>
+    <button id="add" type="button">Add to cart</button>
+    <p class="state" id="cart">Cart: 0 items</p>
+    <label><input id="gift" type="checkbox" aria-label="Gift wrap"> Gift wrap</label>
+    <p class="state" id="giftstate">Gift wrap: off</p>
+    <button id="order" type="button">Place order</button>
+    <p class="state" id="orderstate"></p>
+  </section>
+  <section class="s">
+    <h2>Shipping</h2>
+    <label for="name">Name</label>
+    <input id="name" type="text" aria-label="Name" autocomplete="off">
+    <label for="address">Address</label>
+    <input id="address" type="text" aria-label="Address" autocomplete="off">
+    <button id="save" type="button">Save address</button>
+    <p class="state" id="shipstate"></p>
+  </section>
+  <section class="n">
+    <h2>Newsletter</h2>
+    <label for="email">Email</label>
+    <input id="email" type="email" aria-label="Email" autocomplete="off">
+    <button id="subscribe" type="button">Subscribe</button>
+    <p class="state" id="substate"></p>
+  </section>
+  <section class="d">
+    <h2>Display</h2>
+    <button id="theme" type="button">Dark mode</button>
+    <p class="state" id="themestate">Theme: light</p>
+  </section>
+</main>
+<script src="/shared.js"></script>
+</body>
+</html>
